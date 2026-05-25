@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { Plus, Search, BookOpen, Eye, Edit, ShieldAlert } from "lucide-react";
+import { Plus, Search, BookOpen, Eye, Edit, ShieldAlert, RotateCcw } from "lucide-react";
 
 interface AccountListProps {
   onNavigate: (view: "list" | "create" | "edit" | "detail" | "ledger" | "trial_balance" | "profit_loss", accountId?: string) => void;
@@ -26,6 +26,8 @@ export default function AccountList({ onNavigate }: AccountListProps) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("ALL");
 
+  const queryClient = useQueryClient();
+
   const { data: accounts = [], isLoading, error } = useQuery<AccountItem[]>({
     queryKey: ["accounts"],
     queryFn: async () => {
@@ -33,6 +35,21 @@ export default function AccountList({ onNavigate }: AccountListProps) {
       return res.data;
     },
   });
+
+  const [recalcState, setRecalcState] = useState<"idle" | "loading" | "done" | "error">("idle");
+
+  const handleRecalculate = async () => {
+    setRecalcState("loading");
+    try {
+      await apiClient.post("/accounting/recalculate-balances");
+      setRecalcState("done");
+      queryClient.invalidateQueries({ queryKey: ["accounts"] });
+      setTimeout(() => setRecalcState("idle"), 3000);
+    } catch {
+      setRecalcState("error");
+      setTimeout(() => setRecalcState("idle"), 3000);
+    }
+  };
 
   const formatCurrency = (amount: number) => {
     if (typeof amount !== "number" || isNaN(amount)) amount = 0;
@@ -67,6 +84,20 @@ export default function AccountList({ onNavigate }: AccountListProps) {
           <p className="text-sm text-slate-500">Manage your company's chart of accounts and view ledgers.</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={handleRecalculate}
+            disabled={recalcState === "loading"}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition ${
+              recalcState === "done"
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : recalcState === "error"
+                ? "bg-rose-50 text-rose-700 border border-rose-200"
+                : "border border-slate-200 text-slate-700 hover:bg-slate-50"
+            }`}
+          >
+            <RotateCcw className={`w-4 h-4 ${recalcState === "loading" ? "animate-spin" : ""}`} />
+            {recalcState === "loading" ? "Recalculating..." : recalcState === "done" ? "Done!" : recalcState === "error" ? "Failed" : "Recalculate"}
+          </button>
           <button
             onClick={() => onNavigate("trial_balance")}
             className="flex items-center gap-2 px-4 py-2 border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg font-semibold text-sm transition"
