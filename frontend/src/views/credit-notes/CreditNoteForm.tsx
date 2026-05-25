@@ -139,7 +139,7 @@ export default function CreditNoteForm({ onSuccess, onNavigate }: CreditNoteForm
           gst_rate: l.gst_rate,
         })),
       };
-      return apiClient.post("/credit-notes", payload);
+      return apiClient.post("/invoices/credit-notes", payload);
     },
     onSuccess: () => {
       onSuccess();

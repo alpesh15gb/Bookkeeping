@@ -37,7 +37,7 @@ export default function CreditNoteList({ onNavigate }: CreditNoteListProps) {
   const { data, isLoading, error } = useQuery<{ items?: CreditNoteItem[] } | CreditNoteItem[]>({
     queryKey: ["credit-notes"],
     queryFn: async () => {
-      const res = await apiClient.get("/credit-notes");
+      const res = await apiClient.get("/invoices/credit-notes");
       return res.data;
     },
   });
