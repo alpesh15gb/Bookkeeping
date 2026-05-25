@@ -4,11 +4,11 @@ import { apiClient } from "../../lib/api";
 import { ArrowLeft, Printer, Download, AlertTriangle } from "lucide-react";
 
 interface CreditNoteDetailProps {
-  cnId: string;
-  onNavigate: (view: "credit_notes" | "credit_note_create" | "credit_note_detail", cnId?: string) => void;
+  creditNoteId: string;
+  onNavigate: (view: "credit_notes" | "credit_note_create" | "credit_note_detail", creditNoteId?: string) => void;
 }
 
-export default function CreditNoteDetail({ cnId, onNavigate }: CreditNoteDetailProps) {
+export default function CreditNoteDetail({ creditNoteId: cnId, onNavigate }: CreditNoteDetailProps) {
   const [showPrintModal, setShowPrintModal] = useState(false);
 
   const { data: cn, isLoading, error } = useQuery({
