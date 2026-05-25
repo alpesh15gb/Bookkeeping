@@ -5,7 +5,7 @@ import { ArrowLeft, Printer, Download, AlertTriangle } from "lucide-react";
 
 interface PurchaseOrderDetailProps {
   poId: string;
-  onNavigate: (view: string, poId?: string) => void;
+  onNavigate: (view: "purchase_orders" | "purchase_order_create" | "purchase_order_detail", poId?: string) => void;
 }
 
 export default function PurchaseOrderDetail({ poId, onNavigate }: PurchaseOrderDetailProps) {
@@ -205,7 +205,7 @@ export default function PurchaseOrderDetail({ poId, onNavigate }: PurchaseOrderD
       <div className="flex justify-between items-center no-print">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onNavigate("list")}
+            onClick={() => onNavigate("purchase_orders")}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition"
           >
             <ArrowLeft className="w-5 h-5" />

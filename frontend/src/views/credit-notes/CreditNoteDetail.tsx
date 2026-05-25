@@ -5,7 +5,7 @@ import { ArrowLeft, Printer, Download, AlertTriangle } from "lucide-react";
 
 interface CreditNoteDetailProps {
   cnId: string;
-  onNavigate: (view: string, cnId?: string) => void;
+  onNavigate: (view: "credit_notes" | "credit_note_create" | "credit_note_detail", cnId?: string) => void;
 }
 
 export default function CreditNoteDetail({ cnId, onNavigate }: CreditNoteDetailProps) {
@@ -212,7 +212,7 @@ ${printData.bank_details?.bank_name ? `
       <div className="flex justify-between items-center no-print">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onNavigate("list")}
+            onClick={() => onNavigate("credit_notes")}
             className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition"
           >
             <ArrowLeft className="w-5 h-5" />
