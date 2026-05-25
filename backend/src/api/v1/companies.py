@@ -241,6 +241,9 @@ def upload_logo(
         f.write(contents)
 
     base_url = str(request.base_url).rstrip("/")
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if forwarded_proto == "https":
+        base_url = base_url.replace("http://", "https://")
     logo_url = f"{base_url}/static/logos/{tenant_id}{ext}"
 
     setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
