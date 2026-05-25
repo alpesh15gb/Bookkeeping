@@ -36,6 +36,7 @@ import SalesOrderList from "./views/sales-orders/SalesOrderList";
 import SalesOrderForm from "./views/sales-orders/SalesOrderForm";
 import SalesOrderDetail from "./views/sales-orders/SalesOrderDetail";
 
+import logo from "./logo.png";
 import { apiClient, setAccessToken, setTenantId } from "./lib/api";
 import {
   LayoutDashboard,
@@ -54,7 +55,9 @@ import {
   ShoppingBag,
   LogOut,
   Menu,
-  X
+  X,
+  Bell,
+  ChevronDown
 } from "lucide-react";
 
 type View =
@@ -229,21 +232,20 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col md:flex-row bg-[#fcfcfd]">
       {/* Mobile Sticky Brand Header */}
-      <header className="md:hidden h-14 bg-white border-b border-zinc-200 px-4 flex items-center justify-between sticky top-0 z-30 no-print">
+      <header className="md:hidden h-14 bg-[#0B1B3D] border-b border-zinc-800 px-4 flex items-center justify-between sticky top-0 z-30 no-print">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsSidebarOpen(true)}
-            className="p-1.5 text-zinc-500 hover:bg-zinc-100 rounded-md transition"
+            className="p-1.5 text-zinc-300 hover:bg-zinc-800 rounded-md transition"
             aria-label="Open navigation menu"
           >
             <Menu className="w-5 h-5" />
           </button>
-          <div className="h-7 w-7 bg-zinc-900 rounded-md flex items-center justify-center text-white font-bold text-sm shadow-sm">
-            A
+          <div className="bg-white rounded px-2 py-0.5 shadow-sm h-8 flex items-center justify-center">
+            <img src={logo} alt="Apex Books Logo" className="h-6 object-contain" />
           </div>
-          <span className="font-bold text-sm text-zinc-900 tracking-tight">ApexBooks</span>
         </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 bg-zinc-50 text-zinc-700 rounded-full border border-zinc-200/50 font-mono">
+        <span className="text-[10px] font-semibold px-2 py-0.5 bg-zinc-800 text-gold-500 rounded-full border border-zinc-700 font-mono">
           FY 2026-27
         </span>
       </header>
@@ -258,23 +260,17 @@ export default function App() {
 
       {/* Sidebar - Drawer on Mobile, Static Sidebar on Desktop */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 w-64 bg-zinc-50 border-r border-zinc-200 text-zinc-700 flex flex-col no-print z-50 transform md:transform-none transition-transform duration-200 ease-in-out ${
+        className={`fixed md:static inset-y-0 left-0 w-64 bg-[#0B1B3D] text-zinc-300 flex flex-col no-print z-50 transform md:transform-none transition-transform duration-200 ease-in-out ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
-        <div className="p-5 border-b border-zinc-200 flex items-center justify-between md:justify-start gap-3 bg-zinc-50">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 bg-zinc-900 rounded-lg flex items-center justify-center text-white font-bold text-lg shadow-sm">
-              A
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-zinc-900 tracking-wide leading-tight">ApexBooks</h2>
-              <span className="text-[10px] text-zinc-500 font-semibold uppercase tracking-wider font-sans">GST Ready</span>
-            </div>
+        <div className="p-5 border-b border-zinc-850 flex items-center justify-between md:justify-start gap-3 bg-[#0B1B3D]">
+          <div className="bg-white rounded-lg p-2 shadow-sm w-full flex items-center justify-center">
+            <img src={logo} alt="Apex Books Logo" className="h-10 object-contain" />
           </div>
           <button
             onClick={() => setIsSidebarOpen(false)}
-            className="md:hidden p-1.5 text-zinc-400 hover:text-zinc-600 rounded-md hover:bg-zinc-200/50"
+            className="md:hidden p-1.5 text-zinc-400 hover:text-white rounded-md hover:bg-white/5"
             aria-label="Close navigation menu"
           >
             <X className="w-4 h-4" />
@@ -329,24 +325,24 @@ export default function App() {
                 }}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-md transition duration-150 ${
                   isCurrent
-                    ? "bg-zinc-900 text-white shadow-sm"
-                    : "text-zinc-600 hover:bg-zinc-200/50 hover:text-zinc-900"
+                    ? "bg-gold-500 text-zinc-950 shadow-sm"
+                    : "text-zinc-300 hover:bg-white/5 hover:text-white"
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isCurrent ? "text-white" : "text-zinc-400"}`} />
+                <Icon className={`w-4 h-4 ${isCurrent ? "text-zinc-950" : "text-zinc-400"}`} />
                 {item.name}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-4 border-t border-zinc-200 text-[11px] text-zinc-500 flex flex-col gap-2 bg-zinc-50/50">
+        <div className="p-4 border-t border-zinc-800 text-[11px] text-zinc-400 flex flex-col gap-2 bg-[#08152e]">
           <div className="flex items-center gap-2">
-            <Building2 className="w-3.5 h-3.5 text-zinc-400" />
+            <Building2 className="w-3.5 h-3.5 text-zinc-500" />
             <span>apexbooks.in</span>
           </div>
           <div className="flex items-center gap-2">
-            <HelpCircle className="w-3.5 h-3.5 text-zinc-400" />
+            <HelpCircle className="w-3.5 h-3.5 text-zinc-500" />
             <span>Support: help@apexbooks.in</span>
           </div>
           <button
@@ -354,9 +350,9 @@ export default function App() {
               handleLogout();
               setIsSidebarOpen(false);
             }}
-            className="flex items-center gap-2 mt-2 text-zinc-500 hover:text-red-600 transition text-[11px] border-t border-zinc-200 pt-2 w-full text-left font-medium"
+            className="flex items-center gap-2 mt-2 text-zinc-400 hover:text-red-400 transition text-[11px] border-t border-zinc-800 pt-2 w-full text-left font-semibold"
           >
-            <LogOut className="w-3.5 h-3.5 text-zinc-400 hover:text-red-600" />
+            <LogOut className="w-3.5 h-3.5 text-zinc-500 hover:text-red-400" />
             <span>Sign Out</span>
           </button>
         </div>
@@ -370,13 +366,26 @@ export default function App() {
               FY 2026-27 Active
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-zinc-100 flex items-center justify-center text-xs font-bold text-zinc-700 border border-zinc-200">
-              U
+          <div className="flex items-center gap-3.5">
+            {/* Notification Bell */}
+            <div className="relative p-1.5 text-zinc-500 hover:bg-zinc-100 rounded-full cursor-pointer transition mr-2">
+              <Bell className="w-5 h-5 text-zinc-600" />
+              <span className="absolute top-0.5 right-0.5 h-3.5 w-3.5 bg-red-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center">
+                3
+              </span>
             </div>
-            <div className="text-xs">
-              <p className="font-semibold text-zinc-800 leading-none mb-0.5">User</p>
-              <p className="text-zinc-400 uppercase text-[9px] font-bold">Accountant</p>
+            {/* User Profile Info */}
+            <div className="flex items-center gap-2.5 cursor-pointer">
+              <img
+                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=120&h=120&fit=crop"
+                alt="User Profile"
+                className="h-8 w-8 rounded-full border border-zinc-200 object-cover"
+              />
+              <div className="text-xs">
+                <p className="font-semibold text-zinc-850 leading-none mb-0.5">Arjun Verma</p>
+                <p className="text-zinc-400 text-[9px] font-medium leading-none">Admin</p>
+              </div>
+              <ChevronDown className="w-3 h-3 text-zinc-400 ml-0.5" />
             </div>
           </div>
         </header>

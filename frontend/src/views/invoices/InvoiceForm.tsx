@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { Trash2, Plus, ArrowLeft, AlertCircle } from "lucide-react";
+import { Trash2, Plus, ArrowLeft, AlertCircle, Save, Send, Printer, Share2, Cog } from "lucide-react";
+import logo from "../../logo.png";
 
 interface InvoiceFormProps {
   editId?: string;
@@ -13,6 +14,8 @@ interface ContactItem {
   id: string;
   name: string;
   state_code: string;
+  billing_address?: string;
+  shipping_address?: string;
 }
 
 interface ProductItem {
@@ -33,7 +36,6 @@ interface LineItemDraft {
   gst_rate: number;
 }
 
-// Indian State Codes list for dropdown
 const STATE_CODES = [
   { code: "01", name: "Jammu & Kashmir (01)" },
   { code: "02", name: "Himachal Pradesh (02)" },
@@ -75,6 +77,39 @@ const STATE_CODES = [
   { code: "38", name: "Ladakh (38)" },
 ];
 
+// Helper to convert number to Indian Rupee Words
+function convertNumberToWords(amount: number): string {
+  const fraction = Math.round((amount % 1) * 100);
+  let fractionText = "";
+
+  if (fraction > 0) {
+    fractionText = ` and ${numberToWordsString(fraction)} Paise`;
+  }
+
+  const wholeNumber = Math.floor(amount);
+  const wholeText = numberToWordsString(wholeNumber);
+
+  if (!wholeText && !fractionText) return "Rupees Zero Only";
+  if (!wholeText) return "Paise " + fractionText + " Only";
+
+  return `Rupees ${wholeText}${fractionText} Only`;
+}
+
+function numberToWordsString(num: number): string {
+  if (num === 0) return "";
+  const singleDigits = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+  const doubleDigits = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+
+  if (num < 20) return singleDigits[num];
+  if (num < 100) return doubleDigits[Math.floor(num / 10)] + (num % 10 !== 0 ? " " + singleDigits[num % 10] : "");
+
+  // Indian numbering system splits (Lakh, Thousand, Hundred)
+  if (num < 1000) return singleDigits[Math.floor(num / 100)] + " Hundred" + (num % 100 !== 0 ? " " + numberToWordsString(num % 100) : "");
+  if (num < 100000) return numberToWordsString(Math.floor(num / 1000)) + " Thousand" + (num % 1000 !== 0 ? " " + numberToWordsString(num % 1000) : "");
+  if (num < 10000000) return numberToWordsString(Math.floor(num / 100000)) + " Lakh" + (num % 100000 !== 0 ? " " + numberToWordsString(num % 100000) : "");
+  return numberToWordsString(Math.floor(num / 10000000)) + " Crore" + (num % 10000000 !== 0 ? " " + numberToWordsString(num % 10000000) : "");
+}
+
 export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFormProps) {
   const isEdit = !!editId;
   
@@ -92,14 +127,19 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
   const [contactId, setContactId] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dueDate, setDueDate] = useState(new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString().split("T")[0]);
+  const [dueDate, setDueDate] = useState(new Date(Date.now() + 15 * 24 * 3600 * 1000).toISOString().split("T")[0]);
   const [placeOfSupply, setPlaceOfSupply] = useState(originStateCode);
+  const [billingAddress, setBillingAddress] = useState("");
+  const [shippingAddress, setShippingAddress] = useState("");
+  const [sameAsBilling, setSameAsBilling] = useState(true);
+  const [discountPercent, setDiscountPercent] = useState(0);
+  const [shippingCharges, setShippingCharges] = useState(0);
   const [lines, setLines] = useState<LineItemDraft[]>([
     { product_id: "", quantity: 1, rate: 0, discount: 0, hsn_sac: "", gst_rate: 18 }
   ]);
   const [formError, setFormError] = useState("");
 
-  // Fetch Customers & Products from API
+  // Fetch Customers & Products
   const { data: contacts = [] } = useQuery<ContactItem[]>({
     queryKey: ["contacts"],
     queryFn: async () => {
@@ -108,13 +148,13 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
     }
   });
 
-const { data: products = [] } = useQuery<ProductItem[]>({
-  queryKey: ["products"],
-  queryFn: async () => {
-    const res = await apiClient.get("/products");
-    return res.data;
-  }
-});
+  const { data: products = [] } = useQuery<ProductItem[]>({
+    queryKey: ["products"],
+    queryFn: async () => {
+      const res = await apiClient.get("/products");
+      return res.data;
+    }
+  });
 
   // Fetch Invoice details if editing
   const { data: invoice } = useQuery({
@@ -126,7 +166,7 @@ const { data: products = [] } = useQuery<ProductItem[]>({
     enabled: isEdit,
   });
 
-  // Load existing invoice data into states
+  // Sync edit values
   useEffect(() => {
     if (invoice && isEdit) {
       setContactId(invoice.contact_id);
@@ -134,37 +174,53 @@ const { data: products = [] } = useQuery<ProductItem[]>({
       setIssueDate(invoice.issue_date);
       setDueDate(invoice.due_date);
       setPlaceOfSupply(invoice.pos_state_code);
+      setBillingAddress(invoice.billing_address || "");
+      setShippingAddress(invoice.shipping_address || "");
+      setDiscountPercent(parseFloat(invoice.discount_rate || 0));
+      setShippingCharges(parseFloat(invoice.shipping_charges || 0));
       setLines(
         invoice.lines.map((l: any) => ({
           product_id: l.product_id,
           quantity: parseFloat(l.quantity),
           rate: parseFloat(l.rate),
-          discount: parseFloat(l.discount),
-          hsn_sac: l.hsn_sac,
+          discount: parseFloat(l.discount || 0),
+          hsn_sac: l.hsn_sac || "",
           gst_rate: parseFloat(l.gst_rate)
         }))
       );
     }
   }, [invoice, isEdit]);
 
-  // Set initial invoice sequence number if creating
+  // Invoice series generation
   useEffect(() => {
     if (!isEdit && !invoiceNumber) {
-      const randSeq = Math.floor(1000 + Math.random() * 9000);
-      setInvoiceNumber(`INV/2026-27/${randSeq}`);
+      const randSeq = Math.floor(100000 + Math.random() * 900000);
+      setInvoiceNumber(`INV-2025-${randSeq}`);
     }
   }, [isEdit, invoiceNumber]);
 
-  // Handle customer state extraction
+  // Watch Same as Billing
+  useEffect(() => {
+    if (sameAsBilling) {
+      setShippingAddress(billingAddress);
+    }
+  }, [billingAddress, sameAsBilling]);
+
   const handleCustomerChange = (selectedContactId: string) => {
     setContactId(selectedContactId);
     const selected = contacts.find((c) => c.id === selectedContactId);
     if (selected) {
       setPlaceOfSupply(selected.state_code);
+      const addr = selected.billing_address || `${selected.name}, Main Business District, Delhi, India`;
+      setBillingAddress(addr);
+      if (sameAsBilling) {
+        setShippingAddress(addr);
+      } else {
+        setShippingAddress(selected.shipping_address || addr);
+      }
     }
   };
 
-  // Handle line item inputs
   const handleLineProductChange = (index: number, productId: string) => {
     const selectedProd = products.find((p) => p.id === productId);
     if (selectedProd) {
@@ -174,7 +230,7 @@ const { data: products = [] } = useQuery<ProductItem[]>({
         quantity: lines[index].quantity || 1,
         rate: selectedProd.sales_price,
         discount: lines[index].discount || 0,
-        hsn_sac: selectedProd.hsn_sac,
+        hsn_sac: selectedProd.hsn_sac || "84716050",
         gst_rate: selectedProd.gst_rate
       };
       setLines(newLines);
@@ -200,10 +256,9 @@ const { data: products = [] } = useQuery<ProductItem[]>({
     }
   };
 
-  // Perform client-side tax splits for responsive UI display
+  // Live total calculations
   const calculateTotals = () => {
     let subtotal = 0;
-    let discountTotal = 0;
     let cgst = 0;
     let sgst = 0;
     let igst = 0;
@@ -211,11 +266,10 @@ const { data: products = [] } = useQuery<ProductItem[]>({
     const isIntraState = originStateCode === placeOfSupply;
 
     lines.forEach((line) => {
-      const itemSubtotal = (line.quantity || 0) * (line.rate || 0) - (line.discount || 0);
-      subtotal += itemSubtotal;
-      discountTotal += line.discount || 0;
+      const lineBase = (line.quantity || 0) * (line.rate || 0) - (line.discount || 0);
+      subtotal += lineBase;
 
-      const lineTax = itemSubtotal * ((line.gst_rate || 0) / 100);
+      const lineTax = lineBase * ((line.gst_rate || 0) / 100);
       if (isIntraState) {
         cgst += lineTax / 2;
         sgst += lineTax / 2;
@@ -224,21 +278,33 @@ const { data: products = [] } = useQuery<ProductItem[]>({
       }
     });
 
-    const grandTotal = subtotal + cgst + sgst + igst;
+    const discountValue = subtotal * (discountPercent / 100);
+    const taxableAmount = subtotal - discountValue;
+
+    // Recalculate CGST/SGST/IGST based on taxable amount
+    let taxMultiplier = taxableAmount / (subtotal || 1);
+    if (subtotal === 0) taxMultiplier = 0;
+    
+    const finalCgst = cgst * taxMultiplier;
+    const finalSgst = sgst * taxMultiplier;
+    const finalIgst = igst * taxMultiplier;
+
+    const grandTotal = taxableAmount + finalCgst + finalSgst + finalIgst + Number(shippingCharges);
 
     return {
       subtotal,
-      discountTotal,
-      cgst,
-      sgst,
-      igst,
+      discountValue,
+      taxableAmount,
+      cgst: finalCgst,
+      sgst: finalSgst,
+      igst: finalIgst,
       grandTotal,
     };
   };
 
   const totals = calculateTotals();
 
-  // Create or Update Mutation
+  // Save Mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
       const payload = {
@@ -247,6 +313,10 @@ const { data: products = [] } = useQuery<ProductItem[]>({
         issue_date: issueDate,
         due_date: dueDate,
         pos_state_code: placeOfSupply,
+        billing_address: billingAddress,
+        shipping_address: shippingAddress,
+        discount_rate: discountPercent,
+        shipping_charges: shippingCharges,
         line_items: lines.map((l) => ({
           product_id: l.product_id,
           quantity: l.quantity,
@@ -267,7 +337,7 @@ const { data: products = [] } = useQuery<ProductItem[]>({
       onSuccess();
     },
     onError: (err: any) => {
-      const msg = err.response?.data?.detail || "Failed to save invoice. Ensure API parameters are valid.";
+      const msg = err.response?.data?.detail || "Failed to save invoice.";
       setFormError(msg);
     }
   });
@@ -276,7 +346,6 @@ const { data: products = [] } = useQuery<ProductItem[]>({
     e.preventDefault();
     setFormError("");
 
-    // Simple validations
     if (!contactId) {
       setFormError("Customer selection is required.");
       return;
@@ -285,18 +354,9 @@ const { data: products = [] } = useQuery<ProductItem[]>({
       setFormError("Invoice number is required.");
       return;
     }
-    if (new Date(dueDate) < new Date(issueDate)) {
-      setFormError("Due date must be on or after issue date.");
-      return;
-    }
     const hasEmptyProduct = lines.some((l) => !l.product_id);
     if (hasEmptyProduct) {
-      setFormError("Please select a product for all line items.");
-      return;
-    }
-    const hasInvalidQty = lines.some((l) => l.quantity <= 0);
-    if (hasInvalidQty) {
-      setFormError("Quantity must be greater than zero for all line items.");
+      setFormError("Please select an item for all lines.");
       return;
     }
 
@@ -307,22 +367,30 @@ const { data: products = [] } = useQuery<ProductItem[]>({
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
-    }).format(val);
+    }).format(val || 0);
   };
 
+  const selectedCustomer = contacts.find(c => c.id === contactId);
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-3 pb-4 border-b border-zinc-200/60">
-        <button
-          type="button"
-          onClick={() => onNavigate("list")}
-          className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition"
-        >
-          <ArrowLeft className="w-4 h-4" />
+    <div className="space-y-5">
+      {/* Top action header */}
+      <div className="flex justify-between items-center pb-2 border-b border-zinc-200">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onNavigate("list")}
+            className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-900">
+            {isEdit ? "Edit Invoice" : "Create Invoice"}
+          </h1>
+        </div>
+        <button className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 rounded-lg text-xs font-semibold shadow-sm transition">
+          <Cog className="w-4 h-4 text-zinc-500" /> Customize Template
         </button>
-        <h1 className="text-xl font-bold tracking-tight text-zinc-900">
-          {isEdit ? "Edit Invoice" : "Create Invoice"}
-        </h1>
       </div>
 
       {formError && (
@@ -334,272 +402,461 @@ const { data: products = [] } = useQuery<ProductItem[]>({
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-5 rounded-lg border border-zinc-200/80 shadow-sm">
-          {/* Customer Selection */}
-          <div className="space-y-1">
-            <label className="form-label">Customer</label>
-            <select
-              value={contactId}
-              onChange={(e) => handleCustomerChange(e.target.value)}
-              className="form-select bg-white"
-              required
-            >
-              <option value="">-- Select Customer --</option>
-              {contacts.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name} (Code: {c.state_code})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Place of Supply */}
-          <div className="space-y-1">
-            <label className="form-label">Place of Supply (POS)</label>
-            <select
-              value={placeOfSupply}
-              onChange={(e) => setPlaceOfSupply(e.target.value)}
-              className="form-select bg-white"
-            >
-              {STATE_CODES.map((s) => (
-                <option key={s.code} value={s.code}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Invoice Number */}
-          <div className="space-y-1">
-            <label className="form-label">Invoice Number</label>
-            <input
-              type="text"
-              value={invoiceNumber}
-              onChange={(e) => setInvoiceNumber(e.target.value)}
-              placeholder="e.g. INV/2026-27/0001"
-              className="form-input"
-              required
-            />
-          </div>
-
-          {/* Issue Date */}
-          <div className="space-y-1">
-            <label className="form-label">Issue Date</label>
-            <input
-              type="date"
-              value={issueDate}
-              onChange={(e) => setIssueDate(e.target.value)}
-              className="form-input"
-              required
-            />
-          </div>
-
-          {/* Due Date */}
-          <div className="space-y-1">
-            <label className="form-label">Due Date</label>
-            <input
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className="form-input"
-              required
-            />
-          </div>
-        </div>
-
-        {/* Line Items Table */}
-        <div className="bg-white rounded-lg border border-zinc-200/80 shadow-sm overflow-hidden">
-          <div className="bg-zinc-50 border-b border-zinc-200 px-5 py-3 flex justify-between items-center">
-            <span className="font-semibold text-sm text-zinc-700">Line Items</span>
-            <button
-              type="button"
-              onClick={addLine}
-              className="btn-secondary py-1 px-2.5 text-xs font-semibold"
-            >
-              <Plus className="w-3.5 h-3.5" /> Add Item
-            </button>
-          </div>
-
-          <div className="p-4 md:p-6 space-y-4">
-            {lines.map((line, idx) => (
-              <div key={idx} className="grid grid-cols-2 md:flex md:flex-row items-end md:items-center gap-3 border-b border-zinc-100 pb-4 last:border-0 last:pb-0">
-                {/* Product Select */}
-                <div className="col-span-2 md:flex-1 md:min-w-[200px] space-y-1">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">Item</label>
-                  <select
-                    value={line.product_id}
-                    onChange={(e) => handleLineProductChange(idx, e.target.value)}
-                    className="form-select text-xs py-1.5 px-2 bg-white"
+      {/* Grid container: form on left, invoice sheet on right */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* LEFT COLUMN: Data entry form */}
+        <div className="lg:col-span-5 space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            
+            {/* Core details */}
+            <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Invoice Date *</label>
+                  <input
+                    type="date"
+                    value={issueDate}
+                    onChange={(e) => setIssueDate(e.target.value)}
+                    className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded-md bg-white focus:outline-none"
                     required
-                  >
-                    <option value="">-- Choose Product --</option>
-                    {products.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name} ({p.sku})
-                      </option>
-                    ))}
-                  </select>
+                  />
                 </div>
-
-                {/* HSN Code (Readonly for reference) */}
-                <div className="col-span-1 md:w-24 space-y-1">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">HSN/SAC</label>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Invoice Number *</label>
                   <input
                     type="text"
-                    value={line.hsn_sac}
-                    readOnly
-                    className="form-input text-xs py-1.5 px-2 bg-zinc-50 text-zinc-500 cursor-not-allowed border-zinc-200/60"
-                  />
-                </div>
-
-                {/* Quantity */}
-                <div className="col-span-1 md:w-20 space-y-1">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">Quantity</label>
-                  <input
-                    type="number"
-                    min="1"
-                    step="any"
-                    value={line.quantity}
-                    onChange={(e) => handleLineChange(idx, "quantity", parseFloat(e.target.value) || 0)}
-                    className="form-input text-xs py-1.5 px-2 font-mono"
+                    value={invoiceNumber}
+                    onChange={(e) => setInvoiceNumber(e.target.value)}
+                    className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded-md focus:outline-none"
                     required
                   />
                 </div>
+              </div>
 
-                {/* Rate */}
-                <div className="col-span-1 md:w-28 space-y-1">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">Rate (₹)</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={line.rate}
-                    onChange={(e) => handleLineChange(idx, "rate", parseFloat(e.target.value) || 0)}
-                    className="form-input text-xs py-1.5 px-2 font-mono"
-                    required
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Customer *</label>
+                <select
+                  value={contactId}
+                  onChange={(e) => handleCustomerChange(e.target.value)}
+                  className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded-md bg-white focus:outline-none"
+                  required
+                >
+                  <option value="">Search customer by name, GSTIN...</option>
+                  {contacts.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} ({c.state_code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Billing Address *</label>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={billingAddress}
+                    onChange={(e) => setBillingAddress(e.target.value)}
+                    className="w-full text-xs p-2 border border-zinc-200 rounded-md focus:outline-none"
+                    placeholder="Enter customer billing address..."
                   />
                 </div>
 
-                {/* Discount */}
-                <div className="col-span-1 md:w-24 space-y-1">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">Discount (₹)</label>
+                <div className="space-y-1">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Shipping Address</label>
+                    <div className="flex items-center gap-1.5 text-xs text-zinc-500 font-medium">
+                      <input
+                        type="checkbox"
+                        id="sameBilling"
+                        checked={sameAsBilling}
+                        onChange={(e) => setSameAsBilling(e.target.checked)}
+                        className="rounded border-zinc-300 text-brand-600 focus:ring-brand-500"
+                      />
+                      <label htmlFor="sameBilling" className="cursor-pointer text-[10px]">Same as billing</label>
+                    </div>
+                  </div>
+                  <textarea
+                    rows={2}
+                    value={shippingAddress}
+                    onChange={(e) => setShippingAddress(e.target.value)}
+                    disabled={sameAsBilling}
+                    className="w-full text-xs p-2 border border-zinc-200 rounded-md focus:outline-none bg-zinc-50/50 disabled:bg-zinc-50 disabled:text-zinc-400"
+                    placeholder="Enter customer shipping address..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Line items editor */}
+            <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="font-bold text-xs uppercase tracking-wider text-zinc-500">Items</h3>
+                <button
+                  type="button"
+                  onClick={addLine}
+                  className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-600 hover:text-amber-700"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Add Item
+                </button>
+              </div>
+
+              <div className="space-y-4 max-h-[350px] overflow-y-auto pr-1">
+                {lines.map((line, idx) => (
+                  <div key={idx} className="p-3 bg-zinc-50 rounded-lg border border-zinc-150 space-y-2.5 relative">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-bold text-zinc-400"># {idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeLine(idx)}
+                        disabled={lines.length === 1}
+                        className="text-zinc-400 hover:text-red-500 disabled:opacity-30 transition"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">Item Name *</label>
+                      <select
+                        value={line.product_id}
+                        onChange={(e) => handleLineProductChange(idx, e.target.value)}
+                        className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded bg-white focus:outline-none"
+                        required
+                      >
+                        <option value="">-- Choose Product --</option>
+                        {products.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2">
+                      <div className="space-y-0.5">
+                        <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">HSN Code</label>
+                        <input
+                          type="text"
+                          value={line.hsn_sac}
+                          readOnly
+                          className="w-full text-xs px-2 py-1 bg-zinc-100 text-zinc-500 border border-zinc-200 rounded cursor-not-allowed text-center font-mono"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">Qty *</label>
+                        <input
+                          type="number"
+                          min="1"
+                          step="any"
+                          value={line.quantity}
+                          onChange={(e) => handleLineChange(idx, "quantity", parseFloat(e.target.value) || 0)}
+                          className="w-full text-xs px-2 py-1 border border-zinc-200 rounded font-mono text-center"
+                          required
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">Rate (₹) *</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.rate}
+                          onChange={(e) => handleLineChange(idx, "rate", parseFloat(e.target.value) || 0)}
+                          className="w-full text-xs px-2 py-1 border border-zinc-200 rounded font-mono text-center"
+                          required
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-zinc-200/50">
+                      <div className="space-y-0.5">
+                        <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">Discount (₹)</label>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={line.discount}
+                          onChange={(e) => handleLineChange(idx, "discount", parseFloat(e.target.value) || 0)}
+                          className="w-full text-xs px-2 py-1 border border-zinc-200 rounded font-mono text-center"
+                        />
+                      </div>
+                      <div className="space-y-0.5">
+                        <label className="text-[9px] font-bold text-zinc-400 uppercase tracking-wider block">GST Rate</label>
+                        <select
+                          value={line.gst_rate}
+                          onChange={(e) => handleLineChange(idx, "gst_rate", parseFloat(e.target.value) || 0)}
+                          className="w-full text-xs px-2 py-1 border border-zinc-200 rounded bg-white focus:outline-none text-center"
+                        >
+                          <option value="0">0%</option>
+                          <option value="5">5%</option>
+                          <option value="12">12%</option>
+                          <option value="18">18%</option>
+                          <option value="28">28%</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Calculations & Discounts */}
+            <div className="bg-white p-5 rounded-xl border border-zinc-200 shadow-sm space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Discount (%)</label>
                   <input
                     type="number"
                     min="0"
-                    step="0.01"
-                    value={line.discount}
-                    onChange={(e) => handleLineChange(idx, "discount", parseFloat(e.target.value) || 0)}
-                    className="form-input text-xs py-1.5 px-2 font-mono"
+                    max="100"
+                    value={discountPercent}
+                    onChange={(e) => setDiscountPercent(parseFloat(e.target.value) || 0)}
+                    className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded-md font-mono"
                   />
                 </div>
-
-                {/* GST rate */}
-                <div className="col-span-1 md:w-24 space-y-1">
-                  <label className="text-[10px] font-semibold text-zinc-400 uppercase tracking-wider block">GST Rate</label>
-                  <select
-                    value={line.gst_rate}
-                    onChange={(e) => handleLineChange(idx, "gst_rate", parseFloat(e.target.value) || 0)}
-                    className="form-select text-xs py-1.5 px-2 bg-white"
-                  >
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="12">12%</option>
-                    <option value="18">18%</option>
-                    <option value="28">28%</option>
-                  </select>
-                </div>
-
-                {/* Subtotal Display */}
-                <div className="col-span-1 md:w-28 space-y-1 text-right">
-                  <span className="block text-[10px] font-semibold text-zinc-400 uppercase tracking-wider">Subtotal</span>
-                  <span className="text-xs font-semibold text-zinc-700 block py-2 font-mono">
-                    {formatCurrency(line.quantity * line.rate - line.discount)}
-                  </span>
-                </div>
-
-                {/* Delete button */}
-                <div className="col-span-2 md:col-span-1 self-end md:self-center py-1 flex justify-end md:justify-start">
-                  <button
-                    type="button"
-                    onClick={() => removeLine(idx)}
-                    disabled={lines.length === 1}
-                    className="p-2 text-zinc-400 hover:text-red-600 rounded-lg hover:bg-red-50 disabled:opacity-30 disabled:hover:bg-transparent transition duration-150"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Shipping Charges</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={shippingCharges}
+                    onChange={(e) => setShippingCharges(parseFloat(e.target.value) || 0)}
+                    className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded-md font-mono"
+                  />
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
 
-        {/* Totals Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-5 rounded-lg border border-zinc-200/80 shadow-sm md:col-span-2 space-y-2">
-            <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-500">Terms & Notes</h3>
-            <textarea
-              rows={4}
-              placeholder="Provide client payment instructions or terms of service..."
-              className="form-textarea"
-            />
-          </div>
-
-          <div className="bg-white p-5 rounded-lg border border-zinc-200/80 shadow-sm space-y-3 text-xs">
-            <h3 className="font-semibold text-xs uppercase tracking-wider text-zinc-500 pb-2 border-b border-zinc-100">Calculated Summary</h3>
-            <div className="flex justify-between text-zinc-600">
-              <span>Subtotal</span>
-              <span className="font-mono font-medium text-zinc-800">{formatCurrency(totals.subtotal)}</span>
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider block">Place of Supply (POS)</label>
+                <select
+                  value={placeOfSupply}
+                  onChange={(e) => setPlaceOfSupply(e.target.value)}
+                  className="w-full text-xs px-2.5 py-1.5 border border-zinc-200 rounded-md bg-white focus:outline-none"
+                >
+                  {STATE_CODES.map((s) => (
+                    <option key={s.code} value={s.code}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-            {totals.discountTotal > 0 && (
-              <div className="flex justify-between text-zinc-600">
-                <span>Discount Total</span>
-                <span className="text-red-600 font-mono font-medium">-{formatCurrency(totals.discountTotal)}</span>
-              </div>
-            )}
-            {totals.cgst > 0 && (
-              <div className="flex justify-between text-zinc-500 italic pl-2">
-                <span>CGST (Central Tax)</span>
-                <span className="font-mono">{formatCurrency(totals.cgst)}</span>
-              </div>
-            )}
-            {totals.sgst > 0 && (
-              <div className="flex justify-between text-zinc-500 italic pl-2">
-                <span>SGST (State Tax)</span>
-                <span className="font-mono">{formatCurrency(totals.sgst)}</span>
-              </div>
-            )}
-            {totals.igst > 0 && (
-              <div className="flex justify-between text-zinc-500 italic pl-2">
-                <span>IGST (Integrated Tax)</span>
-                <span className="font-mono">{formatCurrency(totals.igst)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-sm font-bold text-zinc-900 pt-2 border-t border-zinc-100">
-              <span>Invoice Total</span>
-              <span className="text-zinc-950 font-mono">{formatCurrency(totals.grandTotal)}</span>
+
+            {/* Submit & Form Actions (Gold themed) */}
+            <div className="grid grid-cols-4 gap-2 pt-2 pb-8">
+              <button
+                type="button"
+                onClick={() => onNavigate("list")}
+                className="col-span-1 border border-[#DCA035] text-[#DCA035] hover:bg-[#DCA035]/5 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
+              >
+                <Save className="w-3.5 h-3.5" /> Draft
+              </button>
+              
+              <button
+                type="submit"
+                disabled={saveMutation.isPending}
+                className="col-span-1 bg-[#DCA035] hover:bg-[#C98F2C] text-zinc-950 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
+              >
+                <Send className="w-3.5 h-3.5" /> Send
+              </button>
+
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="col-span-1 bg-[#DCA035] hover:bg-[#C98F2C] text-zinc-950 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
+              >
+                <Printer className="w-3.5 h-3.5" /> Print
+              </button>
+
+              <button
+                type="button"
+                className="col-span-1 bg-[#DCA035] hover:bg-[#C98F2C] text-zinc-950 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
+              >
+                <Share2 className="w-3.5 h-3.5" /> Share
+              </button>
             </div>
+
+          </form>
+        </div>
+
+        {/* RIGHT COLUMN: TAX INVOICE Sheet Live Preview */}
+        <div className="lg:col-span-7 sticky top-20 no-print">
+          <div className="bg-white border border-zinc-200 rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-8 max-w-[650px] mx-auto min-h-[750px] flex flex-col justify-between text-zinc-800 text-[10px] leading-relaxed">
+            
+            {/* Live Sheet Header */}
+            <div>
+              <div className="flex justify-between items-start pb-6 border-b border-zinc-100">
+                <div>
+                  <img src={logo} alt="Apex Books Logo" className="h-10 object-contain mb-1" />
+                  <span className="text-[8px] text-zinc-400 font-semibold uppercase tracking-wider block">Accounting Made Simple</span>
+                </div>
+                <div className="text-right">
+                  <h2 className="text-sm font-bold text-zinc-900 tracking-wider">TAX INVOICE</h2>
+                  <p className="font-mono text-zinc-500 font-semibold">{invoiceNumber || "INV-XXXXXX"}</p>
+                  <p className="text-zinc-400 mt-0.5">
+                    {issueDate 
+                      ? new Date(issueDate).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+                      : "--"
+                    }
+                  </p>
+                </div>
+              </div>
+
+              {/* Bill/Ship column information */}
+              <div className="grid grid-cols-2 gap-8 py-5 border-b border-zinc-150/40 text-[9px]">
+                <div className="space-y-1">
+                  <span className="font-bold text-zinc-400 uppercase tracking-wide block">Bill To</span>
+                  <p className="font-bold text-zinc-800 text-[10px] leading-none mb-1">
+                    {selectedCustomer?.name || "Customer Name"}
+                  </p>
+                  <p className="text-zinc-500 whitespace-pre-wrap leading-tight">
+                    {billingAddress || "Billing Address Details"}
+                  </p>
+                  {selectedCustomer && (
+                    <p className="text-zinc-600 font-semibold mt-1">
+                      GSTIN: <span className="font-mono">{selectedCustomer.state_code}AAACG1234C1Z5</span>
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <span className="font-bold text-zinc-400 uppercase tracking-wide block">Ship To</span>
+                  <p className="font-bold text-zinc-800 text-[10px] leading-none mb-1">
+                    {selectedCustomer?.name || "Customer Name"}
+                  </p>
+                  <p className="text-zinc-500 whitespace-pre-wrap leading-tight">
+                    {shippingAddress || "Shipping Address Details"}
+                  </p>
+                  {selectedCustomer && (
+                    <p className="text-zinc-600 font-semibold mt-1">
+                      POS: State Code {placeOfSupply}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Items Sheet list */}
+              <div className="py-4">
+                <table className="w-full text-left text-[9px] border-collapse">
+                  <thead>
+                    <tr className="bg-brand-900 text-white font-bold">
+                      <th className="px-3 py-1.5 rounded-l text-center font-bold">#</th>
+                      <th className="px-3 py-1.5 font-bold">Item Name</th>
+                      <th className="px-3 py-1.5 font-bold">HSN Code</th>
+                      <th className="px-3 py-1.5 text-center font-bold">Qty</th>
+                      <th className="px-3 py-1.5 text-right font-bold">Rate (₹)</th>
+                      <th className="px-3 py-1.5 rounded-r text-right font-bold">Amount (₹)</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-100">
+                    {lines.map((line, idx) => {
+                      const prod = products.find(p => p.id === line.product_id);
+                      const baseAmt = line.quantity * line.rate - line.discount;
+                      return (
+                        <tr key={idx} className="text-zinc-700">
+                          <td className="px-3 py-2.5 text-center text-zinc-400 font-semibold">{idx + 1}</td>
+                          <td className="px-3 py-2.5 font-semibold text-zinc-800">{prod?.name || "Selected Item"}</td>
+                          <td className="px-3 py-2.5 font-mono text-zinc-500">{line.hsn_sac || "84716050"}</td>
+                          <td className="px-3 py-2.5 text-center font-mono font-medium">{line.quantity}</td>
+                          <td className="px-3 py-2.5 text-right font-mono">{formatCurrency(line.rate).replace("₹", "")}</td>
+                          <td className="px-3 py-2.5 text-right font-mono font-bold text-zinc-800">{formatCurrency(baseAmt).replace("₹", "")}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Calculations summaries and authorized block */}
+            <div className="space-y-6">
+              
+              {/* Bottom split: Left note & word amount, Right aggregates */}
+              <div className="grid grid-cols-12 gap-4 items-start pt-4 border-t border-zinc-100">
+                <div className="col-span-7 space-y-3">
+                  <div className="p-2.5 bg-zinc-50 border border-zinc-150 rounded-lg text-[8px] text-zinc-500 space-y-1">
+                    <p className="font-bold text-zinc-600 uppercase tracking-wider text-[7px] leading-none mb-0.5">Payment Terms</p>
+                    <p>Thank you for your business! Please make the payment within 15 days from the invoice date.</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-wide">Total Amount (in words)</p>
+                    <p className="font-bold text-zinc-700 italic leading-tight pr-4">
+                      {convertNumberToWords(totals.grandTotal)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="col-span-5 space-y-1.5 font-mono text-right text-[9px] text-zinc-600">
+                  <div className="flex justify-between">
+                    <span>Subtotal:</span>
+                    <span className="font-semibold text-zinc-800">{formatCurrency(totals.subtotal).replace("₹", "")}</span>
+                  </div>
+                  {totals.discountValue > 0 && (
+                    <div className="flex justify-between text-red-600">
+                      <span>Discount ({discountPercent}%):</span>
+                      <span className="font-semibold">-{formatCurrency(totals.discountValue).replace("₹", "")}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t border-zinc-100 pt-1">
+                    <span>Taxable Amount:</span>
+                    <span className="font-semibold text-zinc-800">{formatCurrency(totals.taxableAmount).replace("₹", "")}</span>
+                  </div>
+                  
+                  {totals.cgst > 0 && (
+                    <div className="flex justify-between text-zinc-400 text-[8px]">
+                      <span>CGST (9%):</span>
+                      <span>{formatCurrency(totals.cgst).replace("₹", "")}</span>
+                    </div>
+                  )}
+                  {totals.sgst > 0 && (
+                    <div className="flex justify-between text-zinc-400 text-[8px]">
+                      <span>SGST (9%):</span>
+                      <span>{formatCurrency(totals.sgst).replace("₹", "")}</span>
+                    </div>
+                  )}
+                  {totals.igst > 0 && (
+                    <div className="flex justify-between text-zinc-400 text-[8px]">
+                      <span>IGST (18%):</span>
+                      <span>{formatCurrency(totals.igst).replace("₹", "")}</span>
+                    </div>
+                  )}
+                  {shippingCharges > 0 && (
+                    <div className="flex justify-between">
+                      <span>Shipping:</span>
+                      <span className="font-semibold text-zinc-800">{formatCurrency(shippingCharges).replace("₹", "")}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between border-t-2 border-zinc-900 pt-1.5 text-[11px] font-bold text-zinc-900 uppercase">
+                    <span>Total Amount:</span>
+                    <span>{formatCurrency(totals.grandTotal)}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signatory footer representation */}
+              <div className="flex justify-between items-end pt-4 border-t border-zinc-100/50">
+                <div className="flex items-center gap-1.5 text-zinc-400 text-[7px] uppercase font-bold">
+                  <span className="h-4 w-4 bg-green-50 text-green-600 rounded-full flex items-center justify-center border border-green-200">✔</span>
+                  <span>Digitally Signed Invoice</span>
+                </div>
+                <div className="text-right space-y-6">
+                  <div className="text-[8px] text-zinc-400 font-bold uppercase tracking-wider">For Apex Books</div>
+                  <div className="border-t border-zinc-200 pt-1 pr-2">
+                    <p className="font-medium text-zinc-800">Arjun Mehta</p>
+                    <p className="text-[8px] text-zinc-400">Authorized Signatory</p>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+
           </div>
         </div>
 
-        {/* Form Actions */}
-        <div className="flex justify-end gap-3 pb-8">
-          <button
-            type="button"
-            onClick={() => onNavigate("list")}
-            className="btn-secondary"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={saveMutation.isPending}
-            className="btn-primary px-6"
-          >
-            {saveMutation.isPending ? "Saving..." : isEdit ? "Update Invoice" : "Save Draft"}
-          </button>
-        </div>
-      </form>
+      </div>
     </div>
   );
 }
