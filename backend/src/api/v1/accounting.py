@@ -477,7 +477,7 @@ def get_profit_loss_report(
 @router.post("/recalculate-balances")
 def recalculate_account_balances(
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("accounting:view"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage"))
 ):
     """Recalculate current_balance for all accounts from journal entries."""
     update_account_balances(db, tenant_id)
