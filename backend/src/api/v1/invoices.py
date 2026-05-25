@@ -18,7 +18,7 @@ from src.schemas.document import (
 )
 from src.schemas.einvoice_schemas import EInvoiceResponse, EInvoiceCancelRequest, EInvoiceCancelResponse
 from src.domains.taxation.services import GSTEngine
-from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
+from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
 from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
 from src.api.deps import get_tenant_context, enforce_permission
 
@@ -953,6 +953,8 @@ def finalize_credit_note(
 
     cn.status = "ISSUED"
     db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
     db.commit()
     db.refresh(cn)
     return cn
@@ -1147,6 +1149,8 @@ def finalize_debit_note(
 
     dn.status = "ISSUED"
     db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
     db.commit()
     db.refresh(dn)
     return dn

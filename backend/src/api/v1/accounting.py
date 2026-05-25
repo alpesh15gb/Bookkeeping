@@ -18,6 +18,7 @@ from src.schemas.accounting_schemas import (
     ProfitLossResponse, ProfitLossItem
 )
 from src.domains.company.services import NumberingSeriesService
+from src.domains.accounting.services import update_account_balances
 from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/accounting", tags=["Accounting & Ledger"])
@@ -471,3 +472,13 @@ def get_profit_loss_report(
         total_expenses=total_expenses,
         net_profit=net_profit
     )
+
+
+@router.post("/recalculate-balances")
+def recalculate_account_balances(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("accounting:view"))
+):
+    """Recalculate current_balance for all accounts from journal entries."""
+    update_account_balances(db, tenant_id)
+    return {"message": "Account balances recalculated from journal entries."}

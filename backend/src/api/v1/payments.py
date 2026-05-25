@@ -14,7 +14,7 @@ from src.schemas.payment_schemas import (
     PaymentCreate, PaymentResponse, PaymentListResponse,
     BillPaymentCreate, BillPaymentResponse, BillPaymentListResponse
 )
-from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
+from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
 from src.domains.company.services import NumberingSeriesService
 from src.api.deps import get_tenant_context, enforce_permission
 
@@ -145,6 +145,8 @@ def create_payment_receipt(
     )
 
     db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
     db.commit()
     db.refresh(payment)
     return payment
@@ -388,6 +390,8 @@ def create_vendor_payment(
     )
 
     db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
     db.commit()
     db.refresh(payment)
     return payment

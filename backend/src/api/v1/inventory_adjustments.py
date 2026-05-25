@@ -12,7 +12,7 @@ from src.infrastructure.database.models import (
 from src.schemas.bill_schemas import (
     InventoryAdjustmentCreate, InventoryAdjustmentUpdate, InventoryAdjustmentResponse, InventoryAdjustmentListResponse
 )
-from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
+from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
 from src.api.deps import get_tenant_context, enforce_permission
 
 router = APIRouter(prefix="/inventory-adjustments", tags=["Inventory Adjustments"])
@@ -259,6 +259,9 @@ def confirm_inventory_adjustment(
         db.add(stock_entry)
 
     adjustment.status = "CONFIRMED"
+    if journal_lines:
+        affected = {line.account_id for line in journal_lines}
+        update_account_balances(db, tenant_id, affected)
     db.commit()
     db.refresh(adjustment)
     return adjustment

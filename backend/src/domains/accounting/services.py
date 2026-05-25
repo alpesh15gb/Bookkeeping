@@ -3,7 +3,7 @@ from typing import List, Optional, Dict
 from datetime import date
 import uuid
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 
 class LedgerValidationError(Exception):
     """Raised when double-entry rules or compliance requirements are violated."""
@@ -515,3 +515,37 @@ class AccountResolver:
         self.db.add(account)
         self.db.flush()
         return account.id
+
+
+def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Optional[set[uuid.UUID]] = None) -> None:
+    """Recalculate current_balance for accounts from their journal lines.
+
+    If account_ids is None, recalculates ALL accounts for the tenant.
+    """
+    from src.infrastructure.database.models import Account, JournalLine
+
+    query = db.query(Account).filter(
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None
+    )
+    if account_ids:
+        query = query.filter(Account.id.in_(account_ids))
+
+    accounts = query.all()
+    for account in accounts:
+        debit_sum = db.query(func.sum(JournalLine.amount)).filter(
+            JournalLine.account_id == account.id,
+            JournalLine.direction == "DEBIT"
+        ).scalar() or Decimal("0.0000")
+
+        credit_sum = db.query(func.sum(JournalLine.amount)).filter(
+            JournalLine.account_id == account.id,
+            JournalLine.direction == "CREDIT"
+        ).scalar() or Decimal("0.0000")
+
+        if account.account_type in ("ASSET", "EXPENSE"):
+            account.current_balance = debit_sum - credit_sum
+        else:
+            account.current_balance = credit_sum - debit_sum
+
+    db.commit()
