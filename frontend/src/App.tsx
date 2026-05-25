@@ -87,6 +87,7 @@ export default function App() {
   const [activeCreditNoteId, setActiveCreditNoteId] = useState<string | undefined>(undefined);
   const [activePOId, setActivePOId] = useState<string | undefined>(undefined);
   const [activeSOId, setActiveSOId] = useState<string | undefined>(undefined);
+  const [user, setUser] = useState<{ full_name: string; email: string } | null>(null);
 
   // Restore session on mount
   useEffect(() => {
@@ -97,7 +98,10 @@ export default function App() {
       setTenantId(tenantId);
       apiClient
         .get("/auth/me")
-        .then(() => setAuthenticated(true))
+        .then((res) => {
+          setUser(res.data);
+          setAuthenticated(true);
+        })
         .catch(() => {
           setAccessToken(null);
           setTenantId(null);
@@ -105,6 +109,22 @@ export default function App() {
         });
     }
   }, []);
+
+  // Fetch/Clear user info on auth status changes
+  useEffect(() => {
+    if (authenticated) {
+      apiClient
+        .get("/auth/me")
+        .then((res) => {
+          setUser(res.data);
+        })
+        .catch(() => {
+          handleLogout();
+        });
+    } else {
+      setUser(null);
+    }
+  }, [authenticated]);
 
   const handleLogin = () => {
     setAuthenticated(true);
@@ -382,8 +402,8 @@ export default function App() {
                 className="h-8 w-8 rounded-full border border-zinc-200 object-cover"
               />
               <div className="text-xs">
-                <p className="font-semibold text-zinc-850 leading-none mb-0.5">Arjun Verma</p>
-                <p className="text-zinc-400 text-[9px] font-medium leading-none">Admin</p>
+                <p className="font-semibold text-zinc-850 leading-none mb-0.5">{user?.full_name || "Arjun Verma"}</p>
+                <p className="text-zinc-400 text-[9px] font-medium leading-none">{user?.email || "Admin"}</p>
               </div>
               <ChevronDown className="w-3 h-3 text-zinc-400 ml-0.5" />
             </div>
