@@ -25,7 +25,8 @@ type ReportView =
   | "outstanding_receivables"
   | "outstanding_payables"
   | "sales_analytics"
-  | "purchase_analytics";
+  | "purchase_analytics"
+  | "gst_offline_exports";
 
 interface ReportsDashboardProps {
   onNavigate: (view: ReportView, reportType?: string) => void;
@@ -181,6 +182,7 @@ const reportCards: ReportCardConfig[] = [
   { key: "cash_flow", icon: TrendingUp, title: "Cash Flow Statement", description: "Operating, investing, and financing activities", section: "Financial Reports", color: "bg-emerald-50 text-emerald-600" },
   { key: "gstr1", icon: FileSpreadsheet, title: "GSTR-1", description: "Outward supply summary for GST return", section: "GST Returns", color: "bg-indigo-50 text-indigo-600" },
   { key: "gstr3b", icon: Receipt, title: "GSTR-3B", description: "Monthly summary return and tax payable", section: "GST Returns", color: "bg-violet-50 text-violet-600" },
+  { key: "gst_offline_exports", icon: FileSpreadsheet, title: "GST Offline Tool Exports", description: "Excel exports formatted for direct upload to GST utility", section: "GST Returns", color: "bg-amber-50 text-amber-600" },
   { key: "aging_receivables", icon: Clock, title: "AR Aging", description: "Receivables aging by bucket periods", section: "Aging Reports", color: "bg-amber-50 text-amber-600" },
   { key: "aging_payables", icon: Clock, title: "AP Aging", description: "Payables aging by bucket periods", section: "Aging Reports", color: "bg-orange-50 text-orange-600" },
   { key: "outstanding_receivables", icon: DollarSign, title: "Outstanding Receivables", description: "Overdue invoices and recovery tracking", section: "Outstanding", color: "bg-rose-50 text-rose-600" },
@@ -368,6 +370,7 @@ function GSTR3BView({ onBack }: { onBack: () => void }) {
   const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split("T")[0];
   const [startDate, setStartDate] = useState(firstDayOfMonth);
   const [endDate, setEndDate] = useState(lastDayOfMonth);
+  const [downloading, setDownloading] = useState(false);
 
   const { data, isLoading, error } = useQuery<GSTR3BData>({
     queryKey: ["report-gstr3b", startDate, endDate],
@@ -376,6 +379,43 @@ function GSTR3BView({ onBack }: { onBack: () => void }) {
       return res.data;
     },
   });
+
+  const handleExport = async () => {
+    setDownloading(true);
+    try {
+      const response = await apiClient.get("/gst/gstr3b/export", {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+        },
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      
+      let filename = `GSTR3B_Export_${startDate}_to_${endDate}.xlsx`;
+      const disposition = response.headers["content-disposition"];
+      if (disposition && disposition.includes("filename=")) {
+        const parts = disposition.split("filename=");
+        if (parts.length > 1) {
+          filename = parts[1].replace(/['"]/g, "").trim();
+        }
+      }
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (isLoading) return <LoadingSpinner />;
   if (error || !data) return <ErrorBanner />;
@@ -390,8 +430,15 @@ function GSTR3BView({ onBack }: { onBack: () => void }) {
           <h1 className="text-xl font-bold text-slate-900">GSTR-3B Summary</h1>
           <p className="text-xs text-slate-400">{formatDate(data.period_start)} — {formatDate(data.period_end)}</p>
         </div>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-end gap-3">
           <DateRangePicker startDate={startDate} endDate={endDate} onStartChange={setStartDate} onEndChange={setEndDate} />
+          <button
+            onClick={handleExport}
+            disabled={downloading}
+            className="px-4 py-2 text-xs font-bold rounded-lg bg-[#DCA035] text-zinc-950 hover:bg-[#C98F2C] disabled:opacity-50 transition self-end"
+          >
+            {downloading ? "Exporting..." : "Export Excel"}
+          </button>
         </div>
       </div>
 
@@ -677,13 +724,24 @@ function AgingReportView({ onBack, type }: { onBack: () => void; type: "receivab
   );
 }
 
-function GenericReportView({ onBack, endpoint, queryKey, title, startDate, endDate }: {
+function GenericReportView({
+  onBack,
+  endpoint,
+  queryKey,
+  title,
+  startDate,
+  endDate,
+  exportEndpoint,
+  exportType,
+}: {
   onBack: () => void;
   endpoint: string;
   queryKey: string;
   title: string;
   startDate?: string;
   endDate?: string;
+  exportEndpoint?: string;
+  exportType?: "gstr1" | "gstr2" | "gstr3b";
 }) {
   const today = new Date();
   const firstDayOfYear = new Date(today.getFullYear(), 0, 1).toISOString().split("T")[0];
@@ -694,6 +752,7 @@ function GenericReportView({ onBack, endpoint, queryKey, title, startDate, endDa
   const [localEndDate, setLocalEndDate] = useState(endDate || lastDayOfMonth);
   const activeStart = startDate ?? localStartDate;
   const activeEnd = endDate ?? localEndDate;
+  const [downloading, setDownloading] = useState(false);
 
   const { data, isLoading, error } = useQuery<any>({
     queryKey: [queryKey, activeStart, activeEnd],
@@ -702,6 +761,43 @@ function GenericReportView({ onBack, endpoint, queryKey, title, startDate, endDa
       return res.data;
     },
   });
+
+  const handleExport = async () => {
+    setDownloading(true);
+    try {
+      const response = await apiClient.get(exportEndpoint!, {
+        params: {
+          start_date: activeStart,
+          end_date: activeEnd,
+        },
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      
+      let filename = `${exportType?.toUpperCase() || "EXPORT"}_Export_${activeStart}_to_${activeEnd}.xlsx`;
+      const disposition = response.headers["content-disposition"];
+      if (disposition && disposition.includes("filename=")) {
+        const parts = disposition.split("filename=");
+        if (parts.length > 1) {
+          filename = parts[1].replace(/['"]/g, "").trim();
+        }
+      }
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorBanner />;
@@ -764,14 +860,155 @@ function GenericReportView({ onBack, endpoint, queryKey, title, startDate, endDa
           <ArrowLeft className="w-5 h-5" />
         </button>
         <h1 className="text-xl font-bold text-slate-900">{title}</h1>
-        {!startDate && (
-          <div className="ml-auto">
-            <DateRangePicker startDate={localStartDate} endDate={localEndDate} onStartChange={setLocalStartDate} onEndChange={setLocalEndDate} />
-          </div>
-        )}
+        <div className="ml-auto flex items-end gap-3">
+          {!startDate && (
+            <DateRangePicker startDate={activeStart} endDate={activeEnd} onStartChange={setLocalStartDate} onEndChange={setLocalEndDate} />
+          )}
+          {exportEndpoint && (
+            <button
+              onClick={handleExport}
+              disabled={downloading}
+              className="px-4 py-2 text-xs font-bold rounded-lg bg-[#DCA035] text-zinc-950 hover:bg-[#C98F2C] disabled:opacity-50 transition self-end"
+            >
+              {downloading ? "Exporting..." : "Export Excel"}
+            </button>
+          )}
+        </div>
       </div>
       <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
         {renderData(data)}
+      </div>
+    </div>
+  );
+}
+
+function GstOfflineExportsView({ onBack }: { onBack: () => void }) {
+  const today = new Date();
+  const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1).toISOString().split("T")[0];
+  const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).toISOString().split("T")[0];
+  const [startDate, setStartDate] = useState(firstDayOfMonth);
+  const [endDate, setEndDate] = useState(lastDayOfMonth);
+  const [downloading, setDownloading] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleDownload = async (type: "gstr1" | "gstr2" | "gstr3b") => {
+    setError(null);
+    setDownloading(type);
+    try {
+      const response = await apiClient.get(`/gst/${type}/export`, {
+        params: {
+          start_date: startDate,
+          end_date: endDate,
+        },
+        responseType: "blob",
+      });
+
+      const blob = new Blob([response.data], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+
+      let filename = `${type.toUpperCase()}_Export_${startDate}_to_${endDate}.xlsx`;
+      const disposition = response.headers["content-disposition"];
+      if (disposition && disposition.includes("filename=")) {
+        const parts = disposition.split("filename=");
+        if (parts.length > 1) {
+          filename = parts[1].replace(/['"]/g, "").trim();
+        }
+      }
+
+      link.setAttribute("download", filename);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      console.error(err);
+      setError(`Failed to download ${type.toUpperCase()} export. Ensure the backend is running and date ranges are valid.`);
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <button onClick={onBack} className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded transition">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">GST Returns Offline Utility Exports</h1>
+          <p className="text-xs text-slate-400">Generate formatted Excel spreadsheets compatible with the government GST offline tool.</p>
+        </div>
+        <div className="ml-auto">
+          <DateRangePicker startDate={startDate} endDate={endDate} onStartChange={setStartDate} onEndChange={setEndDate} />
+        </div>
+      </div>
+
+      {error && <ErrorBanner message={error} />}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
+        {/* GSTR-1 */}
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+          <div>
+            <div className="h-10 w-10 bg-indigo-50 text-indigo-600 rounded-lg flex items-center justify-center mb-4">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">GSTR-1 return</h3>
+            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+              Export details of outward supplies of goods or services. Includes worksheets for registered customers (b2b), small unregistered consumers (b2cs), credit/debit notes (cdnr/cdnur), HSN-wise summary (hsn), and document count (doc).
+            </p>
+          </div>
+          <button
+            onClick={() => handleDownload("gstr1")}
+            disabled={!!downloading}
+            className="w-full mt-6 py-2.5 px-4 rounded-lg font-bold text-xs transition duration-200 bg-[#DCA035] text-zinc-950 hover:bg-[#C98F2C] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {downloading === "gstr1" ? "Generating..." : "Export GSTR-1 Excel"}
+          </button>
+        </div>
+
+        {/* GSTR-2 */}
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+          <div>
+            <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center mb-4">
+              <FileSpreadsheet className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">GSTR-2 return</h3>
+            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+              Export details of inward registered supplies (purchases) from vendors. Includes the b2b registered invoice details required for Input Tax Credit (ITC) reconciliation.
+            </p>
+          </div>
+          <button
+            onClick={() => handleDownload("gstr2")}
+            disabled={!!downloading}
+            className="w-full mt-6 py-2.5 px-4 rounded-lg font-bold text-xs transition duration-200 bg-[#DCA035] text-zinc-950 hover:bg-[#C98F2C] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {downloading === "gstr2" ? "Generating..." : "Export GSTR-2 Excel"}
+          </button>
+        </div>
+
+        {/* GSTR-3B */}
+        <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm flex flex-col justify-between hover:shadow-md transition">
+          <div>
+            <div className="h-10 w-10 bg-violet-50 text-violet-600 rounded-lg flex items-center justify-center mb-4">
+              <Receipt className="w-5 h-5" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800">GSTR-3B return</h3>
+            <p className="text-xs text-slate-400 mt-2 leading-relaxed">
+              Export a consolidated self-declaration summary of outward supplies, inward supplies subject to reverse charge, eligible Input Tax Credit (ITC), and net payable taxes.
+            </p>
+          </div>
+          <button
+            onClick={() => handleDownload("gstr3b")}
+            disabled={!!downloading}
+            className="w-full mt-6 py-2.5 px-4 rounded-lg font-bold text-xs transition duration-200 bg-[#DCA035] text-zinc-950 hover:bg-[#C98F2C] flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {downloading === "gstr3b" ? "Generating..." : "Export GSTR-3B Excel"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -791,6 +1028,8 @@ export default function ReportsDashboard({ onNavigate: _onNavigate }: ReportsDas
       return <BalanceSheetView onBack={handleBack} />;
     case "gstr3b":
       return <GSTR3BView onBack={handleBack} />;
+    case "gst_offline_exports":
+      return <GstOfflineExportsView onBack={handleBack} />;
     case "cash_flow":
       return <CashFlowView onBack={handleBack} />;
     case "outstanding_receivables":
@@ -802,7 +1041,16 @@ export default function ReportsDashboard({ onNavigate: _onNavigate }: ReportsDas
     case "aging_payables":
       return <AgingReportView onBack={handleBack} type="payables" />;
     case "gstr1":
-      return <GenericReportView onBack={handleBack} endpoint="/reports/gst/gstr1" queryKey="report-gstr1" title="GSTR-1" />;
+      return (
+        <GenericReportView
+          onBack={handleBack}
+          endpoint="/reports/gst/gstr1"
+          queryKey="report-gstr1"
+          title="GSTR-1"
+          exportEndpoint="/gst/gstr1/export"
+          exportType="gstr1"
+        />
+      );
     case "sales_analytics":
       return <GenericReportView onBack={handleBack} endpoint="/reports/analytics/sales" queryKey="report-sales-analytics" title="Sales Analytics" />;
     case "purchase_analytics":
