@@ -785,7 +785,27 @@ def list_credit_notes(
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
     """Lists all credit notes for the active tenant."""
-    return db.query(CreditNote).filter(CreditNote.tenant_id == tenant_id, CreditNote.deleted_at == None).all()
+    from sqlalchemy.orm import joinedload
+    notes = db.query(CreditNote).options(
+        joinedload(CreditNote.invoice)
+    ).filter(
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).all()
+    return [
+        CreditNoteListResponse(
+            id=cn.id,
+            credit_note_number=cn.credit_note_number,
+            issue_date=cn.issue_date,
+            status=cn.status,
+            total=cn.total,
+            reason=cn.reason,
+            created_at=cn.created_at,
+            invoice_number=cn.invoice.invoice_number if cn.invoice else None,
+            contact_name=cn.invoice.contact.name if cn.invoice and cn.invoice.contact else None,
+        )
+        for cn in notes
+    ]
 
 @router.get("/credit-notes/{cn_id}", response_model=CreditNoteResponse)
 def get_credit_note(

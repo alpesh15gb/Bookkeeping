@@ -194,6 +194,8 @@ class CreditNoteListResponse(SchemaBase):
     total: Decimal
     reason: Optional[str]
     created_at: datetime
+    invoice_number: Optional[str] = None
+    contact_name: Optional[str] = None
 
 # DEBIT NOTE SCHEMAS
 class DebitNoteLineCreate(SchemaBase):
