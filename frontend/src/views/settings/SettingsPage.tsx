@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient, getActiveTenantId } from "../../lib/api";
 import {
@@ -80,10 +80,10 @@ interface AuditLogItem {
   id: string;
   actor_email: string;
   action: string;
-  entity_type: string;
+  resource: string;
   ip_address: string;
   user_agent: string;
-  timestamp: string;
+  created_at: string;
 }
 
 const STATE_CODES = [
@@ -127,7 +127,7 @@ const STATE_CODES = [
   { code: "38", name: "Ladakh" },
 ];
 
-const DOC_TYPES = ["INVOICE", "BILL", "RECEIPT", "DISBURSEMENT", "JOURNAL", "CREDIT_NOTE", "DEBIT_NOTE", "PURCHASE_ORDER", "SALES_ORDER", "DELIVERY_CHALLAN", "PROFORMA_INVOICE"];
+const DOC_TYPES = ["INVOICE", "BILL", "PAYMENT", "JOURNAL"];
 
 type TabId = "company" | "profile" | "gst" | "invoice" | "bank" | "security" | "audit";
 
@@ -140,6 +140,111 @@ const TABS: { id: TabId; label: string; icon: React.ReactNode }[] = [
   { id: "security", label: "Security", icon: <Shield className="w-4 h-4" /> },
   { id: "audit", label: "Audit Logs", icon: <ClipboardList className="w-4 h-4" /> },
 ];
+
+function LogoUploader({ currentLogo, onUpload, onRemove }: { currentLogo: string; onUpload: (url: string) => void; onRemove: () => void }) {
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const queryClient = useQueryClient();
+
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await apiClient.post("/settings/logo", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      return res.data.logo_url;
+    },
+    onSuccess: (url) => {
+      onUpload(url);
+      queryClient.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+
+  const handleFile = (file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    setUploading(true);
+    uploadMutation.mutate(file, {
+      onSettled: () => setUploading(false),
+    });
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  return (
+    <div className="space-y-3">
+      <div
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={handleDrop}
+        onClick={() => inputRef.current?.click()}
+        className={`relative flex flex-col items-center justify-center border-2 border-dashed rounded-xl p-6 cursor-pointer transition ${
+          dragOver ? "border-brand-500 bg-brand-50" : "border-slate-200 hover:border-brand-300 bg-slate-50/50"
+        }`}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleChange}
+          className="hidden"
+        />
+
+        {currentLogo ? (
+          <div className="flex flex-col items-center gap-3">
+            <img
+              src={currentLogo}
+              alt="Company logo"
+              className="max-h-24 max-w-48 object-contain rounded-lg border border-slate-100"
+            />
+            <div className="flex gap-2">
+              {uploading ? (
+                <span className="text-xs text-slate-500">Uploading...</span>
+              ) : (
+                <>
+                  <span className="text-xs text-slate-400">Click or drag to replace</span>
+                  <button
+                    type="button"
+                    onClick={(e) => { e.stopPropagation(); onRemove(); }}
+                    className="text-xs text-rose-600 hover:text-rose-700 font-semibold"
+                  >
+                    Remove
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-slate-400">
+            {uploading ? (
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
+            ) : (
+              <>
+                <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-sm">Drop logo here or click to browse</span>
+                <span className="text-xs">PNG, JPG, GIF, WebP up to 5MB</span>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 
 export default function SettingsPage({ onNavigate }: SettingsPageProps) {
   const [activeTab, setActiveTab] = useState<TabId>("company");
@@ -208,6 +313,7 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
     gstin: "",
     pan: "",
     financial_year_start: "",
+    cin: "",
   });
 
   const [settingsForm, setSettingsForm] = useState({
@@ -251,6 +357,7 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
         financial_year_start: companyData.financial_year_start
           ? new Date(companyData.financial_year_start).toISOString().split("T")[0]
           : "",
+        cin: (companyData as any).cin || "",
       });
     }
   }, [companyData]);
@@ -473,6 +580,17 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
                 </div>
 
                 <div className="space-y-2">
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">CIN</label>
+                  <input
+                    type="text"
+                    value={companyForm.cin}
+                    onChange={(e) => setCompanyForm((p) => ({ ...p, cin: e.target.value.toUpperCase() }))}
+                    placeholder="U74999MH2021PTC123456"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
+                  />
+                </div>
+
+                <div className="space-y-2">
                   <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Financial Year Start</label>
                   <input
                     type="date"
@@ -568,13 +686,11 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
             <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
               <div className="space-y-6">
                 <div className="space-y-2">
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Logo URL</label>
-                  <input
-                    type="url"
-                    value={settingsForm.logo_url}
-                    onChange={(e) => setSettingsForm((p) => ({ ...p, logo_url: e.target.value }))}
-                    placeholder="https://example.com/logo.png"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Company Logo</label>
+                  <LogoUploader
+                    currentLogo={settingsForm.logo_url}
+                    onUpload={(url) => setSettingsForm((p) => ({ ...p, logo_url: url }))}
+                    onRemove={() => setSettingsForm((p) => ({ ...p, logo_url: "" }))}
                   />
                 </div>
 
@@ -1091,7 +1207,7 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
                   {auditData?.data?.map((log) => (
                     <tr key={log.id} className="hover:bg-slate-50/50 transition">
                       <td className="px-6 py-4 text-slate-500">
-                        {new Date(log.timestamp).toLocaleString("en-IN")}
+                        {new Date(log.created_at).toLocaleString("en-IN")}
                       </td>
                       <td className="px-6 py-4 font-medium text-slate-700">{log.actor_email}</td>
                       <td className="px-6 py-4">
@@ -1099,7 +1215,7 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
                           {log.action}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-slate-600">{log.entity_type}</td>
+                      <td className="px-6 py-4 text-slate-600">{log.resource}</td>
                       <td className="px-6 py-4 font-mono text-slate-500">{log.ip_address}</td>
                     </tr>
                   ))}

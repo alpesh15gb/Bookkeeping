@@ -6,7 +6,7 @@ from decimal import Decimal
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    PurchaseOrder, PurchaseOrderLine, Contact, Product, JournalEntry, JournalLine
+    PurchaseOrder, PurchaseOrderLine, Contact, Product, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
 )
 from src.schemas.bill_schemas import (
     PurchaseOrderCreate, PurchaseOrderUpdate, PurchaseOrderResponse, PurchaseOrderListResponse
@@ -171,6 +171,87 @@ def get_purchase_order(
     if not po:
         raise HTTPException(status_code=404, detail="Purchase Order not found in this company context.")
     return po
+
+
+@router.get("/{id}/pdf-payload")
+def get_purchase_order_pdf_payload(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    """Consolidated metadata for PDF print rendering of a purchase order."""
+    po = db.query(PurchaseOrder).filter(
+        PurchaseOrder.id == id,
+        PurchaseOrder.tenant_id == tenant_id,
+        PurchaseOrder.deleted_at == None
+    ).first()
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase Order not found.")
+
+    settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    company = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    bank = db.query(BankingProfile).filter(
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.is_primary == True,
+        BankingProfile.is_active == True
+    ).first()
+    contact = po.contact
+
+    return {
+        "company": {
+            "legal_name": company.legal_name if company else None,
+            "trade_name": company.trade_name if company else None,
+            "gstin": company.gstin if company else None,
+            "pan": company.pan if company else None,
+            "logo_url": settings.logo_url if settings else None
+        },
+        "bank_details": {
+            "bank_name": bank.bank_name if bank else None,
+            "account_number": bank.account_number if bank else None,
+            "ifsc_code": bank.ifsc_code if bank else None,
+            "account_holder_name": bank.account_holder_name if bank else None,
+            "upi_id": bank.upi_id if bank else None
+        },
+        "vendor": {
+            "name": contact.name if contact else None,
+            "gstin": contact.gstin if contact else None,
+            "pan": contact.pan if contact else None,
+            "billing_address": contact.billing_address if contact else None,
+            "state_code": contact.state_code if contact else None
+        },
+        "purchase_order": {
+            "id": str(po.id),
+            "po_number": po.po_number,
+            "order_date": po.order_date.isoformat(),
+            "due_date": po.due_date.isoformat(),
+            "pos_state_code": po.pos_state_code,
+            "status": po.status,
+            "subtotal": float(po.subtotal),
+            "discount_total": float(po.discount_total),
+            "cgst_amount": float(po.cgst_amount),
+            "sgst_amount": float(po.sgst_amount),
+            "igst_amount": float(po.igst_amount),
+            "utgst_amount": float(po.utgst_amount),
+            "cess_amount": float(po.cess_amount),
+            "total": float(po.total)
+        },
+        "lines": [
+            {
+                "product_name": line.product.name if line.product else "N/A",
+                "hsn_sac": line.hsn_sac,
+                "quantity": float(line.quantity),
+                "rate": float(line.rate),
+                "discount": float(line.discount),
+                "subtotal": float(line.subtotal),
+                "gst_rate": float(line.gst_rate),
+                "cgst_amount": float(line.cgst_amount),
+                "sgst_amount": float(line.sgst_amount),
+                "igst_amount": float(line.igst_amount),
+                "total": float(line.total)
+            }
+            for line in po.lines
+        ]
+    }
 
 
 @router.put("/{id}", response_model=PurchaseOrderResponse)

@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List
-import uuid
+import os, uuid
 from datetime import datetime, timezone
 
+from src.core.config import settings
 from src.core.database import get_db_session
 from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries
 from src.schemas.company_schemas import (
@@ -102,8 +104,6 @@ def update_company(
     tenant.trade_name = payload.trade_name or payload.legal_name
     tenant.gstin = payload.gstin
     tenant.pan = payload.pan
-    if payload.financial_year_start is not None:
-        tenant.financial_year_start = payload.financial_year_start
 
     db.commit()
     db.refresh(tenant)
@@ -218,7 +218,43 @@ def delete_branch(
     db.commit()
     return None
 
-# 3. Settings endpoints
+# 3. Logo upload endpoint
+ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+@router.post("/settings/logo")
+def upload_logo(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update")),
+    request: Request = None
+):
+    """Uploads a company logo image for the active tenant. Saved to static/logos/<tenant_id>.ext"""
+    ext = os.path.splitext(file.filename or ".png")[1].lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(status_code=400, detail=f"Invalid file type: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
+
+    logo_path = os.path.join("static", "logos", f"{tenant_id}{ext}")
+    os.makedirs(os.path.dirname(logo_path), exist_ok=True)
+
+    contents = file.file.read()
+    with open(logo_path, "wb") as f:
+        f.write(contents)
+
+    base_url = str(request.base_url).rstrip("/")
+    logo_url = f"{base_url}/static/logos/{tenant_id}{ext}"
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    if not setting:
+        setting = TenantSetting(tenant_id=tenant_id)
+        db.add(setting)
+    setting.logo_url = logo_url
+    db.commit()
+    db.refresh(setting)
+
+    return {"logo_url": logo_url, "detail": "Logo uploaded successfully"}
+
+
+# 4. Settings endpoints
 @router.get("/settings", response_model=TenantSettingResponse)
 def get_settings(
     db: Session = Depends(get_db_session),

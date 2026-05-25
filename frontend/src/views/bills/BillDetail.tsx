@@ -29,6 +29,23 @@ export default function BillDetail({ billId, onNavigate }: BillDetailProps) {
     },
   });
 
+  const { data: companyData } = useQuery({
+    queryKey: ["company", bill?.tenant_id],
+    queryFn: async () => {
+      const res = await apiClient.get(`/companies/${bill.tenant_id}`);
+      return res.data;
+    },
+    enabled: !!bill?.tenant_id,
+  });
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const res = await apiClient.get("/settings");
+      return res.data;
+    },
+  });
+
   // Finalize Mutation
   const finalizeMutation = useMutation({
     mutationFn: async () => {
@@ -92,46 +109,81 @@ export default function BillDetail({ billId, onNavigate }: BillDetailProps) {
 <meta charset="utf-8"/>
 <title>Bill ${docNumber}</title>
 <style>
-  body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
-  .header { display: flex; justify-content: space-between; border-bottom: 2px solid #333; padding-bottom: 20px; margin-bottom: 20px; }
-  .company h1 { margin: 0; font-size: 24px; color: #1e40af; }
-  .invoice-info { text-align: right; }
-  .invoice-info h2 { font-size: 20px; margin: 0 0 5px 0; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 40px; color: #1e293b; font-size: 12px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1e40af; padding-bottom: 24px; margin-bottom: 24px; }
+  .company { display: flex; align-items: flex-start; gap: 16px; }
+  .company-logo { max-height: 64px; max-width: 160px; object-fit: contain; }
+  .company h1 { margin: 0; font-size: 22px; color: #1e40af; font-weight: 700; }
+  .company p { margin: 2px 0; font-size: 11px; color: #475569; }
+  .doc-info { text-align: right; }
+  .doc-info h2 { font-size: 26px; margin: 0 0 8px 0; color: #1e293b; letter-spacing: 1px; text-transform: uppercase; }
+  .doc-info p { margin: 2px 0; font-size: 12px; color: #475569; }
+  .address-section { display: flex; justify-content: space-between; margin: 20px 0; }
+  .address-box { width: 48%; }
+  .address-box .label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .address-box .name { font-size: 14px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
+  .address-box p { margin: 1px 0; font-size: 11px; color: #475569; line-height: 1.5; }
+  .meta-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 20px 0; padding: 16px; background: #f8fafc; border-radius: 4px; }
+  .meta-grid .item .label { font-size: 9px; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 1px; }
+  .meta-grid .item .value { font-size: 13px; font-weight: 600; color: #1e293b; margin-top: 2px; }
   table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-  th { background: #f1f5f9; padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
-  td { padding: 10px; border-bottom: 1px solid #eee; }
+  th { background: #1e40af; color: white; padding: 10px 12px; text-align: left; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+  td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 11px; }
+  tr:nth-child(even) { background: #f8fafc; }
   .text-right { text-align: right; }
-  .totals { margin-top: 20px; }
-  .totals tr td { border: none; padding: 4px 10px; }
-  .totals .grand-total { font-size: 18px; font-weight: bold; border-top: 2px solid #333; }
-  .bank-info { margin-top: 30px; background: #f8fafc; padding: 15px; border-radius: 8px; }
-  @media print { body { margin: 20px; } }
+  .totals { margin-top: 20px; margin-left: auto; width: 350px; }
+  .totals tr td { border: none; padding: 6px 12px; font-size: 12px; }
+  .totals .grand-total td { font-size: 16px; font-weight: 700; border-top: 2px solid #1e293b; padding-top: 10px; }
+  .totals .label-cell { text-align: right; color: #64748b; }
+  .totals .value-cell { text-align: right; font-weight: 600; }
+  .bank-info { margin-top: 30px; background: #f1f5f9; padding: 16px; border-radius: 4px; border-left: 3px solid #1e40af; }
+  .bank-info h4 { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .bank-info p { margin: 2px 0; font-size: 11px; color: #1e293b; }
+  .footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e2e8f0; text-align: center; font-size: 10px; color: #94a3b8; }
+  @media print { body { padding: 20px; } }
 </style>
 </head>
 <body>
 <div class="header">
   <div class="company">
-    <h1>${printData.company?.legal_name || ""}</h1>
-    ${printData.company?.gstin ? `<p>GSTIN: ${printData.company.gstin}</p>` : ""}
-    ${printData.bank_details?.bank_name ? `<p>Bank: ${printData.bank_details.bank_name}, A/C: ${printData.bank_details.account_number}, IFSC: ${printData.bank_details.ifsc_code}</p>` : ""}
+    ${printData.company?.logo_url ? `<img class="company-logo" src="${printData.company.logo_url}" alt="Logo" onerror="this.style.display='none'" />` : ""}
+    <div>
+      <h1>${printData.company?.legal_name || ""}</h1>
+      ${printData.company?.gstin ? `<p>GSTIN: ${printData.company.gstin}</p>` : ""}
+      ${printData.company?.pan ? `<p>PAN: ${printData.company.pan}</p>` : ""}
+    </div>
   </div>
-  <div class="invoice-info">
-    <h2>Bill</h2>
-    <p><strong>${docNumber}</strong></p>
-    <p>Date: ${printData.bill?.issue_date ? new Date(printData.bill.issue_date).toLocaleDateString("en-IN") : ""}</p>
-    <p>Due: ${printData.bill?.due_date ? new Date(printData.bill.due_date).toLocaleDateString("en-IN") : ""}</p>
+  <div class="doc-info">
+    <h2>Vendor Bill</h2>
+    <p style="font-size:14px;font-weight:700;color:#1e40af;">${docNumber}</p>
   </div>
 </div>
 
-<div style="margin-bottom: 20px;">
-  <strong>Bill From:</strong>
-  <p>${printData.customer?.name || ""} ${printData.customer?.gstin ? "<br>GSTIN: " + printData.customer.gstin : ""}</p>
-  ${printData.customer?.billing_address ? `<p>${printData.customer.billing_address.street || ""}<br>${printData.customer.billing_address.city || ""}, ${printData.customer.billing_address.state || ""} - ${printData.customer.billing_address.pincode || ""}</p>` : ""}
+<div class="address-section">
+  <div class="address-box">
+    <div class="label">Bill From (Vendor)</div>
+    <div class="name">${printData.vendor?.name || ""}</div>
+    ${printData.vendor?.gstin ? `<p>GSTIN: ${printData.vendor.gstin}</p>` : ""}
+    ${printData.vendor?.billing_address ? `<p>${printData.vendor.billing_address.street || ""}, ${printData.vendor.billing_address.city || ""}, ${printData.vendor.billing_address.state || ""} - ${printData.vendor.billing_address.pincode || ""}</p>` : ""}
+  </div>
+  <div class="address-box" style="text-align:right;">
+    <div class="label">Bill To (Buyer)</div>
+    <div class="name">${printData.company?.legal_name || ""}</div>
+    ${printData.company?.gstin ? `<p>GSTIN: ${printData.company.gstin}</p>` : ""}
+  </div>
+</div>
+
+<div class="meta-grid">
+  <div class="item"><div class="label">Bill Date</div><div class="value">${printData.bill?.issue_date ? new Date(printData.bill.issue_date).toLocaleDateString("en-IN") : ""}</div></div>
+  <div class="item"><div class="label">Due Date</div><div class="value">${printData.bill?.due_date ? new Date(printData.bill.due_date).toLocaleDateString("en-IN") : ""}</div></div>
+  <div class="item"><div class="label">Place of Supply</div><div class="value">${printData.bill?.pos_state_code || ""}</div></div>
+  <div class="item"><div class="label">Status</div><div class="value">${printData.bill?.status || ""}</div></div>
 </div>
 
 <table>
   <thead><tr>
-    <th>#</th><th>Item</th><th>HSN</th><th class="text-right">Qty</th>
+    <th>#</th><th>Item</th><th>HSN/SAC</th><th class="text-right">Qty</th>
     <th class="text-right">Rate</th><th class="text-right">Discount</th>
     <th class="text-right">Tax</th><th class="text-right">Amount</th>
   </tr></thead>
@@ -151,12 +203,24 @@ export default function BillDetail({ billId, onNavigate }: BillDetailProps) {
 </table>
 
 <table class="totals">
-  <tr><td colspan="7" class="text-right"><strong>Subtotal:</strong></td><td class="text-right">${formatCurrency(printData.bill?.subtotal || 0)}</td></tr>
-  ${(printData.bill?.cgst_amount || 0) > 0 ? `<tr><td colspan="7" class="text-right">CGST:</td><td class="text-right">${formatCurrency(printData.bill.cgst_amount)}</td></tr>` : ""}
-  ${(printData.bill?.sgst_amount || 0) > 0 ? `<tr><td colspan="7" class="text-right">SGST:</td><td class="text-right">${formatCurrency(printData.bill.sgst_amount)}</td></tr>` : ""}
-  ${(printData.bill?.igst_amount || 0) > 0 ? `<tr><td colspan="7" class="text-right">IGST:</td><td class="text-right">${formatCurrency(printData.bill.igst_amount)}</td></tr>` : ""}
-  <tr class="grand-total"><td colspan="7" class="text-right"><strong>Total:</strong></td><td class="text-right"><strong>${formatCurrency(printData.bill?.total || 0)}</strong></td></tr>
+  <tr><td class="label-cell">Subtotal</td><td class="value-cell">${formatCurrency(printData.bill?.subtotal || 0)}</td></tr>
+  ${(printData.bill?.discount_total || 0) > 0 ? `<tr><td class="label-cell">Discount</td><td class="value-cell">-${formatCurrency(printData.bill.discount_total)}</td></tr>` : ""}
+  ${(printData.bill?.cgst_amount || 0) > 0 ? `<tr><td class="label-cell">Input CGST</td><td class="value-cell">${formatCurrency(printData.bill.cgst_amount)}</td></tr>` : ""}
+  ${(printData.bill?.sgst_amount || 0) > 0 ? `<tr><td class="label-cell">Input SGST</td><td class="value-cell">${formatCurrency(printData.bill.sgst_amount)}</td></tr>` : ""}
+  ${(printData.bill?.igst_amount || 0) > 0 ? `<tr><td class="label-cell">Input IGST</td><td class="value-cell">${formatCurrency(printData.bill.igst_amount)}</td></tr>` : ""}
+  <tr class="grand-total"><td class="label-cell">Total</td><td class="value-cell">${formatCurrency(printData.bill?.total || 0)}</td></tr>
 </table>
+
+${printData.bank_details?.bank_name ? `
+<div class="bank-info">
+  <h4>Bank Details</h4>
+  <p><strong>${printData.bank_details.bank_name}</strong> | A/C: ${printData.bank_details.account_number || ""} | IFSC: ${printData.bank_details.ifsc_code || ""}</p>
+  ${printData.bank_details.upi_id ? `<p>UPI: ${printData.bank_details.upi_id}</p>` : ""}
+</div>` : ""}
+
+<div class="footer">
+  <p>This is a computer-generated bill and does not require a physical signature.</p>
+</div>
 
 <script>window.onload = () => { window.print(); }</script>
 </body></html>`;
@@ -305,11 +369,20 @@ export default function BillDetail({ billId, onNavigate }: BillDetailProps) {
           </div>
 
           <div className="md:text-right">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Buyer Company</span>
-            <h2 className="text-lg font-bold text-slate-900 mt-1">Varma Logistics Private Limited</h2>
-            <p className="text-sm text-slate-500 mt-1">101, Business Hub, Andheri East</p>
-            <p className="text-sm text-slate-500">Mumbai, Maharashtra - 400069</p>
-            <p className="text-sm font-semibold text-slate-700 mt-2 md:text-right">GSTIN: 27AAAAA1111A1Z5</p>
+            <div className="flex items-center justify-end gap-4 mb-2">
+              {settingsData?.logo_url && (
+                <img
+                  src={settingsData.logo_url}
+                  alt="Company logo"
+                  className="h-14 w-auto object-contain rounded border border-slate-100"
+                />
+              )}
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Buyer Company</span>
+                <h2 className="text-lg font-bold text-slate-900 mt-1">{companyData?.legal_name || "—"}</h2>
+              </div>
+            </div>
+            {companyData?.gstin && <p className="text-sm font-semibold text-slate-700">GSTIN: {companyData.gstin}</p>}
           </div>
         </div>
 
