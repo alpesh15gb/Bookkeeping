@@ -1,0 +1,140 @@
+import React, { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiClient } from "../../lib/api";
+import { Plus, Eye, ShieldAlert, FileMinus } from "lucide-react";
+
+interface CreditNoteListProps {
+  onNavigate: (view: "credit_notes" | "credit_note_create" | "credit_note_detail", id?: string) => void;
+}
+
+interface CreditNoteItem {
+  id: string;
+  credit_note_number: string;
+  issue_date: string;
+  invoice_number?: string;
+  status: string;
+  total: number;
+  contact_name?: string;
+}
+
+const formatCurrency = (amount: number) =>
+  new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" }).format(amount);
+
+const getStatusBadge = (status: string) => {
+  const base = "px-2.5 py-1 text-xs font-semibold rounded-full inline-flex items-center border";
+  switch (status?.toUpperCase()) {
+    case "DRAFT": return `${base} bg-slate-100 text-slate-700 border-slate-200`;
+    case "ISSUED": return `${base} bg-emerald-50 text-emerald-700 border-emerald-200`;
+    case "APPLIED": return `${base} bg-blue-50 text-blue-700 border-blue-200`;
+    case "CANCELLED": return `${base} bg-rose-50 text-rose-700 border-rose-200`;
+    default: return `${base} bg-slate-100 text-slate-600 border-slate-200`;
+  }
+};
+
+export default function CreditNoteList({ onNavigate }: CreditNoteListProps) {
+  const [search, setSearch] = useState("");
+
+  const { data, isLoading, error } = useQuery<{ items?: CreditNoteItem[] } | CreditNoteItem[]>({
+    queryKey: ["credit-notes"],
+    queryFn: async () => {
+      const res = await apiClient.get("/credit-notes");
+      return res.data;
+    },
+  });
+
+  const creditNotes: CreditNoteItem[] = Array.isArray(data)
+    ? data
+    : (data as any)?.items || [];
+
+  const filtered = creditNotes.filter((cn) =>
+    cn.credit_note_number?.toLowerCase().includes(search.toLowerCase()) ||
+    cn.contact_name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Credit Notes</h1>
+          <p className="text-sm text-slate-500">Manage credit notes issued to customers for returns and adjustments.</p>
+        </div>
+        <button
+          onClick={() => onNavigate("credit_note_create")}
+          className="flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg shadow-sm font-semibold transition"
+        >
+          <Plus className="w-4 h-4" />
+          New Credit Note
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+        <input
+          type="text"
+          placeholder="Search by credit note number or customer..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
+        </div>
+      ) : error ? (
+        <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">
+          <ShieldAlert className="w-5 h-5 flex-shrink-0" />
+          <span>Error loading credit notes. Please check API server.</span>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 bg-white rounded-xl border border-slate-100 shadow-sm">
+          <FileMinus className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+          <h3 className="text-sm font-semibold text-slate-700">No Credit Notes Found</h3>
+          <p className="text-xs text-slate-500 mt-1">Create a credit note to handle returns and adjustments.</p>
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-left text-sm">
+              <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-100">
+                <tr>
+                  <th className="px-6 py-3.5">Credit Note #</th>
+                  <th className="px-6 py-3.5">Date</th>
+                  <th className="px-6 py-3.5">Linked Invoice</th>
+                  <th className="px-6 py-3.5">Status</th>
+                  <th className="px-6 py-3.5">Total</th>
+                  <th className="px-6 py-3.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filtered.map((cn) => (
+                  <tr key={cn.id} className="hover:bg-slate-50/50 transition">
+                    <td className="px-6 py-4 font-mono font-medium text-brand-900">{cn.credit_note_number}</td>
+                    <td className="px-6 py-4 text-slate-500">
+                      {new Date(cn.issue_date).toLocaleDateString("en-IN")}
+                    </td>
+                    <td className="px-6 py-4 text-slate-500 font-mono">{cn.invoice_number || "—"}</td>
+                    <td className="px-6 py-4">
+                      <span className={getStatusBadge(cn.status)}>{cn.status}</span>
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-800">{formatCurrency(cn.total)}</td>
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => onNavigate("credit_note_detail", cn.id)}
+                        title="View Credit Note"
+                        className="p-1 text-slate-400 hover:text-brand-600 hover:bg-slate-100 rounded transition"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

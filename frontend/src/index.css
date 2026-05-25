@@ -1,0 +1,131 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    margin: 0;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #fcfcfd;
+    color: #09090b;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="email"],
+  input[type="password"],
+  select,
+  textarea {
+    @apply px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-800 focus:border-zinc-800 transition duration-150 ease-in-out placeholder-zinc-400;
+  }
+}
+
+/* Global Premium Styling Presets */
+@layer components {
+  /* Forms & Controls */
+  .form-input, .form-select, .form-textarea {
+    @apply w-full px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-800 focus:border-zinc-800 transition duration-150 ease-in-out placeholder-zinc-400;
+  }
+
+  .form-label {
+    @apply block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-lg shadow-sm font-medium transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-zinc-800 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 rounded-lg shadow-sm font-medium transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-zinc-800 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg shadow-sm font-medium transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+  }
+
+  /* Badges & Indicators */
+  .badge {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md border transition duration-150;
+  }
+  .badge-draft {
+    @apply bg-zinc-50 text-zinc-600 border-zinc-200/70;
+  }
+  .badge-sent, .badge-unpaid {
+    @apply bg-amber-50 text-amber-800 border-amber-200/70;
+  }
+  .badge-partially_paid {
+    @apply bg-blue-50 text-blue-800 border-blue-200/70;
+  }
+  .badge-paid {
+    @apply bg-emerald-50 text-emerald-800 border-emerald-200/70;
+  }
+  .badge-cancelled {
+    @apply bg-red-50 text-red-800 border-red-200/70;
+  }
+
+  /* Premium Responsive Tables */
+  .financial-table {
+    @apply w-full border-collapse text-left text-sm;
+  }
+  .financial-table th {
+    @apply px-4 py-3 bg-zinc-50/70 text-zinc-500 font-semibold border-b border-zinc-100 text-xs uppercase tracking-wider;
+  }
+  .financial-table td {
+    @apply px-4 py-3.5 text-zinc-700 border-b border-zinc-100/60 align-middle;
+  }
+  .financial-table tr {
+    @apply hover:bg-zinc-50/40 transition duration-100 ease-in-out;
+  }
+
+  /* Numeric formats inside table */
+  .numeric-val {
+    @apply font-mono text-right tracking-tight tabular-nums text-zinc-800;
+  }
+
+  /* Sticky totals row */
+  .total-row {
+    @apply bg-zinc-50/50 font-semibold border-t-2 border-zinc-200;
+  }
+  .total-row td {
+    @apply text-zinc-900 border-b-4 border-double border-zinc-200;
+  }
+}
+
+/* Custom Scrollbars for clean visual feel on overflow divs */
+.overflow-x-auto::-webkit-scrollbar {
+  height: 6px;
+}
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: #e4e4e7;
+  border-radius: 3px;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb:hover {
+  background: #d4d4d8;
+}
+
+/* Custom print configurations for Invoice print views */
+@media print {
+  body {
+    background-color: #ffffff;
+    color: #000000;
+    font-family: inherit;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-box {
+    border: none !important;
+    box-shadow: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}
