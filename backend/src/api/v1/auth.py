@@ -60,9 +60,10 @@ def _is_refresh_token_revoked(user_id: str, token: str) -> bool:
 def _log_audit(db: Session, action: str, user_id: str = None, tenant_id: str = None, details: dict = None, request: Request = None):
     log = AuditLog(
         action=action,
-        user_id=uuid.UUID(user_id) if user_id else None,
+        actor_id=uuid.UUID(user_id) if user_id else None,
         tenant_id=uuid.UUID(tenant_id) if tenant_id else None,
-        details=details or {},
+        entity_type="Auth",
+        after_state=details or {},
         ip_address=request.client.host if request and request.client else None,
     )
     db.add(log)

@@ -77,22 +77,6 @@ class PasswordResetToken(Base):
     user = relationship("User")
 
 
-class AuditLog(Base):
-    __tablename__ = "audit_logs"
-    __table_args__ = {"extend_existing": True}
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=True)
-    user_id = Column(UUID(as_uuid=True), nullable=True)
-    action = Column(String(100), nullable=False)
-    resource = Column(String(100))
-    resource_id = Column(String(100))
-    details = Column(JSON)
-    ip_address = Column(String(45))
-    user_agent = Column(String(500))
-    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
-
-
 # ---------------------------------------------------------------------------
 # CONTACT (Customer / Vendor)
 # ---------------------------------------------------------------------------
@@ -154,23 +138,8 @@ class Product(Base):
     deleted_at = Column(DateTime(timezone=True))
 
 
-class StockLedger(Base):
-    __tablename__ = "stock_ledger"
-    __table_args__ = (
-        Index("ix_stock_ledger_product_id", "product_id"),
-        Index("ix_stock_ledger_tenant_date", "tenant_id", "created_at"),
-    )
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
-    transaction_type = Column(String(20), nullable=False)  # 'PURCHASE', 'SALE', 'ADJUSTMENT', 'TRANSFER'
-    transaction_id = Column(UUID(as_uuid=True))
-    quantity = Column(Numeric(12, 2), nullable=False)
-    running_balance = Column(Numeric(12, 2), nullable=False)
-    rate = Column(Numeric(15, 4))
-    description = Column(Text)
-    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+# ---------------------------------------------------------------------------
+# SALES INVOICES
 # ---------------------------------------------------------------------------
 
 class Invoice(Base):
@@ -923,6 +892,7 @@ class AuditLog(Base):
         Index("ix_audit_logs_tenant_timestamp", "tenant_id", "timestamp"),
         Index("ix_audit_logs_entity", "tenant_id", "entity_type", "entity_id"),
         Index("ix_audit_logs_actor", "tenant_id", "actor_id"),
+        {"extend_existing": True},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -989,6 +959,7 @@ class StockLedger(Base):
     __table_args__ = (
         Index("ix_stock_ledger_tenant_product", "tenant_id", "product_id"),
         Index("ix_stock_ledger_tenant_date", "tenant_id", "created_at"),
+        {"extend_existing": True},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
