@@ -75,6 +75,12 @@ class Settings(BaseSettings):
     IRP_PASSWORD: str = ""
 
     # ----------------------------------------------------------------
+    # GST Verification (gstverify.dubey.app)
+    # ----------------------------------------------------------------
+    GST_VERIFY_API_KEY: str = ""
+    GST_VERIFY_BASE_URL: str = "https://api.gstverify.dubey.app"
+
+    # ----------------------------------------------------------------
     # Rate Limiting
     # ----------------------------------------------------------------
     RATE_LIMIT_ENABLED: bool = True                # Disable for tests

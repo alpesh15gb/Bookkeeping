@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { ArrowLeft, AlertCircle, ShieldCheck } from "lucide-react";
 import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
 
 interface ContactFormProps {
@@ -90,6 +90,12 @@ export default function ContactForm({ editId, onNavigate, onSuccess }: ContactFo
   const [shippingPincode, setShippingPincode] = useState("");
 
   const [formError, setFormError] = useState("");
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [captchaImage, setCaptchaImage] = useState("");
+  const [captchaSession, setCaptchaSession] = useState("");
+  const [captchaInput, setCaptchaInput] = useState("");
+  const [showCaptchaModal, setShowCaptchaModal] = useState(false);
+  const [verifySuccess, setVerifySuccess] = useState("");
 
   const hasUnsavedChanges = name !== "" || email !== "" || phone !== "";
   useUnsavedChangesWarning(hasUnsavedChanges);
@@ -175,6 +181,56 @@ export default function ContactForm({ editId, onNavigate, onSuccess }: ContactFo
       setFormError(msg);
     },
   });
+
+  const handleVerifyGSTIN = async () => {
+    if (!gstin || gstin.length !== 15) {
+      setFormError("Enter a valid 15-character GSTIN to verify.");
+      return;
+    }
+    setVerifyLoading(true);
+    setFormError("");
+    setVerifySuccess("");
+    try {
+      const capResp = await apiClient.get("/gst/verify/captcha");
+      setCaptchaImage(capResp.data.image);
+      setCaptchaSession(capResp.data.session_id);
+      setCaptchaInput("");
+      setShowCaptchaModal(true);
+    } catch (err: any) {
+      setFormError(err.response?.data?.detail || "Failed to fetch captcha.");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  const handleSubmitCaptcha = async () => {
+    if (!captchaInput) return;
+    setVerifyLoading(true);
+    setFormError("");
+    try {
+      const resp = await apiClient.post("/gst/verify", {
+        gstin,
+        captcha: captchaInput,
+        session_id: captchaSession,
+      });
+      const data = resp.data;
+      if (data.legal_name) setName(data.legal_name);
+      if (data.trade_name && !name) setName(data.trade_name);
+      if (data.state_code) setStateCode(data.state_code);
+      if (data.address) {
+        const parts = data.address.split(",").map((s: string) => s.trim());
+        setBillingStreet(parts[0] || "");
+        setBillingCity(parts[1] || "");
+        setBillingState(parts[2] || data.state_code || "");
+      }
+      setShowCaptchaModal(false);
+      setVerifySuccess("GSTIN verified ✓");
+    } catch (err: any) {
+      setFormError(err.response?.data?.detail || "GSTIN verification failed.");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -306,13 +362,25 @@ export default function ContactForm({ editId, onNavigate, onSuccess }: ContactFo
 
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">GSTIN</label>
-            <input
-              type="text"
-              value={gstin}
-              onChange={(e) => setGstin(e.target.value)}
-              placeholder="22AAAAA0000A1Z5"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={gstin}
+                onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                placeholder="22AAAAA0000A1Z5"
+                className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono uppercase"
+              />
+              <button
+                type="button"
+                onClick={handleVerifyGSTIN}
+                disabled={verifyLoading || gstin.length !== 15}
+                className="px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition flex items-center gap-1.5"
+              >
+                <ShieldCheck className="w-4 h-4" />
+                {verifyLoading ? "..." : "Verify"}
+              </button>
+            </div>
+            {verifySuccess && <p className="text-xs text-emerald-600 font-semibold mt-1">{verifySuccess}</p>}
           </div>
 
           <div className="space-y-2">
@@ -455,6 +523,34 @@ export default function ContactForm({ editId, onNavigate, onSuccess }: ContactFo
           </button>
         </div>
       </form>
+
+      {/* Captcha Modal */}
+      {showCaptchaModal && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowCaptchaModal(false)}>
+          <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-zinc-900 mb-3">GSTIN Verification</h3>
+            <p className="text-xs text-zinc-500 mb-4">Enter the captcha text shown below to verify {gstin}.</p>
+            {captchaImage && (
+              <img src={captchaImage} alt="Captcha" className="w-full rounded-lg border border-slate-200 mb-4" />
+            )}
+            <input
+              type="text"
+              value={captchaInput}
+              onChange={(e) => setCaptchaInput(e.target.value)}
+              placeholder="Enter captcha text"
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowCaptchaModal(false)} className="px-3 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 rounded-lg transition">Cancel</button>
+              <button onClick={handleSubmitCaptcha} disabled={verifyLoading || !captchaInput}
+                className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition flex items-center gap-1.5">
+                <ShieldCheck className="w-4 h-4" /> {verifyLoading ? "Verifying..." : "Verify"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
