@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"          # development | staging | production
     DEBUG: bool = False
     SEED_ON_STARTUP: bool = False         # Only true in dev/demo
+    APP_URL: str = "http://localhost:5173" # Frontend URL for reset links
 
     # ----------------------------------------------------------------
     # Database
@@ -50,11 +51,11 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------------
     # Email (SMTP / SendGrid)
     # ----------------------------------------------------------------
-    SMTP_HOST: str = "smtp.gmail.com"
+    SMTP_HOST: str = "smtp.hostinger.com"
     SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
-    EMAIL_FROM: str = "noreply@bookkeeping.app"
+    SMTP_USER: str = "support@apexbooks.in"
+    SMTP_PASSWORD: str = "Adish@786#"
+    EMAIL_FROM: str = "support@apexbooks.in"
 
     # ----------------------------------------------------------------
     # File Storage (S3-compatible)

@@ -6,7 +6,7 @@ from typing import List, Optional
 import redis
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import User, Tenant, TenantMembership
+from src.infrastructure.database.models import User, Tenant, TenantMembership, PasswordResetToken
 from src.schemas.auth_schemas import UserRegister, UserLogin, TokenResponse, UserResponse, SchemaBase
 from src.core.security import (
     get_password_hash,
@@ -276,3 +276,104 @@ def change_password(
     db.commit()
 
     return {"detail": "Password changed successfully."}
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+@router.post("/forgot-password")
+def forgot_password(
+    payload: ForgotPasswordRequest,
+    db: Session = Depends(get_db_session),
+):
+    """Sends a password reset link to the user's email."""
+    user = db.query(User).filter(
+        User.email == payload.email,
+        User.deleted_at == None
+    ).first()
+    if not user:
+        return {"detail": "If the email exists, a reset link has been sent."}
+
+    import secrets
+    from datetime import timedelta
+    token_str = secrets.token_urlsafe(48)
+    hashed_token = get_password_hash(token_str)
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+
+    reset = PasswordResetToken(
+        user_id=user.id,
+        token=hashed_token,
+        expires_at=expires_at,
+    )
+    db.add(reset)
+
+    from src.core.config import settings
+    import smtplib
+    from email.mime.text import MIMEText
+
+    reset_link = f"{settings.APP_URL}/reset-password?token={token_str}&email={payload.email}"
+    msg = MIMEText(f"Click the link to reset your password: {reset_link}\n\nThis link expires in 1 hour.")
+    msg["Subject"] = "Password Reset - Bookkeeping App"
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = payload.email
+
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            if settings.SMTP_USER and settings.SMTP_PASSWORD:
+                server.starttls()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.send_message(msg)
+    except Exception:
+        pass
+
+    db.commit()
+    return {"detail": "If the email exists, a reset link has been sent."}
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    token: str
+    new_password: str
+
+
+@router.post("/reset-password")
+def reset_password(
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db_session),
+):
+    """Resets the password using a valid reset token."""
+    user = db.query(User).filter(
+        User.email == payload.email,
+        User.deleted_at == None
+    ).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid reset link.")
+
+    reset = db.query(PasswordResetToken).filter(
+        PasswordResetToken.user_id == user.id,
+        PasswordResetToken.used_at == None,
+        PasswordResetToken.expires_at > datetime.now(timezone.utc),
+    ).order_by(PasswordResetToken.created_at.desc()).first()
+    if not reset:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset token.")
+
+    if not verify_password(payload.token, reset.token):
+        raise HTTPException(status_code=400, detail="Invalid reset token.")
+
+    if len(payload.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+    if not re.search(r"[A-Z]", payload.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter.")
+    if not re.search(r"[a-z]", payload.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter.")
+    if not re.search(r"\d", payload.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one digit.")
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>\-_=+\[\]\\/]", payload.new_password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one special character.")
+
+    user.password_hash = get_password_hash(payload.new_password)
+    reset.used_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {"detail": "Password reset successfully."}
