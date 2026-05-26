@@ -17,11 +17,6 @@ let activeTenantIdMemory: string | null = null;
 
 export const setAccessToken = (token: string | null) => {
   accessTokenMemory = token;
-  if (token) {
-    sessionStorage.setItem('_at', token);
-  } else {
-    sessionStorage.removeItem('_at');
-  }
 };
 
 export const setRefreshToken = (token: string | null) => {
@@ -31,9 +26,9 @@ export const setRefreshToken = (token: string | null) => {
 export const setTenantId = (tenantId: string | null) => {
   activeTenantIdMemory = tenantId;
   if (tenantId) {
-    localStorage.setItem("active_tenant_id", tenantId);
+    sessionStorage.setItem("active_tenant_id", tenantId);
   } else {
-    localStorage.removeItem("active_tenant_id");
+    sessionStorage.removeItem("active_tenant_id");
   }
 };
 

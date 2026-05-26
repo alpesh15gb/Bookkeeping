@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { ArrowLeft, Save } from "lucide-react";
+import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
 
 interface ExpenseFormProps {
   editId?: string;
@@ -22,6 +23,9 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
   const [vendorName, setVendorName] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+
+  const hasUnsavedChanges = categoryId !== "" || amount !== "";
+  useUnsavedChangesWarning(hasUnsavedChanges);
 
   const { data: categories = [] } = useQuery<ExpenseCategory[]>({
     queryKey: ["expense-categories"],
@@ -70,9 +74,14 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!categoryId || !expenseDate || !amount) return;
+    if (!categoryId || !expenseDate || !amount) {
+      setError("Please fill in all required fields.");
+      return;
+    }
     saveMutation.mutate();
   };
+
+  const [error, setError] = useState("");
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -92,6 +101,14 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-slate-100 p-6 space-y-5">
+        {error && (
+          <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span className="text-sm">{error}</span>
+          </div>
+        )}
         <div className="space-y-2">
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Expense Category</label>
           <select

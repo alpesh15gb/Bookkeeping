@@ -77,49 +77,57 @@ interface SalesDashboardProps {
 
 export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
   // Fetch summary cards data
-  const { data: summary } = useQuery<SalesSummary>({
+  const { data: summary, isLoading: summaryLoading, error: summaryError } = useQuery<SalesSummary>({
     queryKey: ["sales-summary"],
     queryFn: async () => {
       const res = await apiClient.get("/sales/summary");
       return res.data;
-    }
+    },
+    refetchInterval: 30000,
   });
 
   // Fetch Invoices list
-  const { data: invoices = [] } = useQuery<InvoiceListItem[]>({
+  const { data: invoices = [], isLoading: invLoading, error: invError } = useQuery<InvoiceListItem[]>({
     queryKey: ["invoices"],
     queryFn: async () => {
       const res = await apiClient.get("/invoices");
       return Array.isArray(res.data) ? res.data : [];
-    }
+    },
+    refetchInterval: 30000,
   });
 
   // Fetch Bills list
-  const { data: bills = [] } = useQuery<BillListItem[]>({
+  const { data: bills = [], isLoading: billsLoading, error: billsError } = useQuery<BillListItem[]>({
     queryKey: ["bills"],
     queryFn: async () => {
       const res = await apiClient.get("/bills");
       return Array.isArray(res.data) ? res.data : [];
-    }
+    },
+    refetchInterval: 30000,
   });
 
   // Fetch Receipts list
-  const { data: receipts = [] } = useQuery<ReceiptItem[]>({
+  const { data: receipts = [], isLoading: recLoading, error: recError } = useQuery<ReceiptItem[]>({
     queryKey: ["payments-receipts"],
     queryFn: async () => {
       const res = await apiClient.get("/payments/receipts");
       return Array.isArray(res.data) ? res.data : [];
-    }
+    },
+    refetchInterval: 30000,
   });
 
   // Fetch Disbursements list
-  const { data: disbursements = [] } = useQuery<DisbursementItem[]>({
+  const { data: disbursements = [], isLoading: disbLoading, error: disbError } = useQuery<DisbursementItem[]>({
     queryKey: ["payments-disbursements"],
     queryFn: async () => {
       const res = await apiClient.get("/payments/disbursements");
       return Array.isArray(res.data) ? res.data : [];
-    }
+    },
+    refetchInterval: 30000,
   });
+
+  const isLoading = summaryLoading || invLoading || billsLoading || recLoading || disbLoading;
+  const hasError = summaryError || invError || billsError || recError || disbError;
 
   // Format currency with Indian formatting and no decimals
   const formatCardCurrency = (val: number) => {
@@ -301,6 +309,19 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
         <h1 className="text-xl font-bold text-navy-900">Dashboard</h1>
       </div>
 
+      {isLoading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DCA035]"></div>
+        </div>
+      ) : hasError ? (
+        <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          <span className="text-xs font-semibold">Error loading dashboard data. Please check API server.</span>
+        </div>
+      ) : (
+      <>
       {/* MoM Analytics KPI Cards */}
       <div className="grid grid-cols-2 gap-4">
         {/* Total Sales Card */}
@@ -365,7 +386,7 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
             </svg>
           </div>
           <div>
-            <span className="text-[10px] font-bold text-slate-400 block uppercase">Cash in Hand</span>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Received</span>
             <span className="text-sm font-bold text-blue-700 block mt-0.5">
               {formatCardCurrency(cashInHandVal)}
             </span>
@@ -469,6 +490,8 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
           )}
         </div>
       </div>
+      </>
+      )}
     </div>
   );
 }

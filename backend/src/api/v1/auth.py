@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 import uuid
+import re
 from typing import List, Optional
 import redis
 
@@ -258,12 +259,17 @@ def change_password(
             detail="Current password is incorrect."
         )
 
-    # Validate new password length
+    # Validate new password strength
     if len(payload.new_password) < 8:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="New password must be at least 8 characters long."
-        )
+        raise HTTPException(status_code=400, detail="New password must be at least 8 characters long.")
+    if not re.search(r"[A-Z]", payload.new_password):
+        raise HTTPException(status_code=400, detail="New password must contain at least one uppercase letter.")
+    if not re.search(r"[a-z]", payload.new_password):
+        raise HTTPException(status_code=400, detail="New password must contain at least one lowercase letter.")
+    if not re.search(r"\d", payload.new_password):
+        raise HTTPException(status_code=400, detail="New password must contain at least one digit.")
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>\-_=+\[\]\\/]", payload.new_password):
+        raise HTTPException(status_code=400, detail="New password must contain at least one special character.")
 
     # Hash and save the new password
     current_user.password_hash = get_password_hash(payload.new_password)

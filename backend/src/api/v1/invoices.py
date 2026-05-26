@@ -469,6 +469,7 @@ def finalize_credit_note(
     cn.status = "ISSUED"
     db.add(journal_entry)
     affected = {line.account_id for line in ledger_draft.lines}
+    db.flush()
     update_account_balances(db, tenant_id, affected)
     db.commit()
     db.refresh(cn)
@@ -1152,16 +1153,16 @@ def get_invoice_pdf_payload(
             "due_date": invoice.due_date.isoformat(),
             "pos_state_code": invoice.pos_state_code,
             "status": invoice.status,
-            "subtotal": float(invoice.subtotal),
-            "discount_total": float(invoice.discount_total),
-            "cgst_amount": float(invoice.cgst_amount),
-            "sgst_amount": float(invoice.sgst_amount),
-            "igst_amount": float(invoice.igst_amount),
-            "utgst_amount": float(invoice.utgst_amount),
-            "cess_amount": float(invoice.cess_amount),
-            "round_off": float(invoice.round_off),
-            "total": float(invoice.total),
-            "amount_paid": float(invoice.amount_paid)
+            "subtotal": str(invoice.subtotal.quantize(Decimal("0.01"))),
+            "discount_total": str(invoice.discount_total.quantize(Decimal("0.01"))),
+            "cgst_amount": str(invoice.cgst_amount.quantize(Decimal("0.01"))),
+            "sgst_amount": str(invoice.sgst_amount.quantize(Decimal("0.01"))),
+            "igst_amount": str(invoice.igst_amount.quantize(Decimal("0.01"))),
+            "utgst_amount": str(invoice.utgst_amount.quantize(Decimal("0.01"))),
+            "cess_amount": str(invoice.cess_amount.quantize(Decimal("0.01"))),
+            "round_off": str(invoice.round_off.quantize(Decimal("0.01"))),
+            "total": str(invoice.total.quantize(Decimal("0.01"))),
+            "amount_paid": str(invoice.amount_paid.quantize(Decimal("0.01")))
         },
         "lines": [
             {
@@ -1170,12 +1171,12 @@ def get_invoice_pdf_payload(
                 "quantity": float(line.quantity),
                 "rate": float(line.rate),
                 "discount": float(line.discount),
-                "subtotal": float(line.subtotal),
-                "gst_rate": float(line.gst_rate),
-                "cgst_amount": float(line.cgst_amount),
-                "sgst_amount": float(line.sgst_amount),
-                "igst_amount": float(line.igst_amount),
-                "total": float(line.total)
+                "subtotal": str(line.subtotal.quantize(Decimal("0.01"))),
+                "gst_rate": str(line.gst_rate.quantize(Decimal("0.01"))),
+                "cgst_amount": str(line.cgst_amount.quantize(Decimal("0.01"))),
+                "sgst_amount": str(line.sgst_amount.quantize(Decimal("0.01"))),
+                "igst_amount": str(line.igst_amount.quantize(Decimal("0.01"))),
+                "total": str(line.total.quantize(Decimal("0.01")))
             }
             for line in invoice.lines
         ]
