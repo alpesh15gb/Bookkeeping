@@ -66,6 +66,13 @@ class Permissions:
     # Reports & Analytics
     REPORTS_VIEW = "reports:view"
 
+    # Expenses
+    EXPENSE_CREATE = "expense:create"
+    EXPENSE_VIEW = "expense:view"
+    EXPENSE_EDIT = "expense:edit"
+    EXPENSE_DELETE = "expense:delete"
+    EXPENSE_FINALIZE = "expense:finalize"
+
 
 ROLE_PERMISSIONS = {
     "superadmin": [perm for name, perm in Permissions.__dict__.items() if not name.startswith("__")],
@@ -81,6 +88,8 @@ ROLE_PERMISSIONS = {
         Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
         Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
         Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+        Permissions.EXPENSE_CREATE, Permissions.EXPENSE_VIEW,
+        Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
     ],
     "accountant": [
         Permissions.TENANT_VIEW,
@@ -92,6 +101,7 @@ ROLE_PERMISSIONS = {
         Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
         Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
         Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+        Permissions.EXPENSE_VIEW, Permissions.EXPENSE_CREATE, Permissions.EXPENSE_FINALIZE,
     ],
     "salesperson": [
         Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
