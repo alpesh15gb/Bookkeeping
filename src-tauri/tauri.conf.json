@@ -23,7 +23,7 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' https://api.apexbooks.in http://localhost:5173 http://localhost:8000; img-src 'self' https://api.apexbooks.in data:; style-src 'self' 'unsafe-inline'"
+      "csp": null
     }
   },
   "bundle": {
