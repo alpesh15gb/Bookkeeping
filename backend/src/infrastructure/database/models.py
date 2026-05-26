@@ -1069,11 +1069,13 @@ class ProformaInvoice(Base):
     cess_amount = Column(Numeric(15, 4), nullable=False, default=0)
     total = Column(Numeric(15, 4), nullable=False, default=0)
     pos_state_code = Column(String(2), nullable=False)
+    converted_to_invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
 
     contact = relationship("Contact")
+    converted_invoice = relationship("Invoice")
     lines = relationship("ProformaInvoiceLine", back_populates="proforma_invoice", cascade="all, delete-orphan")
 
 

@@ -23,6 +23,9 @@ import SettingsPage from "./views/settings/SettingsPage";
 import ExpenseList from "./views/expenses/ExpenseList";
 import ExpenseForm from "./views/expenses/ExpenseForm";
 import ExpenseDetail from "./views/expenses/ExpenseDetail";
+import EstimateList from "./views/estimates/EstimateList";
+import EstimateForm from "./views/estimates/EstimateForm";
+import EstimateDetail from "./views/estimates/EstimateDetail";
 
 // New components
 import PaymentsList from "./views/payments/PaymentsList";
@@ -60,7 +63,8 @@ import {
   Menu,
   X,
   Bell,
-  ChevronDown
+  ChevronDown,
+  FileText
 } from "lucide-react";
 
 type View =
@@ -76,7 +80,8 @@ type View =
   | "credit_notes" | "credit_note_create" | "credit_note_detail"
   | "purchase_orders" | "purchase_order_create" | "purchase_order_detail"
   | "sales_orders" | "sales_order_create" | "sales_order_detail"
-  | "expense_list" | "expense_create" | "expense_edit" | "expense_detail";
+  | "expense_list" | "expense_create" | "expense_edit" | "expense_detail"
+  | "estimate_list" | "estimate_create" | "estimate_edit" | "estimate_detail";
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -92,6 +97,7 @@ export default function App() {
   const [activePOId, setActivePOId] = useState<string | undefined>(undefined);
   const [activeSOId, setActiveSOId] = useState<string | undefined>(undefined);
   const [activeExpenseId, setActiveExpenseId] = useState<string | undefined>(undefined);
+  const [activeEstimateId, setActiveEstimateId] = useState<string | undefined>(undefined);
   const [user, setUser] = useState<{ full_name: string; email: string } | null>(null);
 
   // Restore session on mount
@@ -226,6 +232,11 @@ export default function App() {
     setCurrentView(view);
   };
 
+  const handleNavigateEstimates = (view: "estimate_list" | "estimate_create" | "estimate_edit" | "estimate_detail", estimateId?: string) => {
+    setActiveEstimateId(estimateId);
+    setCurrentView(view);
+  };
+
   const handleFormSuccess = () => {
     setCurrentView("list");
     setActiveInvoiceId(undefined);
@@ -251,6 +262,11 @@ export default function App() {
     setActiveExpenseId(undefined);
   };
 
+  const handleEstimateSuccess = () => {
+    setCurrentView("estimate_list");
+    setActiveEstimateId(undefined);
+  };
+
   const handleAccountSuccess = () => {
     setCurrentView("accounts");
     setActiveAccountId(undefined);
@@ -263,6 +279,7 @@ export default function App() {
   const menuItems = [
     { name: "Dashboard", icon: LayoutDashboard, view: "sales_dashboard" as const },
     { name: "Invoices (Sales)", icon: FileSpreadsheet, view: "list" as const },
+    { name: "Estimates", icon: FileText, view: "estimate_list" as const },
     { name: "Vendor Bills", icon: Receipt, view: "bill_list" as const },
     { name: "Expenses", icon: Receipt, view: "expense_list" as const },
     { name: "Payments", icon: Banknote, view: "payments" as const },
@@ -331,6 +348,7 @@ export default function App() {
               (item.view === "sales_dashboard" && currentView === "sales_dashboard") ||
               (item.view === "list" && ["list", "create", "edit", "detail"].includes(currentView)) ||
               (item.view === "bill_list" && ["bill_list", "bill_create", "bill_edit", "bill_detail"].includes(currentView)) ||
+              (item.view === "estimate_list" && ["estimate_list", "estimate_create", "estimate_edit", "estimate_detail"].includes(currentView)) ||
               (item.view === "expense_list" && ["expense_list", "expense_create", "expense_edit", "expense_detail"].includes(currentView)) ||
               (item.view === "payments" && ["payments", "payment_receipt", "payment_disbursement"].includes(currentView)) ||
               (item.view === "credit_notes" && ["credit_notes", "credit_note_create", "credit_note_detail"].includes(currentView)) ||
@@ -350,6 +368,8 @@ export default function App() {
                     handleNavigateInvoices("list");
                   } else if (item.view === "bill_list") {
                     handleNavigateBills("bill_list");
+                  } else if (item.view === "estimate_list") {
+                    handleNavigateEstimates("estimate_list");
                   } else if (item.view === "expense_list") {
                     handleNavigateExpenses("expense_list");
                   } else if (item.view === "payments") {
@@ -431,6 +451,7 @@ export default function App() {
           {currentView === "sales_dashboard" && <SalesDashboard onNavigate={(view) => {
             const viewMap: Record<string, View> = {
               invoices: "list",
+              estimates: "estimate_list",
               bills: "bill_list",
               expenses: "expense_list",
               contacts: "contacts",
@@ -476,6 +497,13 @@ export default function App() {
           )}
           {currentView === "expense_detail" && activeExpenseId && (
             <ExpenseDetail expenseId={activeExpenseId} onNavigate={handleNavigateExpenses} />
+          )}
+          {currentView === "estimate_list" && <EstimateList onNavigate={handleNavigateEstimates} />}
+          {(currentView === "estimate_create" || currentView === "estimate_edit") && (
+            <EstimateForm editId={activeEstimateId} onNavigate={handleNavigateEstimates} onSuccess={handleEstimateSuccess} />
+          )}
+          {currentView === "estimate_detail" && activeEstimateId && (
+            <EstimateDetail estimateId={activeEstimateId} onNavigate={handleNavigateEstimates} />
           )}
           {currentView === "accounts" && <AccountList onNavigate={handleNavigateAccounts} />}
           {(currentView === "account_create" || currentView === "account_edit") && (

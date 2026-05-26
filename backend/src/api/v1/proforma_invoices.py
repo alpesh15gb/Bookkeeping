@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 from decimal import Decimal
+from datetime import date
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
@@ -321,8 +322,60 @@ def convert_proforma_invoice(
     if pi.status != "ISSUED":
         raise HTTPException(status_code=400, detail="Only issued proforma invoices can be converted.")
 
-    # Note: Conversion typically involves creating a sales invoice from the proforma
-    # For now, we just mark it as converted
+    # Create actual Invoice from proforma data
+    from src.infrastructure.database.models import Invoice, InvoiceLine
+    from src.domains.company.services import NumberingSeriesService
+
+    inv_number = NumberingSeriesService.generate_number(db, tenant_id, "INVOICE")
+
+    invoice = Invoice(
+        tenant_id=tenant_id,
+        contact_id=pi.contact_id,
+        invoice_number=inv_number,
+        issue_date=date.today(),
+        due_date=date.today(),
+        status="DRAFT",
+        subtotal=pi.subtotal,
+        discount_total=pi.discount_total,
+        cgst_amount=pi.cgst_amount,
+        sgst_amount=pi.sgst_amount,
+        igst_amount=pi.igst_amount,
+        utgst_amount=pi.utgst_amount,
+        cess_amount=pi.cess_amount,
+        total=pi.total,
+        pos_state_code=pi.pos_state_code,
+    )
+    db.add(invoice)
+    db.flush()
+
+    # Copy line items
+    for pl in pi.lines:
+        inv_line = InvoiceLine(
+            invoice_id=invoice.id,
+            product_id=pl.product_id,
+            description=pl.description,
+            quantity=pl.quantity,
+            rate=pl.rate,
+            discount=pl.discount,
+            subtotal=pl.subtotal,
+            hsn_sac=pl.hsn_sac,
+            gst_rate=pl.gst_rate,
+            cgst_rate=pl.cgst_rate,
+            cgst_amount=pl.cgst_amount,
+            sgst_rate=pl.sgst_rate,
+            sgst_amount=pl.sgst_amount,
+            igst_rate=pl.igst_rate,
+            igst_amount=pl.igst_amount,
+            utgst_rate=pl.utgst_rate,
+            utgst_amount=pl.utgst_amount,
+            cess_rate=pl.cess_rate,
+            cess_amount=pl.cess_amount,
+            total=pl.total,
+        )
+        db.add(inv_line)
+
+    # Link proforma to invoice
+    pi.converted_to_invoice_id = invoice.id
     pi.status = "CONVERTED"
     db.commit()
     db.refresh(pi)

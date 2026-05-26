@@ -391,6 +391,7 @@ class ProformaInvoiceResponse(ProformaInvoiceBase):
     utgst_amount: Decimal
     cess_amount: Decimal
     total: Decimal
+    converted_to_invoice_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     lines: List[ProformaInvoiceLineResponse]
@@ -404,6 +405,7 @@ class ProformaInvoiceListResponse(SchemaBase):
     status: str
     total: Decimal
     contact_name: str
+    converted_to_invoice_id: Optional[uuid.UUID] = None
     created_at: datetime
 
 
