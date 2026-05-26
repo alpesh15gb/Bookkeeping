@@ -71,7 +71,11 @@ const getLast7Days = () => {
   return days;
 };
 
-export default function SalesDashboard() {
+interface SalesDashboardProps {
+  onNavigate?: (view: string, id?: string) => void;
+}
+
+export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
   // Fetch summary cards data
   const { data: summary } = useQuery<SalesSummary>({
     queryKey: ["sales-summary"],
@@ -277,234 +281,211 @@ export default function SalesDashboard() {
     link.click();
     window.URL.revokeObjectURL(url);
   };
-
   return (
-    <div className="space-y-6">
-      {/* Title Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-3">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight text-zinc-900 font-sans">Dashboard</h1>
+    <div className="space-y-6 max-w-full overflow-hidden">
+      {/* Mobile Top Header (Mockup Brand banner) */}
+      <div className="md:hidden bg-[#0B1B3D] text-white p-4 -mx-4 -mt-4 mb-6 flex items-center justify-between border-b border-navy-800 shadow-lg">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 border border-[#DCA035] rounded-xl flex items-center justify-center bg-navy-800 text-[#DCA035] font-extrabold text-lg">
+            ST
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-white leading-tight">Sharma Traders</h2>
+            <p className="text-[10px] text-[#DCA035] font-semibold leading-tight tracking-wider">Grow Your Business</p>
+          </div>
         </div>
-        <button
-          onClick={handleExportCSV}
-          disabled={recentInvoices.length === 0}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 rounded-lg text-xs font-semibold shadow-sm transition"
-        >
-          <Download className="w-3.5 h-3.5" /> Export Report
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Bell Notification */}
+          <div className="relative p-1.5 hover:bg-white/5 rounded-full cursor-pointer transition">
+            <svg className="w-5 h-5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
+          </div>
+          {/* User Bubble */}
+          <div className="w-8 h-8 rounded-full bg-[#DCA035] text-zinc-950 flex items-center justify-center font-bold text-xs shadow cursor-pointer border border-[#DCA035]/30">
+            AS
+          </div>
+        </div>
       </div>
 
-      {/* Analytics KPI summary cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      {/* Dashboard Section Title */}
+      <div className="flex items-center gap-2 border-b pb-2">
+        <div className="grid grid-cols-2 gap-0.5 w-4 h-4 text-navy-900">
+          <span className="bg-navy-900 rounded-sm" />
+          <span className="bg-navy-900 rounded-sm" />
+          <span className="bg-navy-900 rounded-sm" />
+          <span className="bg-navy-900 rounded-sm" />
+        </div>
+        <h1 className="text-xl font-bold text-navy-900">Dashboard</h1>
+      </div>
+
+      {/* MoM Analytics KPI Cards */}
+      <div className="grid grid-cols-2 gap-4">
         {/* Total Sales Card */}
-        <div className="bg-[#F0FDF4] border border-green-100 rounded-2xl p-5 shadow-[0_2px_8px_-3px_rgba(0,0,0,0.02)] flex items-center gap-4">
-          <div className="p-3 bg-white text-green-600 rounded-full shadow-sm flex-shrink-0">
-            <TrendingUp className="w-6 h-6" />
+        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-start gap-3 relative overflow-hidden">
+          <div className="p-2 bg-emerald-50 text-emerald-600 rounded-xl">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[11px] font-semibold text-zinc-500 block">Total Sales</span>
-            <span className="text-2xl font-bold text-green-700 tracking-tight block">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Sales</span>
+            <span className="text-sm font-bold text-emerald-700 block mt-0.5">
               {formatCardCurrency(totalSalesVal)}
             </span>
-            {renderTrendText(salesTrend)}
+            <span className="text-[9px] text-emerald-600 font-bold block mt-1">
+              {salesTrend !== null ? `${salesTrend > 0 ? '↑' : '↓'} ${Math.abs(salesTrend).toFixed(1)}% this month` : "No prior data"}
+            </span>
           </div>
         </div>
 
         {/* Total Purchases Card */}
-        <div className="bg-[#EFF6FF] border border-blue-100 rounded-2xl p-5 shadow-[0_2px_8px_-3px_rgba(0,0,0,0.02)] flex items-center gap-4">
-          <div className="p-3 bg-white text-blue-600 rounded-full shadow-sm flex-shrink-0">
-            <ShoppingCart className="w-6 h-6" />
+        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-start gap-3 relative overflow-hidden">
+          <div className="p-2 bg-orange-50 text-orange-600 rounded-xl">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[11px] font-semibold text-zinc-500 block">Total Purchases</span>
-            <span className="text-2xl font-bold text-blue-700 tracking-tight block">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Purchases</span>
+            <span className="text-sm font-bold text-orange-700 block mt-0.5">
               {formatCardCurrency(totalPurchasesVal)}
             </span>
-            {renderTrendText(purchasesTrend)}
+            <span className="text-[9px] text-orange-600 font-bold block mt-1">
+              {purchasesTrend !== null ? `${purchasesTrend > 0 ? '↑' : '↓'} ${Math.abs(purchasesTrend).toFixed(1)}% this month` : "No prior data"}
+            </span>
           </div>
         </div>
 
         {/* Total Expenses Card */}
-        <div className="bg-[#FFF7ED] border border-orange-100 rounded-2xl p-5 shadow-[0_2px_8px_-3px_rgba(0,0,0,0.02)] flex items-center gap-4">
-          <div className="p-3 bg-white text-orange-500 rounded-full shadow-sm flex-shrink-0">
-            <FileText className="w-6 h-6" />
+        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-start gap-3 relative overflow-hidden">
+          <div className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+            </svg>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[11px] font-semibold text-zinc-500 block">Total Expenses</span>
-            <span className="text-2xl font-bold text-orange-600 tracking-tight block">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">Total Expenses</span>
+            <span className="text-sm font-bold text-rose-700 block mt-0.5">
               {formatCardCurrency(totalExpensesVal)}
             </span>
-            {renderTrendText(expensesTrend)}
+            <span className="text-[9px] text-rose-600 font-bold block mt-1">
+              {expensesTrend !== null ? `${expensesTrend > 0 ? '↑' : '↓'} ${Math.abs(expensesTrend).toFixed(1)}% this month` : "No prior data"}
+            </span>
           </div>
         </div>
 
         {/* Cash in Hand Card */}
-        <div className="bg-[#FEFCE8] border border-yellow-100 rounded-2xl p-5 shadow-[0_2px_8px_-3px_rgba(0,0,0,0.02)] flex items-center gap-4">
-          <div className="p-3 bg-white text-amber-600 rounded-full shadow-sm flex-shrink-0">
-            <Banknote className="w-6 h-6" />
+        <div className="bg-white border border-slate-100 rounded-2xl p-4 shadow-sm flex items-start gap-3 relative overflow-hidden">
+          <div className="p-2 bg-blue-50 text-blue-600 rounded-xl">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+            </svg>
           </div>
-          <div className="space-y-0.5">
-            <span className="text-[11px] font-semibold text-zinc-500 block">Cash in Hand</span>
-            <span className="text-2xl font-bold text-amber-700 tracking-tight block">
+          <div>
+            <span className="text-[10px] font-bold text-slate-400 block uppercase">Cash in Hand</span>
+            <span className="text-sm font-bold text-blue-700 block mt-0.5">
               {formatCardCurrency(cashInHandVal)}
             </span>
-            {renderTrendText(cashTrend)}
+            <span className="text-[9px] text-zinc-400 font-bold block mt-1">
+              As on today
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Middle Grid - Recent Invoices & SVG Line Chart */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Invoices list */}
-        <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm space-y-4">
-          <div className="flex justify-between items-center pb-2">
-            <h3 className="font-bold text-sm text-zinc-800">Recent Invoices</h3>
-            <button className="text-xs text-brand-500 hover:text-brand-600 font-semibold flex items-center gap-0.5">
-              View All <ArrowUpRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+      {/* Quick Actions Panel */}
+      <div className="space-y-2">
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-l-2 border-[#DCA035] pl-2">Quick Actions</h3>
+        <div className="grid grid-cols-4 gap-2">
+          {/* Add Invoice */}
+          <button
+            onClick={() => onNavigate?.("invoices")}
+            className="bg-[#0B1B3D] text-white p-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow hover:bg-navy-800 transition"
+          >
+            <div className="p-1 text-[#DCA035]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <span className="text-[9px] font-bold">Add Invoice</span>
+          </button>
 
-          {recentInvoices.length === 0 ? (
-            <div className="text-center py-16 text-zinc-400 font-medium text-xs">
-              No recent invoices found. Create an invoice to begin.
+          {/* Add Expense */}
+          <button
+            onClick={() => onNavigate?.("bills")}
+            className="bg-[#0B1B3D] text-white p-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow hover:bg-navy-800 transition"
+          >
+            <div className="p-1 text-[#DCA035]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-zinc-50 text-zinc-500 border-b border-zinc-100">
-                    <th className="px-3 py-2.5 font-bold">Invoice #</th>
-                    <th className="px-3 py-2.5 font-bold">Customer</th>
-                    <th className="px-3 py-2.5 text-right font-bold">Amount</th>
-                    <th className="px-3 py-2.5 text-center font-bold">Status</th>
-                    <th className="px-3 py-2.5 font-bold">Date</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-50">
-                  {recentInvoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-zinc-50/50 transition">
-                      <td className="px-3 py-3 font-mono font-semibold text-zinc-700">{inv.invoice_number}</td>
-                      <td className="px-3 py-3 font-semibold text-zinc-900">{inv.contact_name}</td>
-                      <td className="px-3 py-3 text-right font-mono font-bold text-zinc-800">
-                        {formatTableCurrency(inv.total)}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
-                          inv.status.toLowerCase() === "paid"
-                            ? "bg-green-50 text-green-700 border-green-200"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                        }`}>
-                          {inv.status}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-zinc-500">
-                        {new Date(inv.issue_date).toLocaleDateString("en-IN", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric"
-                        })}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <span className="text-[9px] font-bold">Add Expense</span>
+          </button>
+
+          {/* Add Party */}
+          <button
+            onClick={() => onNavigate?.("contacts")}
+            className="bg-[#0B1B3D] text-white p-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow hover:bg-navy-800 transition"
+          >
+            <div className="p-1 text-[#DCA035]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
+              </svg>
             </div>
-          )}
-          <div className="pt-2 text-center border-t border-zinc-100">
-            <button className="text-xs text-brand-500 hover:text-brand-600 font-semibold inline-flex items-center gap-1">
-              View All Invoices <ArrowUpRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
+            <span className="text-[9px] font-bold">Add Party</span>
+          </button>
+
+          {/* View Reports */}
+          <button
+            onClick={() => onNavigate?.("reports")}
+            className="bg-[#0B1B3D] text-white p-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow hover:bg-navy-800 transition"
+          >
+            <div className="p-1 text-[#DCA035]">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
+            </div>
+            <span className="text-[9px] font-bold">View Reports</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Recent Transactions list */}
+      <div className="space-y-3 pb-6">
+        <div className="flex justify-between items-center">
+          <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider border-l-2 border-[#DCA035] pl-2">Recent Transactions</h3>
+          <button className="text-[10px] text-[#DCA035] font-bold flex items-center">View All <span className="ml-0.5">›</span></button>
         </div>
 
-        {/* SVG Multi-Line Chart (Recent Transactions) */}
-        <div className="bg-white p-5 rounded-2xl border border-zinc-200 shadow-sm space-y-4">
-          <div className="flex justify-between items-center pb-2">
-            <h3 className="font-bold text-sm text-zinc-800">Recent Transactions</h3>
-            <button className="inline-flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-zinc-50 text-zinc-600 border border-zinc-200 rounded-lg text-[10px] font-bold shadow-sm transition">
-              Last 7 Days <ChevronDown className="w-3.5 h-3.5 text-zinc-400" />
-            </button>
-          </div>
-
-          {/* Legend */}
-          <div className="flex items-center gap-4 text-[10px] font-bold text-zinc-500 pl-2">
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#10b981]" />
-              <span>Sales</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#3b82f6]" />
-              <span>Purchases</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <span className="h-2.5 w-2.5 rounded-full bg-[#f97316]" />
-              <span>Expenses</span>
-            </div>
-          </div>
-
-          {/* SVG Chart */}
-          <div className="w-full relative h-[190px]">
-            <svg viewBox="0 0 500 200" className="w-full h-full font-mono text-[9px] text-zinc-400 select-none">
-              {/* Horizontal Grid lines */}
-              <line x1="45" y1="20" x2="480" y2="20" stroke="#f4f4f5" strokeWidth="1" />
-              <line x1="45" y1="60" x2="480" y2="60" stroke="#f4f4f5" strokeWidth="1" />
-              <line x1="45" y1="100" x2="480" y2="100" stroke="#f4f4f5" strokeWidth="1" strokeDasharray="3 3" />
-              <line x1="45" y1="140" x2="480" y2="140" stroke="#f4f4f5" strokeWidth="1" />
-              <line x1="45" y1="170" x2="480" y2="170" stroke="#e4e4e7" strokeWidth="1" />
-
-              {/* Y Axis Labels */}
-              {yLabels.map((val, idx) => (
-                <text key={idx} x="40" y={yLabelPositions[idx]} textAnchor="end" fill="#a1a1aa" className="font-bold">
-                  {formatTableCurrency(val)}
-                </text>
-              ))}
-
-              {/* X Axis Labels */}
-              {dailyData.map((d, i) => (
-                <text key={i} x={getXCoordinate(i)} y="188" textAnchor="middle" fill="#a1a1aa" className="font-bold">
-                  {d.label}
-                </text>
-              ))}
-
-              {/* Data paths (drawn dynamically using coordinates computed from DB entries) */}
-              <path
-                d={salesPath}
-                fill="none"
-                stroke="#10b981"
-                strokeWidth="2.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {dailyData.map((d, i) => (
-                <circle key={`sales-pt-${i}`} cx={getXCoordinate(i)} cy={getYCoordinate(d.sales)} r="3.5" fill="#10b981" />
-              ))}
-
-              <path
-                d={purchasesPath}
-                fill="none"
-                stroke="#3b82f6"
-                strokeWidth="2"
-                strokeDasharray="4 4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {dailyData.map((d, i) => (
-                <circle key={`purchases-pt-${i}`} cx={getXCoordinate(i)} cy={getYCoordinate(d.purchases)} r="3" fill="#3b82f6" />
-              ))}
-
-              <path
-                d={expensesPath}
-                fill="none"
-                stroke="#f97316"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {dailyData.map((d, i) => (
-                <circle key={`expenses-pt-${i}`} cx={getXCoordinate(i)} cy={getYCoordinate(d.expenses)} r="3" fill="#f97316" />
-              ))}
-            </svg>
-          </div>
+        <div className="bg-white border border-slate-100 rounded-2xl p-2 shadow-sm divide-y divide-slate-50">
+          {recentInvoices.length === 0 ? (
+            <div className="text-center py-10 text-xs text-slate-400">No transactions recorded yet.</div>
+          ) : (
+            recentInvoices.map((inv) => (
+              <div key={inv.id} className="flex items-center justify-between p-3">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-emerald-50 text-emerald-600 rounded-full">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 11l5-5m0 0l5 5m-5-5v12" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 leading-tight">Invoice to {inv.contact_name}</h4>
+                    <span className="text-[9px] text-slate-400 block mt-0.5">
+                      {new Date(inv.issue_date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <span className="text-xs font-extrabold text-emerald-700 block">{formatTableCurrency(inv.total)}</span>
+                  <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-bold bg-green-50 text-green-700 border border-green-200 mt-0.5">Sale</span>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>

@@ -411,7 +411,19 @@ export default function App() {
         </header>
 
         <div className="p-4 md:p-8 max-w-7xl w-full mx-auto flex-1">
-          {currentView === "sales_dashboard" && <SalesDashboard />}
+          {currentView === "sales_dashboard" && <SalesDashboard onNavigate={(view) => {
+            const viewMap: Record<string, View> = {
+              invoices: "list",
+              bills: "bill_list",
+              contacts: "contacts",
+              products: "products",
+              reports: "reports",
+              settings: "settings",
+            };
+            const target = viewMap[view] || "sales_dashboard";
+            setCurrentView(target);
+            setIsSidebarOpen(false);
+          }} />}
           {currentView === "list" && <InvoiceList onNavigate={handleNavigateInvoices} />}
           {(currentView === "create" || currentView === "edit") && (
             <InvoiceForm editId={activeInvoiceId} onNavigate={handleNavigateInvoices} onSuccess={handleFormSuccess} />
@@ -521,7 +533,6 @@ export default function App() {
           {currentView === "purchase_order_detail" && activePOId && (
             <PurchaseOrderDetail poId={activePOId} onNavigate={handleNavigatePurchaseOrders} />
           )}
-
           {currentView === "sales_orders" && (
             <SalesOrderList onNavigate={handleNavigateSalesOrders} />
           )}
@@ -536,6 +547,83 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* Mobile Sticky Bottom Tab Navigation Bar */}
+      <div className="md:hidden h-16 bg-[#0B1B3D] border-t border-navy-800 fixed bottom-0 left-0 right-0 z-40 flex items-center justify-around px-2 no-print">
+        <button
+          onClick={() => {
+            setCurrentView("sales_dashboard");
+            setIsSidebarOpen(false);
+          }}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition ${
+            currentView === "sales_dashboard" ? "text-[#DCA035]" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <LayoutDashboard className="w-5 h-5" />
+          <span>Dashboard</span>
+        </button>
+
+        <button
+          onClick={() => {
+            handleNavigateInvoices("list");
+            setIsSidebarOpen(false);
+          }}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition ${
+            ["list", "create", "edit", "detail"].includes(currentView) ? "text-[#DCA035]" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <FileSpreadsheet className="w-5 h-5" />
+          <span>Invoices</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setCurrentView("products");
+            setIsSidebarOpen(false);
+          }}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition ${
+            ["products", "product_create", "product_edit", "product_detail"].includes(currentView) ? "text-[#DCA035]" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Package className="w-5 h-5" />
+          <span>Inventory</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setCurrentView("contacts");
+            setIsSidebarOpen(false);
+          }}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition ${
+            ["contacts", "contact_create", "contact_edit", "contact_detail"].includes(currentView) ? "text-[#DCA035]" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Users className="w-5 h-5" />
+          <span>Parties</span>
+        </button>
+
+        <button
+          onClick={() => {
+            setCurrentView("settings");
+            setIsSidebarOpen(false);
+          }}
+          className={`flex flex-col items-center gap-1 text-[10px] font-bold transition ${
+            currentView === "settings" ? "text-[#DCA035]" : "text-zinc-400 hover:text-white"
+          }`}
+        >
+          <Settings className="w-5 h-5" />
+          <span>Settings</span>
+        </button>
+      </div>
+
+      {/* Adjust main content padding on mobile so bottom bar does not overlap elements */}
+      <style>{`
+        @media (max-width: 767px) {
+          main {
+            padding-bottom: 4rem !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
