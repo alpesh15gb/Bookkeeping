@@ -161,12 +161,16 @@
 
 ## CRITICAL GAPS (Must address to compete)
 
-### Tier 1 — Ship this quarter
-1. **Stock/Inventory tracking** — Add `current_stock`, `opening_stock`, `reorder_level` to Product model, implement stock ledger
-2. **Bank reconciliation** — CSV import → match with ledger → reconciliation report
-3. **Balance Sheet endpoint** — Already have Trial Balance + P&L, just missing Balance Sheet aggregation
-4. **GSTR-2A/2B reconciliation** — Compare purchase invoices with vendor GSTR-2A data
-5. **E-way bill integration** — Generate e-way bill from invoice/bill
+### Tier 1 — Fixed in this session
+1. ✅ **Stock/Inventory tracking** — Added `opening_stock`, `current_stock`, `reorder_level` to Product model + `StockLedger` table
+2. ❌ **Bank reconciliation** — CSV import → match with ledger → reconciliation report (still pending)
+3. ✅ **Balance Sheet endpoint** — Added `GET /api/v1/accounting/balance-sheet` with assets/liabilities/equity + net profit
+4. ❌ **GSTR-2A/2B reconciliation** — Compare purchase invoices with vendor GSTR-2A data (still pending)
+5. ❌ **E-way bill integration** — Generate e-way bill from invoice/bill (still pending)
+
+### Expense Module Alignment
+6. ✅ **Dashboard uses new Expense API** — Was using old `/payments/disbursements`, now uses `/expenses`
+7. ✅ **ExpenseDetail shows total** — Now displays both amount and total
 
 ### Tier 2 — Ship this year
 6. **Cash flow statement** — Aggregate from journal entries by account type
