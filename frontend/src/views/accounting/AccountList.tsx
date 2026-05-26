@@ -51,7 +51,8 @@ export default function AccountList({ onNavigate }: AccountListProps) {
     }
   };
 
-  const formatCurrency = (amount: number) => {
+  const formatCurrency = (amount: number | string) => {
+    if (typeof amount === "string") amount = parseFloat(amount);
     if (typeof amount !== "number" || isNaN(amount)) amount = 0;
     return new Intl.NumberFormat("en-IN", {
       style: "currency",

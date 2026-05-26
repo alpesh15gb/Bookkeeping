@@ -1,11 +1,30 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from typing import Optional, Dict, Any
 import uuid
+from decimal import Decimal
 from datetime import datetime, date
 
+
+def _decimal_to_float(obj):
+    """Recursively convert Decimal to float in nested structures."""
+    if isinstance(obj, Decimal):
+        return float(obj)
+    if isinstance(obj, dict):
+        return {k: _decimal_to_float(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_decimal_to_float(v) for v in obj]
+    return obj
+
+
 class SchemaBase(BaseModel):
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+    def model_dump(self, *, mode: str = "python", **kwargs):
+        # Always dump in python mode to preserve Decimal as Decimal objects
+        result = super().model_dump(mode="python", **kwargs)
+        if mode == "json":
+            return _decimal_to_float(result)
+        return result
 
 class AddressSchema(BaseModel):
     street: str = Field(..., max_length=255)
