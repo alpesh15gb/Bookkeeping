@@ -66,7 +66,7 @@ from src.api.v1.eway_bills import router as eway_bills_router
 from src.api.v1.reports import router as reports_router
 from src.api.v1.audit import router as audit_router
 from src.api.v1.expenses import router as expenses_router
-from src.api.v1.gstr2a import router as gstr2a_router
+from src.api.v1.vyapar_import import router as vyapar_import_router
 from src.schemas.document import ContactResponse, ProductResponse
 from src.infrastructure.database.models import Contact, Product
 from src.api.deps import enforce_permission

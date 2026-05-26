@@ -35,6 +35,9 @@ import AccountDetail from "./views/accounting/AccountDetail";
 import CreditNoteList from "./views/credit-notes/CreditNoteList";
 import CreditNoteForm from "./views/credit-notes/CreditNoteForm";
 import CreditNoteDetail from "./views/credit-notes/CreditNoteDetail";
+import DebitNoteList from "./views/debit-notes/DebitNoteList";
+import DebitNoteDetail from "./views/debit-notes/DebitNoteDetail";
+import EWayBillList from "./views/eway-bills/EWayBillList";
 import PurchaseOrderList from "./views/purchase-orders/PurchaseOrderList";
 import PurchaseOrderForm from "./views/purchase-orders/PurchaseOrderForm";
 import PurchaseOrderDetail from "./views/purchase-orders/PurchaseOrderDetail";
@@ -64,7 +67,8 @@ import {
   X,
   Bell,
   ChevronDown,
-  FileText
+  FileText,
+  Truck
 } from "lucide-react";
 
 type View =
@@ -78,6 +82,8 @@ type View =
   | "settings"
   | "payments" | "payment_receipt" | "payment_disbursement"
   | "credit_notes" | "credit_note_create" | "credit_note_detail"
+  | "debit_notes" | "debit_note_detail"
+  | "eway_bills"
   | "purchase_orders" | "purchase_order_create" | "purchase_order_detail"
   | "sales_orders" | "sales_order_create" | "sales_order_detail"
   | "expense_list" | "expense_create" | "expense_edit" | "expense_detail"
@@ -94,6 +100,7 @@ export default function App() {
   const [activeAccountId, setActiveAccountId] = useState<string | undefined>(undefined);
   const [activePaymentId, setActivePaymentId] = useState<string | undefined>(undefined);
   const [activeCreditNoteId, setActiveCreditNoteId] = useState<string | undefined>(undefined);
+  const [activeDebitNoteId, setActiveDebitNoteId] = useState<string | undefined>(undefined);
   const [activePOId, setActivePOId] = useState<string | undefined>(undefined);
   const [activeSOId, setActiveSOId] = useState<string | undefined>(undefined);
   const [activeExpenseId, setActiveExpenseId] = useState<string | undefined>(undefined);
@@ -217,6 +224,11 @@ export default function App() {
     setCurrentView(view);
   };
 
+  const handleNavigateDebitNotes = (view: "debit_notes" | "debit_note_detail", id?: string) => {
+    setActiveDebitNoteId(id);
+    setCurrentView(view);
+  };
+
   const handleNavigatePurchaseOrders = (view: "purchase_orders" | "purchase_order_create" | "purchase_order_detail", id?: string) => {
     setActivePOId(id);
     setCurrentView(view);
@@ -284,7 +296,9 @@ export default function App() {
     { name: "Expenses", icon: Receipt, view: "expense_list" as const },
     { name: "Payments", icon: Banknote, view: "payments" as const },
     { name: "Credit Notes", icon: FileMinus, view: "credit_notes" as const },
+    { name: "Debit Notes", icon: FileMinus, view: "debit_notes" as const },
     { name: "Purchase Orders", icon: ShoppingCart, view: "purchase_orders" as const },
+    { name: "E-Way Bills", icon: Truck, view: "eway_bills" as const },
     { name: "Sales Orders", icon: ShoppingBag, view: "sales_orders" as const },
     { name: "Customers & Vendors", icon: Users, view: "contacts" as const },
     { name: "Products & Inventory", icon: Package, view: "products" as const },
@@ -352,7 +366,9 @@ export default function App() {
               (item.view === "expense_list" && ["expense_list", "expense_create", "expense_edit", "expense_detail"].includes(currentView)) ||
               (item.view === "payments" && ["payments", "payment_receipt", "payment_disbursement"].includes(currentView)) ||
               (item.view === "credit_notes" && ["credit_notes", "credit_note_create", "credit_note_detail"].includes(currentView)) ||
+              (item.view === "debit_notes" && ["debit_notes", "debit_note_detail"].includes(currentView)) ||
               (item.view === "purchase_orders" && ["purchase_orders", "purchase_order_create", "purchase_order_detail"].includes(currentView)) ||
+              (item.view === "eway_bills" && currentView === "eway_bills") ||
               (item.view === "sales_orders" && ["sales_orders", "sales_order_create", "sales_order_detail"].includes(currentView)) ||
               (item.view === "contacts" && ["contacts", "contact_create", "contact_edit", "contact_detail"].includes(currentView)) ||
               (item.view === "products" && ["products", "product_create", "product_edit", "product_detail"].includes(currentView)) ||
@@ -376,8 +392,12 @@ export default function App() {
                     setCurrentView("payments");
                   } else if (item.view === "credit_notes") {
                     setCurrentView("credit_notes");
+                  } else if (item.view === "debit_notes") {
+                    setCurrentView("debit_notes");
                   } else if (item.view === "purchase_orders") {
                     setCurrentView("purchase_orders");
+                  } else if (item.view === "eway_bills") {
+                    setCurrentView("eway_bills");
                   } else if (item.view === "sales_orders") {
                     setCurrentView("sales_orders");
                   } else if (item.view === "contacts") {
@@ -573,7 +593,11 @@ export default function App() {
           {currentView === "credit_note_detail" && activeCreditNoteId && (
             <CreditNoteDetail creditNoteId={activeCreditNoteId} onNavigate={handleNavigateCreditNotes} />
           )}
-
+          {currentView === "debit_notes" && <DebitNoteList onNavigate={(view, id) => handleNavigateDebitNotes(view as any, id)} />}
+          {currentView === "debit_note_detail" && activeDebitNoteId && (
+            <DebitNoteDetail debitNoteId={activeDebitNoteId} onNavigate={(view, id) => handleNavigateDebitNotes(view as any, id)} />
+          )}
+          {currentView === "eway_bills" && <EWayBillList onNavigate={() => {}} />}
           {currentView === "purchase_orders" && (
             <PurchaseOrderList onNavigate={handleNavigatePurchaseOrders} />
           )}
