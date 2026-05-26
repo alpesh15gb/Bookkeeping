@@ -86,10 +86,9 @@ async def lifespan(app: FastAPI):
     """
     logger.info("Starting Indian Accounting & GST Platform...")
 
-    # Create tables only if they don't exist (dev/test only; production uses Alembic)
-    if not settings.is_production:
-        Base.metadata.create_all(bind=engine)
-        logger.info("Database tables verified (create_all — non-production only).")
+    # Create tables that don't exist yet (safe for all environments)
+    Base.metadata.create_all(bind=engine)
+    logger.info("Database tables verified.")
 
     # Seed demo data only when explicitly requested via env flag
     if settings.SEED_ON_STARTUP and not settings.is_production:
