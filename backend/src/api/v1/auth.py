@@ -173,9 +173,7 @@ def refresh_token(
     if not token:
         raise HTTPException(status_code=400, detail="refresh_token is required.")
     try:
-        payload = decode_token(token)
-        if payload.get("type") != "refresh":
-            raise HTTPException(status_code=401, detail="Invalid token type.")
+        payload = decode_token(token, expected_type="refresh")
         user_id_str = payload.get("sub")
         if not user_id_str:
             raise HTTPException(status_code=401, detail="Invalid token claims.")
@@ -226,7 +224,7 @@ def refresh_token(
 def logout_user(request: Request, refresh_token_str: str, current_user: User = Depends(get_current_user)):
     """Revokes a refresh token so it can no longer be used."""
     try:
-        payload = decode_token(refresh_token_str)
+        payload = decode_token(refresh_token_str, expected_type="refresh")
         user_id = payload.get("sub")
         if user_id:
             _revoke_refresh_token(user_id, refresh_token_str)

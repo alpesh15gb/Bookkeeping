@@ -93,6 +93,14 @@ class Settings(BaseSettings):
             )
         return v
 
+    @field_validator("RATE_LIMIT_ENABLED")
+    @classmethod
+    def rate_limit_must_be_enabled_in_production(cls, v: bool, info) -> bool:
+        import os
+        if os.getenv("APP_ENV", "development") == "production" and not v:
+            raise ValueError("Rate limiting cannot be disabled in production.")
+        return v
+
     @property
     def allowed_origins_list(self) -> List[str]:
         return [origin.strip() for origin in self.ALLOWED_ORIGINS.split(",")]

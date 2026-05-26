@@ -217,15 +217,15 @@ def get_bill_pdf_payload(
             "due_date": bill.due_date.isoformat(),
             "pos_state_code": bill.pos_state_code,
             "status": bill.status,
-            "subtotal": float(bill.subtotal),
-            "discount_total": float(bill.discount_total),
-            "cgst_amount": float(bill.cgst_amount),
-            "sgst_amount": float(bill.sgst_amount),
-            "igst_amount": float(bill.igst_amount),
-            "utgst_amount": float(bill.utgst_amount),
-            "cess_amount": float(bill.cess_amount),
-            "total": float(bill.total),
-            "amount_paid": float(bill.amount_paid)
+            "subtotal": str(bill.subtotal.quantize(Decimal("0.01"))),
+            "discount_total": str(bill.discount_total.quantize(Decimal("0.01"))),
+            "cgst_amount": str(bill.cgst_amount.quantize(Decimal("0.01"))),
+            "sgst_amount": str(bill.sgst_amount.quantize(Decimal("0.01"))),
+            "igst_amount": str(bill.igst_amount.quantize(Decimal("0.01"))),
+            "utgst_amount": str(bill.utgst_amount.quantize(Decimal("0.01"))),
+            "cess_amount": str(bill.cess_amount.quantize(Decimal("0.01"))),
+            "total": str(bill.total.quantize(Decimal("0.01"))),
+            "amount_paid": str(bill.amount_paid.quantize(Decimal("0.01")))
         },
         "lines": [
             {
@@ -234,12 +234,12 @@ def get_bill_pdf_payload(
                 "quantity": float(line.quantity),
                 "rate": float(line.rate),
                 "discount": float(line.discount),
-                "subtotal": float(line.subtotal),
-                "gst_rate": float(line.gst_rate),
-                "cgst_amount": float(line.cgst_amount),
-                "sgst_amount": float(line.sgst_amount),
-                "igst_amount": float(line.igst_amount),
-                "total": float(line.total)
+                "subtotal": str(line.subtotal.quantize(Decimal("0.01"))),
+                "gst_rate": str(line.gst_rate.quantize(Decimal("0.01"))),
+                "cgst_amount": str(line.cgst_amount.quantize(Decimal("0.01"))),
+                "sgst_amount": str(line.sgst_amount.quantize(Decimal("0.01"))),
+                "igst_amount": str(line.igst_amount.quantize(Decimal("0.01"))),
+                "total": str(line.total.quantize(Decimal("0.01")))
             }
             for line in bill.lines
         ]

@@ -131,6 +131,17 @@ export default function App() {
     }
   }, [authenticated]);
 
+  // Close sidebar on Escape key
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isSidebarOpen) {
+        setIsSidebarOpen(false);
+      }
+    };
+    document.addEventListener("keydown", handleEscape);
+    return () => document.removeEventListener("keydown", handleEscape);
+  }, [isSidebarOpen]);
+
   const handleLogin = () => {
     setAuthenticated(true);
   };
@@ -375,7 +386,7 @@ export default function App() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-zinc-800 text-[11px] text-zinc-400 flex flex-col gap-2 bg-[#08152e]">
+        <div className="p-4 border-t border-zinc-800 text-[11px] text-zinc-300 flex flex-col gap-2 bg-[#08152e]">
           <div className="flex items-center gap-2">
             <Building2 className="w-3.5 h-3.5 text-zinc-500" />
             <span>Accounting App</span>

@@ -16,7 +16,7 @@ def get_current_user(
 ) -> User:
     """Validates JWT auth token and returns active User model."""
     try:
-        payload = decode_token(token)
+        payload = decode_token(token, expected_type="access")
         user_id_str = payload.get("sub")
         if not user_id_str or payload.get("type") != "access":
             raise HTTPException(

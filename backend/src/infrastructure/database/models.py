@@ -275,6 +275,10 @@ class Payment(Base):
 
 class PaymentAllocation(Base):
     __tablename__ = "payment_allocations"
+    __table_args__ = (
+        Index("ix_payment_allocations_payment_id", "payment_id"),
+        Index("ix_payment_allocations_invoice_id", "invoice_id"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     payment_id = Column(UUID(as_uuid=True), ForeignKey("payments.id"), nullable=False)
@@ -391,6 +395,10 @@ class BillPayment(Base):
 
 class BillPaymentAllocation(Base):
     __tablename__ = "bill_payment_allocations"
+    __table_args__ = (
+        Index("ix_bill_payment_allocations_payment_id", "payment_id"),
+        Index("ix_bill_payment_allocations_bill_id", "bill_id"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     payment_id = Column(UUID(as_uuid=True), ForeignKey("bill_payments.id"), nullable=False)
@@ -420,6 +428,7 @@ class JournalEntry(Base):
     description = Column(Text)
     source_type = Column(String(20), nullable=False)  # 'INVOICE', 'BILL', 'PAYMENT', 'MANUAL'
     source_id = Column(UUID(as_uuid=True))
+    is_locked = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
 
