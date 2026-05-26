@@ -148,6 +148,9 @@ export default function ExpenseDetail({ expenseId, onNavigate }: ExpenseDetailPr
             <div>
               <span className="text-[10px] font-bold text-zinc-400 uppercase block">Amount</span>
               <p className="text-2xl font-bold text-zinc-900 mt-0.5">{formatCurrency(expense.amount)}</p>
+              {expense.total !== expense.amount && (
+                <p className="text-xs text-zinc-500 mt-0.5">Total (incl. tax): {formatCurrency(expense.total)}</p>
+              )}
             </div>
             <div>
               <span className="text-[10px] font-bold text-zinc-400 uppercase block">Status</span>

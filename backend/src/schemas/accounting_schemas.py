@@ -93,3 +93,19 @@ class ProfitLossResponse(SchemaBase):
     expense_lines: List[ProfitLossItem]
     total_expenses: Decimal
     net_profit: Decimal
+
+
+# Balance Sheet
+class BalanceSheetSection(SchemaBase):
+    account_name: str
+    account_code: str
+    balance: Decimal
+
+class BalanceSheetResponse(SchemaBase):
+    assets: List[BalanceSheetSection]
+    total_assets: Decimal
+    liabilities: List[BalanceSheetSection]
+    total_liabilities: Decimal
+    equity: List[BalanceSheetSection]
+    total_equity: Decimal
+    net_profit: Decimal

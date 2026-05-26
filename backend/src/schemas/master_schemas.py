@@ -52,10 +52,12 @@ class ProductCreate(BaseModel):
     sku: Optional[str] = Field(None, max_length=50)
     hsn_sac: str = Field(..., min_length=6, max_length=8, pattern="^[0-9]{6,8}$")
     product_type: str = Field(..., pattern="^(GOODS|SERVICE)$")
-    uom: str = Field(..., max_length=10) # e.g. PCS, KGS, NOS
+    uom: str = Field(..., max_length=10)
     sales_price: Decimal = Field(Decimal("0.00"), ge=Decimal("0.00"))
     purchase_price: Decimal = Field(Decimal("0.00"), ge=Decimal("0.00"))
     gst_rate: Decimal = Field(Decimal("0.00"), ge=Decimal("0.00"), le=Decimal("100.00"))
+    opening_stock: Decimal = Field(Decimal("0.00"), ge=Decimal("0.00"))
+    reorder_level: Decimal = Field(Decimal("0.00"), ge=Decimal("0.00"))
 
 class ProductUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=150)
@@ -66,6 +68,8 @@ class ProductUpdate(BaseModel):
     sales_price: Optional[Decimal] = Field(None, ge=Decimal("0.00"))
     purchase_price: Optional[Decimal] = Field(None, ge=Decimal("0.00"))
     gst_rate: Optional[Decimal] = Field(None, ge=Decimal("0.00"), le=Decimal("100.00"))
+    opening_stock: Optional[Decimal] = Field(None, ge=Decimal("0.00"))
+    reorder_level: Optional[Decimal] = Field(None, ge=Decimal("0.00"))
     is_active: Optional[bool] = None
 
 class ProductResponse(SchemaBase):
@@ -79,6 +83,9 @@ class ProductResponse(SchemaBase):
     sales_price: Decimal
     purchase_price: Decimal
     gst_rate: Decimal
+    opening_stock: Decimal
+    current_stock: Decimal
+    reorder_level: Decimal
     is_active: bool
     created_at: datetime
     updated_at: datetime

@@ -149,14 +149,32 @@ class Product(Base):
     sales_price = Column(Numeric(15, 4), nullable=False, default=0)
     purchase_price = Column(Numeric(15, 4), nullable=False, default=0)
     gst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    opening_stock = Column(Numeric(12, 2), nullable=False, default=0)
+    current_stock = Column(Numeric(12, 2), nullable=False, default=0)
+    reorder_level = Column(Numeric(12, 2), nullable=False, default=0)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
 
 
-# ---------------------------------------------------------------------------
-# SALES INVOICES
+class StockLedger(Base):
+    __tablename__ = "stock_ledger"
+    __table_args__ = (
+        Index("ix_stock_ledger_product_id", "product_id"),
+        Index("ix_stock_ledger_tenant_date", "tenant_id", "created_at"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    transaction_type = Column(String(20), nullable=False)  # 'PURCHASE', 'SALE', 'ADJUSTMENT', 'TRANSFER'
+    transaction_id = Column(UUID(as_uuid=True))
+    quantity = Column(Numeric(12, 2), nullable=False)
+    running_balance = Column(Numeric(12, 2), nullable=False)
+    rate = Column(Numeric(15, 4))
+    description = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 # ---------------------------------------------------------------------------
 
 class Invoice(Base):

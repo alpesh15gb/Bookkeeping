@@ -508,3 +508,71 @@ def recalculate_account_balances(
     """Recalculate current_balance for all accounts from journal entries."""
     update_account_balances(db, tenant_id)
     return {"message": "Account balances recalculated from journal entries."}
+
+
+@router.get("/balance-sheet", response_model=BalanceSheetResponse)
+def get_balance_sheet(
+    as_on_date: Optional[date] = None,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
+):
+    """Generates a Balance Sheet as on a given date (defaults to today)."""
+    from src.schemas.accounting_schemas import BalanceSheetSection, BalanceSheetResponse
+
+    cutoff = as_on_date or date.today()
+
+    accounts = db.query(Account).filter(
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None,
+        Account.account_type.in_(["ASSET", "LIABILITY", "EQUITY"]),
+    ).order_by(Account.code.asc()).all()
+
+    assets = []
+    liabilities = []
+    equity = []
+    total_assets = Decimal("0.00")
+    total_liabilities = Decimal("0.00")
+    total_equity = Decimal("0.00")
+
+    for a in accounts:
+        bal = a.current_balance or Decimal("0.00")
+        bal = bal.quantize(Decimal("0.01"))
+
+        if a.account_type == "ASSET":
+            assets.append(BalanceSheetSection(account_name=a.name, account_code=a.code, balance=bal))
+            total_assets += bal
+        elif a.account_type == "LIABILITY":
+            liabilities.append(BalanceSheetSection(account_name=a.name, account_code=a.code, balance=bal))
+            total_liabilities += bal
+        else:
+            equity.append(BalanceSheetSection(account_name=a.name, account_code=a.code, balance=bal))
+            total_equity += bal
+
+    # Include net profit in equity
+    pnl = db.query(
+        func.coalesce(func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)), 0).label("debits"),
+        func.coalesce(func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)), 0).label("credits"),
+    ).outerjoin(JournalEntry, JournalLine.entry_id == JournalEntry.id)\
+     .outerjoin(Account, JournalLine.account_id == Account.id)\
+     .filter(Account.tenant_id == tenant_id, Account.account_type.in_(["REVENUE", "EXPENSE"]), Account.deleted_at == None)\
+     .filter(JournalEntry.entry_date <= cutoff).first()
+
+    if pnl:
+        revenue = Decimal(str(pnl.credits)) - Decimal(str(pnl.debits))
+    else:
+        revenue = Decimal("0.00")
+
+    net_profit = revenue
+    if net_profit != 0:
+        equity.append(BalanceSheetSection(account_name="Net Profit", account_code="--", balance=net_profit))
+        total_equity += net_profit
+
+    return BalanceSheetResponse(
+        assets=assets,
+        total_assets=total_assets.quantize(Decimal("0.01")),
+        liabilities=liabilities,
+        total_liabilities=total_liabilities.quantize(Decimal("0.01")),
+        equity=equity,
+        total_equity=total_equity.quantize(Decimal("0.01")),
+        net_profit=net_profit.quantize(Decimal("0.01")),
+    )

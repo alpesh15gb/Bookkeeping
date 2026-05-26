@@ -175,6 +175,9 @@ def create_product(
         sales_price=payload.sales_price,
         purchase_price=payload.purchase_price,
         gst_rate=payload.gst_rate,
+        opening_stock=payload.opening_stock,
+        current_stock=payload.opening_stock,
+        reorder_level=payload.reorder_level,
         is_active=True
     )
     db.add(product)
@@ -242,6 +245,10 @@ def update_product(
         product.purchase_price = payload.purchase_price
     if payload.gst_rate is not None:
         product.gst_rate = payload.gst_rate
+    if payload.opening_stock is not None:
+        product.opening_stock = payload.opening_stock
+    if payload.reorder_level is not None:
+        product.reorder_level = payload.reorder_level
     if payload.is_active is not None:
         product.is_active = payload.is_active
 

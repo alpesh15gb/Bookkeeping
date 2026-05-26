@@ -106,28 +106,18 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
     refetchInterval: 30000,
   });
 
-  // Fetch Receipts list
-  const { data: receipts = [], isLoading: recLoading, error: recError } = useQuery<ReceiptItem[]>({
-    queryKey: ["payments-receipts"],
+  // Fetch Expenses list (new expense module)
+  const { data: expenses = [], isLoading: expLoading, error: expError } = useQuery({
+    queryKey: ["expenses"],
     queryFn: async () => {
-      const res = await apiClient.get("/payments/receipts");
+      const res = await apiClient.get("/expenses");
       return Array.isArray(res.data) ? res.data : [];
     },
     refetchInterval: 30000,
   });
 
-  // Fetch Disbursements list
-  const { data: disbursements = [], isLoading: disbLoading, error: disbError } = useQuery<DisbursementItem[]>({
-    queryKey: ["payments-disbursements"],
-    queryFn: async () => {
-      const res = await apiClient.get("/payments/disbursements");
-      return Array.isArray(res.data) ? res.data : [];
-    },
-    refetchInterval: 30000,
-  });
-
-  const isLoading = summaryLoading || invLoading || billsLoading || recLoading || disbLoading;
-  const hasError = summaryError || invError || billsError || recError || disbError;
+  const isLoading = summaryLoading || invLoading || billsLoading || expLoading;
+  const hasError = summaryError || invError || billsError || expError;
 
   // Format currency with Indian formatting and no decimals
   const formatCardCurrency = (val: number) => {
@@ -151,9 +141,9 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
   const totalPurchasesVal = bills
     .filter(b => b.status.toUpperCase() !== "DRAFT")
     .reduce((sum, b) => sum + b.total, 0);
-  const totalExpensesVal = disbursements
-    .filter(d => d.status.toUpperCase() !== "CANCELLED")
-    .reduce((sum, d) => sum + d.amount, 0);
+  const totalExpensesVal = expenses
+    .filter(e => e.status === "POSTED")
+    .reduce((sum, e) => sum + e.total, 0);
   const cashInHandVal = summary?.total_received || 0;
 
   // 2. Month-over-Month Trend Math
@@ -177,9 +167,9 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
   };
 
   const getMonthlyExpenses = (monthKey: string) => {
-    return disbursements
-      .filter(d => d.payment_date && d.payment_date.startsWith(monthKey) && d.status.toUpperCase() !== "CANCELLED")
-      .reduce((sum, d) => sum + d.amount, 0);
+    return expenses
+      .filter(e => e.expense_date && e.expense_date.startsWith(monthKey) && e.status === "POSTED")
+      .reduce((sum, d) => sum + d.total, 0);
   };
 
   const getMonthlyCash = (monthKey: string) => {
@@ -235,11 +225,11 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
       .filter(b => b.issue_date && b.issue_date.startsWith(dateKey) && b.status.toUpperCase() !== "DRAFT")
       .reduce((sum, b) => sum + b.total, 0);
       
-    const expenses = disbursements
-      .filter(d => d.payment_date && d.payment_date.startsWith(dateKey) && d.status.toUpperCase() !== "CANCELLED")
-      .reduce((sum, d) => sum + d.amount, 0);
+    const expenseSum = expenses
+      .filter(e => e.expense_date && e.expense_date.startsWith(dateKey) && e.status === "POSTED")
+      .reduce((sum, d) => sum + d.total, 0);
       
-    return { label, sales, purchases, expenses };
+    return { label, sales, purchases, expenses: expenseSum };
   });
 
   // Calculate dynamic maximum ceiling for scaling the SVG chart lines
