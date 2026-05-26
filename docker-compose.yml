@@ -43,7 +43,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
-      - ALLOWED_ORIGINS=https://apexbooks.in,https://api.apexbooks.in
+      - ALLOWED_ORIGINS=https://apexbooks.in,https://api.apexbooks.in,tauri://localhost,https://tauri.localhost
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}

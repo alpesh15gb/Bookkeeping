@@ -6,10 +6,12 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:tauri": "tsc && vite build --mode tauri",
     "preview": "vite preview"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.0.0",
+    "@tauri-apps/api": "^2.11.0",
     "axios": "^1.6.0",
     "clsx": "^2.1.0",
     "lucide-react": "^0.300.0",

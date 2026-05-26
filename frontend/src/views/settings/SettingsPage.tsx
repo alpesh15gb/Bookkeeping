@@ -17,6 +17,7 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  Upload,
 } from "lucide-react";
 
 interface SettingsPageProps {
@@ -324,6 +325,39 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
     e_way_bill_username: "",
     origin_state_code: "",
   });
+
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      setUploadError("Image size must be less than 2MB.");
+      return;
+    }
+
+    setUploadingLogo(true);
+    setUploadError("");
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const res = await apiClient.post("/settings/logo", formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+      setSettingsForm((p) => ({ ...p, logo_url: res.data.logo_url }));
+    } catch (err: any) {
+      console.error(err);
+      setUploadError(err.response?.data?.detail || "Failed to upload logo.");
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const [seriesEditId, setSeriesEditId] = useState<string | null>(null);
   const [seriesEdit, setSeriesEdit] = useState<Partial<SeriesItem>>({});

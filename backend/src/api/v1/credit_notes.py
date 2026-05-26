@@ -17,7 +17,7 @@ from decimal import Decimal
 from datetime import datetime, timezone
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import CreditNote, CreditNoteLine, Invoice, Product
+from src.infrastructure.database.models import CreditNote, CreditNoteLine, Invoice, Product, TenantSetting, Tenant, BankingProfile
 from src.schemas.credit_note_schemas import (
     CreditNoteCreate, CreditNoteResponse, CreditNoteListResponse
 )
@@ -228,3 +228,87 @@ def cancel_credit_note(
     db.commit()
     db.refresh(credit_note)
     return credit_note
+
+
+@router.get("/{id}/pdf-payload")
+def get_credit_note_pdf_payload(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("credit_note:view"))
+):
+    """Retrieves metadata model ready for rendering/printing a Credit Note."""
+    cn = db.query(CreditNote).filter(
+        CreditNote.id == id,
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).first()
+    if not cn:
+        raise HTTPException(status_code=404, detail="Credit note not found.")
+
+    settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    company = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    bank = db.query(BankingProfile).filter(
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.is_primary == True,
+        BankingProfile.is_active == True
+    ).first()
+    
+    # Customer details from linked invoice contact
+    contact = cn.invoice.contact if cn.invoice else None
+
+    return {
+        "company": {
+            "legal_name": company.legal_name if company else None,
+            "trade_name": company.trade_name if company else None,
+            "gstin": company.gstin if company else None,
+            "pan": company.pan if company else None,
+            "logo_url": settings.logo_url if settings else None
+        },
+        "bank_details": {
+            "bank_name": bank.bank_name if bank else None,
+            "account_number": bank.account_number if bank else None,
+            "ifsc_code": bank.ifsc_code if bank else None,
+            "account_holder_name": bank.account_holder_name if bank else None,
+            "upi_id": bank.upi_id if bank else None
+        },
+        "customer": {
+            "name": contact.name if contact else None,
+            "gstin": contact.gstin if contact else None,
+            "pan": contact.pan if contact else None,
+            "billing_address": contact.billing_address if contact else None,
+            "shipping_address": contact.shipping_address if contact else None,
+            "state_code": contact.state_code if contact else None
+        },
+        "credit_note": {
+            "id": str(cn.id),
+            "credit_note_number": cn.credit_note_number,
+            "issue_date": cn.issue_date.isoformat() if cn.issue_date else None,
+            "pos_state_code": cn.pos_state_code,
+            "status": cn.status,
+            "reason": cn.reason,
+            "subtotal": float(cn.subtotal),
+            "cgst_amount": float(cn.cgst_amount),
+            "sgst_amount": float(cn.sgst_amount),
+            "igst_amount": float(cn.igst_amount),
+            "utgst_amount": float(cn.utgst_amount),
+            "cess_amount": float(cn.cess_amount),
+            "round_off": float(cn.round_off),
+            "total": float(cn.total)
+        },
+        "lines": [
+            {
+                "product_name": line.product.name if line.product else "N/A",
+                "hsn_sac": line.hsn_sac,
+                "quantity": float(line.quantity),
+                "rate": float(line.rate),
+                "discount": 0.0,
+                "subtotal": float(line.subtotal),
+                "gst_rate": float(line.gst_rate),
+                "cgst_amount": float(line.cgst_amount),
+                "sgst_amount": float(line.sgst_amount),
+                "igst_amount": float(line.igst_amount),
+                "total": float(line.total)
+            }
+            for line in cn.lines
+        ]
+    }

@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
+from fastapi import APIRouter, Depends, HTTPException, status, File, UploadFile, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List
-import os, uuid
+import uuid
+import os
 from datetime import datetime, timezone
 
 from src.core.config import settings
@@ -313,6 +314,47 @@ def update_settings(
     db.commit()
     db.refresh(setting)
     return setting
+
+@router.post("/settings/logo")
+def upload_logo(
+    request: Request,
+    file: UploadFile = File(...),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
+):
+    """Securely uploads and overwrites the company logo image."""
+    # Ensure directory exists inside workspace static folder
+    os.makedirs("static/logos", exist_ok=True)
+    
+    # Restrict to image files only
+    content_type = file.content_type
+    if content_type not in ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/svg+xml"]:
+        raise HTTPException(status_code=400, detail="Only PNG, JPEG, GIF, and SVG images are supported.")
+        
+    ext = os.path.splitext(file.filename)[1]
+    # Fallback extension if none
+    if not ext:
+        if content_type == "image/png":
+            ext = ".png"
+        elif content_type in ["image/jpeg", "image/jpg"]:
+            ext = ".jpg"
+        elif content_type == "image/gif":
+            ext = ".gif"
+        elif content_type == "image/svg+xml":
+            ext = ".svg"
+        else:
+            ext = ".png"
+
+    filename = f"{tenant_id}{ext}"
+    filepath = os.path.join("static/logos", filename)
+    
+    # Save the file
+    with open(filepath, "wb") as f:
+        f.write(file.file.read())
+        
+    # Generate absolute URL using request's base URL
+    base_url = str(request.base_url).rstrip("/")
+    logo_url = f"{base_url}/static/logos/{filename}"
+    return {"logo_url": logo_url}
 
 # 4. Numbering series endpoints
 @router.get("/settings/series", response_model=List[NumberingSeriesResponse])

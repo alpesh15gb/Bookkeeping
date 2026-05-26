@@ -1,6 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
 
-// Core client configurations
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
 export const apiClient: AxiosInstance = axios.create({
@@ -8,7 +7,7 @@ export const apiClient: AxiosInstance = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  withCredentials: true, // Enables sending refresh cookies
+  withCredentials: false,
 });
 
 // Memory cache for Access Token (keeps tokens out of localStorage to prevent XSS theft)
