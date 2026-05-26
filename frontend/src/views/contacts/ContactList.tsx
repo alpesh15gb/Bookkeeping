@@ -48,9 +48,12 @@ export default function ContactList({ onNavigate }: ContactListProps) {
       {/* Desktop Header */}
       <div className="hidden md:flex justify-between items-center pb-2 border-b border-zinc-200">
         <div className="flex items-center gap-6">
-          <h1 className="text-xl font-bold tracking-tight text-zinc-900">
-            Customers & Vendors
-          </h1>
+          <div>
+            <h1 className="text-xl font-bold tracking-tight text-zinc-900">
+              Customers & Vendors
+            </h1>
+            <p className="text-sm text-zinc-500 mt-0.5">Manage contacts and allied parties.</p>
+          </div>
           <div className="flex bg-slate-100 p-1 rounded-lg text-xs font-bold text-slate-600">
             <button
               onClick={() => setTypeFilter("CUSTOMER")}
@@ -91,7 +94,7 @@ export default function ContactList({ onNavigate }: ContactListProps) {
           </div>
           <button
             onClick={() => onNavigate("create")}
-            className="bg-[#0B1B3D] text-[#DCA035] hover:bg-navy-800 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
           >
             <Plus className="w-4 h-4" /> Add Party
           </button>
@@ -154,7 +157,7 @@ export default function ContactList({ onNavigate }: ContactListProps) {
 
       {isLoading ? (
         <div className="flex justify-center items-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DCA035]"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
         </div>
       ) : error ? (
         <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">

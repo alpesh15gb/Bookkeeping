@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { Plus, Eye, ShieldAlert, FileMinus } from "lucide-react";
+import { Plus, Search, Eye, ShieldAlert, FileMinus } from "lucide-react";
 
 interface CreditNoteListProps {
   onNavigate: (view: "credit_notes" | "credit_note_create" | "credit_note_detail", id?: string) => void;
@@ -69,13 +69,16 @@ export default function CreditNoteList({ onNavigate }: CreditNoteListProps) {
 
       {/* Search */}
       <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-        <input
-          type="text"
-          placeholder="Search by credit note number or customer..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
-        />
+        <div className="relative">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
+          <input
+            type="text"
+            placeholder="Search by credit note number or customer..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+          />
+        </div>
       </div>
 
       {isLoading ? (

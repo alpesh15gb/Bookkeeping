@@ -88,9 +88,9 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
       <div className="flex items-center gap-3 pb-4 border-b border-zinc-200/60">
         <button
           onClick={() => onNavigate("expense_list")}
-          className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition"
+          className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition"
         >
-          <ArrowLeft className="w-4 h-4" />
+          <ArrowLeft className="w-5 h-5" />
         </button>
         <div>
           <h1 className="text-xl font-bold tracking-tight text-zinc-900">

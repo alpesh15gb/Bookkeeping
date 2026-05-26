@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { Plus, Eye, ShieldAlert, ShoppingCart } from "lucide-react";
+import { Plus, Search, Eye, ShieldAlert, ShoppingCart } from "lucide-react";
 
 interface PurchaseOrderListProps {
   onNavigate: (view: "purchase_orders" | "purchase_order_create" | "purchase_order_detail", id?: string) => void;
@@ -71,12 +71,13 @@ export default function PurchaseOrderList({ onNavigate }: PurchaseOrderListProps
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
         <div className="relative flex-1">
+          <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
           <input
             type="text"
             placeholder="Search by PO number or vendor name..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-4 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
+            className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-brand-500 text-sm"
           />
         </div>
         <select

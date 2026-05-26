@@ -46,14 +46,14 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
     const s = status.toUpperCase();
     if (s === "PAID") {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-green-50 border border-green-200 text-green-700">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700">
           Paid
         </span>
       );
     }
     if (s === "CANCELLED") {
       return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-red-50 border border-red-200 text-red-700">
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-rose-50 border border-rose-200 text-rose-700">
           Cancelled
         </span>
       );
@@ -97,12 +97,13 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2">
         <div>
           <h1 className="text-xl font-bold tracking-tight text-zinc-900">Invoices</h1>
+          <p className="text-sm text-zinc-500 mt-0.5">Manage sales invoices and GST compliance.</p>
         </div>
         <button
           onClick={() => onNavigate("create")}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-gold-500 hover:bg-gold-600 text-zinc-950 rounded-lg text-sm font-semibold shadow-sm transition"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
         >
-          <Plus className="w-4 h-4 text-zinc-950" />
+          <Plus className="w-4 h-4" />
           Create Invoice
         </button>
       </div>
@@ -120,7 +121,7 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
               setSearch(e.target.value);
               setCurrentPage(1);
             }}
-            className="w-full pl-9 pr-4 py-2 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-zinc-400 placeholder-zinc-400"
+            className="w-full pl-9 pr-4 py-2 border border-zinc-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 placeholder-zinc-400"
           />
         </div>
 
@@ -177,7 +178,7 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
       {/* Table content */}
       {isLoading ? (
         <div className="flex justify-center items-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-zinc-800"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
         </div>
       ) : error ? (
         <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">

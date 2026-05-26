@@ -55,9 +55,12 @@ export default function ProductList({ onNavigate }: ProductListProps) {
     <div className="space-y-6 relative pb-16">
       {/* Desktop Header */}
       <div className="hidden md:flex justify-between items-center pb-2 border-b border-zinc-200">
-        <h1 className="text-xl font-bold tracking-tight text-zinc-900">
-          Products & Inventory
-        </h1>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight text-zinc-900">
+            Products & Inventory
+          </h1>
+          <p className="text-sm text-zinc-500 mt-0.5">Manage product catalogue and inventory.</p>
+        </div>
         <div className="flex items-center gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-400" />
@@ -66,12 +69,12 @@ export default function ProductList({ onNavigate }: ProductListProps) {
               placeholder="Search items by name, HSN..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-[#DCA035] outline-none w-64 bg-white"
+              className="pl-9 pr-4 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none w-64 bg-white"
             />
           </div>
           <button
             onClick={() => onNavigate("create")}
-            className="bg-[#0B1B3D] text-[#DCA035] hover:bg-navy-800 px-4 py-2 rounded-lg text-xs font-bold transition flex items-center gap-1.5 shadow"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-sm font-semibold shadow-sm transition"
           >
             <Plus className="w-4 h-4" /> Add Item
           </button>
@@ -105,7 +108,7 @@ export default function ProductList({ onNavigate }: ProductListProps) {
 
       {isLoading ? (
         <div className="flex justify-center items-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#DCA035]"></div>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
         </div>
       ) : error ? (
         <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">

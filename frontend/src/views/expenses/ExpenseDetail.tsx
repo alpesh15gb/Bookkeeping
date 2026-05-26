@@ -70,10 +70,10 @@ export default function ExpenseDetail({ expenseId, onNavigate }: ExpenseDetailPr
       <div className="flex items-center justify-between pb-4 border-b border-zinc-200/60">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => onNavigate("expense_list")}
-            className="p-1.5 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition"
-          >
-            <ArrowLeft className="w-4 h-4" />
+          onClick={() => onNavigate("expense_list")}
+          className="p-1 text-zinc-400 hover:text-zinc-700 hover:bg-zinc-100 rounded-lg transition"
+        >
+          <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
             <h1 className="text-xl font-bold tracking-tight text-zinc-900">

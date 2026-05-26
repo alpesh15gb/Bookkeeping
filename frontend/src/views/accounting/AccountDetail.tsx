@@ -74,7 +74,7 @@ export default function AccountDetail({ accountId, onNavigate }: AccountDetailPr
 
   if (accountError || !account) {
     return (
-      <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg text-xs font-semibold">
+      <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg text-xs font-semibold">
         <ShieldAlert className="w-5 h-5 flex-shrink-0" />
         <span>Error loading account details. Please check the API server.</span>
       </div>
