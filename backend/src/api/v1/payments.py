@@ -194,7 +194,8 @@ def get_payment_receipt(
     """Fetches details of a single customer payment receipt."""
     payment = db.query(Payment).filter(
         Payment.id == id,
-        Payment.tenant_id == tenant_id
+        Payment.tenant_id == tenant_id,
+        Payment.deleted_at == None
     ).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment receipt not found.")
@@ -209,7 +210,8 @@ def cancel_payment_receipt(
     """Cancels a customer receipt, reversing its invoice allocations and posting reversal journal entries."""
     payment = db.query(Payment).filter(
         Payment.id == id,
-        Payment.tenant_id == tenant_id
+        Payment.tenant_id == tenant_id,
+        Payment.deleted_at == None
     ).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Payment receipt not found.")

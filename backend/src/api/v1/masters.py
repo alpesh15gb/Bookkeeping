@@ -138,6 +138,18 @@ def delete_contact(
     if not contact:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Contact not found.")
 
+    from src.infrastructure.database.models import Invoice, Bill
+    active_invoices = db.query(Invoice).filter(
+        Invoice.contact_id == id, Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None, Invoice.status != "CANCELLED"
+    ).count()
+    active_bills = db.query(Bill).filter(
+        Bill.contact_id == id, Bill.tenant_id == tenant_id,
+        Bill.deleted_at == None, Bill.status != "CANCELLED"
+    ).count()
+    if active_invoices > 0 or active_bills > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete contact with active invoices or bills. Deactivate instead.")
+
     contact.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return None
@@ -251,6 +263,20 @@ def delete_product(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
 
+    from src.infrastructure.database.models import InvoiceLine, BillLine
+    active_inv_lines = db.query(InvoiceLine).join(InvoiceLine.invoice).filter(
+        InvoiceLine.product_id == id,
+        Invoice.deleted_at == None,
+        Invoice.status != "CANCELLED"
+    ).count()
+    active_bill_lines = db.query(BillLine).join(BillLine.bill).filter(
+        BillLine.product_id == id,
+        Bill.deleted_at == None,
+        Bill.status != "CANCELLED"
+    ).count()
+    if active_inv_lines > 0 or active_bill_lines > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete product with active invoice or bill lines.")
+
     product.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return None
@@ -294,10 +320,16 @@ def create_account(
 
 @router.get("/accounts", response_model=List[AccountResponse])
 def list_accounts(
+    page: int = 1,
+    limit: int = 100,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
-    return db.query(Account).filter(Account.tenant_id == tenant_id, Account.deleted_at == None).order_by(Account.code.asc()).all()
+    offset = (page - 1) * limit
+    return db.query(Account).filter(
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None
+    ).order_by(Account.code.asc()).offset(offset).limit(limit).all()
 
 @router.get("/accounts/{id}", response_model=AccountResponse)
 def get_account(

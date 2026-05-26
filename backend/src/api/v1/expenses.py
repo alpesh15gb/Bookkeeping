@@ -82,6 +82,8 @@ def create_expense(
 @router.get("", response_model=List[ExpenseListResponse])
 def list_expenses(
     status_filter: Optional[str] = None,
+    page: int = 1,
+    limit: int = 50,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:view")),
 ):
@@ -91,7 +93,9 @@ def list_expenses(
     )
     if status_filter:
         q = q.filter(Expense.status == status_filter)
+    offset = (page - 1) * limit
     q = q.order_by(Expense.expense_date.desc(), Expense.created_at.desc())
+    q = q.offset(offset).limit(limit)
 
     results = []
     for e in q.all():

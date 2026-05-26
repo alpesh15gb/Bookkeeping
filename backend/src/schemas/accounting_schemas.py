@@ -59,6 +59,7 @@ class LedgerReportResponse(SchemaBase):
     opening_balance: Decimal
     closing_balance: Decimal
     lines: List[LedgerLine]
+    total_lines: int = 0
 
 # Trial Balance Report
 class TrialBalanceLine(SchemaBase):

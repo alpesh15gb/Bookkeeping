@@ -261,6 +261,8 @@ def get_journal_entry(
 @router.get("/ledger/{account_id}", response_model=LedgerReportResponse)
 def get_ledger_statement(
     account_id: uuid.UUID,
+    page: int = 1,
+    limit: int = 100,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
@@ -273,8 +275,10 @@ def get_ledger_statement(
     if not account:
         raise HTTPException(status_code=404, detail="Account not found.")
 
-    # Retrieve all journal lines for this account chronologically
-    lines = db.query(
+    offset = (page - 1) * limit
+
+    # Retrieve paginated journal lines for this account chronologically
+    base_q = db.query(
         JournalLine.amount,
         JournalLine.direction,
         JournalLine.narration,
@@ -282,10 +286,31 @@ def get_ledger_statement(
         JournalEntry.reference_number,
         JournalEntry.description
     ).join(JournalEntry, JournalLine.entry_id == JournalEntry.id)\
-     .filter(JournalLine.account_id == account_id, JournalEntry.tenant_id == tenant_id)\
-     .order_by(JournalEntry.entry_date.asc(), JournalEntry.created_at.asc()).all()
+     .filter(JournalLine.account_id == account_id, JournalEntry.tenant_id == tenant_id)
 
-    op_bal = Decimal(str(account.opening_balance))
+    total_lines = base_q.count()
+    lines = base_q.order_by(JournalEntry.entry_date.asc(), JournalEntry.created_at.asc())\
+                  .offset(offset).limit(limit).all()
+
+    # Compute the opening balance before this page
+    prior_q = base_q.order_by(JournalEntry.entry_date.asc(), JournalEntry.created_at.asc())
+    if offset > 0:
+        prior_lines = prior_q.limit(offset).all()
+        op_bal = Decimal(str(account.opening_balance))
+        for pl in prior_lines:
+            if pl.direction == "DEBIT":
+                if account.account_type in ("ASSET", "EXPENSE"):
+                    op_bal += pl.amount
+                else:
+                    op_bal -= pl.amount
+            else:
+                if account.account_type in ("ASSET", "EXPENSE"):
+                    op_bal -= pl.amount
+                else:
+                    op_bal += pl.amount
+    else:
+        op_bal = Decimal(str(account.opening_balance))
+
     run_bal = op_bal
     report_lines = []
 
@@ -325,7 +350,8 @@ def get_ledger_statement(
         account_code=account.code,
         opening_balance=op_bal,
         closing_balance=run_bal,
-        lines=report_lines
+        lines=report_lines,
+        total_lines=total_lines
     )
 
 @router.get("/trial-balance", response_model=TrialBalanceResponse)

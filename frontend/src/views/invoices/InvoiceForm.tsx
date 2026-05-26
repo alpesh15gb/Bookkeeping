@@ -3,6 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { Trash2, Plus, ArrowLeft, AlertCircle, Save, Send, Printer, Share2, Cog } from "lucide-react";
 import logo from "../../logo.png";
+import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
 
 interface InvoiceFormProps {
   editId?: string;
