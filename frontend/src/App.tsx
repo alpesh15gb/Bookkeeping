@@ -20,6 +20,9 @@ import TrialBalance from "./views/accounting/TrialBalance";
 import ProfitLoss from "./views/accounting/ProfitLoss";
 import ReportsDashboard from "./views/reports/ReportsDashboard";
 import SettingsPage from "./views/settings/SettingsPage";
+import ExpenseList from "./views/expenses/ExpenseList";
+import ExpenseForm from "./views/expenses/ExpenseForm";
+import ExpenseDetail from "./views/expenses/ExpenseDetail";
 
 // New components
 import PaymentsList from "./views/payments/PaymentsList";
@@ -72,7 +75,8 @@ type View =
   | "payments" | "payment_receipt" | "payment_disbursement"
   | "credit_notes" | "credit_note_create" | "credit_note_detail"
   | "purchase_orders" | "purchase_order_create" | "purchase_order_detail"
-  | "sales_orders" | "sales_order_create" | "sales_order_detail";
+  | "sales_orders" | "sales_order_create" | "sales_order_detail"
+  | "expense_list" | "expense_create" | "expense_edit" | "expense_detail";
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -87,6 +91,7 @@ export default function App() {
   const [activeCreditNoteId, setActiveCreditNoteId] = useState<string | undefined>(undefined);
   const [activePOId, setActivePOId] = useState<string | undefined>(undefined);
   const [activeSOId, setActiveSOId] = useState<string | undefined>(undefined);
+  const [activeExpenseId, setActiveExpenseId] = useState<string | undefined>(undefined);
   const [user, setUser] = useState<{ full_name: string; email: string } | null>(null);
 
   // Restore session on mount
@@ -205,6 +210,11 @@ export default function App() {
     setCurrentView(view);
   };
 
+  const handleNavigateExpenses = (view: "expense_list" | "expense_create" | "expense_edit" | "expense_detail", expenseId?: string) => {
+    setActiveExpenseId(expenseId);
+    setCurrentView(view);
+  };
+
   const handleFormSuccess = () => {
     setCurrentView("list");
     setActiveInvoiceId(undefined);
@@ -225,6 +235,11 @@ export default function App() {
     setActiveProductId(undefined);
   };
 
+  const handleExpenseSuccess = () => {
+    setCurrentView("expense_list");
+    setActiveExpenseId(undefined);
+  };
+
   const handleAccountSuccess = () => {
     setCurrentView("accounts");
     setActiveAccountId(undefined);
@@ -238,6 +253,7 @@ export default function App() {
     { name: "Dashboard", icon: LayoutDashboard, view: "sales_dashboard" as const },
     { name: "Invoices (Sales)", icon: FileSpreadsheet, view: "list" as const },
     { name: "Vendor Bills", icon: Receipt, view: "bill_list" as const },
+    { name: "Expenses", icon: Receipt, view: "expense_list" as const },
     { name: "Payments", icon: Banknote, view: "payments" as const },
     { name: "Credit Notes", icon: FileMinus, view: "credit_notes" as const },
     { name: "Purchase Orders", icon: ShoppingCart, view: "purchase_orders" as const },
@@ -304,6 +320,7 @@ export default function App() {
               (item.view === "sales_dashboard" && currentView === "sales_dashboard") ||
               (item.view === "list" && ["list", "create", "edit", "detail"].includes(currentView)) ||
               (item.view === "bill_list" && ["bill_list", "bill_create", "bill_edit", "bill_detail"].includes(currentView)) ||
+              (item.view === "expense_list" && ["expense_list", "expense_create", "expense_edit", "expense_detail"].includes(currentView)) ||
               (item.view === "payments" && ["payments", "payment_receipt", "payment_disbursement"].includes(currentView)) ||
               (item.view === "credit_notes" && ["credit_notes", "credit_note_create", "credit_note_detail"].includes(currentView)) ||
               (item.view === "purchase_orders" && ["purchase_orders", "purchase_order_create", "purchase_order_detail"].includes(currentView)) ||
@@ -322,6 +339,8 @@ export default function App() {
                     handleNavigateInvoices("list");
                   } else if (item.view === "bill_list") {
                     handleNavigateBills("bill_list");
+                  } else if (item.view === "expense_list") {
+                    handleNavigateExpenses("expense_list");
                   } else if (item.view === "payments") {
                     setCurrentView("payments");
                   } else if (item.view === "credit_notes") {
@@ -402,6 +421,7 @@ export default function App() {
             const viewMap: Record<string, View> = {
               invoices: "list",
               bills: "bill_list",
+              expenses: "expense_list",
               contacts: "contacts",
               products: "products",
               reports: "reports",
@@ -438,6 +458,13 @@ export default function App() {
           )}
           {currentView === "product_detail" && activeProductId && (
             <ProductDetail productId={activeProductId} onNavigate={handleNavigateProducts} />
+          )}
+          {currentView === "expense_list" && <ExpenseList onNavigate={handleNavigateExpenses} />}
+          {(currentView === "expense_create" || currentView === "expense_edit") && (
+            <ExpenseForm editId={activeExpenseId} onNavigate={handleNavigateExpenses} onSuccess={handleExpenseSuccess} />
+          )}
+          {currentView === "expense_detail" && activeExpenseId && (
+            <ExpenseDetail expenseId={activeExpenseId} onNavigate={handleNavigateExpenses} />
           )}
           {currentView === "accounts" && <AccountList onNavigate={handleNavigateAccounts} />}
           {(currentView === "account_create" || currentView === "account_edit") && (

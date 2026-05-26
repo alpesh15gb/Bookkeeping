@@ -178,6 +178,29 @@ class LedgerPostingEngine:
         )
 
     @staticmethod
+    def create_expense_posting(
+        tenant_id: uuid.UUID,
+        expense_id: uuid.UUID,
+        expense_number: str,
+        expense_date: date,
+        expense_account_id: uuid.UUID,
+        cash_account_id: uuid.UUID,
+        amount: Decimal,
+    ) -> JournalEntryDraft:
+        lines = []
+        lines.append(JournalLineDraft(expense_account_id, amount, "DEBIT", f"Expense: {expense_number}"))
+        lines.append(JournalLineDraft(cash_account_id, amount, "CREDIT", f"Payment: {expense_number}"))
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=expense_date,
+            reference_number=expense_number,
+            description=f"Expense posting {expense_number}",
+            source_type="EXPENSE",
+            source_id=expense_id,
+            lines=lines
+        )
+
+    @staticmethod
     def create_payment_receipt_posting(
         tenant_id: uuid.UUID,
         payment_id: uuid.UUID,

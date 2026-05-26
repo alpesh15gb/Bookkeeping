@@ -556,6 +556,30 @@ class ExpenseCategory(Base):
     linked_account = relationship("Account")
 
 
+class Expense(Base):
+    __tablename__ = "expenses"
+    __table_args__ = (
+        Index("ix_expenses_tenant_date", "tenant_id", "expense_date"),
+        CheckConstraint("status IN ('DRAFT', 'POSTED', 'CANCELLED')", name="ck_expenses_status"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    expense_number = Column(String(50), nullable=False)
+    expense_category_id = Column(UUID(as_uuid=True), ForeignKey("expense_categories.id"), nullable=False)
+    expense_date = Column(Date, nullable=False)
+    vendor_name = Column(String(150))
+    description = Column(Text)
+    amount = Column(Numeric(15, 4), nullable=False, default=0)
+    total = Column(Numeric(15, 4), nullable=False, default=0)
+    status = Column(String(20), nullable=False, default="DRAFT")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    deleted_at = Column(DateTime(timezone=True))
+
+    category = relationship("ExpenseCategory")
+
+
 class TaxTemplate(Base):
     __tablename__ = "tax_templates"
 

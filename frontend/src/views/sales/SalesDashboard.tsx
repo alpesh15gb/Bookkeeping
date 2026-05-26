@@ -395,7 +395,7 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
 
           {/* Add Expense */}
           <button
-            onClick={() => onNavigate?.("bills")}
+            onClick={() => onNavigate?.("expenses")}
             className="bg-[#0B1B3D] text-white p-3 rounded-2xl flex flex-col items-center justify-center gap-1.5 shadow hover:bg-navy-800 transition"
           >
             <div className="p-1 text-[#DCA035]">

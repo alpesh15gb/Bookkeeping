@@ -62,6 +62,7 @@ from src.api.v1.gst import router as gst_router
 from src.api.v1.eway_bills import router as eway_bills_router
 from src.api.v1.reports import router as reports_router
 from src.api.v1.audit import router as audit_router
+from src.api.v1.expenses import router as expenses_router
 from src.schemas.document import ContactResponse, ProductResponse
 from src.infrastructure.database.models import Contact, Product
 from src.api.deps import enforce_permission
@@ -297,6 +298,7 @@ app.include_router(gst_router,        prefix="/api/v1")
 app.include_router(eway_bills_router, prefix="/api/v1")
 app.include_router(reports_router,    prefix="/api/v1")
 app.include_router(audit_router,      prefix="/api/v1")
+app.include_router(expenses_router,   prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
