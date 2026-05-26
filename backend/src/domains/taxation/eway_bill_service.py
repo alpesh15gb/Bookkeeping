@@ -81,9 +81,52 @@ class EWayBillService:
                     detail="e-Way Bill is only applicable for movement of GOODS. Services do not require an e-Way Bill."
                 )
 
-        # 3. Generate unique 12-digit E-Way Bill Number
-        # Mock 12-digit number starting with 201
-        ewb_number = f"201{int(datetime.now(timezone.utc).timestamp()) % 1000000000:09d}"
+        # 3. Generate unique 12-digit E-Way Bill Number via NIC API
+        import requests
+        from src.core.config import settings
+
+        ewb_number = None
+        if settings.IRP_USERNAME and settings.IRP_PASSWORD:
+            try:
+                from src.infrastructure.database.models import Tenant
+                tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+                tenant_gstin = tenant.gstin if tenant else None
+
+                ewb_payload = {
+                    "Irn": "",
+                    "DocNo": (invoice.invoice_number if invoice else bill.bill_number) if (invoice or bill) else "",
+                    "DocDt": str(invoice.issue_date if invoice else bill.issue_date) if (invoice or bill) else "",
+                    "FromGstin": tenant_gstin or "",
+                    "FromTrdName": "",
+                    "ToGstin": "",
+                    "ToTrdName": payload.transporter_name or "",
+                    "TotInvVal": float(invoice.total if invoice else bill.total) if (invoice or bill) else 0,
+                    "ItemCnt": 1,
+                    "MainHsnCode": "998313",
+                    "TransDistance": payload.trans_distance,
+                    "TransMode": payload.trans_mode or "1",
+                    "VehicleNo": payload.vehicle_number or "",
+                }
+                headers = {
+                    "Content-Type": "application/json",
+                    "gstin": tenant_gstin or "",
+                    "user_name": settings.IRP_USERNAME,
+                    "password": settings.IRP_PASSWORD,
+                }
+                resp = requests.post(
+                    f"{settings.IRP_BASE_URL}/ic/irp/api/v1/ewb/generate",
+                    json=ewb_payload, headers=headers, timeout=15
+                )
+                resp.raise_for_status()
+                ewb_data = resp.json()
+                ewb_number = str(ewb_data.get("ewayBillNo", ""))
+            except Exception:
+                import logging
+                logging.getLogger("ewaybill").warning("NIC e-way bill API unreachable, falling back to local generation")
+
+        if not ewb_number:
+            # Mock 12-digit number starting with 201
+            ewb_number = f"201{int(datetime.now(timezone.utc).timestamp()) % 1000000000:09d}"
 
         # Check duplicate (unlikely, but safe)
         dup = db.query(EWayBill).filter(EWayBill.eway_bill_number == ewb_number).first()

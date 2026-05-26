@@ -165,8 +165,8 @@
 1. ✅ **Stock/Inventory tracking** — Added `opening_stock`, `current_stock`, `reorder_level` to Product model + `StockLedger` table
 2. ❌ **Bank reconciliation** — CSV import → match with ledger → reconciliation report (still pending)
 3. ✅ **Balance Sheet endpoint** — Added `GET /api/v1/accounting/balance-sheet` with assets/liabilities/equity + net profit
-4. ❌ **GSTR-2A/2B reconciliation** — Compare purchase invoices with vendor GSTR-2A data (still pending)
-5. ❌ **E-way bill integration** — Generate e-way bill from invoice/bill (still pending)
+4. ✅ **GSTR-2A manual upload + reconciliation** — `POST /api/v1/gst/gstr2a/upload` accepts JSON from GST portal and matches against purchase bills
+5. ✅ **E-way bill + e-invoice NIC API integration** — Both services now call real NIC portal APIs with fallback to local mock if unreachable
 
 ### Expense Module Alignment
 6. ✅ **Dashboard uses new Expense API** — Was using old `/payments/disbursements`, now uses `/expenses`

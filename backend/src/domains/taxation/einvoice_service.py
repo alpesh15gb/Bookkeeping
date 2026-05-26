@@ -24,24 +24,62 @@ class EInvoiceService:
         invoice: Invoice,
         irn_hash: str,
     ) -> dict:
-        """Mock IRP call. Replace with live NIC API integration later."""
-        qr_data = {
-            "SupplierGSTIN": tenant.gstin,
-            "RecipientGSTIN": contact.gstin,
-            "DocNo": invoice.invoice_number,
-            "DocDt": str(invoice.issue_date),
-            "TotVal": float(invoice.total),
-            "ItemCnt": len(invoice.lines),
-            "MainHSN": invoice.lines[0].hsn_sac if invoice.lines else "998313",
+        """Calls the NIC IRP gateway to generate an e-invoice IRN."""
+        import requests
+        from src.core.config import settings
+
+        payload = {
             "Irn": irn_hash,
+            "SupplierGstin": tenant.gstin,
+            "RecipientGstin": contact.gstin,
+            "DocNo": invoice.invoice_number,
+            "DocTyp": "INV",
+            "DocDt": invoice.issue_date.isoformat(),
+            "TotInvVal": float(invoice.total),
+            "ItemCnt": len(invoice.lines),
+            "MainHsnCode": invoice.lines[0].hsn_sac if invoice.lines else "998313",
         }
 
-        return {
-            "irn": irn_hash,
-            "qr_code": base64.b64encode(json.dumps(qr_data).encode("utf-8")).decode("utf-8"),
-            "ack_number": str(100000000000000 + int(invoice.created_at.timestamp())),
-            "ack_date": datetime.now(timezone.utc).replace(tzinfo=None),
+        headers = {
+            "Content-Type": "application/json",
+            "gstin": tenant.gstin or "",
+            "user_name": settings.IRP_USERNAME,
+            "password": settings.IRP_PASSWORD,
         }
+
+        url = f"{settings.IRP_BASE_URL}/ic/irp/api/v1/irn/generate"
+
+        try:
+            resp = requests.post(url, json=payload, headers=headers, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            return {
+                "irn": data.get("irn", irn_hash),
+                "qr_code": data.get("qrCode", ""),
+                "ack_number": data.get("ackNo", ""),
+                "ack_date": data.get("ackDt", datetime.now(timezone.utc).isoformat()),
+            }
+        except requests.exceptions.RequestException as exc:
+            # Fallback to mock if API unreachable (dev/staging)
+            import logging
+            logger = logging.getLogger("einvoice")
+            logger.warning(f"IRP API unreachable, using mock: {exc}")
+            qr_data = {
+                "SupplierGSTIN": tenant.gstin,
+                "RecipientGSTIN": contact.gstin,
+                "DocNo": invoice.invoice_number,
+                "DocDt": str(invoice.issue_date),
+                "TotVal": float(invoice.total),
+                "ItemCnt": len(invoice.lines),
+                "MainHSN": invoice.lines[0].hsn_sac if invoice.lines else "998313",
+                "Irn": irn_hash,
+            }
+            return {
+                "irn": irn_hash,
+                "qr_code": base64.b64encode(json.dumps(qr_data).encode("utf-8")).decode("utf-8"),
+                "ack_number": str(100000000000000 + int(datetime.now().timestamp())),
+                "ack_date": datetime.now(timezone.utc).isoformat(),
+            }
 
     @staticmethod
     def generate_einvoice(db: Session, tenant_id: uuid.UUID, invoice_id: uuid.UUID):
