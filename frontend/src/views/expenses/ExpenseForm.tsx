@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { ArrowLeft, Save } from "lucide-react";
 import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
@@ -23,6 +23,8 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
   const [vendorName, setVendorName] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [showNewCat, setShowNewCat] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
 
   const hasUnsavedChanges = categoryId !== "" || amount !== "";
   useUnsavedChangesWarning(hasUnsavedChanges);
@@ -82,6 +84,21 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
   };
 
   const [error, setError] = useState("");
+  const queryClient = useQueryClient();
+
+  const createCatMutation = useMutation({
+    mutationFn: async () => {
+      const r = await apiClient.post("/masters/expense-categories", { name: newCatName });
+      return r.data;
+    },
+    onSuccess: (data) => {
+      setCategoryId(data.id);
+      setNewCatName("");
+      setShowNewCat(false);
+      queryClient.invalidateQueries({ queryKey: ["expense-categories"] });
+    },
+    onError: (err: any) => setError(err.response?.data?.detail || "Failed to create category."),
+  });
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -110,7 +127,10 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
           </div>
         )}
         <div className="space-y-2">
-          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Expense Category</label>
+          <div className="flex items-center justify-between">
+            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Expense Category</label>
+            <button type="button" onClick={() => setShowNewCat(true)} className="text-[10px] text-brand-600 font-semibold hover:text-brand-700 transition">+ Add New</button>
+          </div>
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
@@ -123,6 +143,33 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
             ))}
           </select>
         </div>
+
+        {/* New Category Modal */}
+        {showNewCat && (
+          <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={() => setShowNewCat(false)}>
+            <div className="bg-white rounded-2xl shadow-xl p-6 max-w-sm w-full" onClick={(e) => e.stopPropagation()}>
+              <h3 className="text-sm font-bold text-zinc-900 mb-3">New Expense Category</h3>
+              <input
+                type="text"
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                placeholder="e.g. Petrol, Travel, Rent..."
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 mb-4"
+                autoFocus
+              />
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowNewCat(false)} className="px-3 py-2 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 rounded-lg transition">Cancel</button>
+                <button
+                  onClick={() => createCatMutation.mutate()}
+                  disabled={createCatMutation.isPending || !newCatName.trim()}
+                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition"
+                >
+                  {createCatMutation.isPending ? "Creating..." : "Create"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">

@@ -28,6 +28,13 @@ interface ExpenseItem {
   category_name: string | null;
 }
 
+interface BillListItem {
+  id: string;
+  total: number;
+  status: string;
+  issue_date: string;
+}
+
 interface SalesDashboardProps {
   onNavigate?: (view: string, id?: string) => void;
 }
@@ -53,8 +60,14 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
     refetchInterval: 30000,
   });
 
-  const isLoading = summaryLoading || invLoading || expLoading;
-  const hasError = summaryError || invError || expError;
+  const { data: bills = [], isLoading: billsLoading, error: billsError } = useQuery<BillListItem[]>({
+    queryKey: ["bills"],
+    queryFn: async () => { const r = await apiClient.get("/bills"); return Array.isArray(r.data) ? r.data : []; },
+    refetchInterval: 30000,
+  });
+
+  const isLoading = summaryLoading || invLoading || expLoading || billsLoading;
+  const hasError = summaryError || invError || expError || billsError;
 
   const formatCurrency = (val: number) =>
     showBalances
@@ -68,9 +81,9 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
   const totalExpensesVal = expenses
     .filter((e) => e.status === "POSTED")
     .reduce((sum, e) => sum + e.total, 0);
-  const totalPurchasesVal = invoices
-    .filter((i) => i.status !== "DRAFT" && i.status !== "CANCELLED")
-    .reduce((s, i) => s + i.total, 0);
+  const totalPurchasesVal = bills
+    .filter((b) => b.status !== "DRAFT" && b.status !== "CANCELLED")
+    .reduce((s, b) => s + b.total, 0);
   const netProfit = totalSalesVal - totalExpensesVal;
 
   const recentInvoices = [...invoices]
