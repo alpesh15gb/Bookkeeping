@@ -61,6 +61,7 @@ from src.api.v1.payments import router as payments_router
 from src.api.v1.accounting import router as accounting_router
 from src.api.v1.gst import router as gst_router
 from src.api.v1.gst_verify import router as gst_verify_router
+from src.api.v1.hsn_lookup import router as hsn_lookup_router
 from src.api.v1.gstr2a import router as gstr2a_router
 from src.api.v1.vyapar_import import router as vyapar_import_router
 from src.api.v1.eway_bills import router as eway_bills_router
@@ -300,6 +301,7 @@ app.include_router(payments_router,   prefix="/api/v1")
 app.include_router(accounting_router, prefix="/api/v1")
 app.include_router(gst_router,        prefix="/api/v1")
 app.include_router(gst_verify_router, prefix="/api/v1")
+app.include_router(hsn_lookup_router, prefix="/api/v1")
 app.include_router(eway_bills_router, prefix="/api/v1")
 app.include_router(reports_router,    prefix="/api/v1")
 app.include_router(audit_router,      prefix="/api/v1")

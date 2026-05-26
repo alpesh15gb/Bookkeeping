@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { ArrowLeft, AlertCircle } from "lucide-react";
+import { ArrowLeft, AlertCircle, Search } from "lucide-react";
 
 interface ProductFormProps {
   editId?: string;
@@ -24,6 +24,8 @@ export default function ProductForm({ editId, onNavigate, onSuccess }: ProductFo
   const [purchasePrice, setPurchasePrice] = useState(0);
   const [gstRate, setGstRate] = useState(18);
   const [formError, setFormError] = useState("");
+  const [hsnDescription, setHsnDescription] = useState("");
+  const [hsnLookupLoading, setHsnLookupLoading] = useState(false);
 
   const { data: product } = useQuery({
     queryKey: ["product", editId],
@@ -74,6 +76,26 @@ export default function ProductForm({ editId, onNavigate, onSuccess }: ProductFo
       setFormError(msg);
     },
   });
+
+  const handleHSNSearch = async () => {
+    if (!hsnSac || hsnSac.length < 6) return;
+    setHsnLookupLoading(true);
+    setFormError("");
+    setHsnDescription("");
+    try {
+      const r = await apiClient.get(`/gst/hsn/${hsnSac}`);
+      setHsnDescription(r.data.description);
+      if (!name.trim()) setName(r.data.description);
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        setFormError(`HSN code ${hsnSac} not found in directory.`);
+      } else {
+        setFormError(err.response?.data?.detail || "HSN lookup failed.");
+      }
+    } finally {
+      setHsnLookupLoading(false);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -183,18 +205,32 @@ export default function ProductForm({ editId, onNavigate, onSuccess }: ProductFo
               </div>
               <div className="flex-1 space-y-1">
                 <div className="flex justify-between items-center">
-                  <label className="text-xs font-bold text-slate-500 uppercase">HSN Code (8 digits)</label>
+                  <label className="text-xs font-bold text-slate-500 uppercase">HSN/SAC Code</label>
                   <span className="text-[10px] text-slate-400">{hsnSac.length}/8</span>
                 </div>
-                <input
-                  type="text"
-                  maxLength={8}
-                  value={hsnSac}
-                  onChange={(e) => setHsnSac(e.target.value.replace(/\D/g, ""))}
-                  placeholder="Enter 8 digit HSN code"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none font-mono"
-                  required
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    maxLength={8}
+                    value={hsnSac}
+                    onChange={(e) => { setHsnSac(e.target.value.replace(/\D/g, "")); setHsnDescription(""); }}
+                    placeholder="Enter 8 digit HSN code"
+                    className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs focus:ring-2 focus:ring-brand-500 outline-none font-mono"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={handleHSNSearch}
+                    disabled={hsnLookupLoading || hsnSac.length < 6}
+                    className="px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white rounded-lg text-xs font-semibold disabled:opacity-50 transition flex items-center gap-1"
+                  >
+                    <Search className="w-3.5 h-3.5" />
+                    {hsnLookupLoading ? "..." : "Lookup"}
+                  </button>
+                </div>
+                {hsnDescription && (
+                  <p className="text-[10px] text-emerald-600 font-semibold mt-1">{hsnDescription}</p>
+                )}
               </div>
             </div>
 

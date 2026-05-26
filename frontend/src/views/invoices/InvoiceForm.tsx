@@ -538,8 +538,34 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
                             {p.name}
                           </option>
                         ))}
-                      </select>
+                  </select>
+                  {selectedCustomer && selectedCustomer.gstin && (
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <span className="text-[10px] font-mono text-zinc-500">GSTIN: {selectedCustomer.gstin}</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            const capResp = await apiClient.get("/gst/verify/captcha");
+                            const captcha = prompt("Enter captcha from console (API will be called)");
+                            if (!captcha) return;
+                            await apiClient.post("/gst/verify", {
+                              gstin: selectedCustomer.gstin,
+                              captcha,
+                              session_id: capResp.data.session_id,
+                            });
+                            alert("GSTIN verified successfully!");
+                          } catch (err: any) {
+                            alert(err.response?.data?.detail || "Verification failed");
+                          }
+                        }}
+                        className="text-[10px] text-brand-600 font-semibold hover:text-brand-700 transition"
+                      >
+                        Verify
+                      </button>
                     </div>
+                  )}
+                </div>
 
                     <div className="grid grid-cols-3 gap-2">
                       <div className="space-y-0.5">
