@@ -39,7 +39,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
       onLogin();
     } catch (err: any) {
-      setError(err.response?.data?.detail || "Login failed");
+      console.error("LOGIN ERROR:", err);
+      console.error("ERR RESPONSE:", err?.response);
+      console.error("ERR RESPONSE DATA:", err?.response?.data);
+      setError(err.response?.data?.detail || JSON.stringify(err?.response?.data) || "Login failed");
     } finally {
       setLoading(false);
     }
