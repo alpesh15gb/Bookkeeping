@@ -70,4 +70,4 @@ dist-ssr/
 Thumbs.db
 
 # Uploads
-uploads/
+uploads/*.vyb
