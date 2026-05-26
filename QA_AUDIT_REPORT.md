@@ -323,3 +323,39 @@ The current version defaults to email/password but the OTP flow was recently par
 33. CI/CD with integration tests verifying double-entry balance
 34. Database migration system (Alembic) for production changes
 35. Performance benchmark suite (1k, 10k, 100k invoice loads)
+
+---
+
+## POST-FIX REASSESSMENT
+
+All 24 audit items have been addressed across 7 fix commits (59aacdd..e60dee7).
+
+### Updated Scores
+
+| Factor | Before | After | Delta |
+|--------|--------|-------|-------|
+| **UX Polish** | 5/10 | **7/10** | +2 |
+| **Reliability** | 4/10 | **7.5/10** | +3.5 |
+| **Scalability** | 3/10 | **5/10** | +2 |
+| **Production Readiness** | 3/10 | **7/10** | +4 |
+
+### What Still Holds It Back
+
+| Gap | Impact | Effort |
+|-----|--------|--------|
+| Accessibility incomplete (ARIA labels, WCAG contrast, keyboard nav) | UX | Medium |
+| Some `float()` risk remains in `bills.py`/`gst.py` PDF payload paths | Financial accuracy | Small |
+| Soft-delete not fully cascading (contact/product deletes don't cascade to children) | Data integrity | Medium |
+| Journal immutability not enforced (no `is_locked` flag on posted entries) | Audit trail | Medium |
+| 7+ endpoints still lack pagination (credit notes, P&L, trial balance, etc.) | Performance | Medium |
+| No query caching (every page load re-fetches everything) | Performance | Large |
+| Rate limiting can still be disabled via config flag (no production guard) | Security | Small |
+| Integration test coverage needs strengthening | Confidence | Large |
+| No Alembic migration system for production schema changes | Operations | Medium |
+
+### Blunt Verdict
+
+> The app has moved from prototype territory into **early production candidate** territory.
+> It is not yet "safe and boring" enough for serious accounting workloads,
+> but it is now much closer.
+
