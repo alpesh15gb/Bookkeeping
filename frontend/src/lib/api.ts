@@ -1,6 +1,5 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
 
-// Core client configurations
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api/v1";
 
 export const apiClient: AxiosInstance = axios.create({
@@ -8,7 +7,7 @@ export const apiClient: AxiosInstance = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
-  withCredentials: true, // Enables sending refresh cookies
+  withCredentials: false, // Do not send cookies cross-origin (Tauri origin != API origin). Auth uses Bearer tokens.
 });
 
 // Memory cache for Access Token (keeps tokens out of localStorage to prevent XSS theft)
@@ -86,7 +85,9 @@ apiClient.interceptors.response.use(
     const originalRequest = error.config;
 
     // Trigger token refresh only on 401s (Unauthenticated) when request was not already a retry
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Skip auth endpoints: 401 on login/register means wrong credentials, not an expired token
+    const isAuthEndpoint = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/register');
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });

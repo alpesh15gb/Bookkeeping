@@ -1,0 +1,14 @@
+{
+  "scripts": {
+    "tauri": "tauri",
+    "tauri:dev": "cd frontend && npm run dev",
+    "tauri:build": "npx tauri build",
+    "tauri:android": "npx tauri android build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.2"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.0"
+  }
+}
