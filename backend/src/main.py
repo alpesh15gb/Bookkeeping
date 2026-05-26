@@ -21,6 +21,7 @@ from fastapi import Depends, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+import json
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy import text
@@ -180,13 +181,12 @@ def _seed_demo_data():
 # ---------------------------------------------------------------------------
 
 app = FastAPI(
-    title="Indian Accounting & GST Platform API",
+    title="Bookkeeping — Indian Accounting & GST Platform",
     version="1.0.0",
-    docs_url="/docs" if not settings.is_production else None,
-    redoc_url="/redoc" if not settings.is_production else None,
-    openapi_url="/openapi.json" if not settings.is_production else None,
     lifespan=lifespan,
+    default_response_class=JSONResponse,
 )
+
 
 # ---------------------------------------------------------------------------
 # Static Files (logos, etc.)

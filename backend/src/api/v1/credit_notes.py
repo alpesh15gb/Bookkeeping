@@ -21,7 +21,7 @@ from src.infrastructure.database.models import CreditNote, CreditNoteLine, Invoi
 from src.schemas.credit_note_schemas import (
     CreditNoteCreate, CreditNoteResponse, CreditNoteListResponse
 )
-from src.domains.company.services import NumberingSeriesService
+from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
 from src.domains.taxation.services import GSTEngine
 from src.api.deps import enforce_permission
 
@@ -45,8 +45,8 @@ def create_credit_note(
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found in this company context.")
 
-    # Determine origin state for GST calculation from POS state code
-    origin_state_code = payload.pos_state_code
+    # Determine origin state for GST calculation
+    origin_state_code = resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
     note_subtotal = Decimal("0.0000")

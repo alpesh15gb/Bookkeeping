@@ -231,7 +231,6 @@ def post_expense(
         source_id=expense.id,
     )
     db.add(journal_entry)
-    db.flush()
 
     for line in ledger_draft.lines:
         jl = JournalLine(
@@ -244,10 +243,10 @@ def post_expense(
         db.add(jl)
 
     expense.status = "POSTED"
-    db.commit()
 
     account_ids = {line.account_id for line in ledger_draft.lines}
     update_account_balances(db, tenant_id, account_ids)
+    db.commit()
 
     db.refresh(expense)
     return _expense_to_response(expense)

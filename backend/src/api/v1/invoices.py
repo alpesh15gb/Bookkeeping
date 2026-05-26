@@ -786,7 +786,10 @@ def update_invoice(
         invoice.igst_amount = inv_igst
         invoice.utgst_amount = inv_utgst
         invoice.cess_amount = inv_cess
-        invoice.total = inv_subtotal + inv_cgst + inv_sgst + inv_igst + inv_utgst + inv_cess
+        raw_total = inv_subtotal + inv_cgst + inv_sgst + inv_igst + inv_utgst + inv_cess
+        rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        invoice.round_off = rounded_total - raw_total
+        invoice.total = rounded_total
         invoice.lines = db_lines
 
     db.commit()
@@ -818,6 +821,7 @@ def finalize_invoice(
     igst_account_id = resolver.resolve("igst_output")
     utgst_account_id = resolver.resolve("utgst_output")
     cess_account_id = resolver.resolve("cess_output")
+    round_off_account_id = resolver.resolve("round_off") if invoice.round_off != 0 else None
 
     ledger_draft = LedgerPostingEngine.create_invoice_posting(
         tenant_id=tenant_id,
@@ -836,7 +840,9 @@ def finalize_invoice(
         utgst_account_id=utgst_account_id,
         utgst_amount=invoice.utgst_amount,
         cess_account_id=cess_account_id,
-        cess_amount=invoice.cess_amount
+        cess_amount=invoice.cess_amount,
+        round_off_account_id=round_off_account_id,
+        round_off_amount=invoice.round_off,
     )
 
     journal_entry = JournalEntry(
@@ -1176,6 +1182,7 @@ def get_invoice_pdf_payload(
     }
 
 
+@router.post("/{id}/e-invoice/generate", response_model=EInvoiceResponse)
 def generate_e_invoice(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),

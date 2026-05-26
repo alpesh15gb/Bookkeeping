@@ -81,6 +81,8 @@ class LedgerPostingEngine:
         utgst_amount: Decimal = Decimal("0.00"),
         cess_account_id: Optional[uuid.UUID] = None,
         cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
         is_rcm: bool = False
     ) -> JournalEntryDraft:
         """
@@ -113,6 +115,14 @@ class LedgerPostingEngine:
                 lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "CREDIT", "UTGST Output"))
             if cess_amount > 0 and cess_account_id:
                 lines.append(JournalLineDraft(cess_account_id, cess_amount, "CREDIT", "Cess Output"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {invoice_number}"))
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {invoice_number}"))
+            else:
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {invoice_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {invoice_number}"))
 
         return JournalEntryDraft(tenant_id, invoice_date, invoice_number, f"Ledger posting for Sales invoice {invoice_number}", "INVOICE", invoice_id, lines)
 
@@ -417,6 +427,7 @@ _STANDARD_ACCOUNTS: Dict[str, dict] = {
     "assets.bank": {"code": "1201", "name": "Bank", "type": "ASSET"},
     "assets.upi": {"code": "1202", "name": "UPI", "type": "ASSET"},
     "assets.pos": {"code": "1203", "name": "POS", "type": "ASSET"},
+    "round_off": {"code": "9999", "name": "Round-off", "type": "EXPENSE"},
 }
 
 
@@ -571,4 +582,4 @@ def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Opti
         else:
             account.current_balance = credit_sum - debit_sum
 
-    db.commit()
+    db.flush()

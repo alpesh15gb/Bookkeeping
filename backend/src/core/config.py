@@ -30,9 +30,9 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://localhost:6379/0"
 
     # ----------------------------------------------------------------
-    # JWT Authentication  (REQUIRED — no default in production)
+    # JWT Authentication
     # ----------------------------------------------------------------
-    JWT_SECRET_KEY: str = "CHANGE_ME_BEFORE_DEPLOYING_TO_PRODUCTION"
+    JWT_SECRET_KEY: str = ""
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -40,7 +40,7 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------------
     # Encryption
     # ----------------------------------------------------------------
-    SECRET_KEY: str = "CHANGE_ME_BEFORE_DEPLOYING_TO_PRODUCTION"
+    SECRET_KEY: str = ""
 
     # ----------------------------------------------------------------
     # CORS
@@ -82,20 +82,14 @@ class Settings(BaseSettings):
     RATE_LIMIT_REPORTS: str = "60/minute"
     RATE_LIMIT_DEFAULT: str = "200/minute"
 
-    @field_validator("JWT_SECRET_KEY")
+    @field_validator("JWT_SECRET_KEY", "SECRET_KEY")
     @classmethod
-    def jwt_secret_must_be_strong(cls, v: str, info) -> str:
-        # In production environments, the placeholder must not be used
-        if v == "CHANGE_ME_BEFORE_DEPLOYING_TO_PRODUCTION":
-            import os
-            env = os.getenv("APP_ENV", "development")
-            if env == "production":
-                raise ValueError(
-                    "JWT_SECRET_KEY must be set to a strong random value in production. "
-                    "Generate one with: python -c \"import secrets; print(secrets.token_hex(64))\""
-                )
-        if len(v) < 32:
-            raise ValueError("JWT_SECRET_KEY must be at least 32 characters long.")
+    def secret_must_be_set(cls, v: str, info) -> str:
+        if not v or len(v) < 32:
+            raise ValueError(
+                f"{info.field_name} must be set to a strong random value. "
+                f"Generate one with: python -c \"import secrets; print(secrets.token_hex(64))\""
+            )
         return v
 
     @property

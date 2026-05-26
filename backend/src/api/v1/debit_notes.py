@@ -21,12 +21,7 @@ from src.infrastructure.database.models import DebitNote, DebitNoteLine, Invoice
 from src.schemas.debit_note_schemas import (
     DebitNoteCreate, DebitNoteResponse, DebitNoteListResponse
 )
-from src.domains.company.services import NumberingSeriesService
-from src.domains.taxation.services import GSTEngine
-from src.api.deps import enforce_permission
-
-router = APIRouter(prefix="/debit-notes", tags=["Debit Notes"])
-
+from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
 
 @router.post("", response_model=DebitNoteResponse, status_code=status.HTTP_201_CREATED)
 def create_debit_note(
@@ -45,8 +40,8 @@ def create_debit_note(
         if not invoice:
             raise HTTPException(status_code=404, detail="Invoice not found in this company context.")
 
-    # Determine origin state for GST calculation from POS state code
-    origin_state_code = payload.pos_state_code
+    # Determine origin state for GST calculation
+    origin_state_code = resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
     note_subtotal = Decimal("0.0000")

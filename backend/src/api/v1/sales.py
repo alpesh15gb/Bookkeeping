@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Header, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 import uuid
@@ -7,28 +7,16 @@ from typing import List, Optional
 
 from src.core.database import get_db_session, tenant_context
 from src.infrastructure.database.models import Invoice, Contact
+from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/sales", tags=["Sales Analytics"])
 
-# Dependency to retrieve and bind active Tenant ID
-def get_active_tenant(x_tenant_id: str = Header(...)) -> uuid.UUID:
-    try:
-        tenant_uuid = uuid.UUID(x_tenant_id)
-        tenant_context.set(tenant_uuid)
-        return tenant_uuid
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid X-Tenant-ID header format. Must be a valid UUID."
-        )
-
-# Constants for finalized statuses
 FINALIZED_STATUSES = ["SENT", "PARTIALLY_PAID", "PAID"]
 
 @router.get("/summary")
 def get_sales_summary(
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(get_active_tenant)
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
     """
     Compiles overall sales KPI metrics from finalized invoices.
@@ -52,16 +40,16 @@ def get_sales_summary(
     outstanding = total_sales - total_received
 
     return {
-        "total_sales": float(total_sales.quantize(Decimal("0.01"))),
-        "total_received": float(total_received.quantize(Decimal("0.01"))),
-        "outstanding": float(outstanding.quantize(Decimal("0.01"))),
-        "total_gst_liability": float(total_gst.quantize(Decimal("0.01")))
+        "total_sales": str(total_sales.quantize(Decimal("0.01"))),
+        "total_received": str(total_received.quantize(Decimal("0.01"))),
+        "outstanding": str(outstanding.quantize(Decimal("0.01"))),
+        "total_gst_liability": str(total_gst.quantize(Decimal("0.01")))
     }
 
 @router.get("/customer-wise")
 def get_customer_wise_sales(
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(get_active_tenant)
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
     """
     Groups finalized sales figures by customer.
@@ -98,7 +86,7 @@ def get_customer_wise_sales(
 @router.get("/period-wise")
 def get_period_wise_sales(
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(get_active_tenant)
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
     """
     Groups finalized sales transactions monthly.
@@ -148,7 +136,7 @@ def get_sales_transactions(
     limit: int = 50,
     contact_id: Optional[uuid.UUID] = None,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(get_active_tenant)
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
     """
     Lists paginated details of finalized sales invoices.

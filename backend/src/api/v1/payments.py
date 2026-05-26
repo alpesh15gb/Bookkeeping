@@ -163,7 +163,7 @@ def list_payment_receipts(
     offset = (page - 1) * limit
     q = db.query(Payment, Contact.name.label("contact_name"))\
         .join(Contact, Payment.contact_id == Contact.id)\
-        .filter(Payment.tenant_id == tenant_id)
+        .filter(Payment.tenant_id == tenant_id, Payment.deleted_at == None, Contact.deleted_at == None)
 
     if contact_id:
         q = q.filter(Payment.contact_id == contact_id)

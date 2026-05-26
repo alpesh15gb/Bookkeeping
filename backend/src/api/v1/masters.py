@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -402,7 +403,10 @@ def list_banking_profiles(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:view"))
 ):
-    return db.query(BankingProfile).filter(BankingProfile.tenant_id == tenant_id).all()
+    return db.query(BankingProfile).filter(
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.deleted_at == None
+    ).all()
 
 @router.get("/banking-profiles/{id}", response_model=BankingProfileResponse)
 def get_banking_profile(
@@ -410,7 +414,11 @@ def get_banking_profile(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:view"))
 ):
-    profile = db.query(BankingProfile).filter(BankingProfile.id == id, BankingProfile.tenant_id == tenant_id).first()
+    profile = db.query(BankingProfile).filter(
+        BankingProfile.id == id,
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.deleted_at == None
+    ).first()
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Banking profile not found.")
     return profile
@@ -422,7 +430,11 @@ def update_banking_profile(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
 ):
-    profile = db.query(BankingProfile).filter(BankingProfile.id == id, BankingProfile.tenant_id == tenant_id).first()
+    profile = db.query(BankingProfile).filter(
+        BankingProfile.id == id,
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.deleted_at == None
+    ).first()
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Banking profile not found.")
 
@@ -458,11 +470,15 @@ def delete_banking_profile(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
 ):
-    profile = db.query(BankingProfile).filter(BankingProfile.id == id, BankingProfile.tenant_id == tenant_id).first()
+    profile = db.query(BankingProfile).filter(
+        BankingProfile.id == id,
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.deleted_at == None
+    ).first()
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Banking profile not found.")
 
-    db.delete(profile)
+    profile.deleted_at = func.now()
     db.commit()
     return None
 
@@ -499,7 +515,10 @@ def list_expense_categories(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
-    return db.query(ExpenseCategory).filter(ExpenseCategory.tenant_id == tenant_id, ExpenseCategory.is_active == True).all()
+    return db.query(ExpenseCategory).filter(
+        ExpenseCategory.tenant_id == tenant_id,
+        ExpenseCategory.deleted_at == None
+    ).all()
 
 @router.get("/expense-categories/{id}", response_model=ExpenseCategoryResponse)
 def get_expense_category(
@@ -507,7 +526,11 @@ def get_expense_category(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
-    cat = db.query(ExpenseCategory).filter(ExpenseCategory.id == id, ExpenseCategory.tenant_id == tenant_id).first()
+    cat = db.query(ExpenseCategory).filter(
+        ExpenseCategory.id == id,
+        ExpenseCategory.tenant_id == tenant_id,
+        ExpenseCategory.deleted_at == None
+    ).first()
     if not cat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense category not found.")
     return cat
@@ -519,7 +542,11 @@ def update_expense_category(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:manual_post"))
 ):
-    cat = db.query(ExpenseCategory).filter(ExpenseCategory.id == id, ExpenseCategory.tenant_id == tenant_id).first()
+    cat = db.query(ExpenseCategory).filter(
+        ExpenseCategory.id == id,
+        ExpenseCategory.tenant_id == tenant_id,
+        ExpenseCategory.deleted_at == None
+    ).first()
     if not cat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense category not found.")
 
@@ -547,11 +574,15 @@ def delete_expense_category(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:manual_post"))
 ):
-    cat = db.query(ExpenseCategory).filter(ExpenseCategory.id == id, ExpenseCategory.tenant_id == tenant_id).first()
+    cat = db.query(ExpenseCategory).filter(
+        ExpenseCategory.id == id,
+        ExpenseCategory.tenant_id == tenant_id,
+        ExpenseCategory.deleted_at == None
+    ).first()
     if not cat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense category not found.")
 
-    db.delete(cat)
+    cat.deleted_at = func.now()
     db.commit()
     return None
 
