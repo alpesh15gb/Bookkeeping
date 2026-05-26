@@ -443,8 +443,7 @@ def list_banking_profiles(
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:view"))
 ):
     return db.query(BankingProfile).filter(
-        BankingProfile.tenant_id == tenant_id,
-        BankingProfile.deleted_at == None
+        BankingProfile.tenant_id == tenant_id
     ).all()
 
 @router.get("/banking-profiles/{id}", response_model=BankingProfileResponse)
@@ -455,8 +454,7 @@ def get_banking_profile(
 ):
     profile = db.query(BankingProfile).filter(
         BankingProfile.id == id,
-        BankingProfile.tenant_id == tenant_id,
-        BankingProfile.deleted_at == None
+        BankingProfile.tenant_id == tenant_id
     ).first()
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Banking profile not found.")
@@ -471,8 +469,7 @@ def update_banking_profile(
 ):
     profile = db.query(BankingProfile).filter(
         BankingProfile.id == id,
-        BankingProfile.tenant_id == tenant_id,
-        BankingProfile.deleted_at == None
+        BankingProfile.tenant_id == tenant_id
     ).first()
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Banking profile not found.")
@@ -511,13 +508,12 @@ def delete_banking_profile(
 ):
     profile = db.query(BankingProfile).filter(
         BankingProfile.id == id,
-        BankingProfile.tenant_id == tenant_id,
-        BankingProfile.deleted_at == None
+        BankingProfile.tenant_id == tenant_id
     ).first()
     if not profile:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Banking profile not found.")
 
-    profile.deleted_at = func.now()
+    db.delete(profile)
     db.commit()
     return None
 
@@ -556,7 +552,7 @@ def list_expense_categories(
 ):
     return db.query(ExpenseCategory).filter(
         ExpenseCategory.tenant_id == tenant_id,
-        ExpenseCategory.deleted_at == None
+        ExpenseCategory.is_active == True
     ).all()
 
 @router.get("/expense-categories/{id}", response_model=ExpenseCategoryResponse)
@@ -568,7 +564,7 @@ def get_expense_category(
     cat = db.query(ExpenseCategory).filter(
         ExpenseCategory.id == id,
         ExpenseCategory.tenant_id == tenant_id,
-        ExpenseCategory.deleted_at == None
+        ExpenseCategory.is_active == True
     ).first()
     if not cat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense category not found.")
@@ -584,7 +580,7 @@ def update_expense_category(
     cat = db.query(ExpenseCategory).filter(
         ExpenseCategory.id == id,
         ExpenseCategory.tenant_id == tenant_id,
-        ExpenseCategory.deleted_at == None
+        ExpenseCategory.is_active == True
     ).first()
     if not cat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense category not found.")
@@ -616,12 +612,12 @@ def delete_expense_category(
     cat = db.query(ExpenseCategory).filter(
         ExpenseCategory.id == id,
         ExpenseCategory.tenant_id == tenant_id,
-        ExpenseCategory.deleted_at == None
+        ExpenseCategory.is_active == True
     ).first()
     if not cat:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Expense category not found.")
 
-    cat.deleted_at = func.now()
+    db.delete(cat)
     db.commit()
     return None
 
