@@ -179,6 +179,497 @@ def list_invoices(
         ))
     return response
 
+# ==========================================
+# CREDIT NOTES ROUTERS
+# ==========================================
+
+@router.post("/credit-notes", response_model=CreditNoteResponse, status_code=status.HTTP_201_CREATED)
+def create_credit_note(
+    payload: CreditNoteCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+):
+    """Creates a draft Credit Note."""
+    if payload.invoice_id:
+        inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    cn_number = payload.credit_note_number
+    if not cn_number:
+        cn_number = f"CN-{uuid.uuid4().hex[:6].upper()}"
+
+    origin_state = resolve_origin_state_code(db, tenant_id)
+    place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
+
+    db_lines = []
+    subtotal = Decimal("0.0000")
+    cgst = Decimal("0.0000")
+    sgst = Decimal("0.0000")
+    igst = Decimal("0.0000")
+    utgst = Decimal("0.0000")
+    cess = Decimal("0.0000")
+
+    for line in payload.line_items:
+        line_subtotal = line.quantity * line.rate
+        tax_split = GSTEngine.calculate_tax(
+            origin_state_code=origin_state,
+            place_of_supply_state_code=place_of_supply,
+            base_amount=line_subtotal,
+            gst_rate=line.gst_rate
+        )
+
+        db_line = CreditNoteLine(
+            product_id=line.product_id,
+            quantity=line.quantity,
+            rate=line.rate,
+            subtotal=line_subtotal,
+            hsn_sac=line.hsn_sac,
+            gst_rate=line.gst_rate,
+            cgst_rate=tax_split.cgst_rate,
+            cgst_amount=tax_split.cgst_amount,
+            sgst_rate=tax_split.sgst_rate,
+            sgst_amount=tax_split.sgst_amount,
+            igst_rate=tax_split.igst_rate,
+            igst_amount=tax_split.igst_amount,
+            utgst_rate=tax_split.utgst_rate,
+            utgst_amount=tax_split.utgst_amount,
+            cess_rate=tax_split.cess_rate,
+            cess_amount=tax_split.cess_amount,
+            total=tax_split.total_amount
+        )
+        db_lines.append(db_line)
+
+        subtotal += line_subtotal
+        cgst += tax_split.cgst_amount
+        sgst += tax_split.sgst_amount
+        igst += tax_split.igst_amount
+        utgst += tax_split.utgst_amount
+        cess += tax_split.cess_amount
+
+    raw_total = subtotal + cgst + sgst + igst + utgst + cess
+    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    round_off = rounded_total - raw_total
+
+    cn = CreditNote(
+        tenant_id=tenant_id,
+        invoice_id=payload.invoice_id,
+        credit_note_number=cn_number,
+        issue_date=payload.issue_date,
+        reason=payload.reason,
+        status="DRAFT",
+        subtotal=subtotal,
+        cgst_amount=cgst,
+        sgst_amount=sgst,
+        igst_amount=igst,
+        utgst_amount=utgst,
+        cess_amount=cess,
+        round_off=round_off,
+        pos_state_code=place_of_supply,
+        total=rounded_total,
+        lines=db_lines
+    )
+    db.add(cn)
+    db.commit()
+    db.refresh(cn)
+    return cn
+
+@router.get("/credit-notes", response_model=List[CreditNoteListResponse])
+def list_credit_notes(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    """Lists all credit notes for the active tenant."""
+    from sqlalchemy.orm import joinedload
+    notes = db.query(CreditNote).options(
+        joinedload(CreditNote.invoice)
+    ).filter(
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).all()
+    return [
+        CreditNoteListResponse(
+            id=cn.id,
+            credit_note_number=cn.credit_note_number,
+            issue_date=cn.issue_date,
+            status=cn.status,
+            total=cn.total,
+            reason=cn.reason,
+            created_at=cn.created_at,
+            invoice_number=cn.invoice.invoice_number if cn.invoice else None,
+            contact_name=cn.invoice.contact.name if cn.invoice and cn.invoice.contact else None,
+        )
+        for cn in notes
+    ]
+
+@router.get("/credit-notes/{cn_id}", response_model=CreditNoteResponse)
+def get_credit_note(
+    cn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    """Retrieves credit note details."""
+    cn = db.query(CreditNote).filter(
+        CreditNote.id == cn_id,
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).first()
+    if not cn:
+        raise HTTPException(status_code=404, detail="Credit Note not found.")
+    return cn
+
+@router.get("/credit-notes/{cn_id}/pdf-payload")
+def get_credit_note_pdf_payload(
+    cn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    """Consolidated metadata for PDF print rendering of a credit note."""
+    cn = db.query(CreditNote).filter(
+        CreditNote.id == cn_id,
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).first()
+    if not cn:
+        raise HTTPException(status_code=404, detail="Credit Note not found.")
+
+    settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    company = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    bank = db.query(BankingProfile).filter(
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.is_primary == True,
+        BankingProfile.is_active == True
+    ).first()
+    contact = cn.invoice.contact if cn.invoice else None
+
+    return {
+        "company": {
+            "legal_name": company.legal_name if company else None,
+            "trade_name": company.trade_name if company else None,
+            "gstin": company.gstin if company else None,
+            "pan": company.pan if company else None,
+            "logo_url": settings.logo_url if settings else None
+        },
+        "bank_details": {
+            "bank_name": bank.bank_name if bank else None,
+            "account_number": bank.account_number if bank else None,
+            "ifsc_code": bank.ifsc_code if bank else None,
+            "account_holder_name": bank.account_holder_name if bank else None,
+            "upi_id": bank.upi_id if bank else None
+        },
+        "customer": {
+            "name": contact.name if contact else None,
+            "gstin": contact.gstin if contact else None,
+            "pan": contact.pan if contact else None,
+            "billing_address": contact.billing_address if contact else None,
+            "state_code": contact.state_code if contact else None
+        },
+        "credit_note": {
+            "id": str(cn.id),
+            "credit_note_number": cn.credit_note_number,
+            "issue_date": cn.issue_date.isoformat(),
+            "reason": cn.reason,
+            "pos_state_code": cn.pos_state_code,
+            "status": cn.status,
+            "subtotal": float(cn.subtotal),
+            "cgst_amount": float(cn.cgst_amount),
+            "sgst_amount": float(cn.sgst_amount),
+            "igst_amount": float(cn.igst_amount),
+            "utgst_amount": float(cn.utgst_amount),
+            "cess_amount": float(cn.cess_amount),
+            "round_off": float(cn.round_off),
+            "total": float(cn.total)
+        },
+        "lines": [
+            {
+                "product_name": line.product.name if line.product else "N/A",
+                "hsn_sac": line.hsn_sac,
+                "quantity": float(line.quantity),
+                "rate": float(line.rate),
+                "subtotal": float(line.subtotal),
+                "gst_rate": float(line.gst_rate),
+                "cgst_amount": float(line.cgst_amount),
+                "sgst_amount": float(line.sgst_amount),
+                "igst_amount": float(line.igst_amount),
+                "total": float(line.total)
+            }
+            for line in cn.lines
+        ]
+    }
+
+
+@router.post("/credit-notes/{cn_id}/finalize", response_model=CreditNoteResponse)
+def finalize_credit_note(
+    cn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+):
+    """Finalizes a credit note and posts balanced double-entry adjustments to the ledger."""
+    cn = db.query(CreditNote).filter(
+        CreditNote.id == cn_id,
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).first()
+    if not cn:
+        raise HTTPException(status_code=404, detail="Credit Note not found.")
+
+    if cn.status != "DRAFT":
+        raise HTTPException(status_code=400, detail="Only draft Credit Notes can be finalized.")
+
+    contact_id = cn.invoice.contact_id if cn.invoice else None
+    if not contact_id:
+        raise HTTPException(status_code=400, detail="Credit Note must be linked to a contact or invoice for finalization.")
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    cgst_account_id = resolver.resolve("cgst_output")
+    sgst_account_id = resolver.resolve("sgst_output")
+    igst_account_id = resolver.resolve("igst_output")
+    utgst_account_id = resolver.resolve("utgst_output")
+    cess_account_id = resolver.resolve("cess_output")
+
+    ledger_draft = LedgerPostingEngine.create_credit_note_posting(
+        tenant_id=tenant_id,
+        credit_note_id=cn.id,
+        credit_note_number=cn.credit_note_number,
+        issue_date=cn.issue_date,
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=cn.subtotal,
+        cgst_account_id=cgst_account_id,
+        cgst_amount=cn.cgst_amount,
+        sgst_account_id=sgst_account_id,
+        sgst_amount=cn.sgst_amount,
+        igst_account_id=igst_account_id,
+        igst_amount=cn.igst_amount,
+        utgst_account_id=utgst_account_id,
+        utgst_amount=cn.utgst_amount,
+        cess_account_id=cess_account_id,
+        cess_amount=cn.cess_amount
+    )
+
+    journal_entry = JournalEntry(
+        tenant_id=tenant_id,
+        entry_date=ledger_draft.entry_date,
+        reference_number=ledger_draft.reference_number,
+        description=ledger_draft.description,
+        source_type="INVOICE",
+        source_id=cn.id,
+        lines=[
+            JournalLine(
+                account_id=line.account_id,
+                amount=line.amount,
+                direction=line.direction,
+                narration=line.narration
+            )
+            for line in ledger_draft.lines
+        ]
+    )
+
+    cn.status = "ISSUED"
+    db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
+    db.commit()
+    db.refresh(cn)
+    return cn
+
+
+# ==========================================
+# DEBIT NOTES ROUTERS
+# ==========================================
+
+@router.post("/debit-notes", response_model=DebitNoteResponse, status_code=status.HTTP_201_CREATED)
+def create_debit_note(
+    payload: DebitNoteCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+):
+    """Creates a draft Debit Note."""
+    if payload.invoice_id:
+        inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    dn_number = payload.debit_note_number
+    if not dn_number:
+        dn_number = f"DN-{uuid.uuid4().hex[:6].upper()}"
+
+    origin_state = resolve_origin_state_code(db, tenant_id)
+    place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
+
+    db_lines = []
+    subtotal = Decimal("0.0000")
+    cgst = Decimal("0.0000")
+    sgst = Decimal("0.0000")
+    igst = Decimal("0.0000")
+    utgst = Decimal("0.0000")
+    cess = Decimal("0.0000")
+
+    for line in payload.line_items:
+        line_subtotal = line.quantity * line.rate
+        tax_split = GSTEngine.calculate_tax(
+            origin_state_code=origin_state,
+            place_of_supply_state_code=place_of_supply,
+            base_amount=line_subtotal,
+            gst_rate=line.gst_rate
+        )
+
+        db_line = DebitNoteLine(
+            product_id=line.product_id,
+            quantity=line.quantity,
+            rate=line.rate,
+            subtotal=line_subtotal,
+            hsn_sac=line.hsn_sac,
+            gst_rate=line.gst_rate,
+            cgst_rate=tax_split.cgst_rate,
+            cgst_amount=tax_split.cgst_amount,
+            sgst_rate=tax_split.sgst_rate,
+            sgst_amount=tax_split.sgst_amount,
+            igst_rate=tax_split.igst_rate,
+            igst_amount=tax_split.igst_amount,
+            utgst_rate=tax_split.utgst_rate,
+            utgst_amount=tax_split.utgst_amount,
+            cess_rate=tax_split.cess_rate,
+            cess_amount=tax_split.cess_amount,
+            total=tax_split.total_amount
+        )
+        db_lines.append(db_line)
+
+        subtotal += line_subtotal
+        cgst += tax_split.cgst_amount
+        sgst += tax_split.sgst_amount
+        igst += tax_split.igst_amount
+        utgst += tax_split.utgst_amount
+        cess += tax_split.cess_amount
+
+    raw_total = subtotal + cgst + sgst + igst + utgst + cess
+    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    round_off = rounded_total - raw_total
+
+    dn = DebitNote(
+        tenant_id=tenant_id,
+        invoice_id=payload.invoice_id,
+        debit_note_number=dn_number,
+        issue_date=payload.issue_date,
+        reason=payload.reason,
+        status="DRAFT",
+        subtotal=subtotal,
+        cgst_amount=cgst,
+        sgst_amount=sgst,
+        igst_amount=igst,
+        utgst_amount=utgst,
+        cess_amount=cess,
+        round_off=round_off,
+        pos_state_code=place_of_supply,
+        total=rounded_total,
+        lines=db_lines
+    )
+    db.add(dn)
+    db.commit()
+    db.refresh(dn)
+    return dn
+
+@router.get("/debit-notes", response_model=List[DebitNoteListResponse])
+def list_debit_notes(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    """Lists all debit notes for the active tenant."""
+    return db.query(DebitNote).filter(DebitNote.tenant_id == tenant_id, DebitNote.deleted_at == None).all()
+
+@router.get("/debit-notes/{dn_id}", response_model=DebitNoteResponse)
+def get_debit_note(
+    dn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    """Retrieves debit note details."""
+    dn = db.query(DebitNote).filter(
+        DebitNote.id == dn_id,
+        DebitNote.tenant_id == tenant_id,
+        DebitNote.deleted_at == None
+    ).first()
+    if not dn:
+        raise HTTPException(status_code=404, detail="Debit Note not found.")
+    return dn
+
+@router.post("/debit-notes/{dn_id}/finalize", response_model=DebitNoteResponse)
+def finalize_debit_note(
+    dn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+):
+    """Finalizes a debit note and posts balanced double-entry adjustments to the ledger."""
+    dn = db.query(DebitNote).filter(
+        DebitNote.id == dn_id,
+        DebitNote.tenant_id == tenant_id,
+        DebitNote.deleted_at == None
+    ).first()
+    if not dn:
+        raise HTTPException(status_code=404, detail="Debit Note not found.")
+
+    if dn.status != "DRAFT":
+        raise HTTPException(status_code=400, detail="Only draft Debit Notes can be finalized.")
+
+    contact_id = dn.invoice.contact_id if dn.invoice else None
+    if not contact_id:
+        raise HTTPException(status_code=400, detail="Debit Note must be linked to a contact or invoice for finalization.")
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    cgst_account_id = resolver.resolve("cgst_output")
+    sgst_account_id = resolver.resolve("sgst_output")
+    igst_account_id = resolver.resolve("igst_output")
+    utgst_account_id = resolver.resolve("utgst_output")
+    cess_account_id = resolver.resolve("cess_output")
+
+    ledger_draft = LedgerPostingEngine.create_debit_note_posting(
+        tenant_id=tenant_id,
+        debit_note_id=dn.id,
+        debit_note_number=dn.debit_note_number,
+        issue_date=dn.issue_date,
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=dn.subtotal,
+        cgst_account_id=cgst_account_id,
+        cgst_amount=dn.cgst_amount,
+        sgst_account_id=sgst_account_id,
+        sgst_amount=dn.sgst_amount,
+        igst_account_id=igst_account_id,
+        igst_amount=dn.igst_amount,
+        utgst_account_id=utgst_account_id,
+        utgst_amount=dn.utgst_amount,
+        cess_account_id=cess_account_id,
+        cess_amount=dn.cess_amount
+    )
+
+    journal_entry = JournalEntry(
+        tenant_id=tenant_id,
+        entry_date=ledger_draft.entry_date,
+        reference_number=ledger_draft.reference_number,
+        description=ledger_draft.description,
+        source_type="INVOICE",
+        source_id=dn.id,
+        lines=[
+            JournalLine(
+                account_id=line.account_id,
+                amount=line.amount,
+                direction=line.direction,
+                narration=line.narration
+            )
+            for line in ledger_draft.lines
+        ]
+    )
+
+    dn.status = "ISSUED"
+    db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
+    db.commit()
+    db.refresh(dn)
+    return dn
+
 @router.get("/{id}", response_model=InvoiceResponse)
 def get_invoice(
     id: uuid.UUID,
@@ -684,498 +1175,7 @@ def get_invoice_pdf_payload(
         ]
     }
 
-# ==========================================
-# CREDIT NOTES ROUTERS
-# ==========================================
 
-@router.post("/credit-notes", response_model=CreditNoteResponse, status_code=status.HTTP_201_CREATED)
-def create_credit_note(
-    payload: CreditNoteCreate,
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
-):
-    """Creates a draft Credit Note."""
-    if payload.invoice_id:
-        inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
-        if not inv:
-            raise HTTPException(status_code=404, detail="Invoice not found.")
-
-    cn_number = payload.credit_note_number
-    if not cn_number:
-        cn_number = f"CN-{uuid.uuid4().hex[:6].upper()}"
-
-    origin_state = resolve_origin_state_code(db, tenant_id)
-    place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
-
-    db_lines = []
-    subtotal = Decimal("0.0000")
-    cgst = Decimal("0.0000")
-    sgst = Decimal("0.0000")
-    igst = Decimal("0.0000")
-    utgst = Decimal("0.0000")
-    cess = Decimal("0.0000")
-
-    for line in payload.line_items:
-        line_subtotal = line.quantity * line.rate
-        tax_split = GSTEngine.calculate_tax(
-            origin_state_code=origin_state,
-            place_of_supply_state_code=place_of_supply,
-            base_amount=line_subtotal,
-            gst_rate=line.gst_rate
-        )
-
-        db_line = CreditNoteLine(
-            product_id=line.product_id,
-            quantity=line.quantity,
-            rate=line.rate,
-            subtotal=line_subtotal,
-            hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
-            cgst_rate=tax_split.cgst_rate,
-            cgst_amount=tax_split.cgst_amount,
-            sgst_rate=tax_split.sgst_rate,
-            sgst_amount=tax_split.sgst_amount,
-            igst_rate=tax_split.igst_rate,
-            igst_amount=tax_split.igst_amount,
-            utgst_rate=tax_split.utgst_rate,
-            utgst_amount=tax_split.utgst_amount,
-            cess_rate=tax_split.cess_rate,
-            cess_amount=tax_split.cess_amount,
-            total=tax_split.total_amount
-        )
-        db_lines.append(db_line)
-
-        subtotal += line_subtotal
-        cgst += tax_split.cgst_amount
-        sgst += tax_split.sgst_amount
-        igst += tax_split.igst_amount
-        utgst += tax_split.utgst_amount
-        cess += tax_split.cess_amount
-
-    raw_total = subtotal + cgst + sgst + igst + utgst + cess
-    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
-    round_off = rounded_total - raw_total
-
-    cn = CreditNote(
-        tenant_id=tenant_id,
-        invoice_id=payload.invoice_id,
-        credit_note_number=cn_number,
-        issue_date=payload.issue_date,
-        reason=payload.reason,
-        status="DRAFT",
-        subtotal=subtotal,
-        cgst_amount=cgst,
-        sgst_amount=sgst,
-        igst_amount=igst,
-        utgst_amount=utgst,
-        cess_amount=cess,
-        round_off=round_off,
-        pos_state_code=place_of_supply,
-        total=rounded_total,
-        lines=db_lines
-    )
-    db.add(cn)
-    db.commit()
-    db.refresh(cn)
-    return cn
-
-@router.get("/credit-notes", response_model=List[CreditNoteListResponse])
-def list_credit_notes(
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
-):
-    """Lists all credit notes for the active tenant."""
-    from sqlalchemy.orm import joinedload
-    notes = db.query(CreditNote).options(
-        joinedload(CreditNote.invoice)
-    ).filter(
-        CreditNote.tenant_id == tenant_id,
-        CreditNote.deleted_at == None
-    ).all()
-    return [
-        CreditNoteListResponse(
-            id=cn.id,
-            credit_note_number=cn.credit_note_number,
-            issue_date=cn.issue_date,
-            status=cn.status,
-            total=cn.total,
-            reason=cn.reason,
-            created_at=cn.created_at,
-            invoice_number=cn.invoice.invoice_number if cn.invoice else None,
-            contact_name=cn.invoice.contact.name if cn.invoice and cn.invoice.contact else None,
-        )
-        for cn in notes
-    ]
-
-@router.get("/credit-notes/{cn_id}", response_model=CreditNoteResponse)
-def get_credit_note(
-    cn_id: uuid.UUID,
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
-):
-    """Retrieves credit note details."""
-    cn = db.query(CreditNote).filter(
-        CreditNote.id == cn_id,
-        CreditNote.tenant_id == tenant_id,
-        CreditNote.deleted_at == None
-    ).first()
-    if not cn:
-        raise HTTPException(status_code=404, detail="Credit Note not found.")
-    return cn
-
-@router.get("/credit-notes/{cn_id}/pdf-payload")
-def get_credit_note_pdf_payload(
-    cn_id: uuid.UUID,
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
-):
-    """Consolidated metadata for PDF print rendering of a credit note."""
-    cn = db.query(CreditNote).filter(
-        CreditNote.id == cn_id,
-        CreditNote.tenant_id == tenant_id,
-        CreditNote.deleted_at == None
-    ).first()
-    if not cn:
-        raise HTTPException(status_code=404, detail="Credit Note not found.")
-
-    settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
-    company = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    bank = db.query(BankingProfile).filter(
-        BankingProfile.tenant_id == tenant_id,
-        BankingProfile.is_primary == True,
-        BankingProfile.is_active == True
-    ).first()
-    contact = cn.invoice.contact if cn.invoice else None
-
-    return {
-        "company": {
-            "legal_name": company.legal_name if company else None,
-            "trade_name": company.trade_name if company else None,
-            "gstin": company.gstin if company else None,
-            "pan": company.pan if company else None,
-            "logo_url": settings.logo_url if settings else None
-        },
-        "bank_details": {
-            "bank_name": bank.bank_name if bank else None,
-            "account_number": bank.account_number if bank else None,
-            "ifsc_code": bank.ifsc_code if bank else None,
-            "account_holder_name": bank.account_holder_name if bank else None,
-            "upi_id": bank.upi_id if bank else None
-        },
-        "customer": {
-            "name": contact.name if contact else None,
-            "gstin": contact.gstin if contact else None,
-            "pan": contact.pan if contact else None,
-            "billing_address": contact.billing_address if contact else None,
-            "state_code": contact.state_code if contact else None
-        },
-        "credit_note": {
-            "id": str(cn.id),
-            "credit_note_number": cn.credit_note_number,
-            "issue_date": cn.issue_date.isoformat(),
-            "reason": cn.reason,
-            "pos_state_code": cn.pos_state_code,
-            "status": cn.status,
-            "subtotal": float(cn.subtotal),
-            "cgst_amount": float(cn.cgst_amount),
-            "sgst_amount": float(cn.sgst_amount),
-            "igst_amount": float(cn.igst_amount),
-            "utgst_amount": float(cn.utgst_amount),
-            "cess_amount": float(cn.cess_amount),
-            "round_off": float(cn.round_off),
-            "total": float(cn.total)
-        },
-        "lines": [
-            {
-                "product_name": line.product.name if line.product else "N/A",
-                "hsn_sac": line.hsn_sac,
-                "quantity": float(line.quantity),
-                "rate": float(line.rate),
-                "subtotal": float(line.subtotal),
-                "gst_rate": float(line.gst_rate),
-                "cgst_amount": float(line.cgst_amount),
-                "sgst_amount": float(line.sgst_amount),
-                "igst_amount": float(line.igst_amount),
-                "total": float(line.total)
-            }
-            for line in cn.lines
-        ]
-    }
-
-
-@router.post("/credit-notes/{cn_id}/finalize", response_model=CreditNoteResponse)
-def finalize_credit_note(
-    cn_id: uuid.UUID,
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
-):
-    """Finalizes a credit note and posts balanced double-entry adjustments to the ledger."""
-    cn = db.query(CreditNote).filter(
-        CreditNote.id == cn_id,
-        CreditNote.tenant_id == tenant_id,
-        CreditNote.deleted_at == None
-    ).first()
-    if not cn:
-        raise HTTPException(status_code=404, detail="Credit Note not found.")
-
-    if cn.status != "DRAFT":
-        raise HTTPException(status_code=400, detail="Only draft Credit Notes can be finalized.")
-
-    contact_id = cn.invoice.contact_id if cn.invoice else None
-    if not contact_id:
-        raise HTTPException(status_code=400, detail="Credit Note must be linked to a contact or invoice for finalization.")
-    resolver = AccountResolver(db, tenant_id)
-    customer_account_id = resolver.resolve(f"customer.{contact_id}")
-    sales_revenue_account_id = resolver.resolve("sales_revenue")
-    cgst_account_id = resolver.resolve("cgst_output")
-    sgst_account_id = resolver.resolve("sgst_output")
-    igst_account_id = resolver.resolve("igst_output")
-    utgst_account_id = resolver.resolve("utgst_output")
-    cess_account_id = resolver.resolve("cess_output")
-
-    ledger_draft = LedgerPostingEngine.create_credit_note_posting(
-        tenant_id=tenant_id,
-        credit_note_id=cn.id,
-        credit_note_number=cn.credit_note_number,
-        issue_date=cn.issue_date,
-        customer_account_id=customer_account_id,
-        sales_revenue_account_id=sales_revenue_account_id,
-        subtotal=cn.subtotal,
-        cgst_account_id=cgst_account_id,
-        cgst_amount=cn.cgst_amount,
-        sgst_account_id=sgst_account_id,
-        sgst_amount=cn.sgst_amount,
-        igst_account_id=igst_account_id,
-        igst_amount=cn.igst_amount,
-        utgst_account_id=utgst_account_id,
-        utgst_amount=cn.utgst_amount,
-        cess_account_id=cess_account_id,
-        cess_amount=cn.cess_amount
-    )
-
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=ledger_draft.entry_date,
-        reference_number=ledger_draft.reference_number,
-        description=ledger_draft.description,
-        source_type="INVOICE",
-        source_id=cn.id,
-        lines=[
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=line.direction,
-                narration=line.narration
-            )
-            for line in ledger_draft.lines
-        ]
-    )
-
-    cn.status = "ISSUED"
-    db.add(journal_entry)
-    affected = {line.account_id for line in ledger_draft.lines}
-    update_account_balances(db, tenant_id, affected)
-    db.commit()
-    db.refresh(cn)
-    return cn
-
-
-# ==========================================
-# DEBIT NOTES ROUTERS
-# ==========================================
-
-@router.post("/debit-notes", response_model=DebitNoteResponse, status_code=status.HTTP_201_CREATED)
-def create_debit_note(
-    payload: DebitNoteCreate,
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
-):
-    """Creates a draft Debit Note."""
-    if payload.invoice_id:
-        inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
-        if not inv:
-            raise HTTPException(status_code=404, detail="Invoice not found.")
-
-    dn_number = payload.debit_note_number
-    if not dn_number:
-        dn_number = f"DN-{uuid.uuid4().hex[:6].upper()}"
-
-    origin_state = resolve_origin_state_code(db, tenant_id)
-    place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
-
-    db_lines = []
-    subtotal = Decimal("0.0000")
-    cgst = Decimal("0.0000")
-    sgst = Decimal("0.0000")
-    igst = Decimal("0.0000")
-    utgst = Decimal("0.0000")
-    cess = Decimal("0.0000")
-
-    for line in payload.line_items:
-        line_subtotal = line.quantity * line.rate
-        tax_split = GSTEngine.calculate_tax(
-            origin_state_code=origin_state,
-            place_of_supply_state_code=place_of_supply,
-            base_amount=line_subtotal,
-            gst_rate=line.gst_rate
-        )
-
-        db_line = DebitNoteLine(
-            product_id=line.product_id,
-            quantity=line.quantity,
-            rate=line.rate,
-            subtotal=line_subtotal,
-            hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
-            cgst_rate=tax_split.cgst_rate,
-            cgst_amount=tax_split.cgst_amount,
-            sgst_rate=tax_split.sgst_rate,
-            sgst_amount=tax_split.sgst_amount,
-            igst_rate=tax_split.igst_rate,
-            igst_amount=tax_split.igst_amount,
-            utgst_rate=tax_split.utgst_rate,
-            utgst_amount=tax_split.utgst_amount,
-            cess_rate=tax_split.cess_rate,
-            cess_amount=tax_split.cess_amount,
-            total=tax_split.total_amount
-        )
-        db_lines.append(db_line)
-
-        subtotal += line_subtotal
-        cgst += tax_split.cgst_amount
-        sgst += tax_split.sgst_amount
-        igst += tax_split.igst_amount
-        utgst += tax_split.utgst_amount
-        cess += tax_split.cess_amount
-
-    raw_total = subtotal + cgst + sgst + igst + utgst + cess
-    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
-    round_off = rounded_total - raw_total
-
-    dn = DebitNote(
-        tenant_id=tenant_id,
-        invoice_id=payload.invoice_id,
-        debit_note_number=dn_number,
-        issue_date=payload.issue_date,
-        reason=payload.reason,
-        status="DRAFT",
-        subtotal=subtotal,
-        cgst_amount=cgst,
-        sgst_amount=sgst,
-        igst_amount=igst,
-        utgst_amount=utgst,
-        cess_amount=cess,
-        round_off=round_off,
-        pos_state_code=place_of_supply,
-        total=rounded_total,
-        lines=db_lines
-    )
-    db.add(dn)
-    db.commit()
-    db.refresh(dn)
-    return dn
-
-@router.get("/debit-notes", response_model=List[DebitNoteListResponse])
-def list_debit_notes(
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
-):
-    """Lists all debit notes for the active tenant."""
-    return db.query(DebitNote).filter(DebitNote.tenant_id == tenant_id, DebitNote.deleted_at == None).all()
-
-@router.get("/debit-notes/{dn_id}", response_model=DebitNoteResponse)
-def get_debit_note(
-    dn_id: uuid.UUID,
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
-):
-    """Retrieves debit note details."""
-    dn = db.query(DebitNote).filter(
-        DebitNote.id == dn_id,
-        DebitNote.tenant_id == tenant_id,
-        DebitNote.deleted_at == None
-    ).first()
-    if not dn:
-        raise HTTPException(status_code=404, detail="Debit Note not found.")
-    return dn
-
-@router.post("/debit-notes/{dn_id}/finalize", response_model=DebitNoteResponse)
-def finalize_debit_note(
-    dn_id: uuid.UUID,
-    db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
-):
-    """Finalizes a debit note and posts balanced double-entry adjustments to the ledger."""
-    dn = db.query(DebitNote).filter(
-        DebitNote.id == dn_id,
-        DebitNote.tenant_id == tenant_id,
-        DebitNote.deleted_at == None
-    ).first()
-    if not dn:
-        raise HTTPException(status_code=404, detail="Debit Note not found.")
-
-    if dn.status != "DRAFT":
-        raise HTTPException(status_code=400, detail="Only draft Debit Notes can be finalized.")
-
-    contact_id = dn.invoice.contact_id if dn.invoice else None
-    if not contact_id:
-        raise HTTPException(status_code=400, detail="Debit Note must be linked to a contact or invoice for finalization.")
-    resolver = AccountResolver(db, tenant_id)
-    customer_account_id = resolver.resolve(f"customer.{contact_id}")
-    sales_revenue_account_id = resolver.resolve("sales_revenue")
-    cgst_account_id = resolver.resolve("cgst_output")
-    sgst_account_id = resolver.resolve("sgst_output")
-    igst_account_id = resolver.resolve("igst_output")
-    utgst_account_id = resolver.resolve("utgst_output")
-    cess_account_id = resolver.resolve("cess_output")
-
-    ledger_draft = LedgerPostingEngine.create_debit_note_posting(
-        tenant_id=tenant_id,
-        debit_note_id=dn.id,
-        debit_note_number=dn.debit_note_number,
-        issue_date=dn.issue_date,
-        customer_account_id=customer_account_id,
-        sales_revenue_account_id=sales_revenue_account_id,
-        subtotal=dn.subtotal,
-        cgst_account_id=cgst_account_id,
-        cgst_amount=dn.cgst_amount,
-        sgst_account_id=sgst_account_id,
-        sgst_amount=dn.sgst_amount,
-        igst_account_id=igst_account_id,
-        igst_amount=dn.igst_amount,
-        utgst_account_id=utgst_account_id,
-        utgst_amount=dn.utgst_amount,
-        cess_account_id=cess_account_id,
-        cess_amount=dn.cess_amount
-    )
-
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=ledger_draft.entry_date,
-        reference_number=ledger_draft.reference_number,
-        description=ledger_draft.description,
-        source_type="INVOICE",
-        source_id=dn.id,
-        lines=[
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=line.direction,
-                narration=line.narration
-            )
-            for line in ledger_draft.lines
-        ]
-    )
-
-    dn.status = "ISSUED"
-    db.add(journal_entry)
-    affected = {line.account_id for line in ledger_draft.lines}
-    update_account_balances(db, tenant_id, affected)
-    db.commit()
-    db.refresh(dn)
-    return dn
-
-@router.post("/{id}/e-invoice", response_model=EInvoiceResponse)
 def generate_e_invoice(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
