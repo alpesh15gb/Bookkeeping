@@ -138,6 +138,7 @@
 | Feature | Our App | Tally | Zoho Books | Busy | Vyapar |
 |---------|---------|-------|------------|------|--------|
 | Bulk import (CSV) contacts | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Vyapar .vyb import | ✅ | ❌ | ❌ | ❌ | ✅ |
 | Bulk import (CSV) products | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Bulk import invoices | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Export to Excel (all reports) | ⚠️ Partial | ✅ | ✅ | ✅ | ✅ |

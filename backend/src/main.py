@@ -60,6 +60,8 @@ from src.api.v1.masters import router as masters_router
 from src.api.v1.payments import router as payments_router
 from src.api.v1.accounting import router as accounting_router
 from src.api.v1.gst import router as gst_router
+from src.api.v1.gstr2a import router as gstr2a_router
+from src.api.v1.vyapar_import import router as vyapar_import_router
 from src.api.v1.eway_bills import router as eway_bills_router
 from src.api.v1.reports import router as reports_router
 from src.api.v1.audit import router as audit_router
@@ -301,6 +303,7 @@ app.include_router(reports_router,    prefix="/api/v1")
 app.include_router(audit_router,      prefix="/api/v1")
 app.include_router(expenses_router,   prefix="/api/v1")
 app.include_router(gstr2a_router,     prefix="/api/v1")
+app.include_router(vyapar_import_router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
