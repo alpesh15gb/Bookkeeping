@@ -265,8 +265,8 @@ export default function App() {
             <img src={logo} alt="Apex Books Logo" className="h-6 object-contain" />
           </div>
         </div>
-        <span className="text-[10px] font-semibold px-2 py-0.5 bg-zinc-800 text-gold-500 rounded-full border border-zinc-700 font-mono">
-          FY 2026-27
+        <span className="text-[10px] font-semibold px-2 py-0.5 bg-zinc-800 text-zinc-400 rounded-full border border-zinc-700 font-mono">
+          {new Date().getMonth() < 3 ? `${new Date().getFullYear() - 1}-${String(new Date().getFullYear()).slice(2)}` : `${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(2)}`}
         </span>
       </header>
 
@@ -359,11 +359,7 @@ export default function App() {
         <div className="p-4 border-t border-zinc-800 text-[11px] text-zinc-400 flex flex-col gap-2 bg-[#08152e]">
           <div className="flex items-center gap-2">
             <Building2 className="w-3.5 h-3.5 text-zinc-500" />
-            <span>apexbooks.in</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <HelpCircle className="w-3.5 h-3.5 text-zinc-500" />
-            <span>Support: help@apexbooks.in</span>
+            <span>Accounting App</span>
           </div>
           <button
             onClick={() => {
@@ -383,27 +379,18 @@ export default function App() {
         <header className="hidden md:flex h-14 bg-white border-b border-zinc-200 px-8 items-center justify-between no-print sticky top-0 z-30">
           <div className="flex items-center gap-4">
             <span className="text-[11px] font-semibold px-2.5 py-1 bg-zinc-50 text-zinc-700 rounded-full border border-zinc-200/50 font-mono">
-              FY 2026-27 Active
+              {new Date().getMonth() < 3 ? `FY ${new Date().getFullYear() - 1}-${String(new Date().getFullYear()).slice(2)}` : `FY ${new Date().getFullYear()}-${String(new Date().getFullYear() + 1).slice(2)}`}
             </span>
           </div>
           <div className="flex items-center gap-3.5">
-            {/* Notification Bell */}
-            <div className="relative p-1.5 text-zinc-500 hover:bg-zinc-100 rounded-full cursor-pointer transition mr-2">
-              <Bell className="w-5 h-5 text-zinc-600" />
-              <span className="absolute top-0.5 right-0.5 h-3.5 w-3.5 bg-red-500 text-[9px] font-bold text-white rounded-full flex items-center justify-center">
-                3
-              </span>
-            </div>
             {/* User Profile Info */}
             <div className="flex items-center gap-2.5 cursor-pointer">
-              <img
-                src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=120&h=120&fit=crop"
-                alt="User Profile"
-                className="h-8 w-8 rounded-full border border-zinc-200 object-cover"
-              />
+              <div className="h-8 w-8 rounded-full bg-zinc-200 flex items-center justify-center text-xs font-bold text-zinc-600">
+                {user?.full_name?.charAt(0)?.toUpperCase() || "U"}
+              </div>
               <div className="text-xs">
-                <p className="font-semibold text-zinc-850 leading-none mb-0.5">{user?.full_name || "Arjun Verma"}</p>
-                <p className="text-zinc-400 text-[9px] font-medium leading-none">{user?.email || "Admin"}</p>
+                <p className="font-semibold text-zinc-850 leading-none mb-0.5">{user?.full_name || "User"}</p>
+                <p className="text-zinc-400 text-[9px] font-medium leading-none">{user?.email || ""}</p>
               </div>
               <ChevronDown className="w-3 h-3 text-zinc-400 ml-0.5" />
             </div>

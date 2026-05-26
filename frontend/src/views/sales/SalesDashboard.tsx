@@ -283,29 +283,10 @@ export default function SalesDashboard({ onNavigate }: SalesDashboardProps) {
   };
   return (
     <div className="space-y-6 max-w-full overflow-hidden">
-      {/* Mobile Top Header (Mockup Brand banner) */}
+      {/* Mobile Top Header */}
       <div className="md:hidden bg-[#0B1B3D] text-white p-4 -mx-4 -mt-4 mb-6 flex items-center justify-between border-b border-navy-800 shadow-lg">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 border border-[#DCA035] rounded-xl flex items-center justify-center bg-navy-800 text-[#DCA035] font-extrabold text-lg">
-            ST
-          </div>
-          <div>
-            <h2 className="text-sm font-bold text-white leading-tight">Sharma Traders</h2>
-            <p className="text-[10px] text-[#DCA035] font-semibold leading-tight tracking-wider">Grow Your Business</p>
-          </div>
-        </div>
-        <div className="flex items-center gap-3">
-          {/* Bell Notification */}
-          <div className="relative p-1.5 hover:bg-white/5 rounded-full cursor-pointer transition">
-            <svg className="w-5 h-5 text-zinc-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-            </svg>
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-          </div>
-          {/* User Bubble */}
-          <div className="w-8 h-8 rounded-full bg-[#DCA035] text-zinc-950 flex items-center justify-center font-bold text-xs shadow cursor-pointer border border-[#DCA035]/30">
-            AS
-          </div>
+        <div>
+          <h2 className="text-sm font-bold text-white leading-tight">Dashboard</h2>
         </div>
       </div>
 

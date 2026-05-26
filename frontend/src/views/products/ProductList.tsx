@@ -82,7 +82,6 @@ export default function ProductList({ onNavigate }: ProductListProps) {
       <div className="md:hidden bg-[#0B1B3D] text-white p-4 -mx-4 -mt-4 mb-6 border-b border-navy-800 shadow-md">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <span className="text-[#DCA035] font-extrabold text-xl">BL</span>
             <h1 className="text-xl font-bold tracking-tight text-white font-sans">Inventory</h1>
           </div>
           <button className="text-zinc-300 hover:text-[#DCA035]">

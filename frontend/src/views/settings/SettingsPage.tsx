@@ -346,6 +346,8 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
     confirm_password: "",
   });
   const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   React.useEffect(() => {
     if (companyData) {
@@ -489,9 +491,10 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
     }
   };
 
-  const handlePasswordChange = (e: React.FormEvent) => {
+  const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError("");
+    setPasswordSuccess("");
     if (passwordForm.new_password !== passwordForm.confirm_password) {
       setPasswordError("New passwords do not match");
       return;
@@ -500,9 +503,19 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
       setPasswordError("Password must be at least 8 characters");
       return;
     }
-    console.log("Password change would be triggered here (UI only)");
-    setPasswordForm({ current_password: "", new_password: "", confirm_password: "" });
-    alert("Password change UI - backend not connected");
+    setPasswordSaving(true);
+    try {
+      await apiClient.post("/auth/change-password", {
+        current_password: passwordForm.current_password,
+        new_password: passwordForm.new_password,
+      });
+      setPasswordForm({ current_password: "", new_password: "", confirm_password: "" });
+      setPasswordSuccess("Password changed successfully.");
+    } catch (err: any) {
+      setPasswordError(err.response?.data?.detail || "Failed to change password.");
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   const isLoading =
@@ -1130,9 +1143,13 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
 
             <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-6">
               <h3 className="font-semibold text-slate-700 mb-4">Change Password</h3>
-              <p className="text-xs text-slate-500 mb-4">Password change functionality is UI-only. Backend integration pending.</p>
 
               <form onSubmit={handlePasswordChange} className="space-y-4">
+                {passwordSuccess && (
+                  <div className="flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+                    <span className="text-sm">{passwordSuccess}</span>
+                  </div>
+                )}
                 {passwordError && (
                   <div className="flex items-center gap-3 p-4 bg-rose-50 border border-rose-200 text-rose-700 rounded-lg">
                     <ShieldAlert className="w-5 h-5 flex-shrink-0" />
@@ -1172,9 +1189,10 @@ export default function SettingsPage({ onNavigate }: SettingsPageProps) {
 
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg text-sm shadow-sm transition"
+                  disabled={passwordSaving}
+                  className="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white font-semibold rounded-lg text-sm shadow-sm transition disabled:opacity-50"
                 >
-                  Update Password
+                  {passwordSaving ? "Saving..." : "Update Password"}
                 </button>
               </form>
             </div>

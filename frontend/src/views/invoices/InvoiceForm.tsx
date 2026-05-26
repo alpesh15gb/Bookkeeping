@@ -13,6 +13,7 @@ interface InvoiceFormProps {
 interface ContactItem {
   id: string;
   name: string;
+  gstin?: string;
   state_code: string;
   billing_address?: string;
   shipping_address?: string;
@@ -718,7 +719,7 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
                   </p>
                   {selectedCustomer && (
                     <p className="text-zinc-600 font-semibold mt-1">
-                      GSTIN: <span className="font-mono">{selectedCustomer.state_code}AAACG1234C1Z5</span>
+                      GSTIN: <span className="font-mono">{selectedCustomer.gstin || "—"}</span>
                     </p>
                   )}
                 </div>

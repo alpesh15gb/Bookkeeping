@@ -28,10 +28,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     state: "Delhi",
     pincode: "",
     email: "",
+    password: "",
     logo_url: "",
   });
 
-  const handleSendOTP = (e: React.FormEvent) => {
+  const handleSendOTP = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!phone || phone.length < 10) {
       setError("Please enter a valid 10-digit mobile number");
@@ -39,11 +40,14 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     }
     setError("");
     setLoading(true);
-    // Simulate sending OTP
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      await apiClient.post("/auth/send-otp", { phone });
       setOtpMode(true);
-    }, 800);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || "Failed to send OTP. Try email login instead.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleVerifyOTP = async (e: React.FormEvent) => {
@@ -55,18 +59,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     setError("");
     setLoading(true);
     try {
-      // In a real app, verify OTP. For reference, we authenticate with demo account
-      // or map this phone number to a login session
-      const res = await apiClient.post("/auth/login", { 
-        email: email || "demo@bharatledger.in", 
-        password: password || "DemoPassword123!" 
-      }).catch(() => {
-        // Fallback email for ease of use
-        return apiClient.post("/auth/login", { 
-          email: "admin@apexbooks.in", 
-          password: "AdminPassword123!" 
-        });
-      });
+      const res = await apiClient.post("/auth/verify-otp", { phone, otp });
 
       const { access_token, refresh_token } = res.data;
       setAccessToken(access_token);
@@ -79,7 +72,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       }
       onLogin();
     } catch (err: any) {
-      setError(err.response?.data?.detail || "OTP Verification failed. Try Password Login instead.");
+      setError(err.response?.data?.detail || "OTP verification failed");
       setUsePasswordLogin(true);
     } finally {
       setLoading(false);
@@ -112,12 +105,16 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    if (!regFields.password || regFields.password.length < 8) {
+      setError("Password must be at least 8 characters");
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      // Register new user & business tenant
       await apiClient.post("/auth/register", {
         email: regFields.email,
-        password: "TempPassword123!", // auto password for simple OTP style signup
+        password: regFields.password,
         full_name: regFields.full_name,
         phone_number: phone,
         company_legal_name: regFields.company_legal_name,
@@ -127,21 +124,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         state: regFields.state,
         pincode: regFields.pincode,
       });
-      
-      // Auto-login with temporary credentials
-      const res = await apiClient.post("/auth/login", { 
-        email: regFields.email, 
-        password: "TempPassword123!" 
-      });
-      const { access_token, refresh_token } = res.data;
-      setAccessToken(access_token);
-      setRefreshToken(refresh_token);
 
-      const memRes = await apiClient.get("/auth/memberships");
-      if (memRes.data.length > 0) {
-        setTenantId(memRes.data[0].tenant_id);
-      }
-      onLogin();
+      setRegistering(false);
+      setEmail(regFields.email);
+      setError("");
     } catch (err: any) {
       setError(err.response?.data?.detail || "Registration failed");
     } finally {
@@ -150,20 +136,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   };
 
   if (registering) {
-    // DhanSetu Business Setup Screen
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0B1B3D] px-4 py-8">
         <div className="w-full max-w-md bg-white rounded-2xl shadow-xl overflow-hidden border border-slate-100 flex flex-col">
           <div className="bg-[#0B1B3D] py-6 px-8 text-center flex flex-col items-center border-b border-navy-800">
-            {/* DhanSetu Logo */}
-            <div className="flex items-center gap-1.5 mb-1">
-              <svg className="w-7 h-7 text-[#DCA035]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-              </svg>
-              <span className="text-xl font-bold tracking-wider text-white">DHANSETU</span>
-            </div>
-            <p className="text-[10px] text-[#DCA035] tracking-widest uppercase font-semibold">Smart Accounting</p>
-            <div className="w-2 h-2 rounded-full bg-[#DCA035] my-2 rotate-45" />
             <h2 className="text-lg font-bold text-white mt-1">Set Up Your Business</h2>
             <p className="text-xs text-zinc-300">Let's get started with your business details</p>
           </div>
@@ -287,7 +263,24 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               </div>
             </div>
 
-            {/* Logo Upload Mockup */}
+            {/* Password */}
+            <div className="space-y-1">
+              <label className="text-[11px] font-bold text-slate-500 uppercase">Password</label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
+                <input 
+                  type="password" 
+                  required
+                  minLength={8}
+                  placeholder="Create a password (min 8 characters)"
+                  value={regFields.password} 
+                  onChange={e => setRegFields({ ...regFields, password: e.target.value })}
+                  className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-brand-500" 
+                />
+              </div>
+            </div>
+
+            {/* Logo Upload */}
             <div className="space-y-1">
               <label className="text-[11px] font-bold text-slate-500 uppercase">Upload Logo (Optional)</label>
               <div className="border-2 border-dashed border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer hover:border-brand-500 transition">
@@ -323,37 +316,18 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     );
   }
 
-  // Bharat Ledger Premium Welcome Screen
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#0B1B3D] px-4 relative overflow-hidden">
-      {/* Background Watermark/Pattern */}
-      <div className="absolute inset-0 opacity-5 pointer-events-none flex items-center justify-center">
-        <svg className="w-96 h-96 text-white animate-spin-slow" viewBox="0 0 100 100">
-          <circle cx="50" cy="50" r="40" stroke="currentColor" strokeWidth="1" fill="none" />
-          {[...Array(24)].map((_, i) => (
-            <line key={i} x1="50" y1="10" x2="50" y2="90" stroke="currentColor" strokeWidth="0.5" transform={`rotate(${i * 15} 50 50)`} />
-          ))}
-        </svg>
-      </div>
+    <div className="min-h-screen flex items-center justify-center bg-[#0B1B3D] px-4">
 
       <div className="w-full max-w-sm flex flex-col items-center">
-        {/* Logo and Brand Title */}
-        <div className="text-center mb-8 flex flex-col items-center">
-          <div className="w-20 h-20 border-2 border-[#DCA035] rounded-2xl flex items-center justify-center mb-2 shadow-lg bg-navy-800">
-            <span className="text-4xl font-extrabold text-[#DCA035] tracking-tighter">BL</span>
-          </div>
-          <h1 className="text-2xl font-bold tracking-wider text-white">Bharat Ledger</h1>
-          <p className="text-[10px] text-[#DCA035] tracking-widest uppercase font-semibold border-t border-[#DCA035]/30 pt-1 mt-1">GST Made Simple</p>
-        </div>
-
         {/* Card for login form */}
         <div className="w-full bg-[#0F2247]/80 backdrop-blur-md rounded-2xl border border-navy-800 p-6 shadow-2xl">
           <div className="flex flex-col items-center text-center mb-5">
             <div className="p-2.5 bg-navy-800 rounded-xl mb-2 text-[#DCA035] border border-navy-100/10">
               <Smartphone className="w-5 h-5" />
             </div>
-            <h2 className="text-sm font-bold text-white">Welcome to Bharat Ledger</h2>
-            <p className="text-[11px] text-zinc-400">Your trusted GST accounting partner</p>
+            <h2 className="text-sm font-bold text-white">Sign In</h2>
+            <p className="text-[11px] text-zinc-400">Enter your credentials to continue</p>
           </div>
 
           {error && <p className="text-xs text-red-400 bg-red-950/40 border border-red-900/50 p-2.5 rounded-lg mb-4 text-center">{error}</p>}
@@ -432,7 +406,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
               <div className="flex justify-between text-[10px] text-zinc-500">
                 <button type="button" onClick={() => setOtpMode(false)} className="hover:text-white">Change Number</button>
-                <button type="button" onClick={() => {}} className="hover:text-white">Resend OTP</button>
+                <button type="button" onClick={() => { setOtp(""); handleSendOTP(new Event("submit") as any); }} className="hover:text-white">Resend OTP</button>
               </div>
             </form>
           ) : (
@@ -504,7 +478,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className="w-full text-center mt-6 space-y-4">
           <div className="flex items-center justify-center gap-3">
             <span className="h-px bg-zinc-700 w-12" />
-            <span className="text-[10px] text-zinc-500 font-semibold uppercase">New to Bharat Ledger?</span>
+            <span className="text-[10px] text-zinc-500 font-semibold uppercase">New user?</span>
             <span className="h-px bg-zinc-700 w-12" />
           </div>
           <button
