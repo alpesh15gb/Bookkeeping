@@ -219,7 +219,8 @@ export default function ContactList({ onNavigate }: ContactListProps) {
                 <div className="flex flex-col items-center gap-2">
                   <button
                     onClick={() => onNavigate("edit", c.id)}
-                    className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-slate-50 rounded-lg transition"
+                    aria-label="Edit contact"
+                    className="p-1.5 text-slate-400 hover:text-amber-500 hover:bg-slate-50 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-brand-500"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -227,7 +228,8 @@ export default function ContactList({ onNavigate }: ContactListProps) {
                   </button>
                   <button
                     onClick={() => onNavigate("detail", c.id)}
-                    className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-slate-50 rounded-lg transition"
+                    aria-label="View contact details"
+                    className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-slate-50 rounded-lg transition focus:outline-none focus:ring-2 focus:ring-brand-500"
                   >
                     <Eye className="w-4 h-4" />
                   </button>

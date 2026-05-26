@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { ArrowLeft, AlertCircle } from "lucide-react";
+import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
 
 interface ContactFormProps {
   editId?: string;
@@ -89,6 +90,9 @@ export default function ContactForm({ editId, onNavigate, onSuccess }: ContactFo
   const [shippingPincode, setShippingPincode] = useState("");
 
   const [formError, setFormError] = useState("");
+
+  const hasUnsavedChanges = name !== "" || email !== "" || phone !== "";
+  useUnsavedChangesWarning(hasUnsavedChanges);
 
   const { data: contact } = useQuery({
     queryKey: ["contact", editId],

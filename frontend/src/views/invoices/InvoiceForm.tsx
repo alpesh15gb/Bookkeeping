@@ -344,6 +344,9 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
     }
   });
 
+  const hasUnsavedChanges = contactId !== "" || lines.length > 0 || invoiceNumber !== "";
+  useUnsavedChangesWarning(hasUnsavedChanges);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
