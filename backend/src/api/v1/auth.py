@@ -6,7 +6,7 @@ from typing import List, Optional
 import redis
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import User, Tenant, TenantMembership, PasswordResetToken
+from src.infrastructure.database.models import User, Tenant, TenantMembership, PasswordResetToken, AuditLog
 from src.schemas.auth_schemas import UserRegister, UserLogin, TokenResponse, UserResponse, SchemaBase
 from src.core.security import (
     get_password_hash,
@@ -57,6 +57,17 @@ def _is_refresh_token_revoked(user_id: str, token: str) -> bool:
     return False
 
 
+def _log_audit(db: Session, action: str, user_id: str = None, tenant_id: str = None, details: dict = None, request: Request = None):
+    log = AuditLog(
+        action=action,
+        user_id=uuid.UUID(user_id) if user_id else None,
+        tenant_id=uuid.UUID(tenant_id) if tenant_id else None,
+        details=details or {},
+        ip_address=request.client.host if request and request.client else None,
+    )
+    db.add(log)
+
+
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.RATE_LIMIT_REGISTER)
 def register_user(request: Request, payload: UserRegister, db: Session = Depends(get_db_session)):
@@ -98,6 +109,7 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
         is_active=True
     )
     db.add(membership)
+    _log_audit(db, "user.register", user_id=str(user.id), tenant_id=str(tenant.id), request=request)
     db.commit()
     db.refresh(user)
     return user
@@ -108,12 +120,16 @@ def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_d
     # 1. Query user
     user = db.query(User).filter(User.email == payload.email, User.deleted_at == None).first()
     if not user or not verify_password(payload.password, user.password_hash):
+        _log_audit(db, "login.failed", details={"email": payload.email}, request=request)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password."
         )
 
     if not user.is_active:
+        _log_audit(db, "login.blocked", user_id=str(user.id), details={"reason": "deactivated"}, request=request)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account is deactivated."
@@ -135,6 +151,9 @@ def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_d
     # 3. Create session tokens
     access_token = create_access_token(user_id=str(user.id), scopes=scopes)
     refresh_token = create_refresh_token(user_id=str(user.id))
+
+    _log_audit(db, "login.success", user_id=str(user.id), request=request)
+    db.commit()
 
     return TokenResponse(
         access_token=access_token,
@@ -204,7 +223,7 @@ def refresh_token(
     )
 
 @router.post("/logout")
-def logout_user(request: Request, refresh_token_str: str):
+def logout_user(request: Request, refresh_token_str: str, current_user: User = Depends(get_current_user)):
     """Revokes a refresh token so it can no longer be used."""
     try:
         payload = decode_token(refresh_token_str)
@@ -247,6 +266,7 @@ class ChangePasswordRequest(BaseModel):
 
 @router.post("/change-password")
 def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
@@ -254,6 +274,8 @@ def change_password(
     """Allows an authenticated user to change their own password."""
     # Verify the current password
     if not verify_password(payload.current_password, current_user.password_hash):
+        _log_audit(db, "password.change.failed", user_id=str(current_user.id), details={"reason": "wrong_current"}, request=request)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Current password is incorrect."
@@ -273,6 +295,7 @@ def change_password(
 
     # Hash and save the new password
     current_user.password_hash = get_password_hash(payload.new_password)
+    _log_audit(db, "password.changed", user_id=str(current_user.id), request=request)
     db.commit()
 
     return {"detail": "Password changed successfully."}
@@ -284,6 +307,7 @@ class ForgotPasswordRequest(BaseModel):
 
 @router.post("/forgot-password")
 def forgot_password(
+    request: Request,
     payload: ForgotPasswordRequest,
     db: Session = Depends(get_db_session),
 ):
@@ -327,6 +351,7 @@ def forgot_password(
     except Exception:
         pass
 
+    _log_audit(db, "password.reset.requested", user_id=str(user.id), request=request)
     db.commit()
     return {"detail": "If the email exists, a reset link has been sent."}
 
@@ -339,6 +364,7 @@ class ResetPasswordRequest(BaseModel):
 
 @router.post("/reset-password")
 def reset_password(
+    request: Request,
     payload: ResetPasswordRequest,
     db: Session = Depends(get_db_session),
 ):
@@ -374,6 +400,7 @@ def reset_password(
 
     user.password_hash = get_password_hash(payload.new_password)
     reset.used_at = datetime.now(timezone.utc)
+    _log_audit(db, "password.reset.completed", user_id=str(user.id), request=request)
     db.commit()
 
     return {"detail": "Password reset successfully."}

@@ -561,7 +561,7 @@ def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Opti
     query = db.query(Account).filter(
         Account.tenant_id == tenant_id,
         Account.deleted_at == None
-    )
+    ).with_for_update()
     if account_ids:
         query = query.filter(Account.id.in_(account_ids))
 

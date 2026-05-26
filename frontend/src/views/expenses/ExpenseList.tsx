@@ -138,6 +138,7 @@ export default function ExpenseList({ onNavigate }: ExpenseListProps) {
                         <button
                           onClick={() => onNavigate("expense_detail", e.id)}
                           title="View Details"
+                          aria-label="View expense details"
                           className="p-1 text-slate-400 hover:text-brand-600 hover:bg-slate-100 rounded transition"
                         >
                           <Eye className="w-4 h-4" />
@@ -146,6 +147,7 @@ export default function ExpenseList({ onNavigate }: ExpenseListProps) {
                           <button
                             onClick={() => onNavigate("expense_edit", e.id)}
                             title="Edit Expense"
+                            aria-label="Edit expense"
                             className="p-1 text-slate-400 hover:text-amber-600 hover:bg-slate-100 rounded transition"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
