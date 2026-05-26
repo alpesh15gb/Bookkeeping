@@ -15,7 +15,8 @@ from src.schemas.accounting_schemas import (
     JournalEntryCreate, JournalEntryResponse, JournalLineResponse,
     LedgerReportResponse, LedgerLine,
     TrialBalanceResponse, TrialBalanceLine,
-    ProfitLossResponse, ProfitLossItem
+    ProfitLossResponse, ProfitLossItem,
+    BalanceSheetResponse, BalanceSheetSection
 )
 from src.domains.company.services import NumberingSeriesService
 from src.domains.accounting.services import update_account_balances
@@ -517,7 +518,6 @@ def get_balance_sheet(
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
     """Generates a Balance Sheet as on a given date (defaults to today)."""
-    from src.schemas.accounting_schemas import BalanceSheetSection, BalanceSheetResponse
 
     cutoff = as_on_date or date.today()
 
