@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { Plus, Search, Eye, ShieldAlert, FileMinus } from "lucide-react";
+import Pagination from "../../components/Pagination";
 
 interface CreditNoteListProps {
   onNavigate: (view: "credit_notes" | "credit_note_create" | "credit_note_detail", id?: string) => void;
@@ -33,6 +34,8 @@ const getStatusBadge = (status: string) => {
 
 export default function CreditNoteList({ onNavigate }: CreditNoteListProps) {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 20;
 
   const { data, isLoading, error } = useQuery<{ items?: CreditNoteItem[] } | CreditNoteItem[]>({
     queryKey: ["credit-notes"],
@@ -50,6 +53,11 @@ export default function CreditNoteList({ onNavigate }: CreditNoteListProps) {
     cn.credit_note_number?.toLowerCase().includes(search.toLowerCase()) ||
     cn.contact_name?.toLowerCase().includes(search.toLowerCase())
   );
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedItems = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  useEffect(() => setPage(1), [search]);
 
   return (
     <div className="space-y-6">
@@ -97,6 +105,7 @@ export default function CreditNoteList({ onNavigate }: CreditNoteListProps) {
           <p className="text-xs text-slate-500 mt-1">Create a credit note to handle returns and adjustments.</p>
         </div>
       ) : (
+        <>
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
@@ -111,7 +120,7 @@ export default function CreditNoteList({ onNavigate }: CreditNoteListProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((cn) => (
+                {paginatedItems.map((cn) => (
                   <tr key={cn.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-4 font-mono font-medium text-brand-900">{cn.credit_note_number}</td>
                     <td className="px-6 py-4 text-slate-500">
@@ -137,6 +146,8 @@ export default function CreditNoteList({ onNavigate }: CreditNoteListProps) {
             </table>
           </div>
         </div>
+        <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={itemsPerPage} />
+        </>
       )}
     </div>
   );

@@ -236,7 +236,7 @@ def cancel_payment_receipt(
 
     # Revert invoice allocations
     for alloc in payment.allocations:
-        invoice = db.query(Invoice).filter(Invoice.id == alloc.invoice_id).first()
+        invoice = db.query(Invoice).filter(Invoice.id == alloc.invoice_id).with_for_update().first()
         if invoice:
             invoice.amount_paid -= alloc.amount
             if invoice.amount_paid <= 0:
@@ -275,6 +275,8 @@ def cancel_payment_receipt(
             lines=reversal_lines
         )
         db.add(reversal_entry)
+        affected = {line.account_id for line in reversal_lines}
+        update_account_balances(db, tenant_id, affected)
 
     payment.deleted_at = datetime.now(timezone.utc)
     db.commit()
@@ -481,7 +483,7 @@ def cancel_vendor_payment(
 
     # Revert bill allocations
     for alloc in payment.allocations:
-        bill = db.query(Bill).filter(Bill.id == alloc.bill_id).first()
+        bill = db.query(Bill).filter(Bill.id == alloc.bill_id).with_for_update().first()
         if bill:
             bill.amount_paid -= alloc.amount
             if bill.amount_paid <= 0:
@@ -520,6 +522,8 @@ def cancel_vendor_payment(
             lines=reversal_lines
         )
         db.add(reversal_entry)
+        affected = {line.account_id for line in reversal_lines}
+        update_account_balances(db, tenant_id, affected)
 
     payment.deleted_at = datetime.now(timezone.utc)
     db.commit()

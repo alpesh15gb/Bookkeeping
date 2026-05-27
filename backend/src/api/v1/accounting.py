@@ -71,18 +71,6 @@ def create_manual_journal_entry(
                 detail=f"Account '{account.name}' is inactive."
             )
 
-        # Update account balance in real-time
-        if account.account_type in ("ASSET", "EXPENSE"):
-            if line.direction == "DEBIT":
-                account.current_balance += line.amount
-            else:
-                account.current_balance -= line.amount
-        else:
-            if line.direction == "CREDIT":
-                account.current_balance += line.amount
-            else:
-                account.current_balance -= line.amount
-
         db_lines.append(
             JournalLine(
                 account_id=line.account_id,
@@ -97,16 +85,32 @@ def create_manual_journal_entry(
     if not ref_num:
         ref_num = NumberingSeriesService.generate_next_number(db, tenant_id, "JOURNAL")
 
-    # Check duplicate reference number under same tenant
+    # Check duplicate reference number under same tenant (with row lock to prevent races)
     dup = db.query(JournalEntry).filter(
         JournalEntry.tenant_id == tenant_id,
         JournalEntry.reference_number == ref_num
-    ).first()
+    ).with_for_update().first()
     if dup:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Journal Entry reference number '{ref_num}' already exists."
         )
+
+    # Build draft to enforce double-entry validation explicitly
+    from src.domains.accounting.services import JournalEntryDraft, JournalLineDraft
+    draft_lines = [
+        JournalLineDraft(line.account_id, line.amount, line.direction, line.narration)
+        for line in db_lines
+    ]
+    draft = JournalEntryDraft(
+        tenant_id=tenant_id,
+        entry_date=payload.entry_date,
+        reference_number=ref_num,
+        description=payload.description,
+        source_type="MANUAL",
+        source_id=uuid.UUID(int=0),  # placeholder, will be replaced after commit
+        lines=draft_lines
+    )
 
     journal_entry = JournalEntry(
         tenant_id=tenant_id,
@@ -118,6 +122,11 @@ def create_manual_journal_entry(
     )
 
     db.add(journal_entry)
+    db.flush()
+    # Update source_id to the real ID now that it's generated
+    journal_entry.source_id = journal_entry.id
+    affected = {line.account_id for line in db_lines}
+    update_account_balances(db, tenant_id, affected)
     db.commit()
 
     # Re-fetch lines with account details to build response
@@ -521,11 +530,24 @@ def get_balance_sheet(
 
     cutoff = as_on_date or date.today()
 
+    from sqlalchemy import func, case
+
     accounts = db.query(Account).filter(
         Account.tenant_id == tenant_id,
         Account.deleted_at == None,
         Account.account_type.in_(["ASSET", "LIABILITY", "EQUITY"]),
     ).order_by(Account.code.asc()).all()
+
+    # Compute net movement per account up to cutoff date
+    movement_subq = db.query(
+        JournalLine.account_id,
+        func.coalesce(func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=-JournalLine.amount)), 0).label("net_movement")
+    ).join(JournalEntry, JournalLine.entry_id == JournalEntry.id).filter(
+        JournalEntry.tenant_id == tenant_id,
+        JournalEntry.entry_date <= cutoff
+    ).group_by(JournalLine.account_id).subquery()
+
+    movement_map = {row.account_id: row.net_movement for row in db.query(movement_subq).all()}
 
     assets = []
     liabilities = []
@@ -535,7 +557,12 @@ def get_balance_sheet(
     total_equity = Decimal("0.00")
 
     for a in accounts:
-        bal = a.current_balance or Decimal("0.00")
+        op = a.opening_balance or Decimal("0.00")
+        net_movement = movement_map.get(a.id, Decimal("0.00"))
+        if a.account_type in ("ASSET", "EXPENSE"):
+            bal = op + net_movement
+        else:
+            bal = op - net_movement
         bal = bal.quantize(Decimal("0.01"))
 
         if a.account_type == "ASSET":

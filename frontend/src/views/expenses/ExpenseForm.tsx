@@ -4,6 +4,8 @@ import { apiClient } from "../../lib/api";
 import { ArrowLeft, Save } from "lucide-react";
 import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
 
+const GST_RATES = [0, 5, 12, 18, 28];
+
 interface ExpenseFormProps {
   editId?: string;
   onNavigate: (view: "expense_list" | "expense_create" | "expense_edit" | "expense_detail", expenseId?: string) => void;
@@ -15,19 +17,48 @@ interface ExpenseCategory {
   name: string;
 }
 
+interface Account {
+  id: string;
+  name: string;
+  account_type: string;
+}
+
+interface PreviewData {
+  amount: number;
+  gst_rate: number;
+  cgst_amount: number;
+  sgst_amount: number;
+  total: number;
+}
+
 export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFormProps) {
   const isEdit = Boolean(editId);
 
   const [categoryId, setCategoryId] = useState("");
+  const [bankAccountId, setBankAccountId] = useState("");
   const [expenseDate, setExpenseDate] = useState(new Date().toISOString().split("T")[0]);
   const [vendorName, setVendorName] = useState("");
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
+  const [gstRate, setGstRate] = useState("0");
   const [showNewCat, setShowNewCat] = useState(false);
   const [newCatName, setNewCatName] = useState("");
 
   const hasUnsavedChanges = categoryId !== "" || amount !== "";
   useUnsavedChangesWarning(hasUnsavedChanges);
+
+  const { data: preview } = useQuery<PreviewData>({
+    queryKey: ["expense-preview", amount, gstRate],
+    queryFn: async () => {
+      if (!amount || parseFloat(amount) <= 0) return null;
+      const res = await apiClient.post("/expenses/preview", {
+        amount: parseFloat(amount),
+        gst_rate: parseFloat(gstRate),
+      });
+      return res.data;
+    },
+    enabled: !!amount && parseFloat(amount) > 0,
+  });
 
   const { data: categories = [] } = useQuery<ExpenseCategory[]>({
     queryKey: ["expense-categories"],
@@ -36,6 +67,18 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
       return res.data;
     },
   });
+
+  const { data: accounts = [] } = useQuery<Account[]>({
+    queryKey: ["accounts"],
+    queryFn: async () => {
+      const res = await apiClient.get("/masters/accounts");
+      return res.data;
+    },
+  });
+
+  const cashBankAccounts = accounts.filter(
+    (a) => a.account_type === "ASSET" && (a.name.startsWith("Cash") || a.name.startsWith("Bank"))
+  );
 
   const { data: existingExpense } = useQuery({
     queryKey: ["expense", editId],
@@ -49,10 +92,12 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
   useEffect(() => {
     if (existingExpense) {
       setCategoryId(existingExpense.expense_category_id);
+      setBankAccountId(existingExpense.bank_account_id || "");
       setExpenseDate(existingExpense.expense_date);
       setVendorName(existingExpense.vendor_name || "");
       setDescription(existingExpense.description || "");
       setAmount(String(existingExpense.amount));
+      setGstRate(String(existingExpense.gst_rate || "0"));
     }
   }, [existingExpense]);
 
@@ -60,10 +105,12 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
     mutationFn: async () => {
       const payload = {
         expense_category_id: categoryId,
+        bank_account_id: bankAccountId || undefined,
         expense_date: expenseDate,
         vendor_name: vendorName || undefined,
         description: description || undefined,
         amount: parseFloat(amount),
+        gst_rate: parseFloat(gstRate),
       };
       if (isEdit) {
         await apiClient.put(`/expenses/${editId}`, payload);
@@ -171,6 +218,20 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
           </div>
         )}
 
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Bank / Cash Account (optional)</label>
+          <select
+            value={bankAccountId}
+            onChange={(e) => setBankAccountId(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="">Default (Cash on Hand)</option>
+            {cashBankAccounts.map((acct) => (
+              <option key={acct.id} value={acct.id}>{acct.name}</option>
+            ))}
+          </select>
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Expense Date</label>
@@ -196,6 +257,42 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
             />
           </div>
         </div>
+
+        <div className="space-y-2">
+          <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">GST Rate</label>
+          <div className="flex gap-2 flex-wrap">
+            {GST_RATES.map((rate) => (
+              <button
+                key={rate}
+                type="button"
+                onClick={() => setGstRate(String(rate))}
+                className={`px-4 py-2 rounded-lg text-xs font-semibold border transition ${
+                  String(gstRate) === String(rate)
+                    ? "bg-brand-600 text-white border-brand-600"
+                    : "bg-white text-slate-600 border-slate-200 hover:border-brand-300"
+                }`}
+              >
+                {rate === 0 ? "NIL" : `GST ${rate}%`}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {preview && (
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2">
+            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Expense Preview</h4>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="text-slate-500">Amount (excl. tax):</div>
+              <div className="text-right font-mono font-semibold text-slate-800">₹ {Number(preview.amount).toFixed(2)}</div>
+              <div className="text-slate-500">CGST:</div>
+              <div className="text-right font-mono text-slate-600">₹ {Number(preview.cgst_amount).toFixed(2)}</div>
+              <div className="text-slate-500">SGST:</div>
+              <div className="text-right font-mono text-slate-600">₹ {Number(preview.sgst_amount).toFixed(2)}</div>
+              <div className="text-slate-500 font-semibold border-t border-slate-200 pt-1">Total:</div>
+              <div className="text-right font-mono font-bold text-brand-700 border-t border-slate-200 pt-1">₹ {Number(preview.total).toFixed(2)}</div>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Vendor Name (optional)</label>

@@ -60,7 +60,7 @@ class InvoiceLineBase(SchemaBase):
     gst_rate: Decimal = Field(..., ge=0, le=100)
 
 class InvoiceLineCreate(InvoiceLineBase):
-    pass
+    id: Optional[uuid.UUID] = None  # For updates: match by UUID instead of composite key
 
 class InvoiceLineResponse(InvoiceLineBase):
     id: uuid.UUID

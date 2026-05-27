@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { Plus, Search, Receipt, ShieldAlert, Eye } from "lucide-react";
+import Pagination from "../../components/Pagination";
 
 interface ExpenseListProps {
   onNavigate: (view: "expense_list" | "expense_create" | "expense_edit" | "expense_detail", expenseId?: string) => void;
@@ -22,6 +23,8 @@ interface ExpenseListItem {
 
 export default function ExpenseList({ onNavigate }: ExpenseListProps) {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 20;
 
   const { data: expenses = [], isLoading, error } = useQuery<ExpenseListItem[]>({
     queryKey: ["expenses"],
@@ -48,6 +51,11 @@ export default function ExpenseList({ onNavigate }: ExpenseListProps) {
       (e.category_name || "").toLowerCase().includes(q)
     );
   });
+
+  const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
+  const paginatedExpenses = filteredExpenses.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  useEffect(() => setPage(1), [search]);
 
   return (
     <div className="space-y-6">
@@ -110,7 +118,7 @@ export default function ExpenseList({ onNavigate }: ExpenseListProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredExpenses.map((e) => (
+                {paginatedExpenses.map((e) => (
                   <tr key={e.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-4 font-mono font-semibold text-slate-800">{e.expense_number}</td>
                     <td className="px-6 py-4 text-slate-500">{new Date(e.expense_date).toLocaleDateString("en-IN")}</td>
@@ -162,6 +170,7 @@ export default function ExpenseList({ onNavigate }: ExpenseListProps) {
               </tbody>
             </table>
           </div>
+          <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={filteredExpenses.length} pageSize={itemsPerPage} />
         </div>
       )}
     </div>

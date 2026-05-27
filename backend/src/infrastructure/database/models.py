@@ -16,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
+from sqlalchemy import event
 from src.core.database import Base
 
 # ---------------------------------------------------------------------------
@@ -104,6 +105,7 @@ class Contact(Base):
     __table_args__ = (
         Index("ix_contacts_tenant_id", "tenant_id"),
         Index("ix_contacts_tenant_type", "tenant_id", "contact_type"),
+        Index("ix_contacts_tenant_deleted", "tenant_id", "deleted_at"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -135,6 +137,7 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         Index("ix_products_tenant_id", "tenant_id"),
+        Index("ix_products_tenant_deleted", "tenant_id", "deleted_at"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -167,6 +170,8 @@ class Invoice(Base):
         Index("ix_invoices_tenant_date_status", "tenant_id", "issue_date", "status"),
         Index("ix_invoices_tenant_contact", "tenant_id", "contact_id"),
         Index("ix_invoices_due_date", "tenant_id", "due_date"),
+        Index("ix_invoices_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "invoice_number", name="uq_invoices_tenant_number"),
         UniqueConstraint("irn", name="uq_invoices_irn"),
         CheckConstraint(
             "status IN ('DRAFT', 'SENT', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
@@ -175,6 +180,14 @@ class Invoice(Base):
         CheckConstraint(
             "e_invoice_status IN ('PENDING', 'GENERATED', 'CANCELLED', 'FAILED')",
             name="ck_invoices_e_invoice_status",
+        ),
+        CheckConstraint(
+            "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total",
+            name="ck_invoices_total_balance",
+        ),
+        CheckConstraint(
+            "amount_paid <= total",
+            name="ck_invoices_amount_paid",
         ),
     )
 
@@ -252,6 +265,8 @@ class Payment(Base):
     __tablename__ = "payments"
     __table_args__ = (
         Index("ix_payments_tenant_date", "tenant_id", "payment_date"),
+        Index("ix_payments_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "payment_number", name="uq_payments_tenant_number"),
         CheckConstraint(
             "payment_mode IN ('CASH', 'BANK', 'UPI', 'POS', 'OTHER')",
             name="ck_payments_payment_mode",
@@ -301,6 +316,8 @@ class Bill(Base):
         Index("ix_bills_tenant_date_status", "tenant_id", "issue_date", "status"),
         Index("ix_bills_tenant_contact", "tenant_id", "contact_id"),
         Index("ix_bills_due_date", "tenant_id", "due_date"),
+        Index("ix_bills_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "bill_number", name="uq_bills_tenant_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
             name="ck_bills_status",
@@ -381,6 +398,8 @@ class BillPayment(Base):
     __tablename__ = "bill_payments"
     __table_args__ = (
         Index("ix_bill_payments_tenant_date", "tenant_id", "payment_date"),
+        Index("ix_bill_payments_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "payment_number", name="uq_bill_payments_tenant_number"),
         CheckConstraint(
             "payment_mode IN ('CASH', 'BANK', 'UPI', 'POS', 'OTHER')",
             name="ck_bill_payments_payment_mode",
@@ -445,6 +464,18 @@ class JournalEntry(Base):
     lines = relationship("JournalLine", back_populates="entry", cascade="all, delete-orphan")
 
 
+@event.listens_for(JournalEntry, "before_update")
+def prevent_journal_entry_update(mapper, connection, target):
+    if target.is_locked:
+        from sqlalchemy.exc import IntegrityError
+        raise IntegrityError(
+            "Cannot modify a locked journal entry. "
+            "Create a reversal entry instead.",
+            params={},
+            orig=None,
+        )
+
+
 class JournalLine(Base):
     __tablename__ = "journal_lines"
     __table_args__ = (
@@ -470,6 +501,9 @@ class JournalLine(Base):
 
 class Branch(Base):
     __tablename__ = "branches"
+    __table_args__ = (
+        Index("ix_branches_tenant_deleted", "tenant_id", "deleted_at"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
@@ -594,6 +628,8 @@ class Expense(Base):
     __tablename__ = "expenses"
     __table_args__ = (
         Index("ix_expenses_tenant_date", "tenant_id", "expense_date"),
+        Index("ix_expenses_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "expense_number", name="uq_expenses_tenant_number"),
         CheckConstraint("status IN ('DRAFT', 'POSTED', 'CANCELLED')", name="ck_expenses_status"),
     )
 
@@ -601,10 +637,18 @@ class Expense(Base):
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     expense_number = Column(String(50), nullable=False)
     expense_category_id = Column(UUID(as_uuid=True), ForeignKey("expense_categories.id"), nullable=False)
+    bank_account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=True)
     expense_date = Column(Date, nullable=False)
     vendor_name = Column(String(150))
     description = Column(Text)
     amount = Column(Numeric(15, 4), nullable=False, default=0)
+    gst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    sgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    igst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    utgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    cess_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    round_off = Column(Numeric(15, 4), nullable=False, default=0)
     total = Column(Numeric(15, 4), nullable=False, default=0)
     status = Column(String(20), nullable=False, default="DRAFT")
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
@@ -652,6 +696,7 @@ class PurchaseOrder(Base):
         Index("ix_purchase_orders_tenant_date_status", "tenant_id", "order_date", "status"),
         Index("ix_purchase_orders_tenant_contact", "tenant_id", "contact_id"),
         Index("ix_purchase_orders_due_date", "tenant_id", "due_date"),
+        Index("ix_purchase_orders_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "po_number", name="uq_purchase_orders_po_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'CONFIRMED', 'RECEIVED', 'CANCELLED')",
@@ -726,6 +771,7 @@ class SalesOrder(Base):
         Index("ix_sales_orders_tenant_date_status", "tenant_id", "order_date", "status"),
         Index("ix_sales_orders_tenant_contact", "tenant_id", "contact_id"),
         Index("ix_sales_orders_due_date", "tenant_id", "due_date"),
+        Index("ix_sales_orders_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "so_number", name="uq_sales_orders_so_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'CONFIRMED', 'DELIVERED', 'CANCELLED')",
@@ -800,6 +846,7 @@ class DeliveryChallan(Base):
         Index("ix_delivery_challans_tenant_date_status", "tenant_id", "challan_date", "status"),
         Index("ix_delivery_challans_tenant_contact", "tenant_id", "contact_id"),
         Index("ix_delivery_challans_due_date", "tenant_id", "due_date"),
+        Index("ix_delivery_challans_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "challan_number", name="uq_delivery_challans_challan_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'ISSUED', 'CANCELLED')",
@@ -875,6 +922,10 @@ class EWayBill(Base):
         Index("ix_eway_bills_tenant_id", "tenant_id"),
         UniqueConstraint("eway_bill_number", name="uq_eway_bill_number"),
         CheckConstraint("status IN ('GENERATED', 'CANCELLED')", name="ck_eway_bills_status"),
+        CheckConstraint(
+            "(invoice_id IS NOT NULL AND bill_id IS NULL) OR (invoice_id IS NULL AND bill_id IS NOT NULL)",
+            name="ck_eway_bills_single_parent",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1040,6 +1091,7 @@ class ProformaInvoice(Base):
         Index("ix_proforma_invoices_tenant_date_status", "tenant_id", "issue_date", "status"),
         Index("ix_proforma_invoices_tenant_contact", "tenant_id", "contact_id"),
         Index("ix_proforma_invoices_due_date", "tenant_id", "due_date"),
+        Index("ix_proforma_invoices_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "proforma_number", name="uq_proforma_invoices_proforma_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'ISSUED', 'CONVERTED', 'CANCELLED')",
@@ -1156,6 +1208,8 @@ class CreditNote(Base):
     __table_args__ = (
         Index("ix_credit_notes_tenant_id", "tenant_id"),
         Index("ix_credit_notes_invoice_id", "invoice_id"),
+        Index("ix_credit_notes_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "credit_note_number", name="uq_credit_notes_tenant_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'ISSUED', 'CANCELLED')",
             name="ck_credit_notes_status",
@@ -1200,7 +1254,7 @@ class CreditNoteLine(Base):
     quantity = Column(Numeric(15, 4), nullable=False)
     rate = Column(Numeric(15, 4), nullable=False)
     subtotal = Column(Numeric(15, 4), nullable=False)
-    hsn_sac = Column(String(20))
+    hsn_sac = Column(String(8))
     gst_rate = Column(Numeric(5, 2), nullable=False)
     cgst_rate = Column(Numeric(5, 2), nullable=False, default=0)
     cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
@@ -1224,6 +1278,8 @@ class DebitNote(Base):
     __table_args__ = (
         Index("ix_debit_notes_tenant_id", "tenant_id"),
         Index("ix_debit_notes_invoice_id", "invoice_id"),
+        Index("ix_debit_notes_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "debit_note_number", name="uq_debit_notes_tenant_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'ISSUED', 'CANCELLED')",
             name="ck_debit_notes_status",
@@ -1268,7 +1324,7 @@ class DebitNoteLine(Base):
     quantity = Column(Numeric(15, 4), nullable=False)
     rate = Column(Numeric(15, 4), nullable=False)
     subtotal = Column(Numeric(15, 4), nullable=False)
-    hsn_sac = Column(String(20))
+    hsn_sac = Column(String(8))
     gst_rate = Column(Numeric(5, 2), nullable=False)
     cgst_rate = Column(Numeric(5, 2), nullable=False, default=0)
     cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
@@ -1342,6 +1398,10 @@ class BankReconciliation(Base):
         Index("ix_bank_reconciliations_transaction_id", "bank_transaction_id"),
         Index("ix_bank_reconciliations_payment_id", "payment_id"),
         Index("ix_bank_reconciliations_bill_payment_id", "bill_payment_id"),
+        CheckConstraint(
+            "(payment_id IS NOT NULL AND bill_payment_id IS NULL) OR (payment_id IS NULL AND bill_payment_id IS NOT NULL)",
+            name="ck_bank_reconciliations_single_payment",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1384,3 +1444,28 @@ class TenantInvitation(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
 
     tenant = relationship("Tenant")
+
+
+# ---------------------------------------------------------------------------
+# ACCOUNTING PERIOD (period lock for closing books)
+# ---------------------------------------------------------------------------
+
+class AccountingPeriod(Base):
+    __tablename__ = "accounting_periods"
+    __table_args__ = (
+        Index("ix_accounting_periods_tenant", "tenant_id"),
+        UniqueConstraint("tenant_id", "period_name", name="uq_accounting_periods_tenant_name"),
+        CheckConstraint(
+            "is_closed IN (true, false)",
+            name="ck_accounting_periods_is_closed",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    period_name = Column(String(50), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    is_closed = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)

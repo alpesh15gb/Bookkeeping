@@ -43,19 +43,12 @@ export default function BillList({ onNavigate }: BillListProps) {
   };
 
   const getStatusBadge = (status: string) => {
+    const base = "px-2.5 py-1 text-xs font-semibold rounded-full inline-flex items-center border";
     const s = status.toUpperCase();
-    if (s === "PAID") {
-      return (
-        <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 border border-emerald-200 text-emerald-700">
-          Paid
-        </span>
-      );
-    }
-    return (
-      <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-semibold bg-amber-50 border border-amber-200 text-amber-700">
-        Unpaid
-      </span>
-    );
+    if (s === "PAID") return `${base} bg-emerald-50 text-emerald-700 border-emerald-200`;
+    if (s === "DRAFT") return `${base} bg-slate-100 text-slate-700 border-slate-200`;
+    if (s === "CANCELLED") return `${base} bg-rose-50 text-rose-700 border-rose-200`;
+    return `${base} bg-amber-50 text-amber-700 border-amber-200`;
   };
 
   // Filter bills list locally
@@ -208,7 +201,7 @@ export default function BillList({ onNavigate }: BillListProps) {
                     <td className="px-4 py-3.5 text-right font-mono font-bold text-zinc-900">
                       {formatCurrency(b.total)}
                     </td>
-                    <td className="px-4 py-3.5 text-center">{getStatusBadge(b.status)}</td>
+                    <td className="px-4 py-3.5 text-center"><span className={getStatusBadge(b.status)}>{b.status}</span></td>
                     <td className="px-4 py-3.5 text-center">
                       <div className="inline-flex items-center gap-2 justify-center">
                         <button

@@ -287,7 +287,25 @@ export default function BillForm({ editId, onNavigate, onSuccess }: BillFormProp
     };
   };
 
-  const totals = calculateTotals();
+  const totals = backendTotals
+    ? {
+        subtotal: Number(backendTotals.subtotal) || 0,
+        discountValue: Number(backendTotals.discount_total) || 0,
+        taxableAmount: Number(backendTotals.subtotal) - Number(backendTotals.discount_total) || 0,
+        cgst: Number(backendTotals.cgst_amount) || 0,
+        sgst: Number(backendTotals.sgst_amount) || 0,
+        igst: Number(backendTotals.igst_amount) || 0,
+        grandTotal: Number(backendTotals.total) || 0,
+      }
+    : {
+        subtotal: 0,
+        discountValue: 0,
+        taxableAmount: 0,
+        cgst: 0,
+        sgst: 0,
+        igst: 0,
+        grandTotal: 0,
+      };
 
   // Create or Update Mutation
   const saveMutation = useMutation({
@@ -760,19 +778,19 @@ export default function BillForm({ editId, onNavigate, onSuccess }: BillFormProp
                   
                   {totals.cgst > 0 && (
                     <div className="flex justify-between text-zinc-400 text-[8px]">
-                      <span>CGST (9%):</span>
+                      <span>CGST:</span>
                       <span>{formatCurrency(totals.cgst).replace("₹", "")}</span>
                     </div>
                   )}
                   {totals.sgst > 0 && (
                     <div className="flex justify-between text-zinc-400 text-[8px]">
-                      <span>SGST (9%):</span>
+                      <span>SGST:</span>
                       <span>{formatCurrency(totals.sgst).replace("₹", "")}</span>
                     </div>
                   )}
                   {totals.igst > 0 && (
                     <div className="flex justify-between text-zinc-400 text-[8px]">
-                      <span>IGST (18%):</span>
+                      <span>IGST:</span>
                       <span>{formatCurrency(totals.igst).replace("₹", "")}</span>
                     </div>
                   )}

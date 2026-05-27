@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { Plus, Search, Eye, ShieldAlert, ShoppingCart } from "lucide-react";
+import Pagination from "../../components/Pagination";
 
 interface PurchaseOrderListProps {
   onNavigate: (view: "purchase_orders" | "purchase_order_create" | "purchase_order_detail", id?: string) => void;
@@ -34,6 +35,8 @@ const getStatusBadge = (status: string) => {
 
 export default function PurchaseOrderList({ onNavigate }: PurchaseOrderListProps) {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 20;
   const [statusFilter, setStatusFilter] = useState("ALL");
 
   const { data: purchaseOrders = [], isLoading, error } = useQuery<PurchaseOrderItem[]>({
@@ -51,6 +54,11 @@ export default function PurchaseOrderList({ onNavigate }: PurchaseOrderListProps
     const matchStatus = statusFilter === "ALL" || po.status?.toUpperCase() === statusFilter;
     return matchSearch && matchStatus;
   });
+
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedItems = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  useEffect(() => setPage(1), [search, statusFilter]);
 
   return (
     <div className="space-y-6">
@@ -109,6 +117,7 @@ export default function PurchaseOrderList({ onNavigate }: PurchaseOrderListProps
           <p className="text-xs text-slate-500 mt-1">Create a purchase order to begin tracking vendor procurement.</p>
         </div>
       ) : (
+        <>
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
@@ -124,7 +133,7 @@ export default function PurchaseOrderList({ onNavigate }: PurchaseOrderListProps
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((po) => (
+                {paginatedItems.map((po) => (
                   <tr key={po.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-4 font-mono font-medium text-brand-900">{po.po_number}</td>
                     <td className="px-6 py-4 text-slate-500">
@@ -153,6 +162,8 @@ export default function PurchaseOrderList({ onNavigate }: PurchaseOrderListProps
             </table>
           </div>
         </div>
+        <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={itemsPerPage} />
+        </>
       )}
     </div>
   );

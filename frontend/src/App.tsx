@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, Suspense, lazy } from "react";
 import LoginPage from "./views/auth/LoginPage";
 import InvoiceList from "./views/invoices/InvoiceList";
 import InvoiceForm from "./views/invoices/InvoiceForm";
@@ -15,8 +15,6 @@ import ProductForm from "./views/products/ProductForm";
 import ProductDetail from "./views/products/ProductDetail";
 import AccountList from "./views/accounting/AccountList";
 import AccountForm from "./views/accounting/AccountForm";
-import LedgerView from "./views/accounting/LedgerView";
-import TrialBalance from "./views/accounting/TrialBalance";
 import ProfitLoss from "./views/accounting/ProfitLoss";
 import ReportsDashboard from "./views/reports/ReportsDashboard";
 import SettingsPage from "./views/settings/SettingsPage";
@@ -45,8 +43,19 @@ import SalesOrderList from "./views/sales-orders/SalesOrderList";
 import SalesOrderForm from "./views/sales-orders/SalesOrderForm";
 import SalesOrderDetail from "./views/sales-orders/SalesOrderDetail";
 
+// Lazy-loaded Syncfusion-powered views
+const InvoiceListGrid = lazy(() => import("./views/invoices/InvoiceListGrid"));
+const BillListGrid = lazy(() => import("./views/bills/BillListGrid"));
+const ExpenseListGrid = lazy(() => import("./views/expenses/ExpenseListGrid"));
+const LedgerViewGrid = lazy(() => import("./views/accounting/LedgerViewGrid"));
+const TrialBalanceGrid = lazy(() => import("./views/accounting/TrialBalanceGrid"));
+const SalesDashboardCharts = lazy(() => import("./views/dashboard/SalesDashboardCharts"));
+const JournalEntryView = lazy(() => import("./views/accounting/JournalEntryView"));
+const SchedulerView = lazy(() => import("./views/scheduler/SchedulerView"));
+
 import logo from "./logo.png";
 import { apiClient, setAccessToken, setTenantId } from "./lib/api";
+import { useDirtyStore } from "./hooks/useDirtyStore";
 import {
   LayoutDashboard,
   FileSpreadsheet,
@@ -87,12 +96,17 @@ type View =
   | "purchase_orders" | "purchase_order_create" | "purchase_order_detail"
   | "sales_orders" | "sales_order_create" | "sales_order_detail"
   | "expense_list" | "expense_create" | "expense_edit" | "expense_detail"
-  | "estimate_list" | "estimate_create" | "estimate_edit" | "estimate_detail";
+  | "estimate_list" | "estimate_create" | "estimate_edit" | "estimate_detail"
+  | "invoice_grid" | "bill_grid" | "expense_grid"
+  | "ledger_grid" | "trial_balance_grid"
+  | "dashboard_charts"
+  | "journal_entry"
+  | "scheduler";
 
 export default function App() {
   const [authenticated, setAuthenticated] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<View>("sales_dashboard");
+  const [currentView, _setCurrentView] = useState<View>("sales_dashboard");
   const [activeInvoiceId, setActiveInvoiceId] = useState<string | undefined>(undefined);
   const [activeBillId, setActiveBillId] = useState<string | undefined>(undefined);
   const [activeContactId, setActiveContactId] = useState<string | undefined>(undefined);
@@ -106,6 +120,21 @@ export default function App() {
   const [activeExpenseId, setActiveExpenseId] = useState<string | undefined>(undefined);
   const [activeEstimateId, setActiveEstimateId] = useState<string | undefined>(undefined);
   const [user, setUser] = useState<{ full_name: string; email: string } | null>(null);
+
+  const isDirty = useDirtyStore((s) => s.isDirty);
+
+  const navigateIfClean = (fn: () => void) => {
+    if (isDirty) {
+      if (window.confirm("You have unsaved changes. Leave anyway?")) {
+        useDirtyStore.getState().setDirty(false);
+        fn();
+      }
+    } else {
+      fn();
+    }
+  };
+
+  const setCurrentView = (view: View) => navigateIfClean(() => _setCurrentView(view));
 
   // Restore session on mount
   useEffect(() => {
@@ -290,10 +319,14 @@ export default function App() {
 
   const menuItems = [
     { name: "Dashboard", icon: LayoutDashboard, view: "sales_dashboard" as const },
+    { name: "Dashboard Charts", icon: PieChart, view: "dashboard_charts" as const },
     { name: "Invoices (Sales)", icon: FileSpreadsheet, view: "list" as const },
+    { name: "Invoices (Grid)", icon: FileSpreadsheet, view: "invoice_grid" as const },
     { name: "Estimates", icon: FileText, view: "estimate_list" as const },
     { name: "Vendor Bills", icon: Receipt, view: "bill_list" as const },
+    { name: "Bills (Grid)", icon: Receipt, view: "bill_grid" as const },
     { name: "Expenses", icon: Receipt, view: "expense_list" as const },
+    { name: "Expenses (Grid)", icon: Receipt, view: "expense_grid" as const },
     { name: "Payments", icon: Banknote, view: "payments" as const },
     { name: "Credit Notes", icon: FileMinus, view: "credit_notes" as const },
     { name: "Debit Notes", icon: FileMinus, view: "debit_notes" as const },
@@ -303,7 +336,11 @@ export default function App() {
     { name: "Customers & Vendors", icon: Users, view: "contacts" as const },
     { name: "Products & Inventory", icon: Package, view: "products" as const },
     { name: "Accounting & Ledgers", icon: BookOpen, view: "accounts" as const },
+    { name: "Journal Entry", icon: BookOpen, view: "journal_entry" as const },
+    { name: "Ledger (Grid)", icon: BookOpen, view: "ledger_grid" as const },
+    { name: "Trial Balance (Grid)", icon: BookOpen, view: "trial_balance_grid" as const },
     { name: "Reports & GST", icon: PieChart, view: "reports" as const },
+    { name: "Reminders", icon: Bell, view: "scheduler" as const },
     { name: "Settings", icon: Settings, view: "settings" as const },
   ];
 
@@ -374,7 +411,15 @@ export default function App() {
               (item.view === "products" && ["products", "product_create", "product_edit", "product_detail"].includes(currentView)) ||
               (item.view === "accounts" && ["accounts", "account_create", "account_edit", "account_detail", "ledger", "trial_balance", "profit_loss"].includes(currentView)) ||
               (item.view === "reports" && currentView === "reports") ||
-              (item.view === "settings" && currentView === "settings");
+              (item.view === "settings" && currentView === "settings") ||
+              (item.view === "invoice_grid" && currentView === "invoice_grid") ||
+              (item.view === "bill_grid" && currentView === "bill_grid") ||
+              (item.view === "expense_grid" && currentView === "expense_grid") ||
+              (item.view === "ledger_grid" && currentView === "ledger_grid") ||
+              (item.view === "trial_balance_grid" && currentView === "trial_balance_grid") ||
+              (item.view === "dashboard_charts" && currentView === "dashboard_charts") ||
+              (item.view === "journal_entry" && currentView === "journal_entry") ||
+              (item.view === "scheduler" && currentView === "scheduler");
 
             return (
               <button
@@ -468,6 +513,7 @@ export default function App() {
         </header>
 
         <div className="p-4 md:p-8 max-w-7xl w-full mx-auto flex-1">
+          <Suspense fallback={<div className="flex justify-center items-center py-20"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div></div>}>
           {currentView === "sales_dashboard" && <SalesDashboard onNavigate={(view) => {
             const viewMap: Record<string, View> = {
               invoices: "list",
@@ -622,6 +668,19 @@ export default function App() {
           {currentView === "sales_order_detail" && activeSOId && (
             <SalesOrderDetail soId={activeSOId} onNavigate={handleNavigateSalesOrders} />
           )}
+
+          {/* Syncfusion-powered views */}
+          {currentView === "invoice_grid" && <InvoiceListGrid onNavigate={handleNavigateInvoices} />}
+          {currentView === "bill_grid" && <BillListGrid onNavigate={handleNavigateBills} />}
+          {currentView === "expense_grid" && <ExpenseListGrid onNavigate={handleNavigateExpenses} />}
+          {currentView === "ledger_grid" && (
+            <LedgerViewGrid accountId={activeAccountId} onNavigate={handleNavigateAccounts} />
+          )}
+          {currentView === "trial_balance_grid" && <TrialBalanceGrid onNavigate={handleNavigateAccounts} />}
+          {currentView === "dashboard_charts" && <SalesDashboardCharts />}
+          {currentView === "journal_entry" && <JournalEntryView onNavigate={(view: any) => setCurrentView(view)} />}
+          {currentView === "scheduler" && <SchedulerView onNavigate={(view: any) => setCurrentView(view)} />}
+          </Suspense>
         </div>
       </main>
 

@@ -588,6 +588,7 @@ def finalize_credit_note(
     igst_account_id = resolver.resolve("igst_output")
     utgst_account_id = resolver.resolve("utgst_output")
     cess_account_id = resolver.resolve("cess_output")
+    round_off_account_id = resolver.resolve("round_off") if cn.round_off != 0 else None
 
     ledger_draft = LedgerPostingEngine.create_credit_note_posting(
         tenant_id=tenant_id,
@@ -606,7 +607,9 @@ def finalize_credit_note(
         utgst_account_id=utgst_account_id,
         utgst_amount=cn.utgst_amount,
         cess_account_id=cess_account_id,
-        cess_amount=cn.cess_amount
+        cess_amount=cn.cess_amount,
+        round_off_account_id=round_off_account_id,
+        round_off_amount=cn.round_off,
     )
 
     journal_entry = JournalEntry(
@@ -631,6 +634,87 @@ def finalize_credit_note(
     db.add(journal_entry)
     affected = {line.account_id for line in ledger_draft.lines}
     db.flush()
+    update_account_balances(db, tenant_id, affected)
+    db.commit()
+    db.refresh(cn)
+    return cn
+
+
+@router.post("/credit-notes/{cn_id}/cancel", response_model=CreditNoteResponse)
+def cancel_credit_note(
+    cn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+):
+    """Cancels an issued credit note by posting a reversal journal entry."""
+    cn = db.query(CreditNote).filter(
+        CreditNote.id == cn_id,
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).first()
+    if not cn:
+        raise HTTPException(status_code=404, detail="Credit Note not found.")
+
+    if cn.status != "ISSUED":
+        raise HTTPException(status_code=400, detail="Only issued Credit Notes can be cancelled.")
+
+    contact_id = cn.invoice.contact_id if cn.invoice else None
+    if not contact_id:
+        raise HTTPException(status_code=400, detail="Credit Note must be linked to a contact or invoice for cancellation.")
+
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    cgst_account_id = resolver.resolve("cgst_output")
+    sgst_account_id = resolver.resolve("sgst_output")
+    igst_account_id = resolver.resolve("igst_output")
+    utgst_account_id = resolver.resolve("utgst_output")
+    cess_account_id = resolver.resolve("cess_output")
+    round_off_account_id = resolver.resolve("round_off") if cn.round_off != 0 else None
+
+    ledger_draft = LedgerPostingEngine.create_credit_note_reversal_posting(
+        tenant_id=tenant_id,
+        credit_note_id=cn.id,
+        credit_note_number=cn.credit_note_number,
+        cancel_date=date.today(),
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=cn.subtotal,
+        cgst_account_id=cgst_account_id,
+        cgst_amount=cn.cgst_amount,
+        sgst_account_id=sgst_account_id,
+        sgst_amount=cn.sgst_amount,
+        igst_account_id=igst_account_id,
+        igst_amount=cn.igst_amount,
+        utgst_account_id=utgst_account_id,
+        utgst_amount=cn.utgst_amount,
+        cess_account_id=cess_account_id,
+        cess_amount=cn.cess_amount,
+        round_off_account_id=round_off_account_id,
+        round_off_amount=cn.round_off,
+    )
+
+    journal_entry = JournalEntry(
+        tenant_id=tenant_id,
+        entry_date=ledger_draft.entry_date,
+        reference_number=ledger_draft.reference_number,
+        description=ledger_draft.description,
+        source_type="CREDIT_NOTE",
+        source_id=cn.id,
+        lines=[
+            JournalLine(
+                account_id=line.account_id,
+                amount=line.amount,
+                direction=line.direction,
+                narration=line.narration
+            )
+            for line in ledger_draft.lines
+        ]
+    )
+
+    cn.status = "CANCELLED"
+    db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
     update_account_balances(db, tenant_id, affected)
     db.commit()
     db.refresh(cn)
@@ -785,6 +869,7 @@ def finalize_debit_note(
     igst_account_id = resolver.resolve("igst_output")
     utgst_account_id = resolver.resolve("utgst_output")
     cess_account_id = resolver.resolve("cess_output")
+    round_off_account_id = resolver.resolve("round_off") if dn.round_off != 0 else None
 
     ledger_draft = LedgerPostingEngine.create_debit_note_posting(
         tenant_id=tenant_id,
@@ -803,7 +888,9 @@ def finalize_debit_note(
         utgst_account_id=utgst_account_id,
         utgst_amount=dn.utgst_amount,
         cess_account_id=cess_account_id,
-        cess_amount=dn.cess_amount
+        cess_amount=dn.cess_amount,
+        round_off_account_id=round_off_account_id,
+        round_off_amount=dn.round_off,
     )
 
     journal_entry = JournalEntry(
@@ -825,6 +912,87 @@ def finalize_debit_note(
     )
 
     dn.status = "ISSUED"
+    db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
+    db.commit()
+    db.refresh(dn)
+    return dn
+
+
+@router.post("/debit-notes/{dn_id}/cancel", response_model=DebitNoteResponse)
+def cancel_debit_note(
+    dn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+):
+    """Cancels an issued debit note by posting a reversal journal entry."""
+    dn = db.query(DebitNote).filter(
+        DebitNote.id == dn_id,
+        DebitNote.tenant_id == tenant_id,
+        DebitNote.deleted_at == None
+    ).first()
+    if not dn:
+        raise HTTPException(status_code=404, detail="Debit Note not found.")
+
+    if dn.status != "ISSUED":
+        raise HTTPException(status_code=400, detail="Only issued Debit Notes can be cancelled.")
+
+    contact_id = dn.invoice.contact_id if dn.invoice else None
+    if not contact_id:
+        raise HTTPException(status_code=400, detail="Debit Note must be linked to a contact or invoice for cancellation.")
+
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    cgst_account_id = resolver.resolve("cgst_output")
+    sgst_account_id = resolver.resolve("sgst_output")
+    igst_account_id = resolver.resolve("igst_output")
+    utgst_account_id = resolver.resolve("utgst_output")
+    cess_account_id = resolver.resolve("cess_output")
+    round_off_account_id = resolver.resolve("round_off") if dn.round_off != 0 else None
+
+    ledger_draft = LedgerPostingEngine.create_debit_note_reversal_posting(
+        tenant_id=tenant_id,
+        debit_note_id=dn.id,
+        debit_note_number=dn.debit_note_number,
+        cancel_date=date.today(),
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=dn.subtotal,
+        cgst_account_id=cgst_account_id,
+        cgst_amount=dn.cgst_amount,
+        sgst_account_id=sgst_account_id,
+        sgst_amount=dn.sgst_amount,
+        igst_account_id=igst_account_id,
+        igst_amount=dn.igst_amount,
+        utgst_account_id=utgst_account_id,
+        utgst_amount=dn.utgst_amount,
+        cess_account_id=cess_account_id,
+        cess_amount=dn.cess_amount,
+        round_off_account_id=round_off_account_id,
+        round_off_amount=dn.round_off,
+    )
+
+    journal_entry = JournalEntry(
+        tenant_id=tenant_id,
+        entry_date=ledger_draft.entry_date,
+        reference_number=ledger_draft.reference_number,
+        description=ledger_draft.description,
+        source_type="DEBIT_NOTE",
+        source_id=dn.id,
+        lines=[
+            JournalLine(
+                account_id=line.account_id,
+                amount=line.amount,
+                direction=line.direction,
+                narration=line.narration
+            )
+            for line in ledger_draft.lines
+        ]
+    )
+
+    dn.status = "CANCELLED"
     db.add(journal_entry)
     affected = {line.account_id for line in ledger_draft.lines}
     update_account_balances(db, tenant_id, affected)
@@ -888,12 +1056,13 @@ def update_invoice(
         # Use upsert logic: update existing, create new, delete removed
         origin_state_code = resolve_origin_state_code(db, tenant_id)
         
-        # Map existing lines by a composite key (product_id + hsn_sac as a simple unique key)
+        # Map existing lines by UUID (if available) or composite key
         existing_lines = db.query(InvoiceLine).filter(InvoiceLine.invoice_id == id).all()
-        existing_map = {(line.product_id, line.hsn_sac): line for line in existing_lines}
-        
+        existing_by_id = {str(line.id): line for line in existing_lines if line.id}
+        existing_by_key = {(line.product_id, line.hsn_sac, line.gst_rate, line.rate): line for line in existing_lines}
+
         # Track which existing lines are being kept
-        kept_keys = set()
+        kept_ids = set()
         db_lines = []
         inv_subtotal = Decimal("0.0000")
         inv_cgst = Decimal("0.0000")
@@ -916,10 +1085,17 @@ def update_invoice(
                 gst_rate=line.gst_rate
             )
 
-            key = (line.product_id, line.hsn_sac)
-            if key in existing_map:
+            # Match by UUID first, fall back to composite key
+            db_line = None
+            if line.id and str(line.id) in existing_by_id:
+                db_line = existing_by_id[str(line.id)]
+            if db_line is None:
+                key = (line.product_id, line.hsn_sac, line.gst_rate, line.rate)
+                db_line = existing_by_key.get(key)
+
+            if db_line is not None:
                 # Update existing line
-                db_line = existing_map[key]
+                kept_ids.add(str(db_line.id))
                 db_line.quantity = line.quantity
                 db_line.rate = line.rate
                 db_line.discount = line.discount
@@ -963,7 +1139,8 @@ def update_invoice(
                 db.add(db_line)
             
             db_lines.append(db_line)
-            kept_keys.add(key)
+            if db_line.id:
+                kept_ids.add(str(db_line.id))
 
             inv_subtotal += db_line.subtotal
             inv_cgst += db_line.cgst_amount
@@ -974,8 +1151,8 @@ def update_invoice(
             inv_discount += db_line.discount
 
         # Delete removed lines
-        for key, existing_line in existing_map.items():
-            if key not in kept_keys:
+        for existing_line in existing_lines:
+            if str(existing_line.id) not in kept_ids:
                 db.delete(existing_line)
 
         # Apply header-level discount and shipping
@@ -1046,6 +1223,7 @@ def finalize_invoice(
         customer_account_id=customer_account_id,
         sales_revenue_account_id=sales_revenue_account_id,
         subtotal=invoice.subtotal,
+        discount_total=invoice.discount_total,
         cgst_account_id=cgst_account_id,
         cgst_amount=invoice.cgst_amount,
         sgst_account_id=sgst_account_id,
@@ -1078,27 +1256,10 @@ def finalize_invoice(
         ]
     )
 
-    # Update account balances
-    for line in ledger_draft.lines:
-        account = db.query(Account).filter(
-            Account.id == line.account_id,
-            Account.tenant_id == tenant_id,
-            Account.deleted_at == None
-        ).with_for_update().first()
-        if account:
-            if account.account_type in ("ASSET", "EXPENSE"):
-                if line.direction == "DEBIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
-            else:
-                if line.direction == "CREDIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
-
     invoice.status = "SENT"
     db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -1139,7 +1300,7 @@ def record_invoice_payment(
     for alloc in payload.allocations:
         if alloc.invoice_id != id:
             raise HTTPException(status_code=400, detail="Allocation invoice ID mismatch.")
-        
+
         remaining = invoice.total - invoice.amount_paid
         if alloc.amount > remaining:
             raise HTTPException(status_code=400, detail=f"Allocation amount {alloc.amount} exceeds invoice remaining total {remaining}")
@@ -1151,6 +1312,12 @@ def record_invoice_payment(
         )
         db.add(db_alloc)
         allocated_amount += alloc.amount
+
+    if payload.amount != allocated_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Payment amount ({payload.amount}) must equal total allocated amount ({allocated_amount})."
+        )
 
     invoice.amount_paid += allocated_amount
     if invoice.amount_paid >= invoice.total:
@@ -1191,25 +1358,8 @@ def record_invoice_payment(
     )
 
     db.add(journal_entry)
-
-    # Update account balances
-    for line in ledger_draft.lines:
-        account = db.query(Account).filter(
-            Account.id == line.account_id,
-            Account.tenant_id == tenant_id,
-            Account.deleted_at == None
-        ).with_for_update().first()
-        if account:
-            if account.account_type in ("ASSET", "EXPENSE"):
-                if line.direction == "DEBIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
-            else:
-                if line.direction == "CREDIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
 
     db.commit()
     db.refresh(invoice)
@@ -1233,13 +1383,17 @@ def cancel_invoice(
     
     if invoice.status != "SENT":
         raise HTTPException(status_code=400, detail="Only finalized (SENT) invoices can be cancelled.")
-    
-    # Reverse payment allocations: remove allocations and reset invoice amount_paid
+
+    # Block cancellation if payments exist — user must reverse payments first
     allocations = db.query(PaymentAllocation).filter(PaymentAllocation.invoice_id == id).all()
-    for alloc in allocations:
-        db.delete(alloc)
+    if allocations:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot cancel an invoice with applied payments. Reverse payments first."
+        )
+
     invoice.amount_paid = Decimal("0.0000")
-    
+
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
@@ -1248,7 +1402,8 @@ def cancel_invoice(
     igst_account_id = resolver.resolve("igst_output")
     utgst_account_id = resolver.resolve("utgst_output")
     cess_account_id = resolver.resolve("cess_output")
-    
+    round_off_account_id = resolver.resolve("round_off") if invoice.round_off != 0 else None
+
     ledger_draft = LedgerPostingEngine.create_invoice_reversal_posting(
         tenant_id=tenant_id,
         invoice_id=invoice.id,
@@ -1257,6 +1412,7 @@ def cancel_invoice(
         customer_account_id=customer_account_id,
         sales_revenue_account_id=sales_revenue_account_id,
         subtotal=invoice.subtotal,
+        discount_total=invoice.discount_total,
         cgst_account_id=cgst_account_id,
         cgst_amount=invoice.cgst_amount,
         sgst_account_id=sgst_account_id,
@@ -1266,9 +1422,11 @@ def cancel_invoice(
         utgst_account_id=utgst_account_id,
         utgst_amount=invoice.utgst_amount,
         cess_account_id=cess_account_id,
-        cess_amount=invoice.cess_amount
+        cess_amount=invoice.cess_amount,
+        round_off_account_id=round_off_account_id,
+        round_off_amount=invoice.round_off,
     )
-    
+
     journal_entry = JournalEntry(
         tenant_id=tenant_id,
         entry_date=ledger_draft.entry_date,
@@ -1286,28 +1444,11 @@ def cancel_invoice(
             for line in ledger_draft.lines
         ]
     )
-    
+
     invoice.status = "CANCELLED"
     db.add(journal_entry)
-
-    # Update account balances (reversal entries reverse the original postings)
-    for line in ledger_draft.lines:
-        account = db.query(Account).filter(
-            Account.id == line.account_id,
-            Account.tenant_id == tenant_id,
-            Account.deleted_at == None
-        ).with_for_update().first()
-        if account:
-            if account.account_type in ("ASSET", "EXPENSE"):
-                if line.direction == "DEBIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
-            else:
-                if line.direction == "CREDIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
 
     db.commit()
     db.refresh(invoice)

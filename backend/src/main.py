@@ -65,12 +65,14 @@ from src.api.v1.hsn_lookup import router as hsn_lookup_router
 from src.api.v1.gstr2a import router as gstr2a_router
 from src.api.v1.vyapar_import import router as vyapar_import_router
 from src.api.v1.eway_bills import router as eway_bills_router
+from src.api.idempotency_middleware import IdempotencyMiddleware
 from src.api.v1.reports import router as reports_router
 from src.api.v1.audit import router as audit_router
 from src.api.v1.expenses import router as expenses_router
 from src.api.v1.vyapar_import import router as vyapar_import_router
 from src.schemas.document import ContactResponse, ProductResponse
 from src.infrastructure.database.models import Contact, Product
+from src.infrastructure.database.idempotency import IdempotencyRecord  # noqa: F401
 from src.api.deps import enforce_permission
 
 
@@ -237,6 +239,13 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Tenant-ID", "Accept"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Idempotency Middleware
+# ---------------------------------------------------------------------------
+
+app.add_middleware(IdempotencyMiddleware)
 
 
 # ---------------------------------------------------------------------------

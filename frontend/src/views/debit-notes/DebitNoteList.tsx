@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { Plus, FileMinus, ShieldAlert, Eye, Search } from "lucide-react";
+import { Plus, FileMinus, ShieldAlert, Eye, Edit, Search } from "lucide-react";
+import Pagination from "../../components/Pagination";
 
 interface DebitNoteListProps {
   onNavigate: (view: string, id?: string) => void;
@@ -19,6 +20,8 @@ interface DebitNoteItem {
 
 export default function DebitNoteList({ onNavigate }: DebitNoteListProps) {
   const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const itemsPerPage = 20;
   const { data: notes = [], isLoading, error } = useQuery<DebitNoteItem[]>({
     queryKey: ["debit-notes"],
     queryFn: async () => { const r = await apiClient.get("/invoices/debit-notes"); return r.data; },
@@ -26,10 +29,16 @@ export default function DebitNoteList({ onNavigate }: DebitNoteListProps) {
 
   const formatCurrency = (n: number) => new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(n);
   const filtered = notes.filter(n => n.debit_note_number.includes(search) || (n.reason || "").toLowerCase().includes(search.toLowerCase()));
+  const totalPages = Math.ceil(filtered.length / itemsPerPage);
+  const paginatedItems = filtered.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+
+  useEffect(() => setPage(1), [search]);
+
   const getBadge = (s: string) => {
-    if (s === "DRAFT") return <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">Draft</span>;
-    if (s === "ISSUED") return <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200">Issued</span>;
-    return <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">Cancelled</span>;
+    const base = "px-2.5 py-1 text-xs font-semibold rounded-full inline-flex items-center border";
+    if (s === "DRAFT") return `${base} bg-slate-100 text-slate-700 border-slate-200`;
+    if (s === "ISSUED") return `${base} bg-blue-50 text-blue-700 border-blue-200`;
+    return `${base} bg-rose-50 text-rose-700 border-rose-200`;
   };
 
   return (
@@ -50,6 +59,7 @@ export default function DebitNoteList({ onNavigate }: DebitNoteListProps) {
       ) : filtered.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-slate-100 shadow-sm"><FileMinus className="w-12 h-12 text-slate-300 mx-auto mb-3" /><h3 className="text-sm font-semibold text-slate-700">No Debit Notes Found</h3></div>
       ) : (
+        <>
         <div className="bg-white rounded-xl shadow-sm border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-left text-sm">
@@ -57,15 +67,18 @@ export default function DebitNoteList({ onNavigate }: DebitNoteListProps) {
                 <tr><th className="px-6 py-3.5">Debit Note #</th><th className="px-6 py-3.5">Date</th><th className="px-6 py-3.5">Reason</th><th className="px-6 py-3.5 text-right">Amount</th><th className="px-6 py-3.5">Status</th><th className="px-6 py-3.5 text-right">Actions</th></tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map(n => (
+                {paginatedItems.map(n => (
                   <tr key={n.id} className="hover:bg-slate-50/50 transition">
                     <td className="px-6 py-4 font-mono font-semibold text-zinc-800">{n.debit_note_number}</td>
                     <td className="px-6 py-4 text-zinc-500">{new Date(n.issue_date).toLocaleDateString("en-IN")}</td>
                     <td className="px-6 py-4 text-zinc-500 max-w-[200px] truncate">{n.reason || "—"}</td>
                     <td className="px-6 py-4 text-right font-mono font-bold text-zinc-800">{formatCurrency(n.total)}</td>
-                    <td className="px-6 py-4">{getBadge(n.status)}</td>
+                    <td className="px-6 py-4"><span className={getBadge(n.status)}>{n.status}</span></td>
                     <td className="px-6 py-4 text-right">
-                      <button onClick={() => onNavigate("debit_note_detail", n.id)} title="View" aria-label="View debit note" className="p-1 text-zinc-400 hover:text-brand-600 hover:bg-zinc-100 rounded transition"><Eye className="w-4 h-4" /></button>
+                      <div className="inline-flex items-center gap-1">
+                        <button onClick={() => onNavigate("debit_note_detail", n.id)} title="View" aria-label="View debit note" className="p-1 text-zinc-400 hover:text-brand-600 hover:bg-zinc-100 rounded transition"><Eye className="w-4 h-4" /></button>
+                        <button onClick={() => onNavigate("debit_note_detail", n.id)} title="Edit" aria-label="Edit debit note" className="p-1 text-zinc-400 hover:text-brand-600 hover:bg-zinc-100 rounded transition"><Edit className="w-4 h-4" /></button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -73,6 +86,8 @@ export default function DebitNoteList({ onNavigate }: DebitNoteListProps) {
             </table>
           </div>
         </div>
+        <Pagination currentPage={page} totalPages={totalPages} onPageChange={setPage} totalItems={filtered.length} pageSize={itemsPerPage} />
+        </>
       )}
     </div>
   );

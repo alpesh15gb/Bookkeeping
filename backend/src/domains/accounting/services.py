@@ -71,6 +71,7 @@ class LedgerPostingEngine:
         customer_account_id: uuid.UUID,
         sales_revenue_account_id: uuid.UUID,
         subtotal: Decimal,
+        discount_total: Decimal = Decimal("0.00"),
         cgst_account_id: Optional[uuid.UUID] = None,
         cgst_amount: Decimal = Decimal("0.00"),
         sgst_account_id: Optional[uuid.UUID] = None,
@@ -92,18 +93,19 @@ class LedgerPostingEngine:
         the GST, so no output tax accounts are credited by the seller.
         """
         lines: List[JournalLineDraft] = []
+        net_subtotal = subtotal - discount_total
 
         if is_rcm:
             # RCM: seller invoices subtotal only — buyer accounts for tax
-            invoice_total = subtotal
+            invoice_total = net_subtotal
             lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable (RCM): {invoice_number}"))
-            lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "CREDIT", f"Sales Revenue (RCM): {invoice_number}"))
+            lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue (RCM): {invoice_number}"))
         else:
             tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-            invoice_total = subtotal + tax_total
+            invoice_total = net_subtotal + tax_total + round_off_amount
 
             lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable: {invoice_number}"))
-            lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "CREDIT", f"Sales Revenue: {invoice_number}"))
+            lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue: {invoice_number}"))
 
             if cgst_amount > 0 and cgst_account_id:
                 lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "CREDIT", "CGST Output"))
@@ -118,11 +120,13 @@ class LedgerPostingEngine:
 
         if round_off_amount != 0 and round_off_account_id:
             if round_off_amount > 0:
-                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {invoice_number}"))
-                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {invoice_number}"))
-            else:
+                # Customer pays MORE; increase receivable (debit customer)
                 lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {invoice_number}"))
                 lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {invoice_number}"))
+            else:
+                # Customer pays LESS; decrease receivable (credit customer)
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {invoice_number}"))
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {invoice_number}"))
 
         return JournalEntryDraft(tenant_id, invoice_date, invoice_number, f"Ledger posting for Sales invoice {invoice_number}", "INVOICE", invoice_id, lines)
 
@@ -135,6 +139,7 @@ class LedgerPostingEngine:
         vendor_account_id: uuid.UUID,
         purchase_expense_account_id: uuid.UUID,
         subtotal: Decimal,
+        discount_total: Decimal = Decimal("0.00"),
         cgst_account_id: Optional[uuid.UUID] = None,
         cgst_amount: Decimal = Decimal("0.00"),
         sgst_account_id: Optional[uuid.UUID] = None,
@@ -144,23 +149,26 @@ class LedgerPostingEngine:
         utgst_account_id: Optional[uuid.UUID] = None,
         utgst_amount: Decimal = Decimal("0.00"),
         cess_account_id: Optional[uuid.UUID] = None,
-        cess_amount: Decimal = Decimal("0.00")
+        cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         """
         Generates Double Entry Posting for Purchase Bills (Payables).
         
         Debits:
-          - Purchase Expense A/c (Inventory/COGS) -> Subtotal
+          - Purchase Expense A/c (Inventory/COGS) -> Subtotal net of discount
           - Input Tax Accounts (CGST, SGST, IGST, etc.) -> tax splits
         Credits:
           - Vendor A/c (Accounts Payable) -> Bill Total
         """
         lines: List[JournalLineDraft] = []
+        net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        bill_total = subtotal + tax_total
+        bill_total = net_subtotal + tax_total + round_off_amount
 
-        # 1. Debit Purchase Expense
-        lines.append(JournalLineDraft(purchase_expense_account_id, subtotal, "DEBIT", f"Expense: Bill {bill_number}"))
+        # 1. Debit Purchase Expense (net of discount)
+        lines.append(JournalLineDraft(purchase_expense_account_id, net_subtotal, "DEBIT", f"Expense: Bill {bill_number}"))
 
         # 2. Debit Input Tax Accounts (ITC Eligible)
         if cgst_amount > 0 and cgst_account_id:
@@ -176,6 +184,16 @@ class LedgerPostingEngine:
 
         # 3. Credit Accounts Payable
         lines.append(JournalLineDraft(vendor_account_id, bill_total, "CREDIT", f"Payable: Bill {bill_number}"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                # We pay MORE; increase payable (credit vendor)
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {bill_number}"))
+                lines.append(JournalLineDraft(vendor_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {bill_number}"))
+            else:
+                # We pay LESS; decrease payable (debit vendor)
+                lines.append(JournalLineDraft(vendor_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {bill_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {bill_number}"))
 
         return JournalEntryDraft(
             tenant_id=tenant_id,
@@ -196,15 +214,109 @@ class LedgerPostingEngine:
         expense_account_id: uuid.UUID,
         cash_account_id: uuid.UUID,
         amount: Decimal,
+        cgst_account_id: Optional[uuid.UUID] = None,
+        cgst_amount: Decimal = Decimal("0.00"),
+        sgst_account_id: Optional[uuid.UUID] = None,
+        sgst_amount: Decimal = Decimal("0.00"),
+        igst_account_id: Optional[uuid.UUID] = None,
+        igst_amount: Decimal = Decimal("0.00"),
+        utgst_account_id: Optional[uuid.UUID] = None,
+        utgst_amount: Decimal = Decimal("0.00"),
+        cess_account_id: Optional[uuid.UUID] = None,
+        cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
-        lines.append(JournalLineDraft(expense_account_id, amount, "DEBIT", f"Expense recorded: {expense_number}"))
-        lines.append(JournalLineDraft(cash_account_id, amount, "CREDIT", f"Cash/Bank used for: {expense_number}"))
+        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
+        total = amount + tax_total + round_off_amount
+
+        lines.append(JournalLineDraft(expense_account_id, amount, "DEBIT", f"Expense: {expense_number}"))
+
+        if cgst_amount > 0 and cgst_account_id:
+            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "DEBIT", "CGST Input"))
+        if sgst_amount > 0 and sgst_account_id:
+            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "DEBIT", "SGST Input"))
+        if igst_amount > 0 and igst_account_id:
+            lines.append(JournalLineDraft(igst_account_id, igst_amount, "DEBIT", "IGST Input"))
+        if utgst_amount > 0 and utgst_account_id:
+            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "UTGST Input"))
+        if cess_amount > 0 and cess_account_id:
+            lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Cess Input"))
+
+        lines.append(JournalLineDraft(cash_account_id, total, "CREDIT", f"Cash/Bank: {expense_number}"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {expense_number}"))
+                lines.append(JournalLineDraft(cash_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {expense_number}"))
+            else:
+                lines.append(JournalLineDraft(cash_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {expense_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {expense_number}"))
+
         return JournalEntryDraft(
             tenant_id=tenant_id,
             entry_date=expense_date,
             reference_number=expense_number,
             description=f"Ledger posting for expense {expense_number}",
+            source_type="EXPENSE",
+            source_id=expense_id,
+            lines=lines
+        )
+
+    @staticmethod
+    def create_expense_reversal_posting(
+        tenant_id: uuid.UUID,
+        expense_id: uuid.UUID,
+        expense_number: str,
+        cancel_date: date,
+        expense_account_id: uuid.UUID,
+        cash_account_id: uuid.UUID,
+        amount: Decimal,
+        cgst_account_id: Optional[uuid.UUID] = None,
+        cgst_amount: Decimal = Decimal("0.00"),
+        sgst_account_id: Optional[uuid.UUID] = None,
+        sgst_amount: Decimal = Decimal("0.00"),
+        igst_account_id: Optional[uuid.UUID] = None,
+        igst_amount: Decimal = Decimal("0.00"),
+        utgst_account_id: Optional[uuid.UUID] = None,
+        utgst_amount: Decimal = Decimal("0.00"),
+        cess_account_id: Optional[uuid.UUID] = None,
+        cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
+    ) -> JournalEntryDraft:
+        lines: List[JournalLineDraft] = []
+        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
+        total = amount + tax_total + round_off_amount
+
+        lines.append(JournalLineDraft(cash_account_id, total, "DEBIT", f"Expense reversal: {expense_number}"))
+        lines.append(JournalLineDraft(expense_account_id, amount, "CREDIT", f"Expense reversal: {expense_number}"))
+
+        if cgst_amount > 0 and cgst_account_id:
+            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "CREDIT", "CGST Input Reversal"))
+        if sgst_amount > 0 and sgst_account_id:
+            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "CREDIT", "SGST Input Reversal"))
+        if igst_amount > 0 and igst_account_id:
+            lines.append(JournalLineDraft(igst_account_id, igst_amount, "CREDIT", "IGST Input Reversal"))
+        if utgst_amount > 0 and utgst_account_id:
+            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "CREDIT", "UTGST Input Reversal"))
+        if cess_amount > 0 and cess_account_id:
+            lines.append(JournalLineDraft(cess_account_id, cess_amount, "CREDIT", "Cess Input Reversal"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(cash_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {expense_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {expense_number}"))
+            else:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {expense_number}"))
+                lines.append(JournalLineDraft(cash_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {expense_number}"))
+
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=cancel_date,
+            reference_number=f"REV-{expense_number}",
+            description=f"Reversal of expense {expense_number}",
             source_type="EXPENSE",
             source_id=expense_id,
             lines=lines
@@ -275,10 +387,12 @@ class LedgerPostingEngine:
         utgst_amount: Decimal = Decimal("0.00"),
         cess_account_id: Optional[uuid.UUID] = None,
         cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        cn_total = subtotal + tax_total
+        cn_total = subtotal + tax_total + round_off_amount
 
         lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Credit Note: {credit_note_number}"))
         lines.append(JournalLineDraft(customer_account_id, cn_total, "CREDIT", f"Credit Note: {credit_note_number}"))
@@ -293,6 +407,14 @@ class LedgerPostingEngine:
             lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "UTGST Reversal"))
         if cess_amount > 0 and cess_account_id:
             lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Cess Reversal"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {credit_note_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {credit_note_number}"))
+            else:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {credit_note_number}"))
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {credit_note_number}"))
 
         return JournalEntryDraft(
             tenant_id=tenant_id,
@@ -323,10 +445,12 @@ class LedgerPostingEngine:
         utgst_amount: Decimal = Decimal("0.00"),
         cess_account_id: Optional[uuid.UUID] = None,
         cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        dn_total = subtotal + tax_total
+        dn_total = subtotal + tax_total + round_off_amount
 
         lines.append(JournalLineDraft(customer_account_id, dn_total, "DEBIT", f"Debit Note: {debit_note_number}"))
         lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "CREDIT", f"Debit Note: {debit_note_number}"))
@@ -342,6 +466,14 @@ class LedgerPostingEngine:
         if cess_amount > 0 and cess_account_id:
             lines.append(JournalLineDraft(cess_account_id, cess_amount, "CREDIT", "Cess Adjustment"))
 
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {debit_note_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {debit_note_number}"))
+            else:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off: {debit_note_number}"))
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off: {debit_note_number}"))
+
         return JournalEntryDraft(
             tenant_id=tenant_id,
             entry_date=issue_date,
@@ -353,10 +485,10 @@ class LedgerPostingEngine:
         )
 
     @staticmethod
-    def create_invoice_reversal_posting(
+    def create_credit_note_reversal_posting(
         tenant_id: uuid.UUID,
-        invoice_id: uuid.UUID,
-        invoice_number: str,
+        credit_note_id: uuid.UUID,
+        credit_note_number: str,
         cancel_date: date,
         customer_account_id: uuid.UUID,
         sales_revenue_account_id: uuid.UUID,
@@ -371,12 +503,132 @@ class LedgerPostingEngine:
         utgst_amount: Decimal = Decimal("0.00"),
         cess_account_id: Optional[uuid.UUID] = None,
         cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = subtotal + tax_total
+        cn_total = subtotal + tax_total + round_off_amount
 
-        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Cancellation: {invoice_number}"))
+        lines.append(JournalLineDraft(customer_account_id, cn_total, "DEBIT", f"Credit Note Cancellation: {credit_note_number}"))
+        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "CREDIT", f"Credit Note Cancellation: {credit_note_number}"))
+
+        if cgst_amount > 0 and cgst_account_id:
+            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "CREDIT", "CGST Reversal"))
+        if sgst_amount > 0 and sgst_account_id:
+            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "CREDIT", "SGST Reversal"))
+        if igst_amount > 0 and igst_account_id:
+            lines.append(JournalLineDraft(igst_account_id, igst_amount, "CREDIT", "IGST Reversal"))
+        if utgst_amount > 0 and utgst_account_id:
+            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "CREDIT", "UTGST Reversal"))
+        if cess_amount > 0 and cess_account_id:
+            lines.append(JournalLineDraft(cess_account_id, cess_amount, "CREDIT", "Cess Reversal"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {credit_note_number}"))
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {credit_note_number}"))
+            else:
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {credit_note_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {credit_note_number}"))
+
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=cancel_date,
+            reference_number=f"REV-{credit_note_number}",
+            description=f"Reversal of credit note {credit_note_number}",
+            source_type="CREDIT_NOTE",
+            source_id=credit_note_id,
+            lines=lines
+        )
+
+    @staticmethod
+    def create_debit_note_reversal_posting(
+        tenant_id: uuid.UUID,
+        debit_note_id: uuid.UUID,
+        debit_note_number: str,
+        cancel_date: date,
+        customer_account_id: uuid.UUID,
+        sales_revenue_account_id: uuid.UUID,
+        subtotal: Decimal,
+        cgst_account_id: Optional[uuid.UUID] = None,
+        cgst_amount: Decimal = Decimal("0.00"),
+        sgst_account_id: Optional[uuid.UUID] = None,
+        sgst_amount: Decimal = Decimal("0.00"),
+        igst_account_id: Optional[uuid.UUID] = None,
+        igst_amount: Decimal = Decimal("0.00"),
+        utgst_account_id: Optional[uuid.UUID] = None,
+        utgst_amount: Decimal = Decimal("0.00"),
+        cess_account_id: Optional[uuid.UUID] = None,
+        cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
+    ) -> JournalEntryDraft:
+        lines: List[JournalLineDraft] = []
+        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
+        dn_total = subtotal + tax_total + round_off_amount
+
+        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Debit Note Cancellation: {debit_note_number}"))
+        lines.append(JournalLineDraft(customer_account_id, dn_total, "CREDIT", f"Debit Note Cancellation: {debit_note_number}"))
+
+        if cgst_amount > 0 and cgst_account_id:
+            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "DEBIT", "CGST Reversal"))
+        if sgst_amount > 0 and sgst_account_id:
+            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "DEBIT", "SGST Reversal"))
+        if igst_amount > 0 and igst_account_id:
+            lines.append(JournalLineDraft(igst_account_id, igst_amount, "DEBIT", "IGST Reversal"))
+        if utgst_amount > 0 and utgst_account_id:
+            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "UTGST Reversal"))
+        if cess_amount > 0 and cess_account_id:
+            lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Cess Reversal"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {debit_note_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {debit_note_number}"))
+            else:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {debit_note_number}"))
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {debit_note_number}"))
+
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=cancel_date,
+            reference_number=f"REV-{debit_note_number}",
+            description=f"Reversal of debit note {debit_note_number}",
+            source_type="DEBIT_NOTE",
+            source_id=debit_note_id,
+            lines=lines
+        )
+
+    @staticmethod
+    def create_invoice_reversal_posting(
+        tenant_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        invoice_number: str,
+        cancel_date: date,
+        customer_account_id: uuid.UUID,
+        sales_revenue_account_id: uuid.UUID,
+        subtotal: Decimal,
+        discount_total: Decimal = Decimal("0.00"),
+        cgst_account_id: Optional[uuid.UUID] = None,
+        cgst_amount: Decimal = Decimal("0.00"),
+        sgst_account_id: Optional[uuid.UUID] = None,
+        sgst_amount: Decimal = Decimal("0.00"),
+        igst_account_id: Optional[uuid.UUID] = None,
+        igst_amount: Decimal = Decimal("0.00"),
+        utgst_account_id: Optional[uuid.UUID] = None,
+        utgst_amount: Decimal = Decimal("0.00"),
+        cess_account_id: Optional[uuid.UUID] = None,
+        cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
+    ) -> JournalEntryDraft:
+        lines: List[JournalLineDraft] = []
+        net_subtotal = subtotal - discount_total
+        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
+        total = net_subtotal + tax_total + round_off_amount
+
+        lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "DEBIT", f"Cancellation: {invoice_number}"))
         lines.append(JournalLineDraft(customer_account_id, total, "CREDIT", f"Cancellation: {invoice_number}"))
 
         if cgst_amount > 0 and cgst_account_id:
@@ -389,6 +641,14 @@ class LedgerPostingEngine:
             lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "UTGST Reversal"))
         if cess_amount > 0 and cess_account_id:
             lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Cess Reversal"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {invoice_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {invoice_number}"))
+            else:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {invoice_number}"))
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {invoice_number}"))
 
         return JournalEntryDraft(
             tenant_id=tenant_id,
@@ -585,7 +845,7 @@ def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Opti
         else:
             account.current_balance = (credit_sum - debit_sum).quantize(Decimal("0.0001"))
 
-    db.flush()
+    # NOTE: Caller is responsible for db.commit()
 
 
 def recalculate_all_account_balances(db: Session, tenant_id: uuid.UUID) -> None:
@@ -622,4 +882,4 @@ def recalculate_all_account_balances(db: Session, tenant_id: uuid.UUID) -> None:
     for account in accounts:
         account.current_balance = balance_map.get(account.id, Decimal("0.0000")).quantize(Decimal("0.0001"))
 
-    db.commit()
+    # NOTE: Caller is responsible for db.commit()

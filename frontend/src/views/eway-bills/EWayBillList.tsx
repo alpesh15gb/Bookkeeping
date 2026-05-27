@@ -26,9 +26,16 @@ export default function EWayBillList({ onNavigate }: EWayBillListProps) {
 
   const filtered = bills.filter(b => b.eway_bill_number.includes(search) || (b.transporter_name || "").toLowerCase().includes(search.toLowerCase()));
   const getBadge = (s: string) => {
-    if (s === "GENERATED") return <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">Active</span>;
-    if (s === "CANCELLED") return <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">Cancelled</span>;
-    return <span className="px-2.5 py-0.5 rounded text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">{s}</span>;
+    const base = "px-2.5 py-1 text-xs font-semibold rounded-full inline-flex items-center border";
+    if (s === "GENERATED") return `${base} bg-emerald-50 text-emerald-700 border-emerald-200`;
+    if (s === "CANCELLED") return `${base} bg-rose-50 text-rose-700 border-rose-200`;
+    return `${base} bg-slate-100 text-slate-700 border-slate-200`;
+  };
+
+  const getDisplayLabel = (s: string) => {
+    if (s === "GENERATED") return "Active";
+    if (s === "CANCELLED") return "Cancelled";
+    return s;
   };
 
   return (
@@ -62,7 +69,7 @@ export default function EWayBillList({ onNavigate }: EWayBillListProps) {
                     <td className="px-6 py-4 text-zinc-600">{b.transporter_name || "—"}</td>
                     <td className="px-6 py-4 font-mono text-zinc-500">{b.vehicle_number || "—"}</td>
                     <td className="px-6 py-4 text-zinc-500">{b.valid_until ? new Date(b.valid_until).toLocaleDateString("en-IN") : "—"}</td>
-                    <td className="px-6 py-4">{getBadge(b.status)}</td>
+                    <td className="px-6 py-4"><span className={getBadge(b.status)}>{getDisplayLabel(b.status)}</span></td>
                   </tr>
                 ))}
               </tbody>

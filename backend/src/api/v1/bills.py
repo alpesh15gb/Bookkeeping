@@ -3,12 +3,13 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 from decimal import Decimal
+from datetime import date
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import Bill, BillLine, Contact, Product, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
 from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate
 from src.domains.taxation.services import GSTEngine
-from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
+from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
 from src.domains.company.services import resolve_origin_state_code
 from src.api.deps import get_tenant_context, enforce_permission
 
@@ -94,7 +95,10 @@ def create_bill(
         bill_cess += db_line.cess_amount
         bill_discount += db_line.discount
 
-    grand_total = bill_subtotal + bill_cgst + bill_sgst + bill_igst + bill_utgst + bill_cess
+    # Round-off adjustment calculations
+    raw_total = bill_subtotal + bill_cgst + bill_sgst + bill_igst + bill_utgst + bill_cess - bill_discount
+    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    round_off = rounded_total - raw_total
 
     bill = Bill(
         tenant_id=tenant_id,
@@ -110,7 +114,8 @@ def create_bill(
         igst_amount=bill_igst,
         utgst_amount=bill_utgst,
         cess_amount=bill_cess,
-        total=grand_total,
+        round_off=round_off,
+        total=rounded_total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
         lines=db_lines
@@ -120,6 +125,105 @@ def create_bill(
     db.commit()
     db.refresh(bill)
     return bill
+
+@router.post("/preview", response_model=BillResponse, tags=["Vendor Bills (Purchases)"])
+def preview_bill(
+    payload: BillCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+):
+    """
+    Returns a computed preview of a bill without creating it.
+    Useful for frontend live preview before submission.
+    """
+    origin_state_code = resolve_origin_state_code(db, tenant_id)
+
+    db_lines = []
+    bill_subtotal = Decimal("0.0000")
+    bill_cgst = Decimal("0.0000")
+    bill_sgst = Decimal("0.0000")
+    bill_igst = Decimal("0.0000")
+    bill_utgst = Decimal("0.0000")
+    bill_cess = Decimal("0.0000")
+    bill_discount = Decimal("0.0000")
+
+    for line in payload.line_items:
+        product = db.query(Product).filter(
+            Product.id == line.product_id,
+            Product.tenant_id == tenant_id,
+            Product.deleted_at == None
+        ).first()
+        if not product:
+            raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
+
+        line_subtotal = (line.quantity * line.rate) - line.discount
+        if line_subtotal < 0:
+            raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
+
+        tax_split = GSTEngine.calculate_tax(
+            origin_state_code=origin_state_code,
+            place_of_supply_state_code=payload.pos_state_code,
+            base_amount=line_subtotal,
+            gst_rate=line.gst_rate
+        )
+
+        db_line = BillLine(
+            product_id=line.product_id,
+            quantity=line.quantity,
+            rate=line.rate,
+            discount=line.discount,
+            subtotal=line_subtotal,
+            hsn_sac=line.hsn_sac,
+            gst_rate=line.gst_rate,
+            cgst_rate=tax_split.cgst_rate,
+            cgst_amount=tax_split.cgst_amount,
+            sgst_rate=tax_split.sgst_rate,
+            sgst_amount=tax_split.sgst_amount,
+            igst_rate=tax_split.igst_rate,
+            igst_amount=tax_split.igst_amount,
+            utgst_rate=tax_split.utgst_rate,
+            utgst_amount=tax_split.utgst_amount,
+            cess_rate=tax_split.cess_rate,
+            cess_amount=tax_split.cess_amount,
+            total=tax_split.total_amount
+        )
+        db_lines.append(db_line)
+
+        bill_subtotal += db_line.subtotal
+        bill_cgst += db_line.cgst_amount
+        bill_sgst += db_line.sgst_amount
+        bill_igst += db_line.igst_amount
+        bill_utgst += db_line.utgst_amount
+        bill_cess += db_line.cess_amount
+        bill_discount += db_line.discount
+
+    raw_total = bill_subtotal + bill_cgst + bill_sgst + bill_igst + bill_utgst + bill_cess - bill_discount
+    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    round_off = rounded_total - raw_total
+
+    preview_bill = Bill(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=tenant_id,
+        contact_id=payload.contact_id,
+        bill_number="PREVIEW",
+        issue_date=payload.issue_date,
+        due_date=payload.due_date,
+        status="DRAFT",
+        subtotal=bill_subtotal,
+        discount_total=bill_discount,
+        cgst_amount=bill_cgst,
+        sgst_amount=bill_sgst,
+        igst_amount=bill_igst,
+        utgst_amount=bill_utgst,
+        cess_amount=bill_cess,
+        round_off=round_off,
+        total=rounded_total,
+        amount_paid=Decimal("0.0000"),
+        pos_state_code=payload.pos_state_code,
+        lines=db_lines
+    )
+
+    return preview_bill
 
 @router.get("", response_model=List[BillListResponse])
 def list_bills(
@@ -377,6 +481,7 @@ def finalize_bill(
     igst_account_id = resolver.resolve("igst_input")
     utgst_account_id = resolver.resolve("utgst_input")
     cess_account_id = resolver.resolve("cess_input")
+    round_off_account_id = resolver.resolve("round_off") if bill.round_off != 0 else None
 
     ledger_draft = LedgerPostingEngine.create_bill_posting(
         tenant_id=tenant_id,
@@ -386,6 +491,7 @@ def finalize_bill(
         vendor_account_id=vendor_account_id,
         purchase_expense_account_id=purchase_expense_account_id,
         subtotal=bill.subtotal,
+        discount_total=bill.discount_total,
         cgst_account_id=cgst_account_id,
         cgst_amount=bill.cgst_amount,
         sgst_account_id=sgst_account_id,
@@ -395,7 +501,9 @@ def finalize_bill(
         utgst_account_id=utgst_account_id,
         utgst_amount=bill.utgst_amount,
         cess_account_id=cess_account_id,
-        cess_amount=bill.cess_amount
+        cess_amount=bill.cess_amount,
+        round_off_account_id=round_off_account_id,
+        round_off_amount=bill.round_off,
     )
 
     journal_entry = JournalEntry(
@@ -418,25 +526,8 @@ def finalize_bill(
 
     bill.status = "UNPAID"
     db.add(journal_entry)
-
-    # Update account balances
-    for line in ledger_draft.lines:
-        account = db.query(Account).filter(
-            Account.id == line.account_id,
-            Account.tenant_id == tenant_id,
-            Account.deleted_at == None
-        ).with_for_update().first()
-        if account:
-            if account.account_type in ("ASSET", "EXPENSE"):
-                if line.direction == "DEBIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
-            else:
-                if line.direction == "CREDIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
 
     db.commit()
     db.refresh(bill)
@@ -491,6 +582,12 @@ def record_bill_payment(
         db.add(db_alloc)
         allocated_amount += alloc.amount
 
+    if payload.amount != allocated_amount:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Payment amount ({payload.amount}) must equal total allocated amount ({allocated_amount})."
+        )
+
     bill.amount_paid += allocated_amount
     if bill.amount_paid >= bill.total:
         bill.status = "PAID"
@@ -530,25 +627,102 @@ def record_bill_payment(
     )
 
     db.add(journal_entry)
+    affected = {line.account_id for line in ledger_draft.lines}
+    update_account_balances(db, tenant_id, affected)
 
-    # Update account balances
+    db.commit()
+    db.refresh(bill)
+    return bill
+
+
+@router.post("/{id}/cancel", response_model=BillResponse)
+def cancel_bill(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+):
+    """Cancels an unpaid bill, reversing its ledger postings and writing balanced reversal entries."""
+    bill = db.query(Bill).filter(
+        Bill.id == id,
+        Bill.tenant_id == tenant_id,
+        Bill.deleted_at == None
+    ).with_for_update().first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Vendor Bill not found.")
+
+    if bill.status not in ("UNPAID", "PARTIALLY_PAID"):
+        raise HTTPException(status_code=400, detail="Only unpaid or partially paid bills can be cancelled.")
+
+    # Block cancellation if payments exist
+    allocations = db.query(BillPaymentAllocation).filter(BillPaymentAllocation.bill_id == id).all()
+    if allocations:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot cancel a bill with applied payments. Reverse payments first."
+        )
+
+    bill.amount_paid = Decimal("0.0000")
+
+    resolver = AccountResolver(db, tenant_id)
+    vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
+    purchase_expense_account_id = resolver.resolve("purchases")
+    cgst_account_id = resolver.resolve("cgst_input")
+    sgst_account_id = resolver.resolve("sgst_input")
+    igst_account_id = resolver.resolve("igst_input")
+    utgst_account_id = resolver.resolve("utgst_input")
+    cess_account_id = resolver.resolve("cess_input")
+    round_off_account_id = resolver.resolve("round_off") if bill.round_off != 0 else None
+
+    ledger_draft = LedgerPostingEngine.create_bill_posting(
+        tenant_id=tenant_id,
+        bill_id=bill.id,
+        bill_number=bill.bill_number,
+        bill_date=bill.issue_date,
+        vendor_account_id=vendor_account_id,
+        purchase_expense_account_id=purchase_expense_account_id,
+        subtotal=bill.subtotal,
+        discount_total=bill.discount_total,
+        cgst_account_id=cgst_account_id,
+        cgst_amount=bill.cgst_amount,
+        sgst_account_id=sgst_account_id,
+        sgst_amount=bill.sgst_amount,
+        igst_account_id=igst_account_id,
+        igst_amount=bill.igst_amount,
+        utgst_account_id=utgst_account_id,
+        utgst_amount=bill.utgst_amount,
+        cess_account_id=cess_account_id,
+        cess_amount=bill.cess_amount,
+        round_off_account_id=round_off_account_id,
+        round_off_amount=bill.round_off,
+    )
+
+    # Reverse the directions for cancellation
+    reversal_lines = []
     for line in ledger_draft.lines:
-        account = db.query(Account).filter(
-            Account.id == line.account_id,
-            Account.tenant_id == tenant_id,
-            Account.deleted_at == None
-        ).with_for_update().first()
-        if account:
-            if account.account_type in ("ASSET", "EXPENSE"):
-                if line.direction == "DEBIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
-            else:
-                if line.direction == "CREDIT":
-                    account.current_balance += line.amount
-                else:
-                    account.current_balance -= line.amount
+        rev_direction = "CREDIT" if line.direction == "DEBIT" else "DEBIT"
+        reversal_lines.append(
+            JournalLine(
+                account_id=line.account_id,
+                amount=line.amount,
+                direction=rev_direction,
+                narration=f"Reversal: {line.narration or ''}"
+            )
+        )
+
+    journal_entry = JournalEntry(
+        tenant_id=tenant_id,
+        entry_date=date.today(),
+        reference_number=f"REV-{bill.bill_number}",
+        description=f"Reversal of vendor bill {bill.bill_number}",
+        source_type="BILL",
+        source_id=bill.id,
+        lines=reversal_lines
+    )
+
+    bill.status = "CANCELLED"
+    db.add(journal_entry)
+    affected = {line.account_id for line in reversal_lines}
+    update_account_balances(db, tenant_id, affected)
 
     db.commit()
     db.refresh(bill)

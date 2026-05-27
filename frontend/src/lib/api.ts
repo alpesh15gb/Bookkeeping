@@ -12,7 +12,7 @@ export const apiClient: AxiosInstance = axios.create({
 
 // Memory cache for Access Token (keeps tokens out of localStorage to prevent XSS theft)
 let accessTokenMemory: string | null = null;
-let refreshTokenMemory: string | null = null;
+let refreshTokenMemory: string | null = localStorage.getItem("_rt");
 let activeTenantIdMemory: string | null = null;
 
 export const setAccessToken = (token: string | null) => {
@@ -21,6 +21,11 @@ export const setAccessToken = (token: string | null) => {
 
 export const setRefreshToken = (token: string | null) => {
   refreshTokenMemory = token;
+  if (token) {
+    localStorage.setItem("_rt", token);
+  } else {
+    localStorage.removeItem("_rt");
+  }
 };
 
 export const setTenantId = (tenantId: string | null) => {

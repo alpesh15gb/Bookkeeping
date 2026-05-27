@@ -49,7 +49,7 @@ const getModeBadge = (mode: string) => {
     POS: "bg-indigo-50 text-indigo-700 border-indigo-200",
     OTHER: "bg-slate-100 text-slate-600 border-slate-200",
   };
-  return `px-2 py-0.5 text-xs font-semibold rounded border ${colors[mode?.toUpperCase()] || colors.OTHER}`;
+  return `px-2.5 py-1 text-xs font-semibold rounded-full inline-flex items-center border ${colors[mode?.toUpperCase()] || colors.OTHER}`;
 };
 
 export default function PaymentsList({ onNavigate }: PaymentsListProps) {

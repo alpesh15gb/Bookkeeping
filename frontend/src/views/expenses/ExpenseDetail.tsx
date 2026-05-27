@@ -1,7 +1,7 @@
 import React from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { ArrowLeft, Send, Edit, Trash2 } from "lucide-react";
+import { ArrowLeft, Send, Edit, Trash2, XCircle } from "lucide-react";
 
 interface ExpenseDetailProps {
   expenseId: string;
@@ -22,6 +22,16 @@ export default function ExpenseDetail({ expenseId, onNavigate }: ExpenseDetailPr
   const postMutation = useMutation({
     mutationFn: async () => {
       await apiClient.post(`/expenses/${expenseId}/post`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expense"] });
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async () => {
+      await apiClient.post(`/expenses/${expenseId}/cancel`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["expense"] });
@@ -105,6 +115,15 @@ export default function ExpenseDetail({ expenseId, onNavigate }: ExpenseDetailPr
                 <Trash2 className="w-4 h-4" />
               </button>
             </>
+          )}
+          {expense.status === "POSTED" && (
+            <button
+              onClick={() => { if (confirm("Cancel this expense? A reversal journal entry will be posted.")) cancelMutation.mutate(); }}
+              disabled={cancelMutation.isPending}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-semibold transition disabled:opacity-50"
+            >
+              <XCircle className="w-3.5 h-3.5" /> {cancelMutation.isPending ? "Cancelling..." : "Cancel Expense"}
+            </button>
           )}
         </div>
       </div>

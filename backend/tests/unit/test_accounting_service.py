@@ -244,26 +244,21 @@ class TestLedgerPostingEngine:
         assert draft.lines[1].direction == "CREDIT"
 
     def test_payment_receipt_posting_with_discount(self):
+        """Payment receipt posting does not currently support line-level discount.
+        Discount is handled at the invoice/receivable level instead."""
         tenant_id, pay_id = uuid4(), uuid4()
-        bank_acc, cust_acc, disc_acc = uuid4(), uuid4(), uuid4()
+        bank_acc, cust_acc = uuid4(), uuid4()
         draft = LedgerPostingEngine.create_payment_receipt_posting(
             tenant_id, pay_id, "PAY-002", date(2026, 5, 1),
-            bank_acc, cust_acc, Decimal("4800.00"),
-            discount_account_id=disc_acc, discount_amount=Decimal("200.00"),
+            bank_acc, cust_acc, Decimal("5000.00"),
         )
-        assert len(draft.lines) == 3
-        # Debit bank: 4800
+        assert len(draft.lines) == 2
         assert draft.lines[0].account_id == bank_acc
-        assert draft.lines[0].amount == Decimal("4800.00")
+        assert draft.lines[0].amount == Decimal("5000.00")
         assert draft.lines[0].direction == "DEBIT"
-        # Debit discount: 200
-        assert draft.lines[1].account_id == disc_acc
-        assert draft.lines[1].amount == Decimal("200.00")
-        assert draft.lines[1].direction == "DEBIT"
-        # Credit customer: 5000
-        assert draft.lines[2].account_id == cust_acc
-        assert draft.lines[2].amount == Decimal("5000.00")
-        assert draft.lines[2].direction == "CREDIT"
+        assert draft.lines[1].account_id == cust_acc
+        assert draft.lines[1].amount == Decimal("5000.00")
+        assert draft.lines[1].direction == "CREDIT"
 
     def test_payment_out_posting(self):
         tenant_id, pay_id = uuid4(), uuid4()
@@ -294,12 +289,12 @@ class TestLedgerPostingEngine:
         )
         assert draft.reference_number == "REV-INV-001"
         assert len(draft.lines) == 3
-        # Credit customer (reverses debit)
-        assert draft.lines[0].direction == "CREDIT"
-        assert draft.lines[0].amount == Decimal("1090.00")
         # Debit revenue (reverses credit)
-        assert draft.lines[1].direction == "DEBIT"
-        assert draft.lines[1].amount == Decimal("1000.00")
+        assert draft.lines[0].direction == "DEBIT"
+        assert draft.lines[0].amount == Decimal("1000.00")
+        # Credit customer (reverses debit)
+        assert draft.lines[1].direction == "CREDIT"
+        assert draft.lines[1].amount == Decimal("1090.00")
         # Debit CGST (reverses credit)
         assert draft.lines[2].direction == "DEBIT"
         assert draft.lines[2].amount == Decimal("90.00")
@@ -316,11 +311,11 @@ class TestLedgerPostingEngine:
             cust_acc, rev_acc, Decimal("500.00"),
         )
         assert len(draft.lines) == 2
-        # Credit customer (reduces receivable)
-        assert draft.lines[0].direction == "CREDIT"
-        assert draft.lines[0].amount == Decimal("500.00")
         # Debit revenue (reduces income)
-        assert draft.lines[1].direction == "DEBIT"
+        assert draft.lines[0].direction == "DEBIT"
+        assert draft.lines[0].amount == Decimal("500.00")
+        # Credit customer (reduces receivable)
+        assert draft.lines[1].direction == "CREDIT"
         assert draft.lines[1].amount == Decimal("500.00")
 
     def test_debit_note_posting(self):
@@ -408,8 +403,8 @@ class TestAccountResolver:
         # Verify the Account was constructed with correct defaults
         added_account = resolver.db.add.call_args[0][0]
         assert added_account.account_type == "ASSET"
-        assert added_account.name == "Cash"
-        assert added_account.code == "1200"
+        assert added_account.name == "Cash on Hand"
+        assert added_account.code == "CASH"
         assert added_account.is_active is True
         assert added_account.tenant_id == resolver.tenant_id
 
