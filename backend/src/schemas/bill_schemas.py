@@ -49,6 +49,8 @@ class BillBase(SchemaBase):
 
 class BillCreate(BillBase):
     line_items: List[BillLineCreate]
+    discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
 
 class BillUpdate(SchemaBase):
     contact_id: Optional[uuid.UUID] = None
@@ -57,6 +59,8 @@ class BillUpdate(SchemaBase):
     due_date: Optional[date] = None
     pos_state_code: Optional[str] = None
     line_items: Optional[List[BillLineCreate]] = None
+    discount_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    shipping_charges: Optional[Decimal] = Field(default=None, ge=0)
 
 class BillResponse(BillBase):
     id: uuid.UUID
@@ -69,6 +73,7 @@ class BillResponse(BillBase):
     igst_amount: Decimal
     utgst_amount: Decimal
     cess_amount: Decimal
+    round_off: Decimal = Decimal("0.0000")
     total: Decimal
     amount_paid: Decimal
     created_at: datetime

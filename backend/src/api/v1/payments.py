@@ -16,7 +16,7 @@ from src.schemas.payment_schemas import (
 )
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
 from src.domains.company.services import NumberingSeriesService
-from src.api.deps import get_tenant_context, enforce_permission
+from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/payments", tags=["Payments and Receipts"])
 
@@ -55,17 +55,39 @@ def create_payment_receipt(
         )
 
     # Validate allocations
+    if not payload.allocations:
+        raise HTTPException(status_code=400, detail="At least one allocation is required.")
+    
+    # Validate that sum of allocations equals payment amount
     total_allocated = Decimal("0.0000")
-    db_allocations = []
-
     for alloc in payload.allocations:
-        invoice = db.query(Invoice).filter(
-            Invoice.id == alloc.invoice_id,
-            Invoice.tenant_id == tenant_id,
-            Invoice.deleted_at == None
-        ).with_for_update().first()
-        if not invoice:
-            raise HTTPException(status_code=404, detail=f"Invoice with ID {alloc.invoice_id} not found.")
+        if alloc.amount <= 0:
+            raise HTTPException(status_code=400, detail="Allocation amount must be greater than zero.")
+        total_allocated += alloc.amount
+    
+    if total_allocated != payload.amount:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Sum of allocations ({total_allocated}) must equal payment amount ({payload.amount})."
+        )
+
+    # Lock ALL invoices before any modifications to prevent race conditions
+    invoice_ids = [alloc.invoice_id for alloc in payload.allocations]
+    locked_invoices = db.query(Invoice).filter(
+        Invoice.id.in_(invoice_ids),
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None
+    ).with_for_update().all()
+    
+    if len(locked_invoices) != len(invoice_ids):
+        raise HTTPException(status_code=404, detail="One or more invoices not found.")
+    
+    # Build invoice lookup
+    invoice_map = {inv.id: inv for inv in locked_invoices}
+    
+    db_allocations = []
+    for alloc in payload.allocations:
+        invoice = invoice_map[alloc.invoice_id]
         if invoice.status not in ("SENT", "PARTIALLY_PAID"):
             raise HTTPException(status_code=400, detail=f"Invoice {invoice.invoice_number} is not in a payable state (must be SENT or PARTIALLY_PAID).")
 
@@ -88,13 +110,6 @@ def create_payment_receipt(
             amount=alloc.amount
         )
         db_allocations.append(db_alloc)
-        total_allocated += alloc.amount
-
-    if total_allocated > payload.amount:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Sum of allocations ({total_allocated}) exceeds total payment amount ({payload.amount})."
-        )
 
     # Create Payment record
     payment = Payment(

@@ -305,6 +305,14 @@ class Bill(Base):
             "status IN ('DRAFT', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
             name="ck_bills_status",
         ),
+        CheckConstraint(
+            "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total",
+            name="ck_bills_total_balance",
+        ),
+        CheckConstraint(
+            "amount_paid <= total",
+            name="ck_bills_amount_paid",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -321,6 +329,7 @@ class Bill(Base):
     igst_amount = Column(Numeric(15, 4), nullable=False, default=0)
     utgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
     cess_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    round_off = Column(Numeric(15, 4), nullable=False, default=0)
     total = Column(Numeric(15, 4), nullable=False, default=0)
     amount_paid = Column(Numeric(15, 4), nullable=False, default=0)
     pos_state_code = Column(String(2), nullable=False)

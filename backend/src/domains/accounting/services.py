@@ -3,7 +3,7 @@ from typing import List, Optional, Dict
 from datetime import date
 import uuid
 from sqlalchemy.orm import Session
-from sqlalchemy import text, func
+from sqlalchemy import func
 
 class LedgerValidationError(Exception):
     """Raised when double-entry rules or compliance requirements are violated."""
@@ -197,14 +197,14 @@ class LedgerPostingEngine:
         cash_account_id: uuid.UUID,
         amount: Decimal,
     ) -> JournalEntryDraft:
-        lines = []
-        lines.append(JournalLineDraft(expense_account_id, amount, "DEBIT", f"Expense: {expense_number}"))
-        lines.append(JournalLineDraft(cash_account_id, amount, "CREDIT", f"Payment: {expense_number}"))
+        lines: List[JournalLineDraft] = []
+        lines.append(JournalLineDraft(expense_account_id, amount, "DEBIT", f"Expense recorded: {expense_number}"))
+        lines.append(JournalLineDraft(cash_account_id, amount, "CREDIT", f"Cash/Bank used for: {expense_number}"))
         return JournalEntryDraft(
             tenant_id=tenant_id,
             entry_date=expense_date,
             reference_number=expense_number,
-            description=f"Expense posting {expense_number}",
+            description=f"Ledger posting for expense {expense_number}",
             source_type="EXPENSE",
             source_id=expense_id,
             lines=lines
@@ -219,21 +219,19 @@ class LedgerPostingEngine:
         bank_or_cash_account_id: uuid.UUID,
         customer_account_id: uuid.UUID,
         amount: Decimal,
-        discount_account_id: Optional[uuid.UUID] = None,
-        discount_amount: Decimal = Decimal("0.00")
     ) -> JournalEntryDraft:
-        """
-        Generates Double Entry Posting for Customer Payments (Settling Accounts Receivable).
-        """
         lines: List[JournalLineDraft] = []
-        total_credit_amount = amount + discount_amount
-
-        lines.append(JournalLineDraft(bank_or_cash_account_id, amount, "DEBIT", f"Received: {payment_number}"))
-        if discount_amount > 0 and discount_account_id:
-            lines.append(JournalLineDraft(discount_account_id, discount_amount, "DEBIT", "Discount Allowed"))
-        lines.append(JournalLineDraft(customer_account_id, total_credit_amount, "CREDIT", f"Settlement: {payment_number}"))
-
-        return JournalEntryDraft(tenant_id, payment_date, payment_number, f"Ledger posting for payment receipt {payment_number}", "PAYMENT", payment_id, lines)
+        lines.append(JournalLineDraft(bank_or_cash_account_id, amount, "DEBIT", f"Payment received: {payment_number}"))
+        lines.append(JournalLineDraft(customer_account_id, amount, "CREDIT", f"Payment received: {payment_number}"))
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=payment_date,
+            reference_number=payment_number,
+            description=f"Payment receipt {payment_number}",
+            source_type="PAYMENT",
+            source_id=payment_id,
+            lines=lines
+        )
 
     @staticmethod
     def create_payment_out_posting(
@@ -243,31 +241,114 @@ class LedgerPostingEngine:
         payment_date: date,
         bank_or_cash_account_id: uuid.UUID,
         vendor_account_id: uuid.UUID,
-        amount: Decimal
+        amount: Decimal,
     ) -> JournalEntryDraft:
-        """
-        Generates Double Entry Posting for Vendor Payments Out (Settling Accounts Payable).
-        
-        Debits:
-          - Vendor A/c (Accounts Payable) -> Amount settled
-        Credits:
-          - Bank or Cash A/c -> Net cash outflow
-        """
         lines: List[JournalLineDraft] = []
-
-        # 1. Debit Accounts Payable
-        lines.append(JournalLineDraft(vendor_account_id, amount, "DEBIT", f"Settlement out: {payment_number}"))
-
-        # 2. Credit Cash/Bank
-        lines.append(JournalLineDraft(bank_or_cash_account_id, amount, "CREDIT", f"Disbursed: {payment_number}"))
-
+        lines.append(JournalLineDraft(vendor_account_id, amount, "DEBIT", f"Payment made: {payment_number}"))
+        lines.append(JournalLineDraft(bank_or_cash_account_id, amount, "CREDIT", f"Payment made: {payment_number}"))
         return JournalEntryDraft(
             tenant_id=tenant_id,
             entry_date=payment_date,
             reference_number=payment_number,
-            description=f"Ledger posting for payment out {payment_number}",
+            description=f"Vendor payment {payment_number}",
             source_type="PAYMENT",
             source_id=payment_id,
+            lines=lines
+        )
+
+    @staticmethod
+    def create_credit_note_posting(
+        tenant_id: uuid.UUID,
+        credit_note_id: uuid.UUID,
+        credit_note_number: str,
+        issue_date: date,
+        customer_account_id: uuid.UUID,
+        sales_revenue_account_id: uuid.UUID,
+        subtotal: Decimal,
+        cgst_account_id: Optional[uuid.UUID] = None,
+        cgst_amount: Decimal = Decimal("0.00"),
+        sgst_account_id: Optional[uuid.UUID] = None,
+        sgst_amount: Decimal = Decimal("0.00"),
+        igst_account_id: Optional[uuid.UUID] = None,
+        igst_amount: Decimal = Decimal("0.00"),
+        utgst_account_id: Optional[uuid.UUID] = None,
+        utgst_amount: Decimal = Decimal("0.00"),
+        cess_account_id: Optional[uuid.UUID] = None,
+        cess_amount: Decimal = Decimal("0.00"),
+    ) -> JournalEntryDraft:
+        lines: List[JournalLineDraft] = []
+        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
+        cn_total = subtotal + tax_total
+
+        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Credit Note: {credit_note_number}"))
+        lines.append(JournalLineDraft(customer_account_id, cn_total, "CREDIT", f"Credit Note: {credit_note_number}"))
+
+        if cgst_amount > 0 and cgst_account_id:
+            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "DEBIT", "CGST Reversal"))
+        if sgst_amount > 0 and sgst_account_id:
+            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "DEBIT", "SGST Reversal"))
+        if igst_amount > 0 and igst_account_id:
+            lines.append(JournalLineDraft(igst_account_id, igst_amount, "DEBIT", "IGST Reversal"))
+        if utgst_amount > 0 and utgst_account_id:
+            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "UTGST Reversal"))
+        if cess_amount > 0 and cess_account_id:
+            lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Cess Reversal"))
+
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=issue_date,
+            reference_number=credit_note_number,
+            description=f"Credit Note {credit_note_number}",
+            source_type="CREDIT_NOTE",
+            source_id=credit_note_id,
+            lines=lines
+        )
+
+    @staticmethod
+    def create_debit_note_posting(
+        tenant_id: uuid.UUID,
+        debit_note_id: uuid.UUID,
+        debit_note_number: str,
+        issue_date: date,
+        customer_account_id: uuid.UUID,
+        sales_revenue_account_id: uuid.UUID,
+        subtotal: Decimal,
+        cgst_account_id: Optional[uuid.UUID] = None,
+        cgst_amount: Decimal = Decimal("0.00"),
+        sgst_account_id: Optional[uuid.UUID] = None,
+        sgst_amount: Decimal = Decimal("0.00"),
+        igst_account_id: Optional[uuid.UUID] = None,
+        igst_amount: Decimal = Decimal("0.00"),
+        utgst_account_id: Optional[uuid.UUID] = None,
+        utgst_amount: Decimal = Decimal("0.00"),
+        cess_account_id: Optional[uuid.UUID] = None,
+        cess_amount: Decimal = Decimal("0.00"),
+    ) -> JournalEntryDraft:
+        lines: List[JournalLineDraft] = []
+        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
+        dn_total = subtotal + tax_total
+
+        lines.append(JournalLineDraft(customer_account_id, dn_total, "DEBIT", f"Debit Note: {debit_note_number}"))
+        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "CREDIT", f"Debit Note: {debit_note_number}"))
+
+        if cgst_amount > 0 and cgst_account_id:
+            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "CREDIT", "CGST Adjustment"))
+        if sgst_amount > 0 and sgst_account_id:
+            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "CREDIT", "SGST Adjustment"))
+        if igst_amount > 0 and igst_account_id:
+            lines.append(JournalLineDraft(igst_account_id, igst_amount, "CREDIT", "IGST Adjustment"))
+        if utgst_amount > 0 and utgst_account_id:
+            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "CREDIT", "UTGST Adjustment"))
+        if cess_amount > 0 and cess_account_id:
+            lines.append(JournalLineDraft(cess_account_id, cess_amount, "CREDIT", "Cess Adjustment"))
+
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=issue_date,
+            reference_number=debit_note_number,
+            description=f"Debit Note {debit_note_number}",
+            source_type="DEBIT_NOTE",
+            source_id=debit_note_id,
             lines=lines
         )
 
@@ -289,145 +370,58 @@ class LedgerPostingEngine:
         utgst_account_id: Optional[uuid.UUID] = None,
         utgst_amount: Decimal = Decimal("0.00"),
         cess_account_id: Optional[uuid.UUID] = None,
-        cess_amount: Decimal = Decimal("0.00")
+        cess_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
-        """
-        Generates Double Entry Posting for Sales Invoice Cancellation (reversal).
-        """
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        invoice_total = subtotal + tax_total
+        total = subtotal + tax_total
 
-        # 1. Credit Accounts Receivable (reversing original Debit)
-        lines.append(JournalLineDraft(customer_account_id, invoice_total, "CREDIT", f"Reversal: Invoice {invoice_number}"))
-        
-        # 2. Debit Sales Revenue (reversing original Credit)
-        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Reversal: Invoice {invoice_number}"))
+        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Cancellation: {invoice_number}"))
+        lines.append(JournalLineDraft(customer_account_id, total, "CREDIT", f"Cancellation: {invoice_number}"))
 
-        # 3. Debit Output Tax Accounts (reversing original Credit)
         if cgst_amount > 0 and cgst_account_id:
-            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "DEBIT", "Reversal: CGST Output"))
+            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "DEBIT", "CGST Reversal"))
         if sgst_amount > 0 and sgst_account_id:
-            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "DEBIT", "Reversal: SGST Output"))
+            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "DEBIT", "SGST Reversal"))
         if igst_amount > 0 and igst_account_id:
-            lines.append(JournalLineDraft(igst_account_id, igst_amount, "DEBIT", "Reversal: IGST Output"))
+            lines.append(JournalLineDraft(igst_account_id, igst_amount, "DEBIT", "IGST Reversal"))
         if utgst_amount > 0 and utgst_account_id:
-            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "Reversal: UTGST Output"))
+            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "UTGST Reversal"))
         if cess_amount > 0 and cess_account_id:
-            lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Reversal: Cess Output"))
+            lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Cess Reversal"))
 
         return JournalEntryDraft(
-            tenant_id, 
-            cancel_date, 
-            f"REV-{invoice_number}", 
-            f"Reversal posting for Sales invoice {invoice_number}", 
-            "INVOICE", 
-            invoice_id, 
-            lines
+            tenant_id=tenant_id,
+            entry_date=cancel_date,
+            reference_number=f"REV-{invoice_number}",
+            description=f"Reversal of invoice {invoice_number}",
+            source_type="INVOICE",
+            source_id=invoice_id,
+            lines=lines
         )
 
-    @staticmethod
-    def create_credit_note_posting(
-        tenant_id: uuid.UUID,
-        credit_note_id: uuid.UUID,
-        credit_note_number: str,
-        issue_date: date,
-        customer_account_id: uuid.UUID,
-        sales_revenue_account_id: uuid.UUID,
-        subtotal: Decimal,
-        cgst_account_id: Optional[uuid.UUID] = None,
-        cgst_amount: Decimal = Decimal("0.00"),
-        sgst_account_id: Optional[uuid.UUID] = None,
-        sgst_amount: Decimal = Decimal("0.00"),
-        igst_account_id: Optional[uuid.UUID] = None,
-        igst_amount: Decimal = Decimal("0.00"),
-        utgst_account_id: Optional[uuid.UUID] = None,
-        utgst_amount: Decimal = Decimal("0.00"),
-        cess_account_id: Optional[uuid.UUID] = None,
-        cess_amount: Decimal = Decimal("0.00")
-    ) -> JournalEntryDraft:
-        lines: List[JournalLineDraft] = []
-        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = subtotal + tax_total
-
-        lines.append(JournalLineDraft(customer_account_id, total, "CREDIT", f"Credit Note: {credit_note_number}"))
-        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Credit Note: {credit_note_number}"))
-
-        if cgst_amount > 0 and cgst_account_id:
-            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "DEBIT", "Credit Note: CGST Output"))
-        if sgst_amount > 0 and sgst_account_id:
-            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "DEBIT", "Credit Note: SGST Output"))
-        if igst_amount > 0 and igst_account_id:
-            lines.append(JournalLineDraft(igst_account_id, igst_amount, "DEBIT", "Credit Note: IGST Output"))
-        if utgst_amount > 0 and utgst_account_id:
-            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "Credit Note: UTGST Output"))
-        if cess_amount > 0 and cess_account_id:
-            lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Credit Note: Cess Output"))
-
-        return JournalEntryDraft(tenant_id, issue_date, credit_note_number, f"Ledger posting for Credit Note {credit_note_number}", "INVOICE", credit_note_id, lines)
-
-    @staticmethod
-    def create_debit_note_posting(
-        tenant_id: uuid.UUID,
-        debit_note_id: uuid.UUID,
-        debit_note_number: str,
-        issue_date: date,
-        customer_account_id: uuid.UUID,
-        sales_revenue_account_id: uuid.UUID,
-        subtotal: Decimal,
-        cgst_account_id: Optional[uuid.UUID] = None,
-        cgst_amount: Decimal = Decimal("0.00"),
-        sgst_account_id: Optional[uuid.UUID] = None,
-        sgst_amount: Decimal = Decimal("0.00"),
-        igst_account_id: Optional[uuid.UUID] = None,
-        igst_amount: Decimal = Decimal("0.00"),
-        utgst_account_id: Optional[uuid.UUID] = None,
-        utgst_amount: Decimal = Decimal("0.00"),
-        cess_account_id: Optional[uuid.UUID] = None,
-        cess_amount: Decimal = Decimal("0.00")
-    ) -> JournalEntryDraft:
-        lines: List[JournalLineDraft] = []
-        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = subtotal + tax_total
-
-        lines.append(JournalLineDraft(customer_account_id, total, "DEBIT", f"Debit Note: {debit_note_number}"))
-        lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "CREDIT", f"Debit Note: {debit_note_number}"))
-
-        if cgst_amount > 0 and cgst_account_id:
-            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "CREDIT", "Debit Note: CGST Output"))
-        if sgst_amount > 0 and sgst_account_id:
-            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "CREDIT", "Debit Note: SGST Output"))
-        if igst_amount > 0 and igst_account_id:
-            lines.append(JournalLineDraft(igst_account_id, igst_amount, "CREDIT", "Debit Note: IGST Output"))
-        if utgst_amount > 0 and utgst_account_id:
-            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "CREDIT", "Debit Note: UTGST Output"))
-        if cess_amount > 0 and cess_account_id:
-            lines.append(JournalLineDraft(cess_account_id, cess_amount, "CREDIT", "Debit Note: Cess Output"))
-
-        return JournalEntryDraft(tenant_id, issue_date, debit_note_number, f"Ledger posting for Debit Note {debit_note_number}", "INVOICE", debit_note_id, lines)
-
 
 # ---------------------------------------------------------------------------
-# Standard chart-of-accounts definitions for auto-created system accounts
+# Standard Chart of Accounts
 # ---------------------------------------------------------------------------
-_STANDARD_ACCOUNTS: Dict[str, dict] = {
-    "sales_revenue": {"code": "4000", "name": "Sales Revenue", "type": "REVENUE"},
-    "purchases": {"code": "5000", "name": "Purchases", "type": "EXPENSE"},
-    "cgst_output": {"code": "2100", "name": "CGST Output", "type": "LIABILITY"},
-    "sgst_output": {"code": "2101", "name": "SGST Output", "type": "LIABILITY"},
-    "igst_output": {"code": "2102", "name": "IGST Output", "type": "LIABILITY"},
-    "utgst_output": {"code": "2103", "name": "UTGST Output", "type": "LIABILITY"},
-    "cess_output": {"code": "2104", "name": "Cess Output", "type": "LIABILITY"},
-    "cgst_input": {"code": "1100", "name": "CGST Input", "type": "ASSET"},
-    "sgst_input": {"code": "1101", "name": "SGST Input", "type": "ASSET"},
-    "igst_input": {"code": "1102", "name": "IGST Input", "type": "ASSET"},
-    "utgst_input": {"code": "1103", "name": "UTGST Input", "type": "ASSET"},
-    "cess_input": {"code": "1104", "name": "Cess Input", "type": "ASSET"},
-    "assets.cash": {"code": "1200", "name": "Cash", "type": "ASSET"},
-    "assets.bank": {"code": "1201", "name": "Bank", "type": "ASSET"},
-    "assets.upi": {"code": "1202", "name": "UPI", "type": "ASSET"},
-    "assets.pos": {"code": "1203", "name": "POS", "type": "ASSET"},
-    "round_off": {"code": "9999", "name": "Round-off", "type": "EXPENSE"},
+_STANDARD_ACCOUNTS: Dict[str, Dict[str, str]] = {
+    "sales_revenue": {"name": "Sales Revenue", "code": "SRV", "type": "REVENUE"},
+    "purchases": {"name": "Purchases", "code": "PUR", "type": "EXPENSE"},
+    "cgst_output": {"name": "CGST Output Tax", "code": "CGST-OUT", "type": "LIABILITY"},
+    "sgst_output": {"name": "SGST Output Tax", "code": "SGST-OUT", "type": "LIABILITY"},
+    "igst_output": {"name": "IGST Output Tax", "code": "IGST-OUT", "type": "LIABILITY"},
+    "utgst_output": {"name": "UTGST Output Tax", "code": "UTGST-OUT", "type": "LIABILITY"},
+    "cess_output": {"name": "Cess Output Tax", "code": "CESS-OUT", "type": "LIABILITY"},
+    "cgst_input": {"name": "CGST Input Tax", "code": "CGST-IN", "type": "ASSET"},
+    "sgst_input": {"name": "SGST Input Tax", "code": "SGST-IN", "type": "ASSET"},
+    "igst_input": {"name": "IGST Input Tax", "code": "IGST-IN", "type": "ASSET"},
+    "utgst_input": {"name": "UTGST Input Tax", "code": "UTGST-IN", "type": "ASSET"},
+    "cess_input": {"name": "Cess Input Tax", "code": "CESS-IN", "type": "ASSET"},
+    "assets.cash": {"name": "Cash on Hand", "code": "CASH", "type": "ASSET"},
+    "assets.bank": {"name": "Bank Account", "code": "BANK", "type": "ASSET"},
+    "assets.upi": {"name": "UPI Collections", "code": "UPI", "type": "ASSET"},
+    "assets.pos": {"name": "POS Collections", "code": "POS", "type": "ASSET"},
+    "round_off": {"name": "Round Off Account", "code": "ROF", "type": "EXPENSE"},
 }
 
 
@@ -514,13 +508,23 @@ class AccountResolver:
         contact = self.db.query(Contact).filter(
             Contact.id == contact_uuid,
             Contact.tenant_id == self.tenant_id,
+            Contact.deleted_at == None,
         ).first()
-        if contact is None:
-            raise LedgerValidationError(
-                f"Contact {contact_uuid} not found in tenant {self.tenant_id}"
-            )
+        if not contact:
+            raise LedgerValidationError(f"Contact not found for account key: {key}")
 
-        account_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.{prefix}.{contact_uuid}")
+        if prefix == "customer":
+            account_name = f"Accounts Receivable - {contact.name}"
+            account_code = f"AR-{contact_uuid}"
+            account_type = "ASSET"
+        elif prefix == "vendor":
+            account_name = f"Accounts Payable - {contact.name}"
+            account_code = f"AP-{contact_uuid}"
+            account_type = "LIABILITY"
+        else:
+            raise LedgerValidationError(f"Unknown contact prefix in account key: {key}")
+
+        account_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.{key}-{self.tenant_id}")
         existing = self.db.query(Account).filter(
             Account.id == account_id,
             Account.tenant_id == self.tenant_id,
@@ -529,20 +533,11 @@ class AccountResolver:
         if existing is not None:
             return existing.id
 
-        if prefix == "customer":
-            name = f"Accounts Receivable - {contact.name}"
-            account_type = "ASSET"
-            code = f"AR-{contact_uuid}"
-        else:
-            name = f"Accounts Payable - {contact.name}"
-            account_type = "LIABILITY"
-            code = f"AP-{contact_uuid}"
-
         account = Account(
             id=account_id,
             tenant_id=self.tenant_id,
-            name=name,
-            code=code,
+            name=account_name,
+            code=account_code,
             account_type=account_type,
             is_active=True,
         )
@@ -552,21 +547,29 @@ class AccountResolver:
 
 
 def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Optional[set[uuid.UUID]] = None) -> None:
-    """Recalculate current_balance for accounts from their journal lines.
-
+    """
+    Recalculates and sets current_balance for the given account IDs directly
+    from the journal_lines table, using a pessimistic lock for safety.
     If account_ids is None, recalculates ALL accounts for the tenant.
     """
     from src.infrastructure.database.models import Account, JournalLine
+
+    if account_ids is not None and not account_ids:
+        return
 
     query = db.query(Account).filter(
         Account.tenant_id == tenant_id,
         Account.deleted_at == None
     ).with_for_update()
+
     if account_ids:
         query = query.filter(Account.id.in_(account_ids))
 
     accounts = query.all()
+
     for account in accounts:
+        # Compute net balance: sum(DEBIT) - sum(CREDIT) for ASSET/EXPENSE,
+        # sum(CREDIT) - sum(DEBIT) for everything else.
         debit_sum = db.query(func.sum(JournalLine.amount)).filter(
             JournalLine.account_id == account.id,
             JournalLine.direction == "DEBIT"
@@ -578,8 +581,45 @@ def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Opti
         ).scalar() or Decimal("0.0000")
 
         if account.account_type in ("ASSET", "EXPENSE"):
-            account.current_balance = debit_sum - credit_sum
+            account.current_balance = (debit_sum - credit_sum).quantize(Decimal("0.0001"))
         else:
-            account.current_balance = credit_sum - debit_sum
+            account.current_balance = (credit_sum - debit_sum).quantize(Decimal("0.0001"))
 
     db.flush()
+
+
+def recalculate_all_account_balances(db: Session, tenant_id: uuid.UUID) -> None:
+    """
+    Recalculates and updates current_balance for ALL accounts belonging to a tenant.
+    Use this during reconciliation or after bulk imports.
+    """
+    from src.infrastructure.database.models import Account, JournalLine, JournalEntry
+
+    # Compute balances from journal lines
+    subq = db.query(
+        JournalLine.account_id,
+        func.sum(
+            func.case(
+                (JournalLine.direction == "DEBIT", JournalLine.amount),
+                else_=-JournalLine.amount
+            )
+        ).label("balance")
+    ).join(
+        JournalEntry, JournalLine.entry_id == JournalEntry.id
+    ).filter(
+        JournalEntry.tenant_id == tenant_id
+    ).group_by(
+        JournalLine.account_id
+    ).subquery()
+
+    accounts = db.query(Account).filter(
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None
+    ).with_for_update().all()
+
+    balance_map = {row.account_id: (row.balance or Decimal("0.0000")) for row in db.query(subq).all()}
+
+    for account in accounts:
+        account.current_balance = balance_map.get(account.id, Decimal("0.0000")).quantize(Decimal("0.0001"))
+
+    db.commit()

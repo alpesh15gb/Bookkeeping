@@ -25,11 +25,6 @@ export const setRefreshToken = (token: string | null) => {
 
 export const setTenantId = (tenantId: string | null) => {
   activeTenantIdMemory = tenantId;
-  if (tenantId) {
-    sessionStorage.setItem("active_tenant_id", tenantId);
-  } else {
-    sessionStorage.removeItem("active_tenant_id");
-  }
 };
 
 // Retrieve tenant ID from storage on startup

@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
-import { Trash2, Plus, ArrowLeft, AlertCircle, Save, Send, Printer, Share2, Cog } from "lucide-react";
+import {
+  Trash2,
+  Plus,
+  ArrowLeft,
+  AlertCircle,
+  Send,
+  Printer,
+  Share2,
+  Cog,
+} from "lucide-react";
 import logo from "../../logo.png";
 import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
 
@@ -36,6 +45,34 @@ interface LineItemDraft {
   discount: number;
   hsn_sac: string;
   gst_rate: number;
+}
+
+// Form-level invoice preview response from backend
+interface InvoicePreview {
+  subtotal: number;
+  discount_total: number;
+  cgst_amount: number;
+  sgst_amount: number;
+  igst_amount: number;
+  utgst_amount: number;
+  cess_amount: number;
+  round_off: number;
+  total: number;
+  lines: Array<{
+    product_id: string;
+    quantity: number;
+    rate: number;
+    discount: number;
+    hsn_sac: string;
+    gst_rate: number;
+    subtotal: number;
+    cgst_amount: number;
+    sgst_amount: number;
+    igst_amount: number;
+    utgst_amount: number;
+    cess_amount: number;
+    total: number;
+  }>;
 }
 
 const STATE_CODES = [
@@ -258,53 +295,49 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
     }
   };
 
-  // Live total calculations
-  const calculateTotals = () => {
-    let subtotal = 0;
-    let cgst = 0;
-    let sgst = 0;
-    let igst = 0;
+  // -------------------------------------------------------------------
+  // Backend Preview — source of truth for invoice totals and tax splits
+  // -------------------------------------------------------------------
+  const { data: preview, isLoading: previewLoading } = useQuery<InvoicePreview>({
+    queryKey: [
+      "invoice-preview",
+      lines,
+      placeOfSupply,
+      discountPercent,
+      shippingCharges,
+    ],
+    queryFn: async () => {
+      const res = await apiClient.post("/invoices/preview", {
+        pos_state_code: placeOfSupply,
+        discount_rate: discountPercent,
+        shipping_charges: shippingCharges,
+        line_items: lines.map((l) => ({
+          product_id: l.product_id,
+          quantity: l.quantity,
+          rate: l.rate,
+          discount: l.discount,
+          hsn_sac: l.hsn_sac,
+          gst_rate: l.gst_rate,
+        })),
+      });
+      return res.data;
+    },
+    enabled: lines.some((l) => l.product_id && l.quantity > 0 && l.rate >= 0),
+    staleTime: 0,
+  });
 
-    const isIntraState = originStateCode === placeOfSupply;
-
-    lines.forEach((line) => {
-      const lineBase = (line.quantity || 0) * (line.rate || 0) - (line.discount || 0);
-      subtotal += lineBase;
-
-      const lineTax = lineBase * ((line.gst_rate || 0) / 100);
-      if (isIntraState) {
-        cgst += lineTax / 2;
-        sgst += lineTax / 2;
-      } else {
-        igst += lineTax;
-      }
-    });
-
-    const discountValue = subtotal * (discountPercent / 100);
-    const taxableAmount = subtotal - discountValue;
-
-    // Recalculate CGST/SGST/IGST based on taxable amount
-    let taxMultiplier = taxableAmount / (subtotal || 1);
-    if (subtotal === 0) taxMultiplier = 0;
-    
-    const finalCgst = cgst * taxMultiplier;
-    const finalSgst = sgst * taxMultiplier;
-    const finalIgst = igst * taxMultiplier;
-
-    const grandTotal = taxableAmount + finalCgst + finalSgst + finalIgst + Number(shippingCharges);
-
-    return {
-      subtotal,
-      discountValue,
-      taxableAmount,
-      cgst: finalCgst,
-      sgst: finalSgst,
-      igst: finalIgst,
-      grandTotal,
-    };
+  const totals = preview || {
+    subtotal: 0,
+    discount_total: 0,
+    cgst_amount: 0,
+    sgst_amount: 0,
+    igst_amount: 0,
+    utgst_amount: 0,
+    cess_amount: 0,
+    round_off: 0,
+    total: 0,
+    lines: [],
   };
-
-  const totals = calculateTotals();
 
   // Save Mutation
   const saveMutation = useMutation({
@@ -677,14 +710,14 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
               </div>
             </div>
 
-            {/* Submit & Form Actions (Gold themed) */}
+            {/* Submit & Form Actions */}
             <div className="grid grid-cols-4 gap-2 pt-2 pb-8">
               <button
                 type="button"
                 onClick={() => onNavigate("list")}
-                className="col-span-1 border border-[#DCA035] text-[#DCA035] hover:bg-[#DCA035]/5 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
+                className="col-span-1 border border-zinc-300 text-zinc-600 hover:bg-zinc-50 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
               >
-                <Save className="w-3.5 h-3.5" /> Draft
+                Discard & Close
               </button>
               
               <button
@@ -692,20 +725,20 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
                 disabled={saveMutation.isPending}
                 className="col-span-1 bg-[#DCA035] hover:bg-[#C98F2C] text-zinc-950 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
               >
-                <Send className="w-3.5 h-3.5" /> Send
+                <Send className="w-3.5 h-3.5" /> {saveMutation.isPending ? "Saving..." : "Send"}
               </button>
 
               <button
                 type="button"
                 onClick={() => window.print()}
-                className="col-span-1 bg-[#DCA035] hover:bg-[#C98F2C] text-zinc-950 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
+                className="col-span-1 bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-50 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
               >
                 <Printer className="w-3.5 h-3.5" /> Print
               </button>
 
               <button
                 type="button"
-                className="col-span-1 bg-[#DCA035] hover:bg-[#C98F2C] text-zinc-950 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
+                className="col-span-1 bg-white border border-zinc-300 text-zinc-700 hover:bg-zinc-50 py-2 rounded-lg font-bold text-xs transition duration-150 inline-flex items-center justify-center gap-1 shadow-sm"
               >
                 <Share2 className="w-3.5 h-3.5" /> Share
               </button>
@@ -785,7 +818,7 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
                   <tbody className="divide-y divide-zinc-100">
                     {lines.map((line, idx) => {
                       const prod = products.find(p => p.id === line.product_id);
-                      const baseAmt = line.quantity * line.rate - line.discount;
+                      const baseAmt = (line.quantity || 0) * (line.rate || 0) - (line.discount || 0);
                       return (
                         <tr key={idx} className="text-zinc-700">
                           <td className="px-3 py-2.5 text-center text-zinc-400 font-semibold">{idx + 1}</td>
@@ -815,7 +848,7 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
                   <div className="space-y-0.5">
                     <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-wide">Total Amount (in words)</p>
                     <p className="font-bold text-zinc-700 italic leading-tight pr-4">
-                      {convertNumberToWords(totals.grandTotal)}
+                      {convertNumberToWords(totals.total)}
                     </p>
                   </div>
                 </div>
@@ -825,33 +858,51 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
                     <span>Subtotal:</span>
                     <span className="font-semibold text-zinc-800">{formatCurrency(totals.subtotal).replace("₹", "")}</span>
                   </div>
-                  {totals.discountValue > 0 && (
+                  {totals.discount_total > 0 && (
                     <div className="flex justify-between text-red-600">
-                      <span>Discount ({discountPercent}%):</span>
-                      <span className="font-semibold">-{formatCurrency(totals.discountValue).replace("₹", "")}</span>
+                      <span>Discount:</span>
+                      <span className="font-semibold">-{formatCurrency(totals.discount_total).replace("₹", "")}</span>
                     </div>
                   )}
                   <div className="flex justify-between border-t border-zinc-100 pt-1">
                     <span>Taxable Amount:</span>
-                    <span className="font-semibold text-zinc-800">{formatCurrency(totals.taxableAmount).replace("₹", "")}</span>
+                    <span className="font-semibold text-zinc-800">{formatCurrency(totals.subtotal - totals.discount_total).replace("₹", "")}</span>
                   </div>
                   
-                  {totals.cgst > 0 && (
+                  {totals.cgst_amount > 0 && (
                     <div className="flex justify-between text-zinc-400 text-[8px]">
-                      <span>CGST (9%):</span>
-                      <span>{formatCurrency(totals.cgst).replace("₹", "")}</span>
+                      <span>CGST:</span>
+                      <span>{formatCurrency(totals.cgst_amount).replace("₹", "")}</span>
                     </div>
                   )}
-                  {totals.sgst > 0 && (
+                  {totals.sgst_amount > 0 && (
                     <div className="flex justify-between text-zinc-400 text-[8px]">
-                      <span>SGST (9%):</span>
-                      <span>{formatCurrency(totals.sgst).replace("₹", "")}</span>
+                      <span>SGST:</span>
+                      <span>{formatCurrency(totals.sgst_amount).replace("₹", "")}</span>
                     </div>
                   )}
-                  {totals.igst > 0 && (
+                  {totals.igst_amount > 0 && (
                     <div className="flex justify-between text-zinc-400 text-[8px]">
-                      <span>IGST (18%):</span>
-                      <span>{formatCurrency(totals.igst).replace("₹", "")}</span>
+                      <span>IGST:</span>
+                      <span>{formatCurrency(totals.igst_amount).replace("₹", "")}</span>
+                    </div>
+                  )}
+                  {totals.utgst_amount > 0 && (
+                    <div className="flex justify-between text-zinc-400 text-[8px]">
+                      <span>UTGST:</span>
+                      <span>{formatCurrency(totals.utgst_amount).replace("₹", "")}</span>
+                    </div>
+                  )}
+                  {totals.cess_amount > 0 && (
+                    <div className="flex justify-between text-zinc-400 text-[8px]">
+                      <span>Cess:</span>
+                      <span>{formatCurrency(totals.cess_amount).replace("₹", "")}</span>
+                    </div>
+                  )}
+                  {totals.round_off !== 0 && (
+                    <div className="flex justify-between text-zinc-400 text-[8px]">
+                      <span>Round Off:</span>
+                      <span>{formatCurrency(totals.round_off).replace("₹", "")}</span>
                     </div>
                   )}
                   {shippingCharges > 0 && (
@@ -862,7 +913,7 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
                   )}
                   <div className="flex justify-between border-t-2 border-zinc-900 pt-1.5 text-[11px] font-bold text-zinc-900 uppercase">
                     <span>Total Amount:</span>
-                    <span>{formatCurrency(totals.grandTotal)}</span>
+                    <span>{formatCurrency(totals.total)}</span>
                   </div>
                 </div>
               </div>

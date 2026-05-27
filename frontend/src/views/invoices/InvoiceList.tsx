@@ -25,14 +25,28 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  // Fetch Invoices
-  const { data: invoices = [], isLoading, error } = useQuery<InvoiceListItem[]>({
-    queryKey: ["invoices"],
+  // Fetch Invoices with server-side pagination
+  const { data: invoicesResponse, isLoading, error } = useQuery<
+    { items: InvoiceListItem[]; total: number; page: number; limit: number }
+  >({
+    queryKey: ["invoices", currentPage, search, statusFilter],
     queryFn: async () => {
-      const res = await apiClient.get("/invoices");
+      const res = await apiClient.get("/invoices", {
+        params: {
+          page: currentPage,
+          limit: itemsPerPage,
+          search: search || undefined,
+          status: statusFilter !== "ALL" ? statusFilter : undefined,
+        }
+      });
       return res.data;
     },
   });
+
+  const invoices = invoicesResponse?.items || [];
+  const totalItems = invoicesResponse?.total || 0;
+  const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+  const startIndex = (currentPage - 1) * itemsPerPage;
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -65,25 +79,6 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
       </span>
     );
   };
-
-  // Filter list locally
-  const filteredInvoices = invoices.filter((inv) => {
-    const matchesSearch =
-      inv.invoice_number.toLowerCase().includes(search.toLowerCase()) ||
-      inv.contact_name.toLowerCase().includes(search.toLowerCase());
-    
-    if (statusFilter === "ALL") return matchesSearch;
-    if (statusFilter === "PAID") return matchesSearch && inv.status.toUpperCase() === "PAID";
-    if (statusFilter === "CANCELLED") return matchesSearch && inv.status.toUpperCase() === "CANCELLED";
-    // UNPAID filter: matches anything that is not PAID and not CANCELLED
-    return matchesSearch && inv.status.toUpperCase() !== "PAID" && inv.status.toUpperCase() !== "CANCELLED";
-  });
-
-  // Pagination Math
-  const totalItems = filteredInvoices.length;
-  const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedInvoices = filteredInvoices.slice(startIndex, startIndex + itemsPerPage);
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
@@ -185,7 +180,7 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
           <ShieldAlert className="w-5 h-5 flex-shrink-0" />
           <span className="text-xs font-semibold">Error loading invoices. Please check API server.</span>
         </div>
-      ) : paginatedInvoices.length === 0 ? (
+      ) : invoices.length === 0 ? (
         <div className="text-center py-16 bg-white rounded-xl border border-zinc-200 shadow-sm">
           <FileText className="w-12 h-12 text-zinc-300 mx-auto mb-3" />
           <h3 className="text-xs font-semibold text-zinc-700 uppercase tracking-wider">No Invoices Found</h3>
@@ -208,7 +203,7 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-100">
-                {paginatedInvoices.map((inv) => (
+                {invoices.map((inv) => (
                   <tr key={inv.id} className="hover:bg-zinc-50/40 transition">
                     <td className="px-4 py-3.5 font-mono font-medium text-zinc-900">{inv.invoice_number}</td>
                     <td className="px-4 py-3.5 font-bold text-zinc-850">{inv.contact_name}</td>
@@ -264,19 +259,9 @@ export default function InvoiceList({ onNavigate }: InvoiceListProps) {
               >
                 &lt; Previous
               </button>
-              {Array.from({ length: totalPages }).map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handlePageChange(idx + 1)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                    currentPage === idx + 1
-                      ? "bg-brand-900 text-white shadow-sm"
-                      : "border border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-                  }`}
-                >
-                  {idx + 1}
-                </button>
-              ))}
+              <span className="px-3 py-1.5 text-xs font-bold text-zinc-700">
+                Page {currentPage} of {totalPages}
+              </span>
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}

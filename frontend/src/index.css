@@ -5,11 +5,32 @@
 @tailwind utilities;
 
 @layer base {
+  :root {
+    /* Semantic Design Tokens (Single source of truth) */
+    --color-primary: #DCA035;
+    --color-primary-hover: #C98F2C;
+    --color-primary-light: #FFF8EA;
+    --color-surface: #fcfcfd;
+    --color-surface-elevated: #ffffff;
+    --color-border: #e4e4e7;
+    --color-border-strong: #d4d4d8;
+    --color-text-primary: #09090b;
+    --color-text-secondary: #71717a;
+    --color-text-muted: #a1a1aa;
+    --color-text-inverse: #ffffff;
+    --color-danger: #ef4444;
+    --color-danger-light: #fef2f2;
+    --color-success: #10b981;
+    --color-success-light: #ecfdf5;
+    --color-warning: #f59e0b;
+    --color-warning-light: #fffbeb;
+  }
+
   body {
     margin: 0;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    background-color: #fcfcfd;
-    color: #09090b;
+    background-color: var(--color-surface);
+    color: var(--color-text-primary);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
@@ -21,7 +42,9 @@
   input[type="password"],
   select,
   textarea {
-    @apply px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-800 focus:border-zinc-800 transition duration-150 ease-in-out placeholder-zinc-400;
+    @apply w-full px-3 py-2 text-sm bg-white border border-[var(--color-border)] rounded-lg shadow-sm;
+    @apply focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)];
+    @apply transition duration-150 ease-in-out placeholder-[var(--color-text-muted)];
   }
 }
 
@@ -29,32 +52,42 @@
 @layer components {
   /* Forms & Controls */
   .form-input, .form-select, .form-textarea {
-    @apply w-full px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-zinc-800 focus:border-zinc-800 transition duration-150 ease-in-out placeholder-zinc-400;
+    @apply w-full px-3 py-2 text-sm bg-white border border-[var(--color-border)] rounded-lg shadow-sm;
+    @apply focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)];
+    @apply transition duration-150 ease-in-out placeholder-[var(--color-text-muted)];
   }
 
   .form-label {
-    @apply block text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-2;
+    @apply block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-2;
   }
 
-  /* Buttons */
+  /* Buttons — Semantic hierarchy */
   .btn-primary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-gold-500 hover:bg-gold-600 text-white rounded-lg shadow-sm font-semibold transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg shadow-sm font-semibold;
+    @apply bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-[var(--color-text-inverse)];
+    @apply transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed text-sm;
   }
 
   .btn-secondary {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-zinc-50 text-zinc-700 border border-zinc-200 rounded-lg shadow-sm font-medium transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-zinc-800 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg shadow-sm font-medium;
+    @apply bg-white hover:bg-zinc-50 text-[var(--color-text-primary)] border border-[var(--color-border)];
+    @apply transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed text-sm;
   }
 
-  .btn-gold {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-gold-500 hover:bg-gold-600 text-white rounded-lg shadow-sm font-semibold transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs;
-  }
-
-  .btn-gold-outline {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-white hover:bg-gold-50 text-gold-600 border border-gold-500 rounded-lg shadow-sm font-semibold transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-gold-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-xs;
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium;
+    @apply bg-transparent hover:bg-zinc-100 text-[var(--color-text-secondary)] border border-transparent;
+    @apply transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed text-sm;
   }
 
   .btn-danger {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg shadow-sm font-medium transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed text-sm;
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg shadow-sm font-medium;
+    @apply bg-[var(--color-danger-light)] hover:bg-red-100 text-[var(--color-danger)] border border-red-200;
+    @apply transition duration-150 ease-in-out focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed text-sm;
   }
 
   /* Badges & Indicators */
@@ -65,16 +98,16 @@
     @apply bg-zinc-50 text-zinc-600 border-zinc-200;
   }
   .badge-sent, .badge-unpaid, .badge-pending {
-    @apply bg-amber-50 text-amber-700 border-amber-200;
+    @apply bg-[var(--color-warning-light)] text-amber-700 border-amber-200;
   }
   .badge-partially_paid {
     @apply bg-blue-50 text-blue-700 border-blue-200;
   }
   .badge-paid {
-    @apply bg-green-50/80 text-green-700 border-green-200;
+    @apply bg-[var(--color-success-light)] text-green-700 border-green-200;
   }
   .badge-cancelled {
-    @apply bg-red-50 text-red-700 border-red-200;
+    @apply bg-[var(--color-danger-light)] text-red-700 border-red-200;
   }
 
   /* Premium Responsive Tables */
@@ -82,10 +115,10 @@
     @apply w-full border-collapse text-left text-sm;
   }
   .financial-table th {
-    @apply px-4 py-3 bg-zinc-50/70 text-zinc-500 font-semibold border-b border-zinc-100 text-xs uppercase tracking-wider;
+    @apply px-4 py-3 bg-zinc-50/70 text-[var(--color-text-secondary)] font-semibold border-b border-[var(--color-border)] text-xs uppercase tracking-wider;
   }
   .financial-table td {
-    @apply px-4 py-3.5 text-zinc-700 border-b border-zinc-100/60 align-middle;
+    @apply px-4 py-3.5 text-[var(--color-text-primary)] border-b border-[var(--color-border)]/60 align-middle;
   }
   .financial-table tr {
     @apply hover:bg-zinc-50/40 transition duration-100 ease-in-out;
@@ -93,15 +126,15 @@
 
   /* Numeric formats inside table */
   .numeric-val {
-    @apply font-mono text-right tracking-tight tabular-nums text-zinc-800;
+    @apply font-mono text-right tracking-tight tabular-nums text-[var(--color-text-primary)];
   }
 
   /* Sticky totals row */
   .total-row {
-    @apply bg-zinc-50/50 font-semibold border-t-2 border-zinc-200;
+    @apply bg-zinc-50/50 font-semibold border-t-2 border-[var(--color-border-strong)];
   }
   .total-row td {
-    @apply text-zinc-900 border-b-4 border-double border-zinc-200;
+    @apply text-[var(--color-text-primary)] border-b-4 border-double border-[var(--color-border-strong)];
   }
 }
 
@@ -113,11 +146,11 @@
   background: transparent;
 }
 .overflow-x-auto::-webkit-scrollbar-thumb {
-  background: #e4e4e7;
+  background: var(--color-border);
   border-radius: 3px;
 }
 .overflow-x-auto::-webkit-scrollbar-thumb:hover {
-  background: #d4d4d8;
+  background: var(--color-border-strong);
 }
 
 /* Custom print configurations for Invoice print views */

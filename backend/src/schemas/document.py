@@ -88,6 +88,8 @@ class InvoiceBase(SchemaBase):
 
 class InvoiceCreate(InvoiceBase):
     line_items: List[InvoiceLineCreate]
+    discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
 
 class InvoiceUpdate(SchemaBase):
     contact_id: Optional[uuid.UUID] = None
@@ -96,6 +98,8 @@ class InvoiceUpdate(SchemaBase):
     due_date: Optional[date] = None
     pos_state_code: Optional[str] = None
     line_items: Optional[List[InvoiceLineCreate]] = None
+    discount_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    shipping_charges: Optional[Decimal] = Field(default=None, ge=0)
 
 class InvoiceResponse(InvoiceBase):
     id: uuid.UUID

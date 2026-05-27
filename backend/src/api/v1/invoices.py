@@ -20,7 +20,7 @@ from src.schemas.einvoice_schemas import EInvoiceResponse, EInvoiceCancelRequest
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
 from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
-from src.api.deps import get_tenant_context, enforce_permission
+from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
@@ -118,8 +118,23 @@ def create_invoice(
         inv_cess += db_line.cess_amount
         inv_discount += db_line.discount
 
-    # 3. Round-off adjustment calculations
-    raw_total = inv_subtotal + inv_cgst + inv_sgst + inv_igst + inv_utgst + inv_cess
+    # 3. Apply header-level discount and shipping charges
+    header_discount_rate = payload.discount_rate or Decimal("0.00")
+    header_shipping = payload.shipping_charges or Decimal("0.0000")
+    
+    discount_amount = (inv_subtotal * header_discount_rate / Decimal("100.00")).quantize(Decimal("0.0001"))
+    adjusted_subtotal = inv_subtotal - discount_amount
+    
+    # Recalculate taxes based on adjusted subtotal (proportional)
+    tax_multiplier = Decimal("1.00") if inv_subtotal == 0 else adjusted_subtotal / inv_subtotal
+    final_cgst = (inv_cgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_sgst = (inv_sgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_igst = (inv_igst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_utgst = (inv_utgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_cess = (inv_cess * tax_multiplier).quantize(Decimal("0.0001"))
+    
+    # Round-off adjustment calculations
+    raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
@@ -131,12 +146,12 @@ def create_invoice(
         due_date=payload.due_date,
         status="DRAFT",
         subtotal=inv_subtotal,
-        discount_total=inv_discount,
-        cgst_amount=inv_cgst,
-        sgst_amount=inv_sgst,
-        igst_amount=inv_igst,
-        utgst_amount=inv_utgst,
-        cess_amount=inv_cess,
+        discount_total=discount_amount,
+        cgst_amount=final_cgst,
+        sgst_amount=final_sgst,
+        igst_amount=final_igst,
+        utgst_amount=final_utgst,
+        cess_amount=final_cess,
         round_off=round_off,
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
@@ -178,6 +193,132 @@ def list_invoices(
             created_at=inv.created_at
         ))
     return response
+
+@router.post("/preview", response_model=InvoiceResponse, tags=["Invoices"])
+def preview_invoice(
+    payload: InvoiceCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+):
+    """
+    Returns a computed preview of an invoice without creating it.
+    Useful for frontend live preview before submission.
+    """
+    # Verify Customer belongs to active tenant
+    contact = db.query(Contact).filter(
+        Contact.id == payload.contact_id,
+        Contact.tenant_id == tenant_id,
+        Contact.deleted_at == None
+    ).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Customer not found in this company context.")
+
+    origin_state_code = resolve_origin_state_code(db, tenant_id)
+
+    db_lines = []
+    inv_subtotal = Decimal("0.0000")
+    inv_cgst = Decimal("0.0000")
+    inv_sgst = Decimal("0.0000")
+    inv_igst = Decimal("0.0000")
+    inv_utgst = Decimal("0.0000")
+    inv_cess = Decimal("0.0000")
+    inv_discount = Decimal("0.0000")
+
+    for line in payload.line_items:
+        product = db.query(Product).filter(
+            Product.id == line.product_id,
+            Product.tenant_id == tenant_id,
+            Product.deleted_at == None
+        ).first()
+        if not product:
+            raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
+
+        line_subtotal = (line.quantity * line.rate) - line.discount
+        if line_subtotal < 0:
+            raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
+
+        tax_split = GSTEngine.calculate_tax(
+            origin_state_code=origin_state_code,
+            place_of_supply_state_code=payload.pos_state_code,
+            base_amount=line_subtotal,
+            gst_rate=line.gst_rate
+        )
+
+        db_line = InvoiceLine(
+            product_id=line.product_id,
+            quantity=line.quantity,
+            rate=line.rate,
+            discount=line.discount,
+            subtotal=line_subtotal,
+            hsn_sac=line.hsn_sac,
+            gst_rate=line.gst_rate,
+            cgst_rate=tax_split.cgst_rate,
+            cgst_amount=tax_split.cgst_amount,
+            sgst_rate=tax_split.sgst_rate,
+            sgst_amount=tax_split.sgst_amount,
+            igst_rate=tax_split.igst_rate,
+            igst_amount=tax_split.igst_amount,
+            utgst_rate=tax_split.utgst_rate,
+            utgst_amount=tax_split.utgst_amount,
+            cess_rate=tax_split.cess_rate,
+            cess_amount=tax_split.cess_amount,
+            total=tax_split.total_amount
+        )
+        db_lines.append(db_line)
+
+        inv_subtotal += db_line.subtotal
+        inv_cgst += db_line.cgst_amount
+        inv_sgst += db_line.sgst_amount
+        inv_igst += db_line.igst_amount
+        inv_utgst += db_line.utgst_amount
+        inv_cess += db_line.cess_amount
+        inv_discount += db_line.discount
+
+    # Apply header-level discount and shipping charges
+    header_discount_rate = payload.discount_rate or Decimal("0.00")
+    header_shipping = payload.shipping_charges or Decimal("0.0000")
+    
+    # Apply header discount as a percentage of subtotal
+    discount_amount = (inv_subtotal * header_discount_rate / Decimal("100.00")).quantize(Decimal("0.0001"))
+    adjusted_subtotal = inv_subtotal - discount_amount
+    
+    tax_multiplier = Decimal("1.00") if inv_subtotal == 0 else adjusted_subtotal / inv_subtotal
+    final_cgst = (inv_cgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_sgst = (inv_sgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_igst = (inv_igst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_utgst = (inv_utgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_cess = (inv_cess * tax_multiplier).quantize(Decimal("0.0001"))
+    
+    raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
+    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    round_off = rounded_total - raw_total
+
+    # Build response without persisting
+    preview_invoice = Invoice(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000000"),  # Dummy ID for preview
+        tenant_id=tenant_id,
+        contact_id=payload.contact_id,
+        invoice_number="PREVIEW",
+        issue_date=payload.issue_date,
+        due_date=payload.due_date,
+        status="DRAFT",
+        subtotal=inv_subtotal,
+        discount_total=discount_amount,
+        cgst_amount=final_cgst,
+        sgst_amount=final_sgst,
+        igst_amount=final_igst,
+        utgst_amount=final_utgst,
+        cess_amount=final_cess,
+        round_off=round_off,
+        total=rounded_total,
+        amount_paid=Decimal("0.0000"),
+        pos_state_code=payload.pos_state_code,
+        e_invoice_status="PENDING",
+        lines=db_lines
+    )
+
+    return preview_invoice
+
 
 # ==========================================
 # CREDIT NOTES ROUTERS
@@ -453,7 +594,7 @@ def finalize_credit_note(
         entry_date=ledger_draft.entry_date,
         reference_number=ledger_draft.reference_number,
         description=ledger_draft.description,
-        source_type="INVOICE",
+        source_type="CREDIT_NOTE",
         source_id=cn.id,
         lines=[
             JournalLine(
@@ -650,7 +791,7 @@ def finalize_debit_note(
         entry_date=ledger_draft.entry_date,
         reference_number=ledger_draft.reference_number,
         description=ledger_draft.description,
-        source_type="INVOICE",
+        source_type="DEBIT_NOTE",
         source_id=dn.id,
         lines=[
             JournalLine(
@@ -724,9 +865,15 @@ def update_invoice(
         invoice.pos_state_code = payload.pos_state_code
 
     if payload.line_items is not None:
-        db.query(InvoiceLine).filter(InvoiceLine.invoice_id == id).delete()
-
+        # Use upsert logic: update existing, create new, delete removed
         origin_state_code = resolve_origin_state_code(db, tenant_id)
+        
+        # Map existing lines by a composite key (product_id + hsn_sac as a simple unique key)
+        existing_lines = db.query(InvoiceLine).filter(InvoiceLine.invoice_id == id).all()
+        existing_map = {(line.product_id, line.hsn_sac): line for line in existing_lines}
+        
+        # Track which existing lines are being kept
+        kept_keys = set()
         db_lines = []
         inv_subtotal = Decimal("0.0000")
         inv_cgst = Decimal("0.0000")
@@ -749,28 +896,54 @@ def update_invoice(
                 gst_rate=line.gst_rate
             )
 
-            db_line = InvoiceLine(
-                invoice_id=invoice.id,
-                product_id=line.product_id,
-                quantity=line.quantity,
-                rate=line.rate,
-                discount=line.discount,
-                subtotal=line_subtotal,
-                hsn_sac=line.hsn_sac,
-                gst_rate=line.gst_rate,
-                cgst_rate=tax_split.cgst_rate,
-                cgst_amount=tax_split.cgst_amount,
-                sgst_rate=tax_split.sgst_rate,
-                sgst_amount=tax_split.sgst_amount,
-                igst_rate=tax_split.igst_rate,
-                igst_amount=tax_split.igst_amount,
-                utgst_rate=tax_split.utgst_rate,
-                utgst_amount=tax_split.utgst_amount,
-                cess_rate=tax_split.cess_rate,
-                cess_amount=tax_split.cess_amount,
-                total=tax_split.total_amount
-            )
+            key = (line.product_id, line.hsn_sac)
+            if key in existing_map:
+                # Update existing line
+                db_line = existing_map[key]
+                db_line.quantity = line.quantity
+                db_line.rate = line.rate
+                db_line.discount = line.discount
+                db_line.subtotal = line_subtotal
+                db_line.hsn_sac = line.hsn_sac
+                db_line.gst_rate = line.gst_rate
+                db_line.cgst_rate = tax_split.cgst_rate
+                db_line.cgst_amount = tax_split.cgst_amount
+                db_line.sgst_rate = tax_split.sgst_rate
+                db_line.sgst_amount = tax_split.sgst_amount
+                db_line.igst_rate = tax_split.igst_rate
+                db_line.igst_amount = tax_split.igst_amount
+                db_line.utgst_rate = tax_split.utgst_rate
+                db_line.utgst_amount = tax_split.utgst_amount
+                db_line.cess_rate = tax_split.cess_rate
+                db_line.cess_amount = tax_split.cess_amount
+                db_line.total = tax_split.total_amount
+            else:
+                # Create new line
+                db_line = InvoiceLine(
+                    invoice_id=invoice.id,
+                    product_id=line.product_id,
+                    quantity=line.quantity,
+                    rate=line.rate,
+                    discount=line.discount,
+                    subtotal=line_subtotal,
+                    hsn_sac=line.hsn_sac,
+                    gst_rate=line.gst_rate,
+                    cgst_rate=tax_split.cgst_rate,
+                    cgst_amount=tax_split.cgst_amount,
+                    sgst_rate=tax_split.sgst_rate,
+                    sgst_amount=tax_split.sgst_amount,
+                    igst_rate=tax_split.igst_rate,
+                    igst_amount=tax_split.igst_amount,
+                    utgst_rate=tax_split.utgst_rate,
+                    utgst_amount=tax_split.utgst_amount,
+                    cess_rate=tax_split.cess_rate,
+                    cess_amount=tax_split.cess_amount,
+                    total=tax_split.total_amount
+                )
+                db.add(db_line)
+            
             db_lines.append(db_line)
+            kept_keys.add(key)
 
             inv_subtotal += db_line.subtotal
             inv_cgst += db_line.cgst_amount
@@ -780,16 +953,37 @@ def update_invoice(
             inv_cess += db_line.cess_amount
             inv_discount += db_line.discount
 
-        invoice.subtotal = inv_subtotal
-        invoice.discount_total = inv_discount
-        invoice.cgst_amount = inv_cgst
-        invoice.sgst_amount = inv_sgst
-        invoice.igst_amount = inv_igst
-        invoice.utgst_amount = inv_utgst
-        invoice.cess_amount = inv_cess
-        raw_total = inv_subtotal + inv_cgst + inv_sgst + inv_igst + inv_utgst + inv_cess
+        # Delete removed lines
+        for key, existing_line in existing_map.items():
+            if key not in kept_keys:
+                db.delete(existing_line)
+
+        # Apply header-level discount and shipping
+        header_discount_rate = payload.discount_rate or Decimal("0.00")
+        header_shipping = payload.shipping_charges or Decimal("0.0000")
+        
+        discount_amount = (inv_subtotal * header_discount_rate / Decimal("100.00")).quantize(Decimal("0.0001"))
+        adjusted_subtotal = inv_subtotal - discount_amount
+        
+        tax_multiplier = Decimal("1.00") if inv_subtotal == 0 else adjusted_subtotal / inv_subtotal
+        final_cgst = (inv_cgst * tax_multiplier).quantize(Decimal("0.0001"))
+        final_sgst = (inv_sgst * tax_multiplier).quantize(Decimal("0.0001"))
+        final_igst = (inv_igst * tax_multiplier).quantize(Decimal("0.0001"))
+        final_utgst = (inv_utgst * tax_multiplier).quantize(Decimal("0.0001"))
+        final_cess = (inv_cess * tax_multiplier).quantize(Decimal("0.0001"))
+        
+        raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
         rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
-        invoice.round_off = rounded_total - raw_total
+        round_off = rounded_total - raw_total
+
+        invoice.subtotal = inv_subtotal
+        invoice.discount_total = discount_amount
+        invoice.cgst_amount = final_cgst
+        invoice.sgst_amount = final_sgst
+        invoice.igst_amount = final_igst
+        invoice.utgst_amount = final_utgst
+        invoice.cess_amount = final_cess
+        invoice.round_off = round_off
         invoice.total = rounded_total
         invoice.lines = db_lines
 

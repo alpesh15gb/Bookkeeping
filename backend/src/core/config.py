@@ -8,7 +8,7 @@ import os
 from functools import lru_cache
 from typing import List
 from pydantic_settings import BaseSettings
-from pydantic import field_validator, model_validator
+from pydantic import field_validator
 
 
 class Settings(BaseSettings):
@@ -51,11 +51,11 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------------
     # Email (SMTP / SendGrid)
     # ----------------------------------------------------------------
-    SMTP_HOST: str = "smtp.hostinger.com"
+    SMTP_HOST: str = ""
     SMTP_PORT: int = 587
-    SMTP_USER: str = "support@apexbooks.in"
-    SMTP_PASSWORD: str = "Adish@786#"
-    EMAIL_FROM: str = "support@apexbooks.in"
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    EMAIL_FROM: str = ""
 
     # ----------------------------------------------------------------
     # File Storage (S3-compatible)
