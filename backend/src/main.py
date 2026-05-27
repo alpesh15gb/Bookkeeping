@@ -68,6 +68,8 @@ from src.api.v1.eway_bills import router as eway_bills_router
 from src.api.idempotency_middleware import IdempotencyMiddleware
 from src.api.v1.reports import router as reports_router
 from src.api.v1.audit import router as audit_router
+from src.api.v1.dashboard import router as dashboard_router
+from src.api.v1.reminders import router as reminders_router
 from src.api.v1.expenses import router as expenses_router
 from src.api.v1.vyapar_import import router as vyapar_import_router
 from src.schemas.document import ContactResponse, ProductResponse
@@ -313,6 +315,8 @@ app.include_router(hsn_lookup_router, prefix="/api/v1")
 app.include_router(eway_bills_router, prefix="/api/v1")
 app.include_router(reports_router,    prefix="/api/v1")
 app.include_router(audit_router,      prefix="/api/v1")
+app.include_router(dashboard_router,  prefix="/api/v1")
+app.include_router(reminders_router,  prefix="/api/v1")
 app.include_router(expenses_router,   prefix="/api/v1")
 app.include_router(gstr2a_router,     prefix="/api/v1")
 app.include_router(vyapar_import_router, prefix="/api/v1")

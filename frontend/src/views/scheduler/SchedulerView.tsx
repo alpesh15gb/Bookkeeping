@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { ArrowLeft, Plus } from "lucide-react";
+import "../../lib/syncfusion";
+
+const ScheduleInternal = React.lazy(() => import("./ScheduleInternal"));
 
 interface SchedulerViewProps {
   onNavigate: (view: any) => void;
@@ -18,35 +21,7 @@ interface Reminder {
 }
 
 export default function SchedulerView({ onNavigate }: SchedulerViewProps) {
-  const [ScheduleComponent, setScheduleComponent] = useState<any>(null);
-  const [ViewsDirective, setViewsDirective] = useState<any>(null);
-  const [ViewDirective, setViewDirective] = useState<any>(null);
-  const [Inject, setInject] = useState<any>(null);
-  const [Day, setDay] = useState<any>(null);
-  const [Week, setWeek] = useState<any>(null);
-  const [Month, setMonth] = useState<any>(null);
-  const [Agenda, setAgenda] = useState<any>(null);
-  const [mounted, setMounted] = useState(false);
   const queryClient = useQueryClient();
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      await import("../../lib/syncfusion");
-      const mod = await import("@syncfusion/ej2-react-schedule");
-      if (cancelled) return;
-      setScheduleComponent(() => mod.ScheduleComponent);
-      setViewsDirective(() => mod.ViewsDirective);
-      setViewDirective(() => mod.ViewDirective);
-      setInject(() => mod.Inject);
-      setDay(() => mod.Day);
-      setWeek(() => mod.Week);
-      setMonth(() => mod.Month);
-      setAgenda(() => mod.Agenda);
-      setMounted(true);
-    })();
-    return () => { cancelled = true; };
-  }, []);
 
   const { data: reminders = [] } = useQuery<Reminder[]>({
     queryKey: ["reminders"],
@@ -143,37 +118,17 @@ export default function SchedulerView({ onNavigate }: SchedulerViewProps) {
         </div>
       )}
 
-      {mounted && ScheduleComponent && ViewsDirective && ViewDirective && Inject && Day && Week && Month && Agenda ? (
-        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden ej-schedule-custom">
-          {React.createElement(ScheduleComponent, {
-            height: "600px",
-            selectedDate: new Date(),
-            eventSettings: { dataSource: events },
-            children: [
-              React.createElement(
-                ViewsDirective,
-                null,
-                React.createElement(ViewDirective, { option: "Day" }),
-                React.createElement(ViewDirective, { option: "Week" }),
-                React.createElement(ViewDirective, { option: "Month" }),
-                React.createElement(ViewDirective, { option: "Agenda" }),
-              ),
-              React.createElement(
-                Inject,
-                null,
-                Day,
-                Week,
-                Month,
-                Agenda,
-              ),
-            ],
-          })}
-        </div>
-      ) : (
-        <div className="flex justify-center items-center py-20">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600"></div>
-        </div>
-      )}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden ej-schedule-custom">
+        <Suspense
+          fallback={
+            <div className="flex justify-center items-center py-20">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-600" />
+            </div>
+          }
+        >
+          <ScheduleInternal events={events} />
+        </Suspense>
+      </div>
     </div>
   );
 }
