@@ -233,18 +233,17 @@ def post_expense(
         description=f"Expense: {expense.description or 'No description'}",
         source_type="EXPENSE",
         source_id=expense.id,
+        lines=[
+            JournalLine(
+                account_id=line.account_id,
+                amount=line.amount,
+                direction=line.direction,
+                narration=line.narration,
+            )
+            for line in ledger_draft.lines
+        ]
     )
     db.add(journal_entry)
-
-    for line in ledger_draft.lines:
-        jl = JournalLine(
-            entry_id=journal_entry.id,
-            account_id=line.account_id,
-            direction=line.direction,
-            amount=line.amount,
-            description=line.narration,
-        )
-        db.add(jl)
 
     expense.status = "POSTED"
 

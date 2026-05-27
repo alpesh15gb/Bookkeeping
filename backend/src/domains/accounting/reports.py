@@ -36,7 +36,7 @@ class FinancialReportingService:
             SELECT 
                 a.name AS account_name,
                 a.code AS account_code,
-                a.classification,
+                a.account_type AS classification,
                 COALESCE(SUM(CASE WHEN jl.direction = 'DEBIT' THEN jl.amount ELSE 0 END), 0) AS total_debit,
                 COALESCE(SUM(CASE WHEN jl.direction = 'CREDIT' THEN jl.amount ELSE 0 END), 0) AS total_credit
             FROM accounts a
@@ -44,7 +44,7 @@ class FinancialReportingService:
             LEFT JOIN journal_entries je ON jl.entry_id = je.id
             WHERE (je.entry_date <= :as_of_date OR je.entry_date IS NULL)
               AND a.deleted_at IS NULL
-            GROUP BY a.id, a.name, a.code, a.classification
+            GROUP BY a.id, a.name, a.code, a.account_type
             ORDER BY a.code
         """)
 
@@ -94,17 +94,17 @@ class FinancialReportingService:
             SELECT 
                 a.name AS account_name,
                 a.code AS account_code,
-                a.classification,
+                a.account_type AS classification,
                 COALESCE(SUM(CASE WHEN jl.direction = 'DEBIT' THEN jl.amount ELSE 0 END), 0) AS total_debit,
                 COALESCE(SUM(CASE WHEN jl.direction = 'CREDIT' THEN jl.amount ELSE 0 END), 0) AS total_credit
             FROM accounts a
             JOIN journal_lines jl ON a.id = jl.account_id
             JOIN journal_entries je ON jl.entry_id = je.id
             WHERE je.entry_date BETWEEN :start_date AND :end_date
-              AND a.classification IN ('REVENUE', 'EXPENSE')
+              AND a.account_type IN ('REVENUE', 'EXPENSE')
               AND a.deleted_at IS NULL
-            GROUP BY a.id, a.name, a.code, a.classification
-            ORDER BY a.classification DESC, a.code ASC
+            GROUP BY a.id, a.name, a.code, a.account_type
+            ORDER BY a.account_type DESC, a.code ASC
         """)
 
         result = db.execute(query, {"start_date": start_date, "end_date": end_date}).fetchall()
@@ -156,17 +156,17 @@ class FinancialReportingService:
             SELECT 
                 a.name AS account_name,
                 a.code AS account_code,
-                a.classification,
+                a.account_type AS classification,
                 COALESCE(SUM(CASE WHEN jl.direction = 'DEBIT' THEN jl.amount ELSE 0 END), 0) AS total_debit,
                 COALESCE(SUM(CASE WHEN jl.direction = 'CREDIT' THEN jl.amount ELSE 0 END), 0) AS total_credit
             FROM accounts a
             JOIN journal_lines jl ON a.id = jl.account_id
             JOIN journal_entries je ON jl.entry_id = je.id
             WHERE je.entry_date <= :as_of_date
-              AND a.classification IN ('ASSET', 'LIABILITY', 'EQUITY')
+              AND a.account_type IN ('ASSET', 'LIABILITY', 'EQUITY')
               AND a.deleted_at IS NULL
-            GROUP BY a.id, a.name, a.code, a.classification
-            ORDER BY a.classification ASC, a.code ASC
+            GROUP BY a.id, a.name, a.code, a.account_type
+            ORDER BY a.account_type ASC, a.code ASC
         """)
 
         result = db.execute(query, {"as_of_date": as_of_date}).fetchall()
