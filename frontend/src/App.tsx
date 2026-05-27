@@ -656,8 +656,19 @@ export default function App() {
           {currentView === "invoice_grid" && <InvoiceList onNavigate={handleNavigateInvoices} />}
           {currentView === "bill_grid" && <BillList onNavigate={handleNavigateBills} />}
           {currentView === "expense_grid" && <ExpenseList onNavigate={handleNavigateExpenses} />}
-          {currentView === "ledger_grid" && activeAccountId && (
-            <LedgerView accountId={activeAccountId} onNavigate={handleNavigateAccounts} />
+          {currentView === "ledger_grid" && (
+            activeAccountId ? (
+              <LedgerView accountId={activeAccountId} onNavigate={handleNavigateAccounts} />
+            ) : (
+              <AccountList onNavigate={(view, id) => {
+                if (view === "detail" && id) {
+                  setActiveAccountId(id);
+                  setCurrentView("ledger_grid");
+                } else {
+                  handleNavigateAccounts(view, id);
+                }
+              }} />
+            )
           )}
           {currentView === "trial_balance_grid" && <TrialBalance onNavigate={handleNavigateAccounts} />}
           {currentView === "dashboard_charts" && <SalesDashboard onNavigate={() => {}} />}
