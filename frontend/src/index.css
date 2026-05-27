@@ -42,9 +42,9 @@
   input[type="password"],
   select,
   textarea {
-    @apply w-full px-3 py-2 text-sm bg-white border border-[var(--color-border)] rounded-lg shadow-sm;
+    @apply w-full px-3 py-2 text-sm bg-white border border-zinc-200 rounded-lg shadow-sm;
     @apply focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-[var(--color-primary)];
-    @apply transition duration-150 ease-in-out placeholder-[var(--color-text-muted)];
+    @apply transition duration-150 ease-in-out;
   }
 }
 
@@ -118,7 +118,7 @@
     @apply px-4 py-3 bg-zinc-50/70 text-[var(--color-text-secondary)] font-semibold border-b border-[var(--color-border)] text-xs uppercase tracking-wider;
   }
   .financial-table td {
-    @apply px-4 py-3.5 text-[var(--color-text-primary)] border-b border-[var(--color-border)]/60 align-middle;
+    @apply px-4 py-3.5 text-[var(--color-text-primary)] border-b border-zinc-200/60 align-middle;
   }
   .financial-table tr {
     @apply hover:bg-zinc-50/40 transition duration-100 ease-in-out;
