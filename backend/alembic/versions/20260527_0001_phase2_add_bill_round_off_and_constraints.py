@@ -17,54 +17,69 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
-def upgrade() -> None:
-    # Add round_off column to bills
-    op.add_column("bills", sa.Column("round_off", sa.Numeric(15, 4), nullable=False, server_default=sa.text("0.0000")))
-
-    # Check constraints for invoices
-    op.create_check_constraint(
-        "ck_invoices_total_balance",
+CONSTRAINTS = {
+    "ck_invoices_total_balance": (
         "invoices",
         "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total",
-    )
-    op.create_check_constraint(
-        "ck_invoices_amount_paid",
+    ),
+    "ck_invoices_amount_paid": (
         "invoices",
         "amount_paid <= total",
-    )
-
-    # Check constraints for bills
-    op.create_check_constraint(
-        "ck_bills_total_balance",
+    ),
+    "ck_bills_total_balance": (
         "bills",
         "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total",
-    )
-    op.create_check_constraint(
-        "ck_bills_amount_paid",
+    ),
+    "ck_bills_amount_paid": (
         "bills",
         "amount_paid <= total",
-    )
-
-    # Check constraints for credit_notes (no discount_total column)
-    op.create_check_constraint(
-        "ck_credit_notes_total_balance",
+    ),
+    "ck_credit_notes_total_balance": (
         "credit_notes",
         "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off",
-    )
-
-    # Check constraints for debit_notes (no discount_total column)
-    op.create_check_constraint(
-        "ck_debit_notes_total_balance",
+    ),
+    "ck_debit_notes_total_balance": (
         "debit_notes",
         "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off",
-    )
+    ),
+}
+
+
+def upgrade() -> None:
+    # Idempotent: add column only if it doesn't exist
+    conn = op.get_bind()
+    
+    # Add round_off to bills if not present
+    result = conn.execute(
+        sa.text(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='bills' AND column_name='round_off'"
+        )
+    ).fetchone()
+    if not result:
+        op.add_column("bills", sa.Column("round_off", sa.Numeric(15, 4), nullable=False, server_default=sa.text("0.0000")))
+
+    # Create check constraints idempotently
+    for name, (table, condition) in CONSTRAINTS.items():
+        # Check if constraint already exists
+        result = conn.execute(
+            sa.text(
+                "SELECT constraint_name FROM information_schema.table_constraints "
+                "WHERE table_name=:t AND constraint_name=:n"
+            ),
+            {"t": table, "n": name},
+        ).fetchone()
+        if not result:
+            op.create_check_constraint(name, table, condition)
 
 
 def downgrade() -> None:
-    op.drop_constraint("ck_debit_notes_total_balance", "debit_notes", type_="check")
-    op.drop_constraint("ck_credit_notes_total_balance", "credit_notes", type_="check")
-    op.drop_constraint("ck_bills_amount_paid", "bills", type_="check")
-    op.drop_constraint("ck_bills_total_balance", "bills", type_="check")
-    op.drop_constraint("ck_invoices_amount_paid", "invoices", type_="check")
-    op.drop_constraint("ck_invoices_total_balance", "invoices", type_="check")
-    op.drop_column("bills", "round_off")
+    for name in reversed(list(CONSTRAINTS.keys())):
+        try:
+            op.drop_constraint(name, CONSTRAINTS[name][0], type_="check")
+        except Exception:
+            pass
+    try:
+        op.drop_column("bills", "round_off")
+    except Exception:
+        pass

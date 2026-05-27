@@ -1156,6 +1156,14 @@ class CreditNote(Base):
     __table_args__ = (
         Index("ix_credit_notes_tenant_id", "tenant_id"),
         Index("ix_credit_notes_invoice_id", "invoice_id"),
+        CheckConstraint(
+            "status IN ('DRAFT', 'ISSUED', 'CANCELLED')",
+            name="ck_credit_notes_status",
+        ),
+        CheckConstraint(
+            "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off",
+            name="ck_credit_notes_total_balance",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1216,6 +1224,14 @@ class DebitNote(Base):
     __table_args__ = (
         Index("ix_debit_notes_tenant_id", "tenant_id"),
         Index("ix_debit_notes_invoice_id", "invoice_id"),
+        CheckConstraint(
+            "status IN ('DRAFT', 'ISSUED', 'CANCELLED')",
+            name="ck_debit_notes_status",
+        ),
+        CheckConstraint(
+            "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off",
+            name="ck_debit_notes_total_balance",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
