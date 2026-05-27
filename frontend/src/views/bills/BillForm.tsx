@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { Trash2, Plus, ArrowLeft, AlertCircle, Save, Send, Printer, Share2, Cog } from "lucide-react";
@@ -287,25 +287,7 @@ export default function BillForm({ editId, onNavigate, onSuccess }: BillFormProp
     };
   };
 
-  const totals = backendTotals
-    ? {
-        subtotal: Number(backendTotals.subtotal) || 0,
-        discountValue: Number(backendTotals.discount_total) || 0,
-        taxableAmount: Number(backendTotals.subtotal) - Number(backendTotals.discount_total) || 0,
-        cgst: Number(backendTotals.cgst_amount) || 0,
-        sgst: Number(backendTotals.sgst_amount) || 0,
-        igst: Number(backendTotals.igst_amount) || 0,
-        grandTotal: Number(backendTotals.total) || 0,
-      }
-    : {
-        subtotal: 0,
-        discountValue: 0,
-        taxableAmount: 0,
-        cgst: 0,
-        sgst: 0,
-        igst: 0,
-        grandTotal: 0,
-      };
+  const totals = useMemo(calculateTotals, [lines, discountPercent, shippingCharges]);
 
   // Create or Update Mutation
   const saveMutation = useMutation({

@@ -40,7 +40,7 @@ export default function SyncfusionChart(props: SyncfusionChartProps) {
       await import("../lib/syncfusion");
       const [
         { ChartComponent: CC, SeriesDirective: SD, SeriesCollectionDirective: SCD, Inject: Inj },
-        { LineSeries, ColumnSeries, AreaSeries, SplineSeries, BarSeries, PieSeries, AccumulationPieSeries, AccumulationToolbar, Tooltip, Legend, Category, DateTime, Logarithmic },
+        { LineSeries, ColumnSeries, AreaSeries, SplineSeries, BarSeries, PieSeries, AccumulationSeries, Tooltip, Legend, Category, DateTime, Logarithmic },
       ] = await Promise.all([
         import("@syncfusion/ej2-react-charts"),
         import("@syncfusion/ej2-charts"),
@@ -52,7 +52,7 @@ export default function SyncfusionChart(props: SyncfusionChartProps) {
       setInject(() => Inj);
       setChartServices([
         LineSeries, ColumnSeries, AreaSeries, SplineSeries, BarSeries, 
-        PieSeries, AccumulationPieSeries, AccumulationToolbar, 
+        PieSeries, AccumulationSeries, 
         Tooltip, Legend, Category, DateTime, Logarithmic
       ]);
       setMounted(true);

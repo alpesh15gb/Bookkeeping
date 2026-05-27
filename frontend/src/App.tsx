@@ -52,6 +52,8 @@ const TrialBalanceGrid = lazy(() => import("./views/accounting/TrialBalanceGrid"
 const SalesDashboardCharts = lazy(() => import("./views/dashboard/SalesDashboardCharts"));
 const JournalEntryView = lazy(() => import("./views/accounting/JournalEntryView"));
 const SchedulerView = lazy(() => import("./views/scheduler/SchedulerView"));
+import LedgerView from "./views/accounting/LedgerView";
+import TrialBalance from "./views/accounting/TrialBalance";
 
 import logo from "./logo.png";
 import { apiClient, setAccessToken, setTenantId } from "./lib/api";
