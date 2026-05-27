@@ -45,18 +45,18 @@ def upgrade() -> None:
         "amount_paid <= total",
     )
 
-    # Check constraints for credit_notes
+    # Check constraints for credit_notes (no discount_total column)
     op.create_check_constraint(
         "ck_credit_notes_total_balance",
         "credit_notes",
-        "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total",
+        "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off",
     )
 
-    # Check constraints for debit_notes
+    # Check constraints for debit_notes (no discount_total column)
     op.create_check_constraint(
         "ck_debit_notes_total_balance",
         "debit_notes",
-        "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total",
+        "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off",
     )
 
 
