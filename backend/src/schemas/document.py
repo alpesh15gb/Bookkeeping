@@ -135,6 +135,12 @@ class InvoiceListResponse(SchemaBase):
     contact_name: str
     created_at: datetime
 
+class PaginatedInvoiceResponse(SchemaBase):
+    items: List[InvoiceListResponse]
+    total: int
+    page: int
+    limit: int
+
 # CREDIT NOTE SCHEMAS
 class CreditNoteLineCreate(SchemaBase):
     product_id: uuid.UUID

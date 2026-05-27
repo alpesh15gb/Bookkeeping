@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import uuid
 from decimal import Decimal
 from datetime import date
@@ -12,7 +12,8 @@ from src.infrastructure.database.models import (
     CreditNote, CreditNoteLine, DebitNote, DebitNoteLine, TenantSetting, BankingProfile, Tenant
 )
 from src.schemas.document import (
-    InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse, PaymentCreate,
+    InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse,
+    PaginatedInvoiceResponse, PaymentCreate,
     CreditNoteCreate, CreditNoteResponse, CreditNoteListResponse,
     DebitNoteCreate, DebitNoteResponse, DebitNoteListResponse
 )
@@ -165,23 +166,42 @@ def create_invoice(
     db.refresh(invoice)
     return invoice
 
-@router.get("", response_model=List[InvoiceListResponse])
+@router.get("", response_model=PaginatedInvoiceResponse)
 def list_invoices(
     page: int = 1,
     limit: int = 50,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
     offset = (page - 1) * limit
-    # Filter query by tenant_id (RLS handles this at DB layer, but we double-check here)
-    results = db.query(Invoice, Contact.name.label("contact_name"))\
+    q = db.query(Invoice, Contact.name.label("contact_name"))\
         .join(Contact, Invoice.contact_id == Contact.id)\
-        .filter(Invoice.tenant_id == tenant_id, Invoice.deleted_at == None)\
-        .offset(offset).limit(limit).all()
+        .filter(Invoice.tenant_id == tenant_id, Invoice.deleted_at == None)
 
-    response = []
+    if search:
+        q = q.filter(
+            Invoice.invoice_number.ilike(f"%{search}%") |
+            Contact.name.ilike(f"%{search}%")
+        )
+
+    if status and status.upper() != "ALL":
+        if status.upper() == "PAID":
+            q = q.filter(Invoice.status == "PAID")
+        elif status.upper() == "CANCELLED":
+            q = q.filter(Invoice.status == "CANCELLED")
+        elif status.upper() == "UNPAID":
+            q = q.filter(Invoice.status.notin_(["PAID", "CANCELLED"]))
+        else:
+            q = q.filter(Invoice.status == status.upper())
+
+    total = q.count()
+    results = q.offset(offset).limit(limit).all()
+
+    items = []
     for inv, contact_name in results:
-        response.append(InvoiceListResponse(
+        items.append(InvoiceListResponse(
             id=inv.id,
             invoice_number=inv.invoice_number,
             issue_date=inv.issue_date,
@@ -192,7 +212,7 @@ def list_invoices(
             contact_name=contact_name,
             created_at=inv.created_at
         ))
-    return response
+    return PaginatedInvoiceResponse(items=items, total=total, page=page, limit=limit)
 
 @router.post("/preview", response_model=InvoiceResponse, tags=["Invoices"])
 def preview_invoice(
