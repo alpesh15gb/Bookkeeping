@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { ArrowLeft, Save, Plus, Trash2 } from "lucide-react";
 
@@ -32,6 +32,14 @@ export default function JournalEntryView({ onNavigate }: JournalEntryViewProps) 
   const [lines, setLines] = useState<JournalLine[]>([emptyLine(), emptyLine()]);
   const [error, setError] = useState("");
   const queryClient = useQueryClient();
+
+  const { data: accounts = [] } = useQuery<{ id: string; name: string; account_type: string }[]>({
+    queryKey: ["masters-accounts"],
+    queryFn: async () => {
+      const res = await apiClient.get("/masters/accounts");
+      return res.data;
+    },
+  });
 
   const totalDebit = lines.reduce((s, l) => s + (l.debit || 0), 0);
   const totalCredit = lines.reduce((s, l) => s + (l.credit || 0), 0);
@@ -154,16 +162,22 @@ export default function JournalEntryView({ onNavigate }: JournalEntryViewProps) 
                 <tr key={line.id} className="hover:bg-slate-50/50 transition">
                   <td className="px-4 py-2 text-slate-400 text-xs font-mono">{index + 1}</td>
                   <td className="px-4 py-2">
-                    <input
-                      type="text"
-                      value={line.account_name}
+                    <select
+                      value={line.account_id}
                       onChange={(e) => {
-                        updateLine(line.id, "account_name", e.target.value);
+                        const selected = accounts.find((a) => a.id === e.target.value);
                         updateLine(line.id, "account_id", e.target.value);
+                        updateLine(line.id, "account_name", selected ? `${selected.name} (${selected.account_type})` : "");
                       }}
-                      placeholder="Search or type account..."
                       className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"
-                    />
+                    >
+                      <option value="">-- Select Account --</option>
+                      {accounts.map((acct) => (
+                        <option key={acct.id} value={acct.id}>
+                          {acct.name} ({acct.account_type})
+                        </option>
+                      ))}
+                    </select>
                   </td>
                   <td className="px-4 py-2">
                     <input

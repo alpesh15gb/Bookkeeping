@@ -8,15 +8,17 @@ from sqlalchemy import func
 from src.api.deps import get_db_session, enforce_permission
 from src.infrastructure.database.models import Expense, ExpenseCategory
 from src.schemas.expense_schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseListResponse, ExpensePreviewRequest, ExpensePreviewResponse
-from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
+from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.taxation.services import GSTEngine
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
 
-def _compute_expense_totals(amount: Decimal, gst_rate: Decimal, place_of_supply_state_code: str = "27") -> dict:
+def _compute_expense_totals(db: Session, tenant_id: uuid.UUID, amount: Decimal, gst_rate: Decimal, place_of_supply_state_code: str) -> dict:
+    from src.domains.company.services import resolve_origin_state_code
+    origin = resolve_origin_state_code(db, tenant_id)
     tax_split = GSTEngine.calculate_tax(
-        origin_state_code="27",
+        origin_state_code=origin,
         place_of_supply_state_code=place_of_supply_state_code,
         base_amount=amount,
         gst_rate=gst_rate,
@@ -67,7 +69,7 @@ def _gen_expense_number(db: Session, tenant_id: uuid.UUID) -> str:
     last = db.query(func.max(Expense.expense_number)).filter(
         Expense.tenant_id == tenant_id,
         Expense.expense_number.like(f"{prefix}%"),
-    ).scalar()
+    ).with_for_update().scalar()
     next_num = 1
     if last:
         try:
@@ -80,8 +82,10 @@ def _gen_expense_number(db: Session, tenant_id: uuid.UUID) -> str:
 @router.post("/preview", response_model=ExpensePreviewResponse)
 def preview_expense(
     payload: ExpensePreviewRequest,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("expense:view")),
 ):
-    totals = _compute_expense_totals(payload.amount, payload.gst_rate)
+    totals = _compute_expense_totals(db=db, tenant_id=tenant_id, amount=payload.amount, gst_rate=payload.gst_rate, place_of_supply_state_code=payload.place_of_supply_state_code or "27")
     return ExpensePreviewResponse(**totals)
 
 
@@ -100,7 +104,7 @@ def create_expense(
         raise HTTPException(status_code=404, detail="Expense category not found.")
 
     expense_number = _gen_expense_number(db, tenant_id)
-    totals = _compute_expense_totals(payload.amount, payload.gst_rate)
+    totals = _compute_expense_totals(db, tenant_id, payload.amount, payload.gst_rate, payload.place_of_supply_state_code or origin_state_code)
 
     expense = Expense(
         tenant_id=tenant_id,
@@ -218,7 +222,7 @@ def update_expense(
         expense.gst_rate = payload.gst_rate
 
     if recompute:
-        totals = _compute_expense_totals(expense.amount, expense.gst_rate)
+        totals = _compute_expense_totals(db, tenant_id, expense.amount, expense.gst_rate, expense.pos_state_code or "27")
         expense.cgst_amount = totals["cgst_amount"]
         expense.sgst_amount = totals["sgst_amount"]
         expense.igst_amount = totals["igst_amount"]
@@ -310,29 +314,9 @@ def post_expense(
 
     from src.infrastructure.database.models import JournalEntry, JournalLine
 
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=expense.expense_date,
-        reference_number=expense.expense_number,
-        description=f"Expense: {expense.description or 'No description'}",
-        source_type="EXPENSE",
-        source_id=expense.id,
-        lines=[
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=line.direction,
-                narration=line.narration,
-            )
-            for line in ledger_draft.lines
-        ]
-    )
-    db.add(journal_entry)
+    journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     expense.status = "POSTED"
-
-    account_ids = {line.account_id for line in ledger_draft.lines}
-    update_account_balances(db, tenant_id, account_ids)
     db.commit()
 
     db.refresh(expense)
@@ -399,28 +383,9 @@ def cancel_expense(
 
     from src.infrastructure.database.models import JournalEntry, JournalLine
 
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=ledger_draft.entry_date,
-        reference_number=ledger_draft.reference_number,
-        description=ledger_draft.description,
-        source_type="EXPENSE",
-        source_id=expense.id,
-        lines=[
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=line.direction,
-                narration=line.narration,
-            )
-            for line in ledger_draft.lines
-        ]
-    )
-    db.add(journal_entry)
+    journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     expense.status = "CANCELLED"
-    account_ids = {line.account_id for line in ledger_draft.lines}
-    update_account_balances(db, tenant_id, account_ids)
     db.commit()
 
     db.refresh(expense)

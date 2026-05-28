@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { ArrowLeft, AlertCircle, Search } from "lucide-react";
 
@@ -14,6 +14,7 @@ const GST_RATES = [0, 5, 12, 18, 28];
 
 export default function ProductForm({ editId, onNavigate, onSuccess }: ProductFormProps) {
   const isEdit = !!editId;
+  const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
   const [sku, setSku] = useState("");
@@ -51,7 +52,7 @@ export default function ProductForm({ editId, onNavigate, onSuccess }: ProductFo
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const payload = {
+      const payload: any = {
         name,
         sku: sku || undefined,
         hsn_sac: hsnSac,
@@ -60,7 +61,11 @@ export default function ProductForm({ editId, onNavigate, onSuccess }: ProductFo
         sales_price: salesPrice,
         purchase_price: purchasePrice,
         gst_rate: gstRate,
+        description: description || undefined,
       };
+      if (openingStock) payload.opening_stock = parseFloat(openingStock);
+      if (reorderLevel) payload.reorder_level = parseFloat(reorderLevel);
+      payload.is_active = isActive;
 
       if (isEdit) {
         return apiClient.put(`/masters/products/${editId}`, payload);
@@ -69,6 +74,7 @@ export default function ProductForm({ editId, onNavigate, onSuccess }: ProductFo
       }
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["products"] });
       onSuccess();
     },
     onError: (err: any) => {

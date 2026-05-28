@@ -118,7 +118,10 @@ export default function ExpenseForm({ editId, onNavigate, onSuccess }: ExpenseFo
         await apiClient.post("/expenses", payload);
       }
     },
-    onSuccess: () => onSuccess(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["expenses"] });
+      onSuccess();
+    },
   });
 
   const handleSubmit = (e: React.FormEvent) => {

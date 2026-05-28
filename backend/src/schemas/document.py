@@ -85,6 +85,8 @@ class InvoiceBase(SchemaBase):
     issue_date: date
     due_date: date
     pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
+    billing_address: Optional[dict] = None
+    shipping_address: Optional[dict] = None
 
 class InvoiceCreate(InvoiceBase):
     line_items: List[InvoiceLineCreate]

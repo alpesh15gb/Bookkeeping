@@ -14,11 +14,13 @@ from src.schemas.payment_schemas import (
     PaymentCreate, PaymentResponse, PaymentListResponse,
     BillPaymentCreate, BillPaymentResponse, BillPaymentListResponse
 )
-from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
+from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.company.services import NumberingSeriesService
 from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/payments", tags=["Payments and Receipts"])
+
+VALID_PAYMENT_MODES = {"cash", "bank", "upi", "pos", "other"}
 
 @router.post("/receipts", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 def create_payment_receipt(
@@ -26,7 +28,6 @@ def create_payment_receipt(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:create"))
 ):
-    """Records a customer payment receipt, allocating it to one or more sales invoices."""
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
@@ -37,12 +38,10 @@ def create_payment_receipt(
     if contact.contact_type not in ("CUSTOMER", "BOTH"):
         raise HTTPException(status_code=400, detail="Selected contact must be a Customer.")
 
-    # Numbering series auto-generation
     payment_number = payload.payment_number
     if not payment_number:
         payment_number = NumberingSeriesService.generate_next_number(db, tenant_id, "RECEIPT")
 
-    # Check duplicate payment number under same tenant
     dup = db.query(Payment).filter(
         Payment.tenant_id == tenant_id,
         Payment.payment_number == payment_number,
@@ -54,11 +53,12 @@ def create_payment_receipt(
             detail=f"Payment receipt number {payment_number} already exists."
         )
 
-    # Validate allocations
+    if payload.payment_mode.lower() not in VALID_PAYMENT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid payment mode. Must be one of: {VALID_PAYMENT_MODES}")
+
     if not payload.allocations:
         raise HTTPException(status_code=400, detail="At least one allocation is required.")
     
-    # Validate that sum of allocations equals payment amount
     total_allocated = Decimal("0.0000")
     for alloc in payload.allocations:
         if alloc.amount <= 0:
@@ -71,7 +71,6 @@ def create_payment_receipt(
             detail=f"Sum of allocations ({total_allocated}) must equal payment amount ({payload.amount})."
         )
 
-    # Lock ALL invoices before any modifications to prevent race conditions
     invoice_ids = [alloc.invoice_id for alloc in payload.allocations]
     locked_invoices = db.query(Invoice).filter(
         Invoice.id.in_(invoice_ids),
@@ -82,14 +81,13 @@ def create_payment_receipt(
     if len(locked_invoices) != len(invoice_ids):
         raise HTTPException(status_code=404, detail="One or more invoices not found.")
     
-    # Build invoice lookup
     invoice_map = {inv.id: inv for inv in locked_invoices}
     
     db_allocations = []
     for alloc in payload.allocations:
         invoice = invoice_map[alloc.invoice_id]
-        if invoice.status not in ("SENT", "PARTIALLY_PAID"):
-            raise HTTPException(status_code=400, detail=f"Invoice {invoice.invoice_number} is not in a payable state (must be SENT or PARTIALLY_PAID).")
+        if invoice.status not in ("POSTED", "PARTIALLY_PAID"):
+            raise HTTPException(status_code=400, detail=f"Invoice {invoice.invoice_number} is not in a payable state (must be POSTED or PARTIALLY_PAID).")
 
         remaining = invoice.total - invoice.amount_paid
         if alloc.amount > remaining:
@@ -98,7 +96,6 @@ def create_payment_receipt(
                 detail=f"Allocation amount {alloc.amount} exceeds remaining total {remaining} for invoice {invoice.invoice_number}."
             )
 
-        # Update invoice amount_paid
         invoice.amount_paid += alloc.amount
         if invoice.amount_paid >= invoice.total:
             invoice.status = "PAID"
@@ -111,7 +108,6 @@ def create_payment_receipt(
         )
         db_allocations.append(db_alloc)
 
-    # Create Payment record
     payment = Payment(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
@@ -121,12 +117,12 @@ def create_payment_receipt(
         amount=payload.amount,
         reference_number=payload.reference_number,
         description=payload.description,
+        status="ACTIVE",
         allocations=db_allocations
     )
     db.add(payment)
     db.flush()
 
-    # Ledger posting
     resolver = AccountResolver(db, tenant_id)
     bank_or_cash_account_id = resolver.resolve(f"assets.{payload.payment_mode.lower()}")
     customer_account_id = resolver.resolve(f"customer.{contact.id}")
@@ -141,27 +137,7 @@ def create_payment_receipt(
         amount=payload.amount
     )
 
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=ledger_draft.entry_date,
-        reference_number=ledger_draft.reference_number,
-        description=ledger_draft.description,
-        source_type=ledger_draft.source_type,
-        source_id=ledger_draft.source_id,
-        lines=[
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=line.direction,
-                narration=line.narration
-            )
-            for line in ledger_draft.lines
-        ]
-    )
-
-    db.add(journal_entry)
-    affected = {line.account_id for line in ledger_draft.lines}
-    update_account_balances(db, tenant_id, affected)
+    commit_ledger_draft(db, tenant_id, ledger_draft)
     db.commit()
     db.refresh(payment)
     return payment
@@ -174,7 +150,6 @@ def list_payment_receipts(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:view"))
 ):
-    """Lists customer payment receipts, optionally filtered by customer contact ID."""
     offset = (page - 1) * limit
     q = db.query(Payment, Contact.name.label("contact_name"))\
         .join(Contact, Payment.contact_id == Contact.id)\
@@ -187,7 +162,6 @@ def list_payment_receipts(
 
     response = []
     for pay, contact_name in results:
-        status_str = "CANCELLED" if pay.deleted_at is not None else "ACTIVE"
         response.append(PaymentListResponse(
             id=pay.id,
             payment_number=pay.payment_number,
@@ -195,7 +169,7 @@ def list_payment_receipts(
             payment_mode=pay.payment_mode,
             amount=pay.amount,
             contact_name=contact_name,
-            status=status_str,
+            status=pay.status or "ACTIVE",
             created_at=pay.created_at
         ))
     return response
@@ -206,7 +180,6 @@ def get_payment_receipt(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:view"))
 ):
-    """Fetches details of a single customer payment receipt."""
     payment = db.query(Payment).filter(
         Payment.id == id,
         Payment.tenant_id == tenant_id,
@@ -220,9 +193,8 @@ def get_payment_receipt(
 def cancel_payment_receipt(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("payment:create"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("payment:cancel"))
 ):
-    """Cancels a customer receipt, reversing its invoice allocations and posting reversal journal entries."""
     payment = db.query(Payment).filter(
         Payment.id == id,
         Payment.tenant_id == tenant_id,
@@ -231,53 +203,41 @@ def cancel_payment_receipt(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment receipt not found.")
 
-    if payment.deleted_at is not None:
+    if payment.status == "CANCELLED":
         raise HTTPException(status_code=400, detail="Payment receipt is already cancelled.")
 
-    # Revert invoice allocations
     for alloc in payment.allocations:
         invoice = db.query(Invoice).filter(Invoice.id == alloc.invoice_id).with_for_update().first()
         if invoice:
             invoice.amount_paid -= alloc.amount
             if invoice.amount_paid <= 0:
                 invoice.amount_paid = Decimal("0.0000")
-                invoice.status = "SENT"
+                invoice.status = "POSTED"
             else:
                 invoice.status = "PARTIALLY_PAID"
 
-    # Post reversal entries
-    orig_entry = db.query(JournalEntry).filter(
-        JournalEntry.tenant_id == tenant_id,
-        JournalEntry.source_type == "PAYMENT",
-        JournalEntry.source_id == payment.id
-    ).first()
+    resolver = AccountResolver(db, tenant_id)
+    bank_or_cash_account_id = resolver.resolve(f"assets.{payment.payment_mode.lower()}")
+    # Resolve customer from the first allocation's invoice
+    if payment.allocations:
+        first_invoice = db.query(Invoice).filter(Invoice.id == payment.allocations[0].invoice_id).first()
+        customer_account_id = resolver.resolve(f"customer.{first_invoice.contact_id}") if first_invoice else None
+    else:
+        customer_account_id = None
 
-    if orig_entry:
-        reversal_lines = []
-        for line in orig_entry.lines:
-            rev_direction = "CREDIT" if line.direction == "DEBIT" else "DEBIT"
-            reversal_lines.append(
-                JournalLine(
-                    account_id=line.account_id,
-                    amount=line.amount,
-                    direction=rev_direction,
-                    narration=f"Reversal: {line.narration or ''}"
-                )
-            )
-
-        reversal_entry = JournalEntry(
+    if customer_account_id:
+        ledger_draft = LedgerPostingEngine.create_payment_receipt_reversal_posting(
             tenant_id=tenant_id,
-            entry_date=date.today(),
-            reference_number=f"REV-{payment.payment_number}",
-            description=f"Reversal entry for payment receipt {payment.payment_number}",
-            source_type="PAYMENT",
-            source_id=payment.id,
-            lines=reversal_lines
+            payment_id=payment.id,
+            payment_number=payment.payment_number,
+            cancel_date=date.today(),
+            bank_or_cash_account_id=bank_or_cash_account_id,
+            customer_account_id=customer_account_id,
+            amount=payment.amount
         )
-        db.add(reversal_entry)
-        affected = {line.account_id for line in reversal_lines}
-        update_account_balances(db, tenant_id, affected)
+        commit_ledger_draft(db, tenant_id, ledger_draft)
 
+    payment.status = "CANCELLED"
     payment.deleted_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(payment)
@@ -290,7 +250,6 @@ def create_vendor_payment(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:create"))
 ):
-    """Records a vendor payment out, allocating it to one or more vendor bills."""
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
@@ -301,12 +260,10 @@ def create_vendor_payment(
     if contact.contact_type not in ("VENDOR", "BOTH"):
         raise HTTPException(status_code=400, detail="Selected contact must be a Vendor.")
 
-    # Numbering series auto-generation
     payment_number = payload.payment_number
     if not payment_number:
         payment_number = NumberingSeriesService.generate_next_number(db, tenant_id, "DISBURSEMENT")
 
-    # Check duplicate payment number under same tenant
     dup = db.query(BillPayment).filter(
         BillPayment.tenant_id == tenant_id,
         BillPayment.payment_number == payment_number,
@@ -318,7 +275,9 @@ def create_vendor_payment(
             detail=f"Disbursement number {payment_number} already exists."
         )
 
-    # Validate allocations
+    if payload.payment_mode.lower() not in VALID_PAYMENT_MODES:
+        raise HTTPException(status_code=400, detail=f"Invalid payment mode. Must be one of: {VALID_PAYMENT_MODES}")
+
     total_allocated = Decimal("0.0000")
     db_allocations = []
 
@@ -330,8 +289,8 @@ def create_vendor_payment(
         ).with_for_update().first()
         if not bill:
             raise HTTPException(status_code=404, detail=f"Vendor Bill with ID {alloc.bill_id} not found.")
-        if bill.status not in ("UNPAID", "PARTIALLY_PAID"):
-            raise HTTPException(status_code=400, detail=f"Bill {bill.bill_number} is not in a payable state (must be UNPAID or PARTIALLY_PAID).")
+        if bill.status not in ("POSTED", "PARTIALLY_PAID"):
+            raise HTTPException(status_code=400, detail=f"Bill {bill.bill_number} is not in a payable state (must be POSTED or PARTIALLY_PAID).")
 
         remaining = bill.total - bill.amount_paid
         if alloc.amount > remaining:
@@ -340,7 +299,6 @@ def create_vendor_payment(
                 detail=f"Allocation amount {alloc.amount} exceeds remaining total {remaining} for bill {bill.bill_number}."
             )
 
-        # Update bill amount_paid
         bill.amount_paid += alloc.amount
         if bill.amount_paid >= bill.total:
             bill.status = "PAID"
@@ -354,13 +312,12 @@ def create_vendor_payment(
         db_allocations.append(db_alloc)
         total_allocated += alloc.amount
 
-    if total_allocated > payload.amount:
+    if total_allocated != payload.amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Sum of allocations ({total_allocated}) exceeds total payment amount ({payload.amount})."
+            detail=f"Sum of allocations ({total_allocated}) must equal payment amount ({payload.amount})."
         )
 
-    # Create BillPayment record
     payment = BillPayment(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
@@ -370,12 +327,12 @@ def create_vendor_payment(
         amount=payload.amount,
         reference_number=payload.reference_number,
         description=payload.description,
+        status="ACTIVE",
         allocations=db_allocations
     )
     db.add(payment)
     db.flush()
 
-    # Ledger posting
     resolver = AccountResolver(db, tenant_id)
     bank_or_cash_account_id = resolver.resolve(f"assets.{payload.payment_mode.lower()}")
     vendor_account_id = resolver.resolve(f"vendor.{contact.id}")
@@ -390,27 +347,7 @@ def create_vendor_payment(
         amount=payload.amount
     )
 
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=ledger_draft.entry_date,
-        reference_number=ledger_draft.reference_number,
-        description=ledger_draft.description,
-        source_type=ledger_draft.source_type,
-        source_id=ledger_draft.source_id,
-        lines=[
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=line.direction,
-                narration=line.narration
-            )
-            for line in ledger_draft.lines
-        ]
-    )
-
-    db.add(journal_entry)
-    affected = {line.account_id for line in ledger_draft.lines}
-    update_account_balances(db, tenant_id, affected)
+    commit_ledger_draft(db, tenant_id, ledger_draft)
     db.commit()
     db.refresh(payment)
     return payment
@@ -423,11 +360,10 @@ def list_vendor_payments(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:view"))
 ):
-    """Lists vendor payments out, optionally filtered by vendor contact ID."""
     offset = (page - 1) * limit
     q = db.query(BillPayment, Contact.name.label("contact_name"))\
         .join(Contact, BillPayment.contact_id == Contact.id)\
-        .filter(BillPayment.tenant_id == tenant_id)
+        .filter(BillPayment.tenant_id == tenant_id, BillPayment.deleted_at == None)
 
     if contact_id:
         q = q.filter(BillPayment.contact_id == contact_id)
@@ -436,7 +372,6 @@ def list_vendor_payments(
 
     response = []
     for pay, contact_name in results:
-        status_str = "CANCELLED" if pay.deleted_at is not None else "ACTIVE"
         response.append(BillPaymentListResponse(
             id=pay.id,
             payment_number=pay.payment_number,
@@ -444,7 +379,7 @@ def list_vendor_payments(
             payment_mode=pay.payment_mode,
             amount=pay.amount,
             contact_name=contact_name,
-            status=status_str,
+            status=pay.status or "ACTIVE",
             created_at=pay.created_at
         ))
     return response
@@ -455,7 +390,6 @@ def get_vendor_payment(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:view"))
 ):
-    """Fetches details of a single vendor payment out."""
     payment = db.query(BillPayment).filter(
         BillPayment.id == id,
         BillPayment.tenant_id == tenant_id
@@ -468,9 +402,8 @@ def get_vendor_payment(
 def cancel_vendor_payment(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("payment:create"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("payment:cancel"))
 ):
-    """Cancels a vendor payment out, reversing its bill allocations and posting reversal journal entries."""
     payment = db.query(BillPayment).filter(
         BillPayment.id == id,
         BillPayment.tenant_id == tenant_id
@@ -478,53 +411,36 @@ def cancel_vendor_payment(
     if not payment:
         raise HTTPException(status_code=404, detail="Disbursement not found.")
 
-    if payment.deleted_at is not None:
+    if payment.status == "CANCELLED":
         raise HTTPException(status_code=400, detail="Disbursement is already cancelled.")
 
-    # Revert bill allocations
     for alloc in payment.allocations:
         bill = db.query(Bill).filter(Bill.id == alloc.bill_id).with_for_update().first()
         if bill:
             bill.amount_paid -= alloc.amount
             if bill.amount_paid <= 0:
                 bill.amount_paid = Decimal("0.0000")
-                bill.status = "UNPAID"
+                bill.status = "POSTED"
             else:
                 bill.status = "PARTIALLY_PAID"
 
-    # Post reversal entries
-    orig_entry = db.query(JournalEntry).filter(
-        JournalEntry.tenant_id == tenant_id,
-        JournalEntry.source_type == "PAYMENT",
-        JournalEntry.source_id == payment.id
-    ).first()
+    resolver = AccountResolver(db, tenant_id)
+    bank_or_cash_account_id = resolver.resolve(f"assets.{payment.payment_mode.lower()}")
+    vendor_account_id = resolver.resolve(f"vendor.{payment.contact_id}")
 
-    if orig_entry:
-        reversal_lines = []
-        for line in orig_entry.lines:
-            rev_direction = "CREDIT" if line.direction == "DEBIT" else "DEBIT"
-            reversal_lines.append(
-                JournalLine(
-                    account_id=line.account_id,
-                    amount=line.amount,
-                    direction=rev_direction,
-                    narration=f"Reversal: {line.narration or ''}"
-                )
-            )
+    ledger_draft = LedgerPostingEngine.create_payment_out_reversal_posting(
+        tenant_id=tenant_id,
+        payment_id=payment.id,
+        payment_number=payment.payment_number,
+        cancel_date=date.today(),
+        bank_or_cash_account_id=bank_or_cash_account_id,
+        vendor_account_id=vendor_account_id,
+        amount=payment.amount
+    )
 
-        reversal_entry = JournalEntry(
-            tenant_id=tenant_id,
-            entry_date=date.today(),
-            reference_number=f"REV-{payment.payment_number}",
-            description=f"Reversal entry for vendor payment {payment.payment_number}",
-            source_type="PAYMENT",
-            source_id=payment.id,
-            lines=reversal_lines
-        )
-        db.add(reversal_entry)
-        affected = {line.account_id for line in reversal_lines}
-        update_account_balances(db, tenant_id, affected)
+    commit_ledger_draft(db, tenant_id, ledger_draft)
 
+    payment.status = "CANCELLED"
     payment.deleted_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(payment)

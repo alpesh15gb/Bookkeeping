@@ -48,7 +48,7 @@ import LedgerView from "./views/accounting/LedgerView";
 import TrialBalance from "./views/accounting/TrialBalance";
 
 import logo from "./logo.png";
-import { apiClient, setAccessToken, setTenantId } from "./lib/api";
+import { apiClient, setAccessToken, setRefreshToken, setTenantId, getSessionExpired, clearSessionExpired } from "./lib/api";
 import { useDirtyStore } from "./hooks/useDirtyStore";
 import {
   LayoutDashboard,
@@ -132,9 +132,11 @@ export default function App() {
   // Restore session on mount
   useEffect(() => {
     const at = sessionStorage.getItem("_at");
+    const rt = sessionStorage.getItem("_rt");
     const tenantId = localStorage.getItem("active_tenant_id");
     if (at && tenantId) {
       setAccessToken(at);
+      if (rt) setRefreshToken(rt);
       setTenantId(tenantId);
       apiClient
         .get("/auth/me")
@@ -146,8 +148,25 @@ export default function App() {
           setAccessToken(null);
           setTenantId(null);
           sessionStorage.removeItem("_at");
+          sessionStorage.removeItem("_rt");
         });
     }
+  }, []);
+
+  // Listen for session-expired event from API interceptor
+  useEffect(() => {
+    const handler = () => {
+      if (getSessionExpired()) {
+        clearSessionExpired();
+        setAccessToken(null);
+        setTenantId(null);
+        sessionStorage.removeItem("_at");
+        sessionStorage.removeItem("_rt");
+        setAuthenticated(false);
+      }
+    };
+    window.addEventListener("auth:session-expired", handler);
+    return () => window.removeEventListener("auth:session-expired", handler);
   }, []);
 
   // Fetch/Clear user info on auth status changes
@@ -182,10 +201,13 @@ export default function App() {
   };
 
   const handleLogout = () => {
-    apiClient.post("/auth/logout", {}).catch(() => {});
+    apiClient.post("/auth/logout", { refresh_token: sessionStorage.getItem("_rt") || "" }).catch(() => {});
     setAccessToken(null);
+    setRefreshToken(null);
     setTenantId(null);
     sessionStorage.removeItem("_at");
+    sessionStorage.removeItem("_rt");
+    localStorage.removeItem("active_tenant_id");
     setAuthenticated(false);
   };
 
@@ -225,7 +247,7 @@ export default function App() {
     else { setCurrentView("products"); }
   };
 
-  const handleNavigateAccounts = (view: any, accountId?: string) => {
+  const handleNavigateAccounts = (view: "list" | "create" | "edit" | "detail" | "ledger" | "trial_balance" | "profit_loss", accountId?: string) => {
     setActiveAccountId(accountId);
     if (view === "create") { setCurrentView("account_create"); }
     else if (view === "edit") { setCurrentView("account_edit"); }
@@ -272,36 +294,43 @@ export default function App() {
   };
 
   const handleFormSuccess = () => {
+    useDirtyStore.getState().setDirty(false);
     setCurrentView("list");
     setActiveInvoiceId(undefined);
   };
 
   const handleBillSuccess = () => {
+    useDirtyStore.getState().setDirty(false);
     setCurrentView("bill_list");
     setActiveBillId(undefined);
   };
 
   const handleContactSuccess = () => {
+    useDirtyStore.getState().setDirty(false);
     setCurrentView("contacts");
     setActiveContactId(undefined);
   };
 
   const handleProductSuccess = () => {
+    useDirtyStore.getState().setDirty(false);
     setCurrentView("products");
     setActiveProductId(undefined);
   };
 
   const handleExpenseSuccess = () => {
+    useDirtyStore.getState().setDirty(false);
     setCurrentView("expense_list");
     setActiveExpenseId(undefined);
   };
 
   const handleEstimateSuccess = () => {
+    useDirtyStore.getState().setDirty(false);
     setCurrentView("estimate_list");
     setActiveEstimateId(undefined);
   };
 
   const handleAccountSuccess = () => {
+    useDirtyStore.getState().setDirty(false);
     setCurrentView("accounts");
     setActiveAccountId(undefined);
   };
@@ -615,6 +644,7 @@ export default function App() {
           )}
           {currentView === "credit_note_create" && (
             <CreditNoteForm onSuccess={() => {
+              useDirtyStore.getState().setDirty(false);
               setActiveCreditNoteId(undefined);
               setCurrentView("credit_notes");
             }} onNavigate={handleNavigateCreditNotes} />

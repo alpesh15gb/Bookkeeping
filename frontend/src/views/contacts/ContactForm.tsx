@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "../../lib/api";
 import { ArrowLeft, AlertCircle, ShieldCheck } from "lucide-react";
 import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
@@ -68,6 +68,7 @@ const REGISTRATION_TYPES = [
 
 export default function ContactForm({ editId, onNavigate, onSuccess }: ContactFormProps) {
   const isEdit = !!editId;
+  const queryClient = useQueryClient();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

@@ -35,15 +35,43 @@ interface CreditNoteLineItem {
 
 const STATE_CODES = [
   { code: "01", name: "Jammu & Kashmir (01)" },
+  { code: "02", name: "Himachal Pradesh (02)" },
+  { code: "03", name: "Punjab (03)" },
+  { code: "04", name: "Chandigarh (04)" },
+  { code: "05", name: "Uttarakhand (05)" },
+  { code: "06", name: "Haryana (06)" },
   { code: "07", name: "Delhi (07)" },
+  { code: "08", name: "Rajasthan (08)" },
   { code: "09", name: "Uttar Pradesh (09)" },
+  { code: "10", name: "Bihar (10)" },
+  { code: "11", name: "Sikkim (11)" },
+  { code: "12", name: "Arunachal Pradesh (12)" },
+  { code: "13", name: "Nagaland (13)" },
+  { code: "14", name: "Manipur (14)" },
+  { code: "15", name: "Mizoram (15)" },
+  { code: "16", name: "Tripura (16)" },
+  { code: "17", name: "Meghalaya (17)" },
+  { code: "18", name: "Assam (18)" },
   { code: "19", name: "West Bengal (19)" },
+  { code: "20", name: "Jharkhand (20)" },
+  { code: "21", name: "Odisha (21)" },
+  { code: "22", name: "Chhattisgarh (22)" },
+  { code: "23", name: "Madhya Pradesh (23)" },
   { code: "24", name: "Gujarat (24)" },
+  { code: "25", name: "Daman & Diu (25)" },
+  { code: "26", name: "Dadra & Nagar Haveli (26)" },
   { code: "27", name: "Maharashtra (27)" },
+  { code: "28", name: "Andhra Pradesh (Old) (28)" },
   { code: "29", name: "Karnataka (29)" },
+  { code: "30", name: "Goa (30)" },
+  { code: "31", name: "Lakshadweep (31)" },
+  { code: "32", name: "Kerala (32)" },
   { code: "33", name: "Tamil Nadu (33)" },
+  { code: "34", name: "Puducherry (34)" },
+  { code: "35", name: "Andaman & Nicobar (35)" },
   { code: "36", name: "Telangana (36)" },
   { code: "37", name: "Andhra Pradesh (37)" },
+  { code: "38", name: "Ladakh (38)" },
 ];
 
 export default function CreditNoteForm({ onSuccess, onNavigate }: CreditNoteFormProps) {
@@ -55,6 +83,16 @@ export default function CreditNoteForm({ onSuccess, onNavigate }: CreditNoteForm
     { product_id: "", quantity: 1, rate: 0, discount: 0, hsn_sac: "", gst_rate: 18 },
   ]);
   const [formError, setFormError] = useState("");
+
+  const { data: settingsData } = useQuery({
+    queryKey: ["settings"],
+    queryFn: async () => {
+      const res = await apiClient.get("/settings");
+      return res.data;
+    },
+  });
+
+  const originStateCode = settingsData?.origin_state_code || "27";
 
   const { data: invoices = [] } = useQuery<InvoiceItem[]>({
     queryKey: ["invoices"],
@@ -107,12 +145,18 @@ export default function CreditNoteForm({ onSuccess, onNavigate }: CreditNoteForm
     let sgst = 0;
     let igst = 0;
 
+    const isIntraState = originStateCode === posStateCode;
+
     lines.forEach((line) => {
       const itemSubtotal = (line.quantity || 0) * (line.rate || 0) - (line.discount || 0);
       subtotal += itemSubtotal;
       const tax = itemSubtotal * ((line.gst_rate || 0) / 100);
-      cgst += tax / 2;
-      sgst += tax / 2;
+      if (isIntraState) {
+        cgst += tax / 2;
+        sgst += tax / 2;
+      } else {
+        igst += tax;
+      }
     });
 
     return { subtotal, cgst, sgst, igst, grandTotal: subtotal + cgst + sgst + igst };
@@ -186,7 +230,6 @@ export default function CreditNoteForm({ onSuccess, onNavigate }: CreditNoteForm
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
-        {/* Header fields */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-6 rounded-xl border border-slate-100 shadow-sm">
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
@@ -243,7 +286,6 @@ export default function CreditNoteForm({ onSuccess, onNavigate }: CreditNoteForm
           </div>
         </div>
 
-        {/* Line Items */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="bg-slate-50 border-b border-slate-100 px-6 py-3.5 flex justify-between items-center">
             <span className="font-semibold text-sm text-slate-700">Line Items</span>
@@ -328,7 +370,6 @@ export default function CreditNoteForm({ onSuccess, onNavigate }: CreditNoteForm
           </div>
         </div>
 
-        {/* Totals */}
         <div className="flex justify-end">
           <div className="bg-white p-6 rounded-xl border border-slate-100 shadow-sm w-72 space-y-3">
             <h3 className="font-semibold text-sm text-slate-700 pb-2 border-b border-slate-100">Credit Note Totals</h3>
@@ -345,13 +386,17 @@ export default function CreditNoteForm({ onSuccess, onNavigate }: CreditNoteForm
                 <span>SGST</span><span>{formatCurrency(totals.sgst)}</span>
               </div>
             )}
+            {totals.igst > 0 && (
+              <div className="flex justify-between text-xs text-slate-500 italic pl-2">
+                <span>IGST</span><span>{formatCurrency(totals.igst)}</span>
+              </div>
+            )}
             <div className="flex justify-between text-base font-bold text-slate-900 pt-2 border-t border-slate-100">
               <span>Grand Total</span><span className="text-brand-900">{formatCurrency(totals.grandTotal)}</span>
             </div>
           </div>
         </div>
 
-        {/* Actions */}
         <div className="flex justify-end gap-3">
           <button type="button" onClick={() => onNavigate("credit_notes")}
             className="px-4 py-2 border border-slate-200 text-slate-700 font-semibold rounded-lg text-sm bg-white hover:bg-slate-50 transition">

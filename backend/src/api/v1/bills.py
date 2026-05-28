@@ -9,7 +9,7 @@ from src.core.database import get_db_session
 from src.infrastructure.database.models import Bill, BillLine, Contact, Product, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
 from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate
 from src.domains.taxation.services import GSTEngine
-from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
+from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.company.services import resolve_origin_state_code
 from src.api.deps import get_tenant_context, enforce_permission
 
@@ -19,9 +19,8 @@ router = APIRouter(prefix="/bills", tags=["Vendor Bills (Purchases)"])
 def create_bill(
     payload: BillCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")) # vendor bill creation requires invoice:create or purchasing scopes
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
-    # Verify Vendor belongs to active tenant
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
@@ -45,7 +44,6 @@ def create_bill(
     bill_discount = Decimal("0.0000")
 
     for line in payload.line_items:
-        # Check product belongs to tenant
         product = db.query(Product).filter(
             Product.id == line.product_id,
             Product.tenant_id == tenant_id,
@@ -95,8 +93,23 @@ def create_bill(
         bill_cess += db_line.cess_amount
         bill_discount += db_line.discount
 
-    # Round-off adjustment calculations
-    raw_total = bill_subtotal + bill_cgst + bill_sgst + bill_igst + bill_utgst + bill_cess - bill_discount
+    # Apply header-level discount and shipping
+    header_discount_rate = payload.discount_rate or Decimal("0.00")
+    header_shipping = payload.shipping_charges or Decimal("0.0000")
+
+    header_discount_amt = (bill_subtotal * header_discount_rate / Decimal("100")).quantize(Decimal("0.0001"))
+    adjusted_subtotal = bill_subtotal - header_discount_amt
+    total_discount = bill_discount + header_discount_amt
+
+    # Proportional tax recalculation (matching invoice pattern)
+    tax_multiplier = Decimal("1.00") if bill_subtotal == 0 else adjusted_subtotal / bill_subtotal
+    final_cgst = (bill_cgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_sgst = (bill_sgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_igst = (bill_igst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_utgst = (bill_utgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_cess = (bill_cess * tax_multiplier).quantize(Decimal("0.0001"))
+
+    raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
@@ -108,12 +121,12 @@ def create_bill(
         due_date=payload.due_date,
         status="DRAFT",
         subtotal=bill_subtotal,
-        discount_total=bill_discount,
-        cgst_amount=bill_cgst,
-        sgst_amount=bill_sgst,
-        igst_amount=bill_igst,
-        utgst_amount=bill_utgst,
-        cess_amount=bill_cess,
+        discount_total=total_discount,
+        cgst_amount=final_cgst,
+        sgst_amount=final_sgst,
+        igst_amount=final_igst,
+        utgst_amount=final_utgst,
+        cess_amount=final_cess,
         round_off=round_off,
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
@@ -132,10 +145,6 @@ def preview_bill(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
-    """
-    Returns a computed preview of a bill without creating it.
-    Useful for frontend live preview before submission.
-    """
     origin_state_code = resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
@@ -197,7 +206,18 @@ def preview_bill(
         bill_cess += db_line.cess_amount
         bill_discount += db_line.discount
 
-    raw_total = bill_subtotal + bill_cgst + bill_sgst + bill_igst + bill_utgst + bill_cess - bill_discount
+    header_discount_rate = payload.discount_rate or Decimal("0.00")
+    header_shipping = payload.shipping_charges or Decimal("0.0000")
+    header_discount_amt = (bill_subtotal * header_discount_rate / Decimal("100")).quantize(Decimal("0.0001"))
+    adjusted_subtotal = bill_subtotal - header_discount_amt
+    total_discount = bill_discount + header_discount_amt
+    tax_multiplier = Decimal("1.00") if bill_subtotal == 0 else adjusted_subtotal / bill_subtotal
+    final_cgst = (bill_cgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_sgst = (bill_sgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_igst = (bill_igst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_utgst = (bill_utgst * tax_multiplier).quantize(Decimal("0.0001"))
+    final_cess = (bill_cess * tax_multiplier).quantize(Decimal("0.0001"))
+    raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
@@ -210,12 +230,12 @@ def preview_bill(
         due_date=payload.due_date,
         status="DRAFT",
         subtotal=bill_subtotal,
-        discount_total=bill_discount,
-        cgst_amount=bill_cgst,
-        sgst_amount=bill_sgst,
-        igst_amount=bill_igst,
-        utgst_amount=bill_utgst,
-        cess_amount=bill_cess,
+        discount_total=total_discount,
+        cgst_amount=final_cgst,
+        sgst_amount=final_sgst,
+        igst_amount=final_igst,
+        utgst_amount=final_utgst,
+        cess_amount=final_cess,
         round_off=round_off,
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
@@ -274,7 +294,6 @@ def get_bill_pdf_payload(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
-    """Consolidated metadata for PDF print rendering of a vendor bill."""
     bill = db.query(Bill).filter(
         Bill.id == id,
         Bill.tenant_id == tenant_id,
@@ -392,7 +411,6 @@ def update_bill(
         bill_subtotal = Decimal("0.0000")
         bill_cgst = Decimal("0.0000")
         bill_sgst = Decimal("0.0000")
-        inv_igst = Decimal("0.0000") # wait, let's keep bill variables consistent
         bill_igst = Decimal("0.0000")
         bill_utgst = Decimal("0.0000")
         bill_cess = Decimal("0.0000")
@@ -442,14 +460,30 @@ def update_bill(
             bill_cess += db_line.cess_amount
             bill_discount += db_line.discount
 
+        header_discount_rate = payload.discount_rate or Decimal("0.00")
+        header_shipping = payload.shipping_charges or Decimal("0.0000")
+        header_discount_amt = (bill_subtotal * header_discount_rate / Decimal("100")).quantize(Decimal("0.0001"))
+        adjusted_subtotal = bill_subtotal - header_discount_amt
+        total_discount = bill_discount + header_discount_amt
+        tax_multiplier = Decimal("1.00") if bill_subtotal == 0 else adjusted_subtotal / bill_subtotal
+        final_cgst = (bill_cgst * tax_multiplier).quantize(Decimal("0.0001"))
+        final_sgst = (bill_sgst * tax_multiplier).quantize(Decimal("0.0001"))
+        final_igst = (bill_igst * tax_multiplier).quantize(Decimal("0.0001"))
+        final_utgst = (bill_utgst * tax_multiplier).quantize(Decimal("0.0001"))
+        final_cess = (bill_cess * tax_multiplier).quantize(Decimal("0.0001"))
+        raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
+        rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        round_off = rounded_total - raw_total
+
         bill.subtotal = bill_subtotal
-        bill.discount_total = bill_discount
-        bill.cgst_amount = bill_cgst
-        bill.sgst_amount = bill_sgst
-        bill.igst_amount = bill_igst
-        bill.utgst_amount = bill_utgst
-        bill.cess_amount = bill_cess
-        bill.total = bill_subtotal + bill_cgst + bill_sgst + bill_igst + bill_utgst + bill_cess
+        bill.discount_total = total_discount
+        bill.cgst_amount = final_cgst
+        bill.sgst_amount = final_sgst
+        bill.igst_amount = final_igst
+        bill.utgst_amount = final_utgst
+        bill.cess_amount = final_cess
+        bill.round_off = round_off
+        bill.total = rounded_total
         bill.lines = db_lines
 
     db.commit()
@@ -506,29 +540,9 @@ def finalize_bill(
         round_off_amount=bill.round_off,
     )
 
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=ledger_draft.entry_date,
-        reference_number=ledger_draft.reference_number,
-        description=ledger_draft.description,
-        source_type=ledger_draft.source_type,
-        source_id=ledger_draft.source_id,
-        lines=[
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=line.direction,
-                narration=line.narration
-            )
-            for line in ledger_draft.lines
-        ]
-    )
+    journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
-    bill.status = "UNPAID"
-    db.add(journal_entry)
-    affected = {line.account_id for line in ledger_draft.lines}
-    update_account_balances(db, tenant_id, affected)
-
+    bill.status = "POSTED"
     db.commit()
     db.refresh(bill)
     return bill
@@ -608,27 +622,7 @@ def record_bill_payment(
         amount=payload.amount
     )
 
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=ledger_draft.entry_date,
-        reference_number=ledger_draft.reference_number,
-        description=ledger_draft.description,
-        source_type=ledger_draft.source_type,
-        source_id=ledger_draft.source_id,
-        lines=[
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=line.direction,
-                narration=line.narration
-            )
-            for line in ledger_draft.lines
-        ]
-    )
-
-    db.add(journal_entry)
-    affected = {line.account_id for line in ledger_draft.lines}
-    update_account_balances(db, tenant_id, affected)
+    journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     db.commit()
     db.refresh(bill)
@@ -641,7 +635,7 @@ def cancel_bill(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
 ):
-    """Cancels an unpaid bill, reversing its ledger postings and writing balanced reversal entries."""
+    """Cancels a posted bill, reversing its ledger postings via the dedicated reversal engine."""
     bill = db.query(Bill).filter(
         Bill.id == id,
         Bill.tenant_id == tenant_id,
@@ -650,10 +644,9 @@ def cancel_bill(
     if not bill:
         raise HTTPException(status_code=404, detail="Vendor Bill not found.")
 
-    if bill.status not in ("UNPAID", "PARTIALLY_PAID"):
-        raise HTTPException(status_code=400, detail="Only unpaid or partially paid bills can be cancelled.")
+    if bill.status not in ("POSTED", "PARTIALLY_PAID"):
+        raise HTTPException(status_code=400, detail="Only posted or partially paid bills can be cancelled.")
 
-    # Block cancellation if payments exist
     allocations = db.query(BillPaymentAllocation).filter(BillPaymentAllocation.bill_id == id).all()
     if allocations:
         raise HTTPException(
@@ -673,11 +666,11 @@ def cancel_bill(
     cess_account_id = resolver.resolve("cess_input")
     round_off_account_id = resolver.resolve("round_off") if bill.round_off != 0 else None
 
-    ledger_draft = LedgerPostingEngine.create_bill_posting(
+    ledger_draft = LedgerPostingEngine.create_bill_reversal_posting(
         tenant_id=tenant_id,
         bill_id=bill.id,
         bill_number=bill.bill_number,
-        bill_date=bill.issue_date,
+        cancel_date=date.today(),
         vendor_account_id=vendor_account_id,
         purchase_expense_account_id=purchase_expense_account_id,
         subtotal=bill.subtotal,
@@ -696,34 +689,9 @@ def cancel_bill(
         round_off_amount=bill.round_off,
     )
 
-    # Reverse the directions for cancellation
-    reversal_lines = []
-    for line in ledger_draft.lines:
-        rev_direction = "CREDIT" if line.direction == "DEBIT" else "DEBIT"
-        reversal_lines.append(
-            JournalLine(
-                account_id=line.account_id,
-                amount=line.amount,
-                direction=rev_direction,
-                narration=f"Reversal: {line.narration or ''}"
-            )
-        )
-
-    journal_entry = JournalEntry(
-        tenant_id=tenant_id,
-        entry_date=date.today(),
-        reference_number=f"REV-{bill.bill_number}",
-        description=f"Reversal of vendor bill {bill.bill_number}",
-        source_type="BILL",
-        source_id=bill.id,
-        lines=reversal_lines
-    )
+    journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     bill.status = "CANCELLED"
-    db.add(journal_entry)
-    affected = {line.account_id for line in reversal_lines}
-    update_account_balances(db, tenant_id, affected)
-
     db.commit()
     db.refresh(bill)
     return bill

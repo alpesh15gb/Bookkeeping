@@ -7,7 +7,7 @@ from src.core.database import SessionLocal
 
 logger = logging.getLogger("bookkeeping.idempotency")
 
-IDEMPOTENT_METHODS = {"POST", "PUT", "PATCH"}
+IDEMPOTENT_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
@@ -25,10 +25,11 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         db = SessionLocal()
         try:
-            existing = db.execute(
+            result = db.execute(
                 text(
-                    "SELECT id FROM idempotency_keys "
-                    "WHERE idempotency_key = :key AND tenant_id = :tenant AND method = :method AND path = :path"
+                    "INSERT INTO idempotency_keys (idempotency_key, tenant_id, method, path) "
+                    "VALUES (:key, :tenant, :method, :path) "
+                    "ON CONFLICT (idempotency_key, tenant_id, method, path) DO NOTHING"
                 ),
                 {
                     "key": idempotency_key,
@@ -36,9 +37,10 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     "method": request.method,
                     "path": str(request.url.path),
                 },
-            ).fetchone()
+            )
+            db.commit()
 
-            if existing:
+            if result.rowcount == 0:
                 logger.warning(
                     "Duplicate idempotency key %s for %s %s (tenant=%s)",
                     idempotency_key, request.method, request.url.path, tenant_id,
@@ -50,20 +52,6 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                         "code": "DUPLICATE_REQUEST",
                     },
                 )
-
-            db.execute(
-                text(
-                    "INSERT INTO idempotency_keys (idempotency_key, tenant_id, method, path) "
-                    "VALUES (:key, :tenant, :method, :path)"
-                ),
-                {
-                    "key": idempotency_key,
-                    "tenant": tenant_id,
-                    "method": request.method,
-                    "path": str(request.url.path),
-                },
-            )
-            db.commit()
         except Exception:
             db.rollback()
             logger.exception("Idempotency check failed, allowing request to proceed")

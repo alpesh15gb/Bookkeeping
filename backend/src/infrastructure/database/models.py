@@ -174,7 +174,7 @@ class Invoice(Base):
         UniqueConstraint("tenant_id", "invoice_number", name="uq_invoices_tenant_number"),
         UniqueConstraint("irn", name="uq_invoices_irn"),
         CheckConstraint(
-            "status IN ('DRAFT', 'SENT', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
+            "status IN ('DRAFT', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
             name="ck_invoices_status",
         ),
         CheckConstraint(
@@ -282,6 +282,7 @@ class Payment(Base):
     amount = Column(Numeric(15, 4), nullable=False)
     reference_number = Column(String(50))
     description = Column(Text)
+    status = Column(String(20), nullable=False, default="ACTIVE")
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -319,7 +320,7 @@ class Bill(Base):
         Index("ix_bills_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "bill_number", name="uq_bills_tenant_number"),
         CheckConstraint(
-            "status IN ('DRAFT', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
+            "status IN ('DRAFT', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
             name="ck_bills_status",
         ),
         CheckConstraint(
@@ -415,6 +416,7 @@ class BillPayment(Base):
     amount = Column(Numeric(15, 4), nullable=False)
     reference_number = Column(String(50))
     description = Column(Text)
+    status = Column(String(20), nullable=False, default="ACTIVE")
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))

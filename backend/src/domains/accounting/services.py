@@ -660,6 +660,112 @@ class LedgerPostingEngine:
             lines=lines
         )
 
+    @staticmethod
+    def create_bill_reversal_posting(
+        tenant_id: uuid.UUID,
+        bill_id: uuid.UUID,
+        bill_number: str,
+        cancel_date: date,
+        vendor_account_id: uuid.UUID,
+        purchase_expense_account_id: uuid.UUID,
+        subtotal: Decimal,
+        discount_total: Decimal = Decimal("0.00"),
+        cgst_account_id: Optional[uuid.UUID] = None,
+        cgst_amount: Decimal = Decimal("0.00"),
+        sgst_account_id: Optional[uuid.UUID] = None,
+        sgst_amount: Decimal = Decimal("0.00"),
+        igst_account_id: Optional[uuid.UUID] = None,
+        igst_amount: Decimal = Decimal("0.00"),
+        utgst_account_id: Optional[uuid.UUID] = None,
+        utgst_amount: Decimal = Decimal("0.00"),
+        cess_account_id: Optional[uuid.UUID] = None,
+        cess_amount: Decimal = Decimal("0.00"),
+        round_off_account_id: Optional[uuid.UUID] = None,
+        round_off_amount: Decimal = Decimal("0.00"),
+    ) -> JournalEntryDraft:
+        lines: List[JournalLineDraft] = []
+        net_subtotal = subtotal - discount_total
+        tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
+        bill_total = net_subtotal + tax_total + round_off_amount
+
+        lines.append(JournalLineDraft(vendor_account_id, bill_total, "DEBIT", f"Reversal of vendor bill: {bill_number}"))
+        lines.append(JournalLineDraft(purchase_expense_account_id, net_subtotal, "CREDIT", f"Reversal of purchase expense: {bill_number}"))
+
+        if cgst_amount > 0 and cgst_account_id:
+            lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "CREDIT", "CGST Input Reversal"))
+        if sgst_amount > 0 and sgst_account_id:
+            lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "CREDIT", "SGST Input Reversal"))
+        if igst_amount > 0 and igst_account_id:
+            lines.append(JournalLineDraft(igst_account_id, igst_amount, "CREDIT", "IGST Input Reversal"))
+        if utgst_amount > 0 and utgst_account_id:
+            lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "CREDIT", "UTGST Input Reversal"))
+        if cess_amount > 0 and cess_account_id:
+            lines.append(JournalLineDraft(cess_account_id, cess_amount, "CREDIT", "Cess Input Reversal"))
+
+        if round_off_amount != 0 and round_off_account_id:
+            if round_off_amount > 0:
+                lines.append(JournalLineDraft(vendor_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {bill_number}"))
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {bill_number}"))
+            else:
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {bill_number}"))
+                lines.append(JournalLineDraft(vendor_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {bill_number}"))
+
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=cancel_date,
+            reference_number=f"REV-{bill_number}",
+            description=f"Reversal of vendor bill {bill_number}",
+            source_type="BILL",
+            source_id=bill_id,
+            lines=lines
+        )
+
+    @staticmethod
+    def create_payment_receipt_reversal_posting(
+        tenant_id: uuid.UUID,
+        payment_id: uuid.UUID,
+        payment_number: str,
+        cancel_date: date,
+        bank_or_cash_account_id: uuid.UUID,
+        customer_account_id: uuid.UUID,
+        amount: Decimal,
+    ) -> JournalEntryDraft:
+        lines: List[JournalLineDraft] = []
+        lines.append(JournalLineDraft(customer_account_id, amount, "DEBIT", f"Payment receipt reversal: {payment_number}"))
+        lines.append(JournalLineDraft(bank_or_cash_account_id, amount, "CREDIT", f"Payment receipt reversal: {payment_number}"))
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=cancel_date,
+            reference_number=f"REV-{payment_number}",
+            description=f"Reversal of payment receipt {payment_number}",
+            source_type="PAYMENT",
+            source_id=payment_id,
+            lines=lines
+        )
+
+    @staticmethod
+    def create_payment_out_reversal_posting(
+        tenant_id: uuid.UUID,
+        payment_id: uuid.UUID,
+        payment_number: str,
+        cancel_date: date,
+        bank_or_cash_account_id: uuid.UUID,
+        vendor_account_id: uuid.UUID,
+        amount: Decimal,
+    ) -> JournalEntryDraft:
+        lines: List[JournalLineDraft] = []
+        lines.append(JournalLineDraft(bank_or_cash_account_id, amount, "DEBIT", f"Vendor payment reversal: {payment_number}"))
+        lines.append(JournalLineDraft(vendor_account_id, amount, "CREDIT", f"Vendor payment reversal: {payment_number}"))
+        return JournalEntryDraft(
+            tenant_id=tenant_id,
+            entry_date=cancel_date,
+            reference_number=f"REV-{payment_number}",
+            description=f"Reversal of vendor payment {payment_number}",
+            source_type="PAYMENT",
+            source_id=payment_id,
+            lines=lines
+        )
+
 
 # ---------------------------------------------------------------------------
 # Standard Chart of Accounts
@@ -846,6 +952,32 @@ def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Opti
             account.current_balance = (credit_sum - debit_sum).quantize(Decimal("0.0001"))
 
     # NOTE: Caller is responsible for db.commit()
+
+
+def commit_ledger_draft(db: Session, tenant_id: uuid.UUID, draft: JournalEntryDraft) -> "JournalEntry":
+    from src.infrastructure.database.models import JournalEntry, JournalLine
+
+    journal_entry = JournalEntry(
+        tenant_id=draft.tenant_id,
+        entry_date=draft.entry_date,
+        reference_number=draft.reference_number,
+        description=draft.description,
+        source_type=draft.source_type,
+        source_id=draft.source_id,
+        lines=[
+            JournalLine(
+                account_id=line.account_id,
+                amount=line.amount,
+                direction=line.direction,
+                narration=line.narration
+            )
+            for line in draft.lines
+        ]
+    )
+    db.add(journal_entry)
+    affected = {line.account_id for line in draft.lines}
+    update_account_balances(db, tenant_id, affected)
+    return journal_entry
 
 
 def recalculate_all_account_balances(db: Session, tenant_id: uuid.UUID) -> None:

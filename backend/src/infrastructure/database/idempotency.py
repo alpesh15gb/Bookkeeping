@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Boolean, UUID, Index
+from sqlalchemy import Column, String, DateTime, Boolean, UUID, Index, UniqueConstraint
 from sqlalchemy.sql import func
 import uuid
 
@@ -8,6 +8,7 @@ from src.core.database import Base
 class IdempotencyRecord(Base):
     __tablename__ = "idempotency_keys"
     __table_args__ = (
+        UniqueConstraint("idempotency_key", "tenant_id", "method", "path", name="uq_idempotency_key_tenant_method_path"),
         Index("ix_idempotency_created", "created_at"),
     )
 

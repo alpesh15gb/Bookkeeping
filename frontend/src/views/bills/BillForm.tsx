@@ -90,7 +90,7 @@ function convertNumberToWords(amount: number): string {
   const wholeText = numberToWordsString(wholeNumber);
 
   if (!wholeText && !fractionText) return "Rupees Zero Only";
-  if (!wholeText) return "Paise " + fractionText + " Only";
+  if (!wholeText) return "Rupees Zero" + fractionText + " Only";
 
   return `Rupees ${wholeText}${fractionText} Only`;
 }
@@ -287,7 +287,7 @@ export default function BillForm({ editId, onNavigate, onSuccess }: BillFormProp
     };
   };
 
-  const totals = useMemo(calculateTotals, [lines, discountPercent, shippingCharges]);
+  const totals = useMemo(calculateTotals, [lines, discountPercent, shippingCharges, originStateCode, placeOfSupply]);
 
   // Create or Update Mutation
   const saveMutation = useMutation({
