@@ -1,3 +1,12 @@
+// ── Internal helpers ──
+
+/** Coerce any numeric-compatible value to a proper number */
+function toNum(v: number | string | any): number {
+  if (typeof v === "number") return v;
+  const n = Number(v);
+  return isNaN(n) ? 0 : n;
+}
+
 // ── Currency & Number Formatting ──
 
 /**
@@ -5,9 +14,10 @@
  * 100000  → "1,00,000"
  * 5000000 → "50,00,000"
  */
-export function formatIndianNumber(num: number): string {
-  const sign = num < 0 ? "-" : "";
-  const abs = Math.abs(num);
+export function formatIndianNumber(num: number | string): string {
+  const n = toNum(num);
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
   const [integerPart, decimalPart] = abs.toFixed(2).split(".");
 
   const lastThree = integerPart.slice(-3);
@@ -22,18 +32,19 @@ export function formatIndianNumber(num: number): string {
 
 /**
  * Format amount in Indian Rupee format with ₹ symbol.
- * @param amount numeric amount
+ * @param amount numeric amount (handles both number and string)
  * @param compact if true, show in Lakhs/Crores for large values
  * @param showSymbol if false, omit ₹ symbol
  */
 export function formatIndianCurrency(
-  amount: number,
+  amount: number | string,
   compact: boolean = false,
   showSymbol: boolean = true,
 ): string {
+  const n = toNum(amount);
   const symbol = showSymbol ? "₹" : "";
-  const sign = amount < 0 ? "-" : "";
-  const abs = Math.abs(amount);
+  const sign = n < 0 ? "-" : "";
+  const abs = Math.abs(n);
 
   if (compact && abs >= 10_000_000) {
     return `${sign}${symbol}${(abs / 10_000_000).toFixed(2)}Cr`;
@@ -58,15 +69,16 @@ export function formatIndianCurrency(
  * Shows compact (L/Cr) with label for large amounts,
  * or precise with Indian commas for smaller.
  */
-export function formatMetricAmount(amount: number): {
+export function formatMetricAmount(amount: number | string): {
   value: string;
   suffix: string;
 } {
-  const abs = Math.abs(amount);
-  if (abs >= 10_000_000) return { value: (amount / 10_000_000).toFixed(2), suffix: "Cr" };
-  if (abs >= 100_000) return { value: (amount / 100_000).toFixed(2), suffix: "L" };
-  if (abs >= 1_000) return { value: formatIndianNumber(amount).replace(/\.00$/, ""), suffix: "" };
-  return { value: amount.toFixed(2), suffix: "" };
+  const n = toNum(amount);
+  const abs = Math.abs(n);
+  if (abs >= 10_000_000) return { value: (n / 10_000_000).toFixed(2), suffix: "Cr" };
+  if (abs >= 100_000) return { value: (n / 100_000).toFixed(2), suffix: "L" };
+  if (abs >= 1_000) return { value: formatIndianNumber(n).replace(/\.00$/, ""), suffix: "" };
+  return { value: n.toFixed(2), suffix: "" };
 }
 
 // ── Date Formatting ──
