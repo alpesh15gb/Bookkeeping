@@ -5,7 +5,7 @@ import { ArrowLeft, BookOpen, Edit, ShieldAlert, TrendingUp, TrendingDown } from
 
 interface AccountDetailProps {
   accountId: string;
-  onNavigate: (view: string, id?: string) => void;
+  onNavigate: (view: "list" | "create" | "edit" | "detail" | "ledger" | "trial_balance" | "profit_loss", accountId?: string) => void;
 }
 
 interface AccountData {
