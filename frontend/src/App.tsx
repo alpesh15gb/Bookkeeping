@@ -362,9 +362,9 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#fcfcfd]">
+    <div className="min-h-screen flex flex-col md:flex-row bg-surface">
       {/* Mobile Sticky Brand Header */}
-      <header className="md:hidden h-14 bg-[#0B1B3D] border-b border-zinc-800 px-4 flex items-center justify-between sticky top-0 z-30 no-print">
+      <header className="md:hidden h-14 bg-brand-navy border-b border-white/10 px-4 flex items-center justify-between sticky top-0 z-30 no-print">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setIsSidebarOpen(true)}
@@ -392,11 +392,11 @@ export default function App() {
 
       {/* Sidebar - Drawer on Mobile, Static Sidebar on Desktop */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 w-64 bg-[#0B1B3D] text-zinc-300 flex flex-col no-print z-50 transform md:transform-none transition-transform duration-200 ease-in-out ${
+        className={`fixed md:static inset-y-0 left-0 w-64 bg-brand-navy text-zinc-300 flex flex-col no-print z-50 transform md:transform-none transition-transform duration-200 ease-in-out ${
           isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
         }`}
       >
-        <div className="p-5 border-b border-zinc-850 flex items-center justify-between md:justify-start gap-3 bg-[#0B1B3D]">
+        <div className="p-5 border-b border-white/10 flex items-center justify-between md:justify-start gap-3 bg-brand-navy">
           <div className="bg-white rounded-lg p-2 shadow-sm w-full flex items-center justify-center">
             <img src={logo} alt="Apex Books Logo" className="h-10 object-contain" />
           </div>
@@ -472,8 +472,8 @@ export default function App() {
                 }}
                 className={`w-full flex items-center gap-3 px-3 py-2 text-xs font-semibold rounded-md transition duration-150 ${
                   isCurrent
-                    ? "bg-gold-500 text-zinc-950 shadow-sm"
-                    : "text-zinc-300 hover:bg-white/5 hover:text-white"
+                    ? "bg-brand-gold text-white shadow-sm"
+                    : "text-zinc-400 hover:bg-brand-navy-light hover:text-white"
                 }`}
               >
                 <Icon className={`w-4 h-4 ${isCurrent ? "text-zinc-950" : "text-zinc-400"}`} />
@@ -483,7 +483,7 @@ export default function App() {
           })}
         </nav>
 
-        <div className="p-4 border-t border-zinc-800 text-[11px] text-zinc-300 flex flex-col gap-2 bg-[#08152e]">
+        <div className="p-4 border-t border-white/10 text-[11px] text-zinc-400 flex flex-col gap-2 bg-brand-navy-dark">
           <div className="flex items-center gap-2">
             <Building2 className="w-3.5 h-3.5 text-zinc-500" />
             <span>Accounting App</span>

@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import logo from "../../logo.png";
 import { useUnsavedChangesWarning } from "../../hooks/useUnsavedChangesWarning";
+import PageHeader from "../../components/PageHeader";
 
 interface InvoiceFormProps {
   editId?: string;
@@ -420,7 +421,7 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
   const selectedCustomer = contacts.find(c => c.id === contactId);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
       {/* Top action header */}
       <div className="flex justify-between items-center pb-2 border-b border-zinc-200">
         <div className="flex items-center gap-2">
