@@ -14,6 +14,7 @@ from src.infrastructure.database.models import (
 from src.schemas.document import (
     InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse,
     PaginatedInvoiceResponse, PaymentCreate,
+    InvoicePreviewRequest,
     CreditNoteCreate, CreditNoteResponse, CreditNoteListResponse,
     DebitNoteCreate, DebitNoteResponse, DebitNoteListResponse
 )
@@ -216,23 +217,15 @@ def list_invoices(
 
 @router.post("/preview", response_model=InvoiceResponse, tags=["Invoices"])
 def preview_invoice(
-    payload: InvoiceCreate,
+    payload: InvoicePreviewRequest,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
     """
     Returns a computed preview of an invoice without creating it.
     Useful for frontend live preview before submission.
+    Contact resolution is skipped since preview doesn't require it.
     """
-    # ... (preview implementation unchanged — delegate to a helper if needed)
-    contact = db.query(Contact).filter(
-        Contact.id == payload.contact_id,
-        Contact.tenant_id == tenant_id,
-        Contact.deleted_at == None
-    ).first()
-    if not contact:
-        raise HTTPException(status_code=404, detail="Customer not found in this company context.")
-
     origin_state_code = resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
@@ -314,10 +307,12 @@ def preview_invoice(
     preview_invoice = Invoice(
         id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
         tenant_id=tenant_id,
-        contact_id=payload.contact_id,
+        contact_id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
         invoice_number="PREVIEW",
-        issue_date=payload.issue_date,
-        due_date=payload.due_date,
+        issue_date=date.today(),
+        due_date=date.today(),
+        billing_address={},
+        shipping_address=None,
         status="DRAFT",
         subtotal=inv_subtotal,
         discount_total=discount_amount,

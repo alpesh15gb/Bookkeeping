@@ -93,6 +93,12 @@ class InvoiceCreate(InvoiceBase):
     discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
 
+class InvoicePreviewRequest(SchemaBase):
+    pos_state_code: str = Field(..., pattern="[0-9]{2}$")
+    line_items: List[InvoiceLineCreate]
+    discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
+
 class InvoiceUpdate(SchemaBase):
     contact_id: Optional[uuid.UUID] = None
     invoice_number: Optional[str] = None
