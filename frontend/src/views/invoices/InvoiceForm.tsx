@@ -25,8 +25,8 @@ interface ContactItem {
   name: string;
   gstin?: string;
   state_code: string;
-  billing_address?: string;
-  shipping_address?: string;
+  billing_address?: string | Record<string, any>;
+  shipping_address?: string | Record<string, any>;
 }
 
 interface ProductItem {
@@ -149,6 +149,15 @@ function numberToWordsString(num: number): string {
   return numberToWordsString(Math.floor(num / 10000000)) + " Crore" + (num % 10000000 !== 0 ? " " + numberToWordsString(num % 10000000) : "");
 }
 
+function formatAddress(addr: any): string {
+  if (typeof addr === "string") return addr;
+  if (addr && typeof addr === "object") {
+    return [addr.street, addr.city, addr.state, addr.pincode, addr.country]
+      .filter(Boolean).join(", ");
+  }
+  return "";
+}
+
 export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFormProps) {
   const isEdit = !!editId;
   
@@ -213,8 +222,8 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
       setIssueDate(invoice.issue_date);
       setDueDate(invoice.due_date);
       setPlaceOfSupply(invoice.pos_state_code);
-      setBillingAddress(invoice.billing_address || "");
-      setShippingAddress(invoice.shipping_address || "");
+      setBillingAddress(formatAddress(invoice.billing_address) || "");
+      setShippingAddress(formatAddress(invoice.shipping_address) || "");
       setDiscountPercent(parseFloat(invoice.discount_rate || 0));
       setShippingCharges(parseFloat(invoice.shipping_charges || 0));
       setLines(
@@ -250,12 +259,12 @@ export default function InvoiceForm({ editId, onNavigate, onSuccess }: InvoiceFo
     const selected = contacts.find((c) => c.id === selectedContactId);
     if (selected) {
       setPlaceOfSupply(selected.state_code);
-      const addr = selected.billing_address || `${selected.name}, Main Business District, Delhi, India`;
+      const addr = formatAddress(selected.billing_address) || `${selected.name}, Main Business District, Delhi, India`;
       setBillingAddress(addr);
       if (sameAsBilling) {
         setShippingAddress(addr);
       } else {
-        setShippingAddress(selected.shipping_address || addr);
+        setShippingAddress(formatAddress(selected.shipping_address) || addr);
       }
     }
   };

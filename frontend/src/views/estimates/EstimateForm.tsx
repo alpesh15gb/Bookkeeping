@@ -11,22 +11,24 @@ interface EstimateFormProps {
 }
 
 interface ContactItem {
-  id: string; name: string;
+  id: string; name: string; state_code: string;
 }
 interface ProductItem {
-  id: string; name: string; sales_price: number; gst_rate: number;
+  id: string; name: string; sales_price: number; gst_rate: number; hsn_sac: string;
 }
 interface LineDraft {
-  product_id: string; product_name: string; quantity: number; rate: number;
+  product_id: string; product_name: string; quantity: number; rate: number; discount: number; hsn_sac: string; gst_rate: number;
 }
 
 export default function EstimateForm({ editId, onNavigate, onSuccess }: EstimateFormProps) {
   const isEdit = Boolean(editId);
 
   const [contactId, setContactId] = useState("");
+  const [estimateNumber, setEstimateNumber] = useState("");
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState("");
-  const [lines, setLines] = useState<LineDraft[]>([{ product_id: "", product_name: "", quantity: 1, rate: 0 }]);
+  const [placeOfSupply, setPlaceOfSupply] = useState("");
+  const [lines, setLines] = useState<LineDraft[]>([{ product_id: "", product_name: "", quantity: 1, rate: 0, discount: 0, hsn_sac: "", gst_rate: 18 }]);
 
   useUnsavedChangesWarning(contactId !== "" || lines.some(l => l.product_id !== ""));
 
@@ -35,6 +37,13 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
     d.setDate(d.getDate() + 15);
     setDueDate(d.toISOString().split("T")[0]);
   }, []);
+
+  useEffect(() => {
+    if (!isEdit && !estimateNumber) {
+      const randSeq = Math.floor(100000 + Math.random() * 900000);
+      setEstimateNumber(`EST-2025-${randSeq}`);
+    }
+  }, [isEdit, estimateNumber]);
 
   const { data: contacts = [] } = useQuery<ContactItem[]>({
     queryKey: ["contacts"],
@@ -55,14 +64,19 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
   useEffect(() => {
     if (existing) {
       setContactId(existing.contact?.id || "");
+      setEstimateNumber(existing.proforma_number || "");
       setIssueDate(existing.issue_date);
       setDueDate(existing.due_date);
+      setPlaceOfSupply(existing.pos_state_code || "");
       if (existing.lines?.length) {
         setLines(existing.lines.map((l: any) => ({
           product_id: l.product?.id || l.product_id || "",
           product_name: l.description || l.product?.name || "",
           quantity: Number(l.quantity),
           rate: Number(l.rate),
+          discount: Number(l.discount || 0),
+          hsn_sac: l.hsn_sac || "",
+          gst_rate: Number(l.gst_rate || 18),
         })));
       }
     }
@@ -72,9 +86,18 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
     mutationFn: async () => {
       const payload = {
         contact_id: contactId,
+        proforma_number: estimateNumber,
         issue_date: issueDate,
         due_date: dueDate,
-        line_items: lines.map(l => ({ product_id: l.product_id, quantity: l.quantity, rate: l.rate })),
+        pos_state_code: placeOfSupply,
+        line_items: lines.map(l => ({
+          product_id: l.product_id,
+          quantity: l.quantity,
+          rate: l.rate,
+          discount: l.discount,
+          hsn_sac: l.hsn_sac,
+          gst_rate: l.gst_rate,
+        })),
       };
       if (isEdit) await apiClient.put(`/proforma-invoices/${editId}`, payload);
       else await apiClient.post("/proforma-invoices", payload);
@@ -84,11 +107,11 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!contactId || !issueDate || !dueDate || lines.some(l => !l.product_id)) return;
+    if (!contactId || !issueDate || !dueDate || !placeOfSupply || lines.some(l => !l.product_id)) return;
     saveMutation.mutate();
   };
 
-  const addLine = () => setLines([...lines, { product_id: "", product_name: "", quantity: 1, rate: 0 }]);
+  const addLine = () => setLines([...lines, { product_id: "", product_name: "", quantity: 1, rate: 0, discount: 0, hsn_sac: "", gst_rate: 18 }]);
   const removeLine = (i: number) => { if (lines.length > 1) setLines(lines.filter((_, idx) => idx !== i)); };
 
   const handleProductSelect = (i: number, pid: string) => {
@@ -96,10 +119,20 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
     setLines(lines.map((l, idx) => idx === i ? {
       ...l, product_id: pid, product_name: p?.name || "",
       rate: p?.sales_price || l.rate,
+      hsn_sac: p?.hsn_sac || "",
+      gst_rate: p?.gst_rate || 18,
     } : l));
   };
 
-  const total = lines.reduce((s, l) => s + l.quantity * l.rate, 0);
+  const handleCustomerChange = (selectedContactId: string) => {
+    setContactId(selectedContactId);
+    const selected = contacts.find((c) => c.id === selectedContactId);
+    if (selected) {
+      setPlaceOfSupply(selected.state_code);
+    }
+  };
+
+  const total = lines.reduce((s, l) => s + l.quantity * l.rate - l.discount, 0);
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -118,7 +151,7 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
           <div className="grid grid-cols-3 gap-4">
             <div className="space-y-2">
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">Customer *</label>
-              <select value={contactId} onChange={(e) => setContactId(e.target.value)}
+              <select value={contactId} onChange={(e) => handleCustomerChange(e.target.value)}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-brand-500" required>
                 <option value="">Select customer...</option>
                 {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
@@ -143,9 +176,12 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
             <thead>
               <tr className="text-xs text-zinc-500 font-bold uppercase tracking-wider border-b border-zinc-100">
                 <th className="pb-2 pr-2">Item</th>
-                <th className="pb-2 pr-2 w-20">Qty</th>
-                <th className="pb-2 pr-2 w-28 text-right">Rate (₹)</th>
-                <th className="pb-2 w-28 text-right">Amount</th>
+                <th className="pb-2 pr-2 w-16">HSN</th>
+                <th className="pb-2 pr-2 w-16">Qty</th>
+                <th className="pb-2 pr-2 w-24 text-right">Rate (₹)</th>
+                <th className="pb-2 pr-2 w-16 text-right">Disc</th>
+                <th className="pb-2 pr-2 w-16 text-right">GST%</th>
+                <th className="pb-2 w-24 text-right">Amount</th>
                 <th className="pb-2 w-10"></th>
               </tr>
             </thead>
@@ -160,6 +196,11 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
                     </select>
                   </td>
                   <td className="py-2 pr-2">
+                    <input type="text" value={line.hsn_sac} maxLength={8}
+                      onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, hsn_sac: e.target.value } : l))}
+                      className="w-full px-2 py-1.5 border border-zinc-200 rounded-md text-xs font-mono focus:outline-none focus:ring-2 focus:ring-brand-500" />
+                  </td>
+                  <td className="py-2 pr-2">
                     <input type="number" min="0.01" step="0.01" value={line.quantity}
                       onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, quantity: parseFloat(e.target.value) || 0 } : l))}
                       className="w-full px-2 py-1.5 border border-zinc-200 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
@@ -169,8 +210,18 @@ export default function EstimateForm({ editId, onNavigate, onSuccess }: Estimate
                       onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, rate: parseFloat(e.target.value) || 0 } : l))}
                       className="w-full px-2 py-1.5 border border-zinc-200 rounded-md text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono" />
                   </td>
+                  <td className="py-2 pr-2">
+                    <input type="number" min="0" step="0.01" value={line.discount}
+                      onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, discount: parseFloat(e.target.value) || 0 } : l))}
+                      className="w-full px-2 py-1.5 border border-zinc-200 rounded-md text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono" />
+                  </td>
+                  <td className="py-2 pr-2">
+                    <input type="number" min="0" max="100" step="0.01" value={line.gst_rate}
+                      onChange={(e) => setLines(lines.map((l, i) => i === idx ? { ...l, gst_rate: parseFloat(e.target.value) || 0 } : l))}
+                      className="w-full px-2 py-1.5 border border-zinc-200 rounded-md text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono" />
+                  </td>
                   <td className="py-2 text-right font-mono font-semibold text-zinc-800">
-                    {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(line.quantity * line.rate)}
+                    {new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(line.quantity * line.rate - line.discount)}
                   </td>
                   <td className="py-2 text-center">
                     <button type="button" onClick={() => removeLine(idx)} disabled={lines.length === 1}

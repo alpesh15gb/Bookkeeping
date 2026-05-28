@@ -16,7 +16,7 @@ interface ContactItem {
   name: string;
   contact_type: string;
   state_code: string;
-  billing_address?: string;
+  billing_address?: string | Record<string, any>;
 }
 
 interface ProductItem {
@@ -108,6 +108,15 @@ function numberToWordsString(num: number): string {
   return numberToWordsString(Math.floor(num / 10000000)) + " Crore" + (num % 10000000 !== 0 ? " " + numberToWordsString(num % 10000000) : "");
 }
 
+function formatAddress(addr: any): string {
+  if (typeof addr === "string") return addr;
+  if (addr && typeof addr === "object") {
+    return [addr.street, addr.city, addr.state, addr.pincode, addr.country]
+      .filter(Boolean).join(", ");
+  }
+  return "";
+}
+
 export default function BillForm({ editId, onNavigate, onSuccess }: BillFormProps) {
   const isEdit = !!editId;
   
@@ -173,7 +182,7 @@ export default function BillForm({ editId, onNavigate, onSuccess }: BillFormProp
       setIssueDate(bill.issue_date);
       setDueDate(bill.due_date);
       setPlaceOfSupply(bill.pos_state_code);
-      setBillingAddress(bill.billing_address || "");
+      setBillingAddress(formatAddress(bill.billing_address) || "");
       setDiscountPercent(parseFloat(bill.discount_rate || 0));
       setShippingCharges(parseFloat(bill.shipping_charges || 0));
       setLines(
@@ -202,7 +211,7 @@ export default function BillForm({ editId, onNavigate, onSuccess }: BillFormProp
     const selected = vendors.find((v) => v.id === selectedContactId);
     if (selected) {
       setPlaceOfSupply(selected.state_code);
-      setBillingAddress(selected.billing_address || `${selected.name}, Main Business District, Delhi, India`);
+      setBillingAddress(formatAddress(selected.billing_address) || `${selected.name}, Main Business District, Delhi, India`);
     }
   };
 
