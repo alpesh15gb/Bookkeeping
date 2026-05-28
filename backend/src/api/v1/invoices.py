@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import uuid
 from decimal import Decimal
@@ -597,6 +597,47 @@ def cancel_credit_note(
 # ==========================================
 # DEBIT NOTES ROUTERS — statuses: DRAFT → POSTED → CANCELLED
 # ==========================================
+
+@router.get("/debit-notes", response_model=List[DebitNoteListResponse])
+def list_debit_notes(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    notes = db.query(DebitNote).options(
+        joinedload(DebitNote.invoice).joinedload(Invoice.contact)
+    ).filter(
+        DebitNote.tenant_id == tenant_id,
+        DebitNote.deleted_at == None
+    ).all()
+    return [
+        DebitNoteListResponse(
+            id=dn.id,
+            debit_note_number=dn.debit_note_number,
+            issue_date=dn.issue_date,
+            status=dn.status,
+            total=dn.total,
+            reason=dn.reason,
+            created_at=dn.created_at,
+        )
+        for dn in notes
+    ]
+
+
+@router.get("/debit-notes/{dn_id}", response_model=DebitNoteResponse)
+def get_debit_note(
+    dn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    dn = db.query(DebitNote).filter(
+        DebitNote.id == dn_id,
+        DebitNote.tenant_id == tenant_id,
+        DebitNote.deleted_at == None
+    ).first()
+    if not dn:
+        raise HTTPException(status_code=404, detail="Debit Note not found.")
+    return dn
+
 
 @router.post("/debit-notes", response_model=DebitNoteResponse, status_code=status.HTTP_201_CREATED)
 def create_debit_note(
