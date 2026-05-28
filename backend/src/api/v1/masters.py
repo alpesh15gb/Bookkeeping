@@ -528,16 +528,25 @@ def create_expense_category(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:manual_post"))
 ):
-    if payload.linked_account_id:
-        acc = db.query(Account).filter(Account.id == payload.linked_account_id, Account.tenant_id == tenant_id, Account.deleted_at == None).first()
-        if not acc:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Linked ledger account not found.")
+    linked_account_id = payload.linked_account_id
+    if not linked_account_id:
+        from src.domains.accounting.services import AccountResolver
+        resolver = AccountResolver(db, tenant_id)
+        linked_account_id = resolver.resolve("purchases")
+
+    acc = db.query(Account).filter(
+        Account.id == linked_account_id,
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None
+    ).first()
+    if not acc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Linked ledger account not found.")
 
     cat = ExpenseCategory(
         tenant_id=tenant_id,
         name=payload.name,
         description=payload.description,
-        linked_account_id=payload.linked_account_id,
+        linked_account_id=linked_account_id,
         is_active=True
     )
     db.add(cat)
