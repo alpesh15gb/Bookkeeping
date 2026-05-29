@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import uuid
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime, timezone
 
 
 from src.core.database import get_db_session
@@ -426,6 +426,93 @@ def create_credit_note(
     db.refresh(cn)
     return cn
 
+
+@router.post("/credit-notes/preview", response_model=CreditNoteResponse)
+def preview_credit_note(
+    payload: CreditNoteCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+):
+    inv = None
+    if payload.invoice_id:
+        inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    origin_state = resolve_origin_state_code(db, tenant_id)
+    place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
+
+    db_lines = []
+    subtotal = Decimal("0.0000")
+    cgst = Decimal("0.0000")
+    sgst = Decimal("0.0000")
+    igst = Decimal("0.0000")
+    utgst = Decimal("0.0000")
+    cess = Decimal("0.0000")
+
+    for line in payload.line_items:
+        line_subtotal = line.quantity * line.rate
+        tax_split = GSTEngine.calculate_tax(
+            origin_state_code=origin_state,
+            place_of_supply_state_code=place_of_supply,
+            base_amount=line_subtotal,
+            gst_rate=line.gst_rate
+        )
+
+        db_line = CreditNoteLine(
+            product_id=line.product_id,
+            quantity=line.quantity,
+            rate=line.rate,
+            subtotal=line_subtotal,
+            hsn_sac=line.hsn_sac,
+            gst_rate=line.gst_rate,
+            cgst_rate=tax_split.cgst_rate,
+            cgst_amount=tax_split.cgst_amount,
+            sgst_rate=tax_split.sgst_rate,
+            sgst_amount=tax_split.sgst_amount,
+            igst_rate=tax_split.igst_rate,
+            igst_amount=tax_split.igst_amount,
+            utgst_rate=tax_split.utgst_rate,
+            utgst_amount=tax_split.utgst_amount,
+            cess_rate=tax_split.cess_rate,
+            cess_amount=tax_split.cess_amount,
+            total=tax_split.total_amount
+        )
+        db_lines.append(db_line)
+
+        subtotal += line_subtotal
+        cgst += tax_split.cgst_amount
+        sgst += tax_split.sgst_amount
+        igst += tax_split.igst_amount
+        utgst += tax_split.utgst_amount
+        cess += tax_split.cess_amount
+
+    raw_total = subtotal + cgst + sgst + igst + utgst + cess
+    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    round_off = rounded_total - raw_total
+
+    cn = CreditNote(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=tenant_id,
+        invoice_id=payload.invoice_id,
+        credit_note_number="PREVIEW",
+        issue_date=payload.issue_date,
+        reason=payload.reason,
+        status="DRAFT",
+        subtotal=subtotal,
+        cgst_amount=cgst,
+        sgst_amount=sgst,
+        igst_amount=igst,
+        utgst_amount=utgst,
+        cess_amount=cess,
+        round_off=round_off,
+        pos_state_code=place_of_supply,
+        total=rounded_total,
+        lines=db_lines
+    )
+    return cn
+
+
 @router.get("/credit-notes", response_model=List[CreditNoteListResponse])
 def list_credit_notes(
     db: Session = Depends(get_db_session),
@@ -723,6 +810,93 @@ def create_debit_note(
     db.commit()
     db.refresh(dn)
     return dn
+
+
+@router.post("/debit-notes/preview", response_model=DebitNoteResponse)
+def preview_debit_note(
+    payload: DebitNoteCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+):
+    inv = None
+    if payload.invoice_id:
+        inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
+        if not inv:
+            raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    origin_state = resolve_origin_state_code(db, tenant_id)
+    place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
+
+    db_lines = []
+    subtotal = Decimal("0.0000")
+    cgst = Decimal("0.0000")
+    sgst = Decimal("0.0000")
+    igst = Decimal("0.0000")
+    utgst = Decimal("0.0000")
+    cess = Decimal("0.0000")
+
+    for line in payload.line_items:
+        line_subtotal = line.quantity * line.rate
+        tax_split = GSTEngine.calculate_tax(
+            origin_state_code=origin_state,
+            place_of_supply_state_code=place_of_supply,
+            base_amount=line_subtotal,
+            gst_rate=line.gst_rate
+        )
+
+        db_line = DebitNoteLine(
+            product_id=line.product_id,
+            quantity=line.quantity,
+            rate=line.rate,
+            subtotal=line_subtotal,
+            hsn_sac=line.hsn_sac,
+            gst_rate=line.gst_rate,
+            cgst_rate=tax_split.cgst_rate,
+            cgst_amount=tax_split.cgst_amount,
+            sgst_rate=tax_split.sgst_rate,
+            sgst_amount=tax_split.sgst_amount,
+            igst_rate=tax_split.igst_rate,
+            igst_amount=tax_split.igst_amount,
+            utgst_rate=tax_split.utgst_rate,
+            utgst_amount=tax_split.utgst_amount,
+            cess_rate=tax_split.cess_rate,
+            cess_amount=tax_split.cess_amount,
+            total=tax_split.total_amount
+        )
+        db_lines.append(db_line)
+
+        subtotal += line_subtotal
+        cgst += tax_split.cgst_amount
+        sgst += tax_split.sgst_amount
+        igst += tax_split.igst_amount
+        utgst += tax_split.utgst_amount
+        cess += tax_split.cess_amount
+
+    raw_total = subtotal + cgst + sgst + igst + utgst + cess
+    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    round_off = rounded_total - raw_total
+
+    dn = DebitNote(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=tenant_id,
+        invoice_id=payload.invoice_id,
+        debit_note_number="PREVIEW",
+        issue_date=payload.issue_date,
+        reason=payload.reason,
+        status="DRAFT",
+        subtotal=subtotal,
+        cgst_amount=cgst,
+        sgst_amount=sgst,
+        igst_amount=igst,
+        utgst_amount=utgst,
+        cess_amount=cess,
+        round_off=round_off,
+        pos_state_code=place_of_supply,
+        total=rounded_total,
+        lines=db_lines
+    )
+    return dn
+
 
 @router.post("/debit-notes/{dn_id}/finalize", response_model=DebitNoteResponse)
 def finalize_debit_note(
@@ -1231,4 +1405,158 @@ def cancel_invoice(
     db.refresh(invoice)
     return invoice
 
-# PDF payload and E-invoice endpoints unchanged — see full file for those
+@router.get("/{id}/pdf-payload")
+def get_invoice_pdf_payload(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    invoice = db.query(Invoice).filter(
+        Invoice.id == id,
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    company = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    bank = db.query(BankingProfile).filter(
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.is_primary == True,
+        BankingProfile.is_active == True
+    ).first()
+    contact = invoice.contact
+
+    return {
+        "company": {
+            "legal_name": company.legal_name if company else None,
+            "trade_name": company.trade_name if company else None,
+            "gstin": company.gstin if company else None,
+            "pan": company.pan if company else None,
+            "logo_url": settings.logo_url if settings else None
+        },
+        "bank_details": {
+            "bank_name": bank.bank_name if bank else None,
+            "account_number": bank.account_number if bank else None,
+            "ifsc_code": bank.ifsc_code if bank else None,
+            "account_holder_name": bank.account_holder_name if bank else None,
+            "upi_id": bank.upi_id if bank else None
+        },
+        "customer": {
+            "name": contact.name if contact else None,
+            "gstin": contact.gstin if contact else None,
+            "pan": contact.pan if contact else None,
+            "billing_address": contact.billing_address if contact else None,
+            "state_code": contact.state_code if contact else None
+        },
+        "invoice": {
+            "id": str(invoice.id),
+            "invoice_number": invoice.invoice_number,
+            "issue_date": invoice.issue_date.isoformat(),
+            "due_date": invoice.due_date.isoformat(),
+            "pos_state_code": invoice.pos_state_code,
+            "status": invoice.status,
+            "subtotal": str(invoice.subtotal.quantize(Decimal("0.01"))),
+            "discount_total": str(invoice.discount_total.quantize(Decimal("0.01"))),
+            "cgst_amount": str(invoice.cgst_amount.quantize(Decimal("0.01"))),
+            "sgst_amount": str(invoice.sgst_amount.quantize(Decimal("0.01"))),
+            "igst_amount": str(invoice.igst_amount.quantize(Decimal("0.01"))),
+            "utgst_amount": str(invoice.utgst_amount.quantize(Decimal("0.01"))),
+            "cess_amount": str(invoice.cess_amount.quantize(Decimal("0.01"))),
+            "round_off": str(invoice.round_off.quantize(Decimal("0.01"))),
+            "total": str(invoice.total.quantize(Decimal("0.01"))),
+            "amount_paid": str(invoice.amount_paid.quantize(Decimal("0.01")))
+        },
+        "lines": [
+            {
+                "product_name": line.product.name if line.product else "N/A",
+                "hsn_sac": line.hsn_sac,
+                "quantity": float(line.quantity),
+                "rate": float(line.rate),
+                "discount": float(line.discount),
+                "subtotal": str(line.subtotal.quantize(Decimal("0.01"))),
+                "gst_rate": str(line.gst_rate.quantize(Decimal("0.01"))),
+                "cgst_amount": str(line.cgst_amount.quantize(Decimal("0.01"))),
+                "sgst_amount": str(line.sgst_amount.quantize(Decimal("0.01"))),
+                "igst_amount": str(line.igst_amount.quantize(Decimal("0.01"))),
+                "total": str(line.total.quantize(Decimal("0.01")))
+            }
+            for line in invoice.lines
+        ]
+    }
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_invoice(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:delete"))
+):
+    invoice = db.query(Invoice).filter(
+        Invoice.id == id,
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+    
+    if invoice.status != "DRAFT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only draft invoices can be deleted."
+        )
+    
+    invoice.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return
+
+
+@router.delete("/credit-notes/{cn_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_credit_note(
+    cn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:delete"))
+):
+    cn = db.query(CreditNote).filter(
+        CreditNote.id == cn_id,
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).first()
+    if not cn:
+        raise HTTPException(status_code=404, detail="Credit Note not found.")
+    
+    if cn.status != "DRAFT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only draft Credit Notes can be deleted."
+        )
+    
+    cn.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return
+
+
+@router.delete("/debit-notes/{dn_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_debit_note(
+    dn_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:delete"))
+):
+    dn = db.query(DebitNote).filter(
+        DebitNote.id == dn_id,
+        DebitNote.tenant_id == tenant_id,
+        DebitNote.deleted_at == None
+    ).first()
+    if not dn:
+        raise HTTPException(status_code=404, detail="Debit Note not found.")
+    
+    if dn.status != "DRAFT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only draft Debit Notes can be deleted."
+        )
+    
+    dn.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return

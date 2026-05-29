@@ -130,7 +130,7 @@ class InvoiceResponse(InvoiceBase):
     created_at: datetime
     updated_at: datetime
     lines: List[InvoiceLineResponse]
-    contact: ContactResponse
+    contact: Optional[ContactResponse] = None
 
 class InvoiceListResponse(SchemaBase):
     id: uuid.UUID

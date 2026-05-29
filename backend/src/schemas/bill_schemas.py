@@ -79,7 +79,7 @@ class BillResponse(BillBase):
     created_at: datetime
     updated_at: datetime
     lines: List[BillLineResponse]
-    contact: ContactResponse
+    contact: Optional[ContactResponse] = None
 
 class BillListResponse(SchemaBase):
     id: uuid.UUID
@@ -400,7 +400,7 @@ class ProformaInvoiceResponse(ProformaInvoiceBase):
     created_at: datetime
     updated_at: datetime
     lines: List[ProformaInvoiceLineResponse]
-    contact: ContactResponse
+    contact: Optional[ContactResponse] = None
 
 class ProformaInvoiceListResponse(SchemaBase):
     id: uuid.UUID

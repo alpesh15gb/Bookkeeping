@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import Bill, BillLine, Contact, Product, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
@@ -145,7 +145,13 @@ def preview_bill(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
-    origin_state_code = resolve_origin_state_code(db, tenant_id)
+    contact = db.query(Contact).filter(
+        Contact.id == payload.contact_id,
+        Contact.tenant_id == tenant_id,
+        Contact.deleted_at == None
+    ).first() if payload.contact_id else None
+
+    origin_state_code = contact.state_code if (contact and contact.state_code) else resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
     bill_subtotal = Decimal("0.0000")
@@ -240,7 +246,8 @@ def preview_bill(
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
-        lines=db_lines
+        lines=db_lines,
+        contact=contact
     )
 
     return preview_bill
@@ -695,3 +702,29 @@ def cancel_bill(
     db.commit()
     db.refresh(bill)
     return bill
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_bill(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:delete"))
+):
+    bill = db.query(Bill).filter(
+        Bill.id == id,
+        Bill.tenant_id == tenant_id,
+        Bill.deleted_at == None
+    ).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Vendor Bill not found.")
+    
+    if bill.status != "DRAFT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only draft bills can be deleted."
+        )
+    
+    bill.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return
+

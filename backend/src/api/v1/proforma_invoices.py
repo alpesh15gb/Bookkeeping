@@ -3,11 +3,11 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 from decimal import Decimal
-from datetime import date
+from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    ProformaInvoice, ProformaInvoiceLine, Contact, Product, JournalEntry, JournalLine
+    ProformaInvoice, ProformaInvoiceLine, Contact, Product, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
 )
 from src.schemas.bill_schemas import (
     ProformaInvoiceCreate, ProformaInvoiceUpdate, ProformaInvoiceResponse, ProformaInvoiceListResponse
@@ -124,6 +124,106 @@ def create_proforma_invoice(
     db.add(pi)
     db.commit()
     db.refresh(pi)
+    return pi
+
+
+@router.post("/preview", response_model=ProformaInvoiceResponse)
+def preview_proforma_invoice(
+    payload: ProformaInvoiceCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+):
+    contact = None
+    if payload.contact_id:
+        contact = db.query(Contact).filter(
+            Contact.id == payload.contact_id,
+            Contact.tenant_id == tenant_id,
+            Contact.deleted_at == None
+        ).first()
+
+    origin_state_code = resolve_origin_state_code(db, tenant_id)
+
+    db_lines = []
+    pi_subtotal = Decimal("0.0000")
+    pi_cgst = Decimal("0.0000")
+    pi_sgst = Decimal("0.0000")
+    pi_igst = Decimal("0.0000")
+    pi_utgst = Decimal("0.0000")
+    pi_cess = Decimal("0.0000")
+    pi_discount = Decimal("0.0000")
+
+    for line in payload.line_items:
+        product = db.query(Product).filter(
+            Product.id == line.product_id,
+            Product.tenant_id == tenant_id,
+            Product.deleted_at == None
+        ).first()
+        if not product:
+            raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
+
+        line_subtotal = (line.quantity * line.rate) - line.discount
+        if line_subtotal < 0:
+            raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
+
+        tax_split = GSTEngine.calculate_tax(
+            origin_state_code=origin_state_code,
+            place_of_supply_state_code=payload.pos_state_code,
+            base_amount=line_subtotal,
+            gst_rate=line.gst_rate
+        )
+
+        db_line = ProformaInvoiceLine(
+            product_id=line.product_id,
+            quantity=line.quantity,
+            rate=line.rate,
+            discount=line.discount,
+            subtotal=line_subtotal,
+            hsn_sac=line.hsn_sac,
+            gst_rate=line.gst_rate,
+            cgst_rate=tax_split.cgst_rate,
+            cgst_amount=tax_split.cgst_amount,
+            sgst_rate=tax_split.sgst_rate,
+            sgst_amount=tax_split.sgst_amount,
+            igst_rate=tax_split.igst_rate,
+            igst_amount=tax_split.igst_amount,
+            utgst_rate=tax_split.utgst_rate,
+            utgst_amount=tax_split.utgst_amount,
+            cess_rate=tax_split.cess_rate,
+            cess_amount=tax_split.cess_amount,
+            total=tax_split.total_amount
+        )
+        db_lines.append(db_line)
+
+        pi_subtotal += db_line.subtotal
+        pi_cgst += db_line.cgst_amount
+        pi_sgst += db_line.sgst_amount
+        pi_igst += db_line.igst_amount
+        pi_utgst += db_line.utgst_amount
+        pi_cess += db_line.cess_amount
+        pi_discount += db_line.discount
+
+    grand_total = pi_subtotal + pi_cgst + pi_sgst + pi_igst + pi_utgst + pi_cess
+
+    pi = ProformaInvoice(
+        id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
+        tenant_id=tenant_id,
+        contact_id=payload.contact_id,
+        proforma_number="PREVIEW",
+        issue_date=payload.issue_date,
+        due_date=payload.due_date,
+        status="DRAFT",
+        subtotal=pi_subtotal,
+        discount_total=pi_discount,
+        cgst_amount=pi_cgst,
+        sgst_amount=pi_sgst,
+        igst_amount=pi_igst,
+        utgst_amount=pi_utgst,
+        cess_amount=pi_cess,
+        total=grand_total,
+        pos_state_code=payload.pos_state_code,
+        lines=db_lines,
+        contact=contact
+    )
     return pi
 
 
@@ -403,3 +503,107 @@ def cancel_proforma_invoice(
     db.commit()
     db.refresh(pi)
     return pi
+
+@router.get("/{id}/pdf-payload")
+def get_proforma_invoice_pdf_payload(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    pi = db.query(ProformaInvoice).filter(
+        ProformaInvoice.id == id,
+        ProformaInvoice.tenant_id == tenant_id,
+        ProformaInvoice.deleted_at == None
+    ).first()
+    if not pi:
+        raise HTTPException(status_code=404, detail="Proforma invoice not found.")
+
+    settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    company = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    bank = db.query(BankingProfile).filter(
+        BankingProfile.tenant_id == tenant_id,
+        BankingProfile.is_primary == True,
+        BankingProfile.is_active == True
+    ).first()
+    contact = pi.contact
+
+    return {
+        "company": {
+            "legal_name": company.legal_name if company else None,
+            "trade_name": company.trade_name if company else None,
+            "gstin": company.gstin if company else None,
+            "pan": company.pan if company else None,
+            "logo_url": settings.logo_url if settings else None
+        },
+        "bank_details": {
+            "bank_name": bank.bank_name if bank else None,
+            "account_number": bank.account_number if bank else None,
+            "ifsc_code": bank.ifsc_code if bank else None,
+            "account_holder_name": bank.account_holder_name if bank else None,
+            "upi_id": bank.upi_id if bank else None
+        },
+        "customer": {
+            "name": contact.name if contact else None,
+            "gstin": contact.gstin if contact else None,
+            "pan": contact.pan if contact else None,
+            "billing_address": contact.billing_address if contact else None,
+            "state_code": contact.state_code if contact else None
+        },
+        "proforma_invoice": {
+            "id": str(pi.id),
+            "proforma_number": pi.proforma_number,
+            "issue_date": pi.issue_date.isoformat(),
+            "due_date": pi.due_date.isoformat(),
+            "pos_state_code": pi.pos_state_code,
+            "status": pi.status,
+            "subtotal": str(pi.subtotal.quantize(Decimal("0.01"))),
+            "discount_total": str(pi.discount_total.quantize(Decimal("0.01"))),
+            "cgst_amount": str(pi.cgst_amount.quantize(Decimal("0.01"))),
+            "sgst_amount": str(pi.sgst_amount.quantize(Decimal("0.01"))),
+            "igst_amount": str(pi.igst_amount.quantize(Decimal("0.01"))),
+            "utgst_amount": str(pi.utgst_amount.quantize(Decimal("0.01"))),
+            "cess_amount": str(pi.cess_amount.quantize(Decimal("0.01"))),
+            "total": str(pi.total.quantize(Decimal("0.01")))
+        },
+        "lines": [
+            {
+                "product_name": line.product.name if line.product else "N/A",
+                "hsn_sac": line.hsn_sac,
+                "quantity": float(line.quantity),
+                "rate": float(line.rate),
+                "discount": float(line.discount),
+                "subtotal": str(line.subtotal.quantize(Decimal("0.01"))),
+                "gst_rate": str(line.gst_rate.quantize(Decimal("0.01"))),
+                "cgst_amount": str(line.cgst_amount.quantize(Decimal("0.01"))),
+                "sgst_amount": str(line.sgst_amount.quantize(Decimal("0.01"))),
+                "igst_amount": str(line.igst_amount.quantize(Decimal("0.01"))),
+                "total": str(line.total.quantize(Decimal("0.01")))
+            }
+            for line in pi.lines
+        ]
+    }
+
+
+@router.delete("/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_proforma_invoice(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:delete"))
+):
+    pi = db.query(ProformaInvoice).filter(
+        ProformaInvoice.id == id,
+        ProformaInvoice.tenant_id == tenant_id,
+        ProformaInvoice.deleted_at == None
+    ).first()
+    if not pi:
+        raise HTTPException(status_code=404, detail="Proforma invoice not found.")
+    
+    if pi.status != "DRAFT":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only draft estimates/proforma invoices can be deleted."
+        )
+    
+    pi.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+    return
