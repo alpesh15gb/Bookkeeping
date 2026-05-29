@@ -66,10 +66,15 @@ def _expense_to_response(e: Expense) -> ExpenseResponse:
 
 def _gen_expense_number(db: Session, tenant_id: uuid.UUID) -> str:
     prefix = f"EXP-{date.today().strftime('%Y%m')}-"
-    last = db.query(func.max(Expense.expense_number)).filter(
+    rows = db.query(Expense.expense_number).filter(
         Expense.tenant_id == tenant_id,
         Expense.expense_number.like(f"{prefix}%"),
-    ).with_for_update().scalar()
+    ).with_for_update().all()
+    
+    last = None
+    if rows:
+        last = max(r[0] for r in rows if r[0])
+        
     next_num = 1
     if last:
         try:
