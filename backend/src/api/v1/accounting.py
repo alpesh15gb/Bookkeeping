@@ -214,13 +214,13 @@ def list_journal_entries(
                 updated_at=entry.updated_at,
                 lines=[
                     JournalLineResponse(
-                        id=row.id,
-                        account_id=row.account_id,
-                        account_name=row.account_name,
-                        account_code=row.account_code,
-                        amount=row.amount,
-                        direction=row.direction,
-                        narration=row.narration
+                        id=row[0],
+                        account_id=row[1],
+                        account_name=row[2],
+                        account_code=row[3],
+                        amount=row[4],
+                        direction=row[5],
+                        narration=row[6]
                     )
                     for row in lines_with_acc
                 ]
