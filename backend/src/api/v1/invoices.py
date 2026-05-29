@@ -258,6 +258,7 @@ def preview_invoice(
         )
 
         db_line = InvoiceLine(
+            id=uuid.UUID(int=0),
             product_id=line.product_id,
             quantity=line.quantity,
             rate=line.rate,
@@ -326,14 +327,16 @@ def preview_invoice(
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
         e_invoice_status="PENDING",
-        lines=db_lines
+        lines=db_lines,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
     return preview_invoice
 
 
 # ==========================================
-# CREDIT NOTES ROUTERS — statuses: DRAFT → POSTED → CANCELLED
+# CREDIT NOTES ROUTERS â€” statuses: DRAFT â†’ POSTED â†’ CANCELLED
 # ==========================================
 
 @router.post("/credit-notes", response_model=CreditNoteResponse, status_code=status.HTTP_201_CREATED)
@@ -460,6 +463,7 @@ def preview_credit_note(
         )
 
         db_line = CreditNoteLine(
+            id=uuid.UUID(int=0),
             product_id=line.product_id,
             quantity=line.quantity,
             rate=line.rate,
@@ -508,7 +512,9 @@ def preview_credit_note(
         round_off=round_off,
         pos_state_code=place_of_supply,
         total=rounded_total,
-        lines=db_lines
+        lines=db_lines,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     return cn
 
@@ -677,7 +683,7 @@ def cancel_credit_note(
 
 
 # ==========================================
-# DEBIT NOTES ROUTERS — statuses: DRAFT → POSTED → CANCELLED
+# DEBIT NOTES ROUTERS â€” statuses: DRAFT â†’ POSTED â†’ CANCELLED
 # ==========================================
 
 @router.get("/debit-notes", response_model=List[DebitNoteListResponse])
@@ -845,6 +851,7 @@ def preview_debit_note(
         )
 
         db_line = DebitNoteLine(
+            id=uuid.UUID(int=0),
             product_id=line.product_id,
             quantity=line.quantity,
             rate=line.rate,
@@ -893,7 +900,9 @@ def preview_debit_note(
         round_off=round_off,
         pos_state_code=place_of_supply,
         total=rounded_total,
-        lines=db_lines
+        lines=db_lines,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     return dn
 
@@ -1019,7 +1028,7 @@ def cancel_debit_note(
     return dn
 
 # ==========================================
-# INVOICE ROUTES — statuses: DRAFT → POSTED → PARTIALLY_PAID/PAID → CANCELLED
+# INVOICE ROUTES â€” statuses: DRAFT â†’ POSTED â†’ PARTIALLY_PAID/PAID â†’ CANCELLED
 # ==========================================
 
 @router.get("/{id}", response_model=InvoiceResponse)

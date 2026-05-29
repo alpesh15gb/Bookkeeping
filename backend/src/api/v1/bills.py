@@ -183,6 +183,7 @@ def preview_bill(
         )
 
         db_line = BillLine(
+            id=uuid.UUID(int=0),
             product_id=line.product_id,
             quantity=line.quantity,
             rate=line.rate,
@@ -247,7 +248,9 @@ def preview_bill(
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
         lines=db_lines,
-        contact=contact
+        contact=contact,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
 
     return preview_bill

@@ -222,7 +222,9 @@ def preview_proforma_invoice(
         total=grand_total,
         pos_state_code=payload.pos_state_code,
         lines=db_lines,
-        contact=contact
+        contact=contact,
+        created_at=datetime.now(timezone.utc),
+        updated_at=datetime.now(timezone.utc),
     )
     return pi
 

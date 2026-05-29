@@ -165,7 +165,7 @@ class _CreditDebitNoteFormViewState extends State<CreditDebitNoteFormView> {
         'credit_note_number': widget.isCredit && widget.editNote != null ? widget.editNote!['credit_note_number'] : null,
         'debit_note_number': !widget.isCredit && widget.editNote != null ? widget.editNote!['debit_note_number'] : null,
         'issue_date': _dateCtrl.text,
-        'reason': _reasonCtrl.text.trim().isEmpty ? null : _reasonCtrl.text.trim(),
+        'reason': _reasonCtrl.text.trim(),
         'line_items': _lines.map((l) => {
           'product_id': l.productId,
           'quantity': l.quantity,

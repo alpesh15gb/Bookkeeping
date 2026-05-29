@@ -1,0 +1,10 @@
+ISSUED matches: 2
+match0 at 35348: [ ]
+    )
+
+    dn.status = "ISSUED"
+    db.add(journal_en]
+match1 at 36169: [nd.")
+
+    if dn.status != "ISSUED":
+        raise HTTPEx]

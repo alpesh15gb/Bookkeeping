@@ -181,7 +181,7 @@ class CreditNoteCreate(SchemaBase):
     invoice_id: Optional[uuid.UUID] = None
     credit_note_number: Optional[str] = Field(None, max_length=50)
     issue_date: date
-    reason: Optional[str] = Field(None, max_length=255)
+    reason: str = Field(..., min_length=1, max_length=255)
     line_items: List[CreditNoteLineCreate]
 
 class CreditNoteResponse(SchemaBase):
@@ -247,7 +247,7 @@ class DebitNoteCreate(SchemaBase):
     invoice_id: Optional[uuid.UUID] = None
     debit_note_number: Optional[str] = Field(None, max_length=50)
     issue_date: date
-    reason: Optional[str] = Field(None, max_length=255)
+    reason: str = Field(..., min_length=1, max_length=255)
     line_items: List[DebitNoteLineCreate]
 
 class DebitNoteResponse(SchemaBase):

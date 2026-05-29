@@ -1,0 +1,5 @@
+1. Register: 201 OK
+2. Login: 409 FAIL - {"detail":"A record with this data already exists.","code":"
+3. Tenant: FAIL - {"detail":"Could not validate credentials."}
+FATAL: Invalid value "undefined" for header "X-Tenant-ID"
+FATAL: Invalid value "undefined" for header "X-Tenant-ID"
