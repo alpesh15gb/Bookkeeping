@@ -354,9 +354,12 @@ def import_vyapar_backup(
             lines_by_txn.setdefault(txn_id, []).append(li)
 
         # ── 10. Process transactions ───────────────────────────────────────────
-        vy_txns = vconn.execute(
-            "SELECT * FROM kb_transactions ORDER BY txn_date"
-        ).fetchall()
+        vy_txns = [
+            dict(r)
+            for r in vconn.execute(
+                "SELECT * FROM kb_transactions ORDER BY txn_date"
+            ).fetchall()
+        ]
 
         # Counter for generating unique invoice numbers (per import session)
         _inv_counter = 0
