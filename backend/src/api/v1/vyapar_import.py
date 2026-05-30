@@ -11,7 +11,8 @@ from pydantic import BaseModel
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
     Contact, Product, Invoice, InvoiceLine, Bill, BillLine,
-    Expense, ExpenseCategory, Account, Tenant
+    Expense, ExpenseCategory, Account, Tenant,
+    ProformaInvoice, ProformaInvoiceLine
 )
 from src.api.deps import enforce_permission
 from src.domains.company.services import NumberingSeriesService
@@ -24,6 +25,7 @@ class ImportSummary(BaseModel):
     products_imported: int = 0
     invoices_imported: int = 0
     bills_imported: int = 0
+    estimates_imported: int = 0
     expenses_imported: int = 0
     errors: List[str] = []
 
@@ -376,6 +378,7 @@ def import_vyapar_backup(
         # Counter for generating unique invoice numbers (per import session)
         _inv_counter = 0
         _bill_counter = 0
+        _est_counter = 0
 
         def _parse_date(val) -> date:
             if not val:
@@ -386,12 +389,15 @@ def import_vyapar_backup(
                 return date.today()
 
         def _gen_inv_number(existing_ref: Optional[str], prefix: str) -> str:
-            nonlocal _inv_counter, _bill_counter
+            nonlocal _inv_counter, _bill_counter, _est_counter
             if existing_ref and existing_ref.strip():
                 return existing_ref.strip()
             if prefix == "INV":
                 _inv_counter += 1
                 return f"VYP-INV-{_inv_counter:04d}"
+            elif prefix == "EST":
+                _est_counter += 1
+                return f"VYP-EST-{_est_counter:04d}"
             else:
                 _bill_counter += 1
                 return f"VYP-BILL-{_bill_counter:04d}"
@@ -547,8 +553,10 @@ def import_vyapar_backup(
 
                 summary.invoices_imported += 1
 
-            # ── PURCHASE BILLS (type=27) ────────────────────────────────────
+            # ── PURCHASE BILLS / ESTIMATES (type=27) ────────────────────────
             elif txn_type == 27 and contact_id_str:
+                is_estimate = (txn.get("txn_sub_type") == 1)
+
                 cash_amt = float(txn["txn_cash_amount"] or 0)
                 bal_amt = float(txn["txn_balance_amount"] or 0)
                 total_from_txn = cash_amt + bal_amt
@@ -560,7 +568,7 @@ def import_vyapar_backup(
                 total_val = Decimal("0")
                 discount_total = Decimal("0")
 
-                bill_lines_data = []
+                lines_data = []
                 for vl in txn_lines:
                     line_total_f = float(vl["total_amount"] or 0)
                     line_tax_f = float(vl["lineitem_tax_amount"] or 0)
@@ -590,92 +598,163 @@ def import_vyapar_backup(
                         except Exception:
                             pass
 
-                    bill_lines_data.append(BillLine(
-                        product_id=product_id,
-                        description=(vl["_item_name"] or "").strip() or "Item",
-                        quantity=Decimal(str(qty_f)),
-                        rate=Decimal(str(round(rate_f, 6))),
-                        discount=Decimal(str(round(line_disc_f, 2))),
-                        subtotal=Decimal(str(round(max(line_subtotal_f, 0), 2))),
-                        hsn_sac=hsn,
-                        gst_rate=Decimal(str(total_rate_pct)),
-                        cgst_rate=cgst_r,
-                        cgst_amount=cgst_a,
-                        sgst_rate=sgst_r,
-                        sgst_amount=sgst_a,
-                        igst_rate=igst_r,
-                        igst_amount=igst_a,
-                        utgst_rate=Decimal("0"),
-                        utgst_amount=Decimal("0"),
-                        cess_rate=Decimal("0"),
-                        cess_amount=Decimal("0"),
-                        total=Decimal(str(round(line_total_f, 2))),
-                    ))
+                    if is_estimate:
+                        lines_data.append(ProformaInvoiceLine(
+                            product_id=product_id,
+                            description=(vl["_item_name"] or "").strip() or "Item",
+                            quantity=Decimal(str(qty_f)),
+                            rate=Decimal(str(round(rate_f, 6))),
+                            discount=Decimal(str(round(line_disc_f, 2))),
+                            subtotal=Decimal(str(round(max(line_subtotal_f, 0), 2))),
+                            hsn_sac=hsn,
+                            gst_rate=Decimal(str(total_rate_pct)),
+                            cgst_rate=cgst_r,
+                            cgst_amount=cgst_a,
+                            sgst_rate=sgst_r,
+                            sgst_amount=sgst_a,
+                            igst_rate=igst_r,
+                            igst_amount=igst_a,
+                            utgst_rate=Decimal("0"),
+                            utgst_amount=Decimal("0"),
+                            cess_rate=Decimal("0"),
+                            cess_amount=Decimal("0"),
+                            total=Decimal(str(round(line_total_f, 2))),
+                        ))
+                    else:
+                        lines_data.append(BillLine(
+                            product_id=product_id,
+                            description=(vl["_item_name"] or "").strip() or "Item",
+                            quantity=Decimal(str(qty_f)),
+                            rate=Decimal(str(round(rate_f, 6))),
+                            discount=Decimal(str(round(line_disc_f, 2))),
+                            subtotal=Decimal(str(round(max(line_subtotal_f, 0), 2))),
+                            hsn_sac=hsn,
+                            gst_rate=Decimal(str(total_rate_pct)),
+                            cgst_rate=cgst_r,
+                            cgst_amount=cgst_a,
+                            sgst_rate=sgst_r,
+                            sgst_amount=sgst_a,
+                            igst_rate=igst_r,
+                            igst_amount=igst_a,
+                            utgst_rate=Decimal("0"),
+                            utgst_amount=Decimal("0"),
+                            cess_rate=Decimal("0"),
+                            cess_amount=Decimal("0"),
+                            total=Decimal(str(round(line_total_f, 2))),
+                        ))
 
-                if not bill_lines_data:
-                    total_val = Decimal(str(round(total_from_txn, 2)))
-                    subtotal = total_val
-                    bill_lines_data.append(BillLine(
-                        product_id=None,
-                        description="Imported from Vyapar",
-                        quantity=Decimal("1"),
-                        rate=total_val,
-                        discount=Decimal("0"),
-                        subtotal=total_val,
-                        hsn_sac="998313",
-                        gst_rate=Decimal("18.00"),
-                        cgst_rate=Decimal("9.00"),
-                        cgst_amount=Decimal("0"),
-                        sgst_rate=Decimal("9.00"),
-                        sgst_amount=Decimal("0"),
-                        igst_rate=Decimal("0"),
-                        igst_amount=Decimal("0"),
-                        utgst_rate=Decimal("0"),
-                        utgst_amount=Decimal("0"),
-                        cess_rate=Decimal("0"),
-                        cess_amount=Decimal("0"),
-                        total=total_val,
-                    ))
-
-                amount_paid = Decimal(str(round(cash_amt, 2)))
-                if amount_paid > total_val:
-                    amount_paid = total_val
-                if amount_paid >= total_val:
-                    bill_status = "PAID"
-                elif amount_paid > 0:
-                    bill_status = "PARTIALLY_PAID"
-                else:
-                    bill_status = "UNPAID"
+                if not lines_data:
+                    if is_estimate:
+                        lines_data.append(ProformaInvoiceLine(
+                            product_id=None,
+                            description="Imported Estimate Transaction",
+                            quantity=Decimal("1.00"),
+                            rate=Decimal(str(total_val)),
+                            discount=Decimal("0"),
+                            subtotal=total_val,
+                            hsn_sac="998313",
+                            gst_rate=Decimal("18.00"),
+                            cgst_rate=Decimal("9.00"),
+                            cgst_amount=Decimal("0"),
+                            sgst_rate=Decimal("9.00"),
+                            sgst_amount=Decimal("0"),
+                            igst_rate=Decimal("0"),
+                            igst_amount=Decimal("0"),
+                            utgst_rate=Decimal("0"),
+                            utgst_amount=Decimal("0"),
+                            cess_rate=Decimal("0"),
+                            cess_amount=Decimal("0"),
+                            total=total_val,
+                        ))
+                    else:
+                        lines_data.append(BillLine(
+                            product_id=None,
+                            description="Imported Bill Transaction",
+                            quantity=Decimal("1.00"),
+                            rate=Decimal(str(total_val)),
+                            discount=Decimal("0"),
+                            subtotal=total_val,
+                            hsn_sac="998313",
+                            gst_rate=Decimal("18.00"),
+                            cgst_rate=Decimal("9.00"),
+                            cgst_amount=Decimal("0"),
+                            sgst_rate=Decimal("9.00"),
+                            sgst_amount=Decimal("0"),
+                            igst_rate=Decimal("0"),
+                            igst_amount=Decimal("0"),
+                            utgst_rate=Decimal("0"),
+                            utgst_amount=Decimal("0"),
+                            cess_rate=Decimal("0"),
+                            cess_amount=Decimal("0"),
+                            total=total_val,
+                        ))
 
                 round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst - discount_total)
 
-                bill = Bill(
-                    tenant_id=tenant_id,
-                    contact_id=uuid.UUID(contact_id_str),
-                    bill_number=_gen_inv_number(ref_number, "BILL"),
-                    issue_date=txn_date,
-                    due_date=due_date,
-                    status=bill_status,
-                    subtotal=subtotal,
-                    discount_total=discount_total,
-                    cgst_amount=total_cgst,
-                    sgst_amount=total_sgst,
-                    igst_amount=total_igst,
-                    utgst_amount=Decimal("0"),
-                    cess_amount=Decimal("0"),
-                    round_off=round_off,
-                    total=total_val,
-                    amount_paid=amount_paid,
-                    pos_state_code=origin_state_code,
-                )
-                db.add(bill)
-                db.flush()
+                if is_estimate:
+                    est = ProformaInvoice(
+                        tenant_id=tenant_id,
+                        contact_id=uuid.UUID(contact_id_str),
+                        proforma_number=_gen_inv_number(ref_number, "EST"),
+                        issue_date=txn_date,
+                        due_date=due_date,
+                        status="ISSUED",
+                        subtotal=subtotal,
+                        discount_total=discount_total,
+                        cgst_amount=total_cgst,
+                        sgst_amount=total_sgst,
+                        igst_amount=total_igst,
+                        utgst_amount=Decimal("0"),
+                        cess_amount=Decimal("0"),
+                        total=total_val,
+                        pos_state_code=origin_state_code,
+                    )
+                    db.add(est)
+                    db.flush()
 
-                for line in bill_lines_data:
-                    line.bill_id = bill.id
-                    db.add(line)
+                    for line in lines_data:
+                        line.proforma_invoice_id = est.id
+                        db.add(line)
 
-                summary.bills_imported += 1
+                    summary.estimates_imported += 1
+                else:
+                    amount_paid = Decimal(str(round(cash_amt, 2)))
+                    if amount_paid > total_val:
+                        amount_paid = total_val
+                    if amount_paid >= total_val:
+                        bill_status = "PAID"
+                    elif amount_paid > 0:
+                        bill_status = "PARTIALLY_PAID"
+                    else:
+                        bill_status = "UNPAID"
+
+                    bill = Bill(
+                        tenant_id=tenant_id,
+                        contact_id=uuid.UUID(contact_id_str),
+                        bill_number=_gen_inv_number(ref_number, "BILL"),
+                        issue_date=txn_date,
+                        due_date=due_date,
+                        status=bill_status,
+                        subtotal=subtotal,
+                        discount_total=discount_total,
+                        cgst_amount=total_cgst,
+                        sgst_amount=total_sgst,
+                        igst_amount=total_igst,
+                        utgst_amount=Decimal("0"),
+                        cess_amount=Decimal("0"),
+                        round_off=round_off,
+                        total=total_val,
+                        amount_paid=amount_paid,
+                        pos_state_code=origin_state_code,
+                    )
+                    db.add(bill)
+                    db.flush()
+
+                    for line in lines_data:
+                        line.bill_id = bill.id
+                        db.add(line)
+
+                    summary.bills_imported += 1
 
             # ── EXPENSES (type=28) ──────────────────────────────────────────
             elif txn_type == 28:

@@ -204,6 +204,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
         (r['products_imported'] ?? 0) +
         (r['invoices_imported'] ?? 0) +
         (r['bills_imported'] ?? 0) +
+        (r['estimates_imported'] ?? 0) +
         (r['expenses_imported'] ?? 0);
 
     return ListView(
@@ -270,6 +271,9 @@ class _VyaparImportViewState extends State<VyaparImportView> {
               _summaryRow(
                   Icons.shopping_bag_outlined, 'Purchase Bills',
                   r['bills_imported'] ?? 0),
+              _summaryRow(
+                  Icons.description_outlined, 'Estimates',
+                  r['estimates_imported'] ?? 0),
               _summaryRow(
                   Icons.account_balance_wallet_outlined, 'Expenses',
                   r['expenses_imported'] ?? 0),
@@ -416,6 +420,8 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                   'All sale transactions with line items and GST breakdown'),
               _infoRow(Icons.shopping_bag_outlined, 'Purchase Bills',
                   'All purchase transactions with line items and GST'),
+              _infoRow(Icons.description_outlined, 'Estimates',
+                  'Quotations and estimates with line items and status tracking'),
               _infoRow(
                   Icons.account_balance_wallet_outlined,
                   'Expenses',
