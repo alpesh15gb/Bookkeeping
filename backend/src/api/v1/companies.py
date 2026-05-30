@@ -514,7 +514,7 @@ def verify_and_execute_purge(
         PurchaseOrder, PurchaseOrderLine,
         EWayBill, BankReconciliation, BankStatement, BankTransaction,
         StockLedger, GSTReturn,
-        Contact, Product, AuditLog
+        Contact, Product, AuditLog, Account
     )
 
     try:
@@ -563,6 +563,12 @@ def verify_and_execute_purge(
         db.query(Contact).filter(Contact.tenant_id == tenant_id).delete(synchronize_session=False)
         db.query(Product).filter(Product.tenant_id == tenant_id).delete(synchronize_session=False)
         db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id).delete(synchronize_session=False)
+
+        # Reset account balances
+        db.query(Account).filter(Account.tenant_id == tenant_id).update(
+            {Account.current_balance: 0, Account.opening_balance: 0},
+            synchronize_session=False
+        )
 
         log = AuditLog(
             action="tenant.purge",
