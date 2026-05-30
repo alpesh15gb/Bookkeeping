@@ -100,6 +100,18 @@ def import_vyapar_backup(
     import tempfile
     import os
 
+    # ── 0. Fix constraints in postgres db (handles older DB schemas) ─────────
+    from sqlalchemy import text
+    try:
+        db.execute(text("ALTER TABLE invoices DROP CONSTRAINT IF EXISTS ck_invoices_status"))
+        db.execute(text("ALTER TABLE invoices ADD CONSTRAINT ck_invoices_status CHECK (status IN ('DRAFT', 'POSTED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'))"))
+        db.execute(text("ALTER TABLE bills DROP CONSTRAINT IF EXISTS ck_bills_status"))
+        db.execute(text("ALTER TABLE bills ADD CONSTRAINT ck_bills_status CHECK (status IN ('DRAFT', 'POSTED', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'CANCELLED'))"))
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Failed to adjust table constraints: {e}")
+        db.rollback()
+
     summary = ImportSummary()
 
     # ── 1. Read the upload bytes ──────────────────────────────────────────────
