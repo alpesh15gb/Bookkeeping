@@ -62,7 +62,7 @@ class _SettingsViewState extends State<SettingsView> {
 
   String _selectedTemplate = 'professional';
 
-  void _showEditDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+  void _populateControllers(Map<String, dynamic> company, Map<String, dynamic> settings) {
     _legalNameCtrl.text = company['legal_name'] ?? '';
     _tradeNameCtrl.text = company['trade_name'] ?? '';
     _gstinCtrl.text = company['gstin'] ?? '';
@@ -80,125 +80,200 @@ class _SettingsViewState extends State<SettingsView> {
     _bankIfscCtrl.text = extraSettings['bank_ifsc'] ?? '';
     _bankBranchCtrl.text = extraSettings['bank_branch'] ?? '';
     _termsCtrl.text = extraSettings['terms'] ?? '';
+  }
 
+  void _showCompanyProfileDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+    _populateControllers(company, settings);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Company Profile'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _legalNameCtrl,
+                decoration: const InputDecoration(labelText: 'Legal Name *'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _tradeNameCtrl,
+                decoration: const InputDecoration(labelText: 'Trade Name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _addressCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Address',
+                  hintText: 'Company physical address',
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _phoneCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Contact Phone',
+                  hintText: 'e.g. 8521794522',
+                ),
+                keyboardType: TextInputType.phone,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _emailCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Contact Email',
+                  hintText: 'e.g. info@company.com',
+                ),
+                keyboardType: TextInputType.emailAddress,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _websiteCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Website',
+                  hintText: 'e.g. www.company.com',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _saveSettings();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showTaxComplianceDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+    _populateControllers(company, settings);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Tax & Compliance'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _gstinCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'GSTIN',
+                  hintText: 'e.g. 27AAPFU0939F1ZV',
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _panCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'PAN',
+                  hintText: 'e.g. AAPFU0939F',
+                ),
+                textCapitalization: TextCapitalization.characters,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _stateCodeCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Origin State Code',
+                  hintText: 'e.g. 27 for Maharashtra',
+                ),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _saveSettings();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBankDetailsDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+    _populateControllers(company, settings);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Bank Details'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _bankNameCtrl,
+                decoration: const InputDecoration(labelText: 'Bank Name'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _bankAccCtrl,
+                decoration: const InputDecoration(labelText: 'Account Number'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _bankIfscCtrl,
+                decoration: const InputDecoration(labelText: 'IFSC Code'),
+                textCapitalization: TextCapitalization.characters,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: _bankBranchCtrl,
+                decoration: const InputDecoration(labelText: 'Branch Name'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await _saveSettings();
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPreferencesDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+    _populateControllers(company, settings);
     showDialog(
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Edit Company Settings'),
+          title: const Text('Edit Preferences'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: _legalNameCtrl,
-                  decoration: const InputDecoration(labelText: 'Legal Name *'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _tradeNameCtrl,
-                  decoration: const InputDecoration(labelText: 'Trade Name'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _gstinCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'GSTIN',
-                    hintText: 'e.g. 27AAPFU0939F1ZV',
-                  ),
-                  textCapitalization: TextCapitalization.characters,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _panCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'PAN',
-                    hintText: 'e.g. AAPFU0939F',
-                  ),
-                  textCapitalization: TextCapitalization.characters,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _stateCodeCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Origin State Code',
-                    hintText: 'e.g. 27 for Maharashtra',
-                  ),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _addressCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Address',
-                    hintText: 'Company physical address',
-                  ),
-                  maxLines: 2,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _phoneCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Contact Phone',
-                    hintText: 'e.g. 8521794522',
-                  ),
-                  keyboardType: TextInputType.phone,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _emailCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Contact Email',
-                    hintText: 'e.g. info@company.com',
-                  ),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _websiteCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Website',
-                    hintText: 'e.g. www.company.com',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                const Divider(),
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Text('Bank Details', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-                TextField(
-                  controller: _bankNameCtrl,
-                  decoration: const InputDecoration(labelText: 'Bank Name'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _bankAccCtrl,
-                  decoration: const InputDecoration(labelText: 'Account Number'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _bankIfscCtrl,
-                  decoration: const InputDecoration(labelText: 'IFSC Code'),
-                  textCapitalization: TextCapitalization.characters,
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: _bankBranchCtrl,
-                  decoration: const InputDecoration(labelText: 'Branch Name'),
-                ),
-                const SizedBox(height: 12),
-                const Divider(),
-                TextField(
-                  controller: _termsCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Terms & Conditions',
-                    hintText: 'Default terms for invoices',
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: _selectedTemplate,
                   decoration: const InputDecoration(
@@ -215,6 +290,15 @@ class _SettingsViewState extends State<SettingsView> {
                       setDialogState(() => _selectedTemplate = v);
                     }
                   },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _termsCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Terms & Conditions',
+                    hintText: 'Default terms for invoices',
+                  ),
+                  maxLines: 3,
                 ),
               ],
             ),
@@ -320,6 +404,16 @@ class _SettingsViewState extends State<SettingsView> {
     final extraSettings = settings['extra_settings'] as Map<String, dynamic>? ?? {};
     final pdfTemplate = extraSettings['pdf_template'] ?? 'professional';
 
+    final companyAddress = extraSettings['company_address'] ?? 'Not configured';
+    final companyPhone = extraSettings['company_phone'] ?? 'Not configured';
+    final companyEmail = extraSettings['company_email'] ?? 'Not configured';
+    final companyWebsite = extraSettings['company_website'] ?? 'Not configured';
+    final bankName = extraSettings['bank_name'] ?? 'Not configured';
+    final bankAccountNo = extraSettings['bank_account_no'] ?? 'Not configured';
+    final bankIfsc = extraSettings['bank_ifsc'] ?? 'Not configured';
+    final bankBranch = extraSettings['bank_branch'] ?? 'Not configured';
+    final terms = extraSettings['terms'] ?? 'No custom terms';
+
     return Scaffold(
       backgroundColor: AppColors.bgLight,
       body: ListView(
@@ -332,15 +426,12 @@ class _SettingsViewState extends State<SettingsView> {
               children: [
                 Row(
                   children: [
-                    Text('Company', style: AppTextStyles.h3),
+                    Text('Company Profile', style: AppTextStyles.h3),
                     const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: AppColors.brandNavy.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(AppRadius.sm),
-                      ),
-                      child: const Text('Active', style: TextStyle(fontSize: 11, color: AppColors.brandNavy, fontWeight: FontWeight.w600)),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.brandNavy),
+                      onPressed: () => _showCompanyProfileDialog(company, settings),
+                      tooltip: 'Edit Company Profile',
                     ),
                   ],
                 ),
@@ -348,6 +439,10 @@ class _SettingsViewState extends State<SettingsView> {
                 _settingRow(Icons.business_outlined, 'Legal Name', legalName),
                 if (tradeName.isNotEmpty && tradeName != legalName)
                   _settingRow(Icons.storefront_outlined, 'Trade Name', tradeName),
+                _settingRow(Icons.location_on_outlined, 'Address', companyAddress),
+                _settingRow(Icons.phone_outlined, 'Phone', companyPhone),
+                _settingRow(Icons.email_outlined, 'Email', companyEmail),
+                _settingRow(Icons.language_outlined, 'Website', companyWebsite),
               ],
             ),
           ),
@@ -358,7 +453,17 @@ class _SettingsViewState extends State<SettingsView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Tax & Compliance', style: AppTextStyles.h3),
+                Row(
+                  children: [
+                    Text('Tax & Compliance', style: AppTextStyles.h3),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.brandNavy),
+                      onPressed: () => _showTaxComplianceDialog(company, settings),
+                      tooltip: 'Edit Tax & Compliance',
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 _settingRow(Icons.badge_outlined, 'GSTIN', gstin),
                 _settingRow(Icons.numbers_outlined, 'PAN', pan),
@@ -374,12 +479,48 @@ class _SettingsViewState extends State<SettingsView> {
           ),
           const SizedBox(height: 12),
 
+          // Bank Details Section
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Bank Details', style: AppTextStyles.h3),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.brandNavy),
+                      onPressed: () => _showBankDetailsDialog(company, settings),
+                      tooltip: 'Edit Bank Details',
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _settingRow(Icons.account_balance_outlined, 'Bank Name', bankName),
+                _settingRow(Icons.payment_outlined, 'Account Number', bankAccountNo),
+                _settingRow(Icons.code_outlined, 'IFSC Code', bankIfsc),
+                _settingRow(Icons.store_outlined, 'Branch Name', bankBranch),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
           // Preferences Section
           AppCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Preferences', style: AppTextStyles.h3),
+                Row(
+                  children: [
+                    Text('Preferences', style: AppTextStyles.h3),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.brandNavy),
+                      onPressed: () => _showPreferencesDialog(company, settings),
+                      tooltip: 'Edit Preferences',
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 12),
                 _settingRow(Icons.monetization_on_outlined, 'Currency', currency),
                 _settingRow(
@@ -392,6 +533,7 @@ class _SettingsViewState extends State<SettingsView> {
                   'PDF Template Style',
                   pdfTemplate.toString().toUpperCase(),
                 ),
+                _settingRow(Icons.description_outlined, 'Terms & Conditions', terms),
               ],
             ),
           ),
@@ -480,18 +622,12 @@ class _SettingsViewState extends State<SettingsView> {
           ),
           const SizedBox(height: 24),
 
-          // Edit button
+          // Change password & dangerous actions
           settingsProvider.isSaving
               ? const Center(child: CircularProgressIndicator())
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    ActionButton(
-                      label: 'Edit Company Settings',
-                      tier: ActionTier.safe,
-                      onPressed: () => _showEditDialog(company, settings),
-                    ),
-                    const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: () {
                         Navigator.push(
