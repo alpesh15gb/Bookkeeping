@@ -19,3 +19,10 @@ requests==2.31.0
 pyotp==2.9.0
 qrcode[pil]==7.4.2
 reportlab==4.1.0
+
+# ── OCR / Bill Scanning (Invoiscope pipeline) ────────────────────────────
+pytesseract==0.3.10
+opencv-python-headless==4.9.0.80
+Pillow==10.3.0
+pdf2image==1.17.0
+numpy==1.26.4

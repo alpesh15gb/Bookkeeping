@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
+import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/bill_provider.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
 import 'package:flutter_client/providers/product_provider.dart';
@@ -14,6 +17,7 @@ import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/search_sheets.dart';
 import 'package:flutter_client/views/invoices/widgets/quick_create_product_sheet.dart';
 import 'package:flutter_client/views/invoices/widgets/quick_create_customer_sheet.dart';
+import 'package:http/http.dart' as http;
 
 class BillFormView extends StatefulWidget {
   final BillModel? editBill;
@@ -32,6 +36,7 @@ class _BillFormViewState extends State<BillFormView> {
   late TextEditingController _dueDateCtrl;
   final TextEditingController _notesCtrl = TextEditingController();
   bool _isSaving = false;
+  bool _isScanning = false;
   Timer? _previewDebounce;
   bool _isPreviewLoading = false;
 
@@ -322,6 +327,250 @@ class _BillFormViewState extends State<BillFormView> {
     );
   }
 
+  // ── Bill scan (Invoiscope OCR) ──────────────────────────────────────────
+
+  /// Show a bottom sheet letting the user choose camera or gallery,
+  /// then upload the photo/PDF to the scan endpoint and pre-fill the form.
+  Future<void> _scanBill() async {
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: AppColors.bgSurface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(height: 12),
+              Container(
+                width: 40, height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 36, height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.brandNavy.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.document_scanner_outlined,
+                          color: AppColors.brandNavy, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Scan Bill', style: AppTextStyles.h3),
+                        Text('Auto-fill from a photo or PDF',
+                            style: AppTextStyles.caption),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined,
+                    color: AppColors.brandNavy),
+                title: const Text('Take a Photo', style: AppTextStyles.body),
+                subtitle: const Text('Use camera to photograph the bill',
+                    style: AppTextStyles.caption),
+                onTap: () => Navigator.pop(ctx, ImageSource.camera),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined,
+                    color: AppColors.brandNavy),
+                title: const Text('Choose from Gallery',
+                    style: AppTextStyles.body),
+                subtitle: const Text('Select a saved photo or PDF',
+                    style: AppTextStyles.caption),
+                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
+              ),
+              const SizedBox(height: 8),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (source == null || !mounted) return;
+
+    // Pick the image
+    final picker = ImagePicker();
+    XFile? picked;
+    try {
+      picked = await picker.pickImage(
+        source: source,
+        imageQuality: 85,
+        maxWidth: 2400,
+        maxHeight: 3400,
+      );
+    } catch (e) {
+      if (mounted) _showError('Could not access camera/gallery: $e');
+      return;
+    }
+
+    if (picked == null || !mounted) return;
+
+    setState(() => _isScanning = true);
+
+    try {
+      final bytes = await picked.readAsBytes();
+      final uri = Uri.parse('${ApiClient.baseUrl}/bills/scan-image');
+      final request = http.MultipartRequest('POST', uri);
+
+      if (ApiClient.accessToken != null) {
+        request.headers['Authorization'] = 'Bearer ${ApiClient.accessToken}';
+      }
+      if (ApiClient.tenantId != null) {
+        request.headers['X-Tenant-ID'] = ApiClient.tenantId!;
+      }
+
+      request.files.add(http.MultipartFile.fromBytes(
+        'file', bytes,
+        filename: picked.name,
+      ));
+      request.fields['confidence'] = '0.25';
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        _applyScannedData(data);
+      } else {
+        String msg = 'Scan failed (${response.statusCode})';
+        try {
+          final b = jsonDecode(response.body);
+          if (b is Map) msg = b['detail']?.toString() ?? msg;
+        } catch (_) {}
+        _showError(msg);
+      }
+    } catch (e) {
+      if (mounted) _showError('Scan error: $e');
+    } finally {
+      if (mounted) setState(() => _isScanning = false);
+    }
+  }
+
+  /// Apply the OCR-extracted data to form fields.
+  void _applyScannedData(Map<String, dynamic> data) {
+    // Bill number
+    if (data['bill_number'] != null) {
+      // We don't have a bill number field on new bill form but can show it
+    }
+
+    // Dates
+    if (data['bill_date'] != null) {
+      setState(() => _billDateCtrl.text = data['bill_date'] as String);
+    }
+    if (data['due_date'] != null) {
+      setState(() => _dueDateCtrl.text = data['due_date'] as String);
+    }
+
+    // Line items — add as new lines with description only (user picks product)
+    final scannedLines = (data['line_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (scannedLines.isNotEmpty) {
+      setState(() {
+        // Remove any empty placeholder lines first
+        _lines.removeWhere((l) => l.productId.isEmpty && l.rate == 0);
+
+        for (final sl in scannedLines) {
+          final qty = (sl['qty'] as num?)?.toDouble() ?? 1.0;
+          final rate = (sl['rate'] as num?)?.toDouble() ?? 0.0;
+          final gstRate = (sl['gst_rate'] as num?)?.toDouble() ?? 18.0;
+          _lines.add(_BillLineItem(
+            productId: '',
+            productName: sl['description']?.toString() ?? 'Item',
+            hsnSac: sl['hsn']?.toString() ?? '',
+            quantity: qty,
+            rate: rate,
+            gstRate: gstRate,
+            discount: 0,
+          ));
+        }
+      });
+    }
+
+    // Build a friendly message about what was filled
+    final filledFields = <String>[];
+    if (data['bill_date'] != null) filledFields.add('Date');
+    if (data['due_date'] != null) filledFields.add('Due date');
+    if (scannedLines.isNotEmpty) filledFields.add('${scannedLines.length} line item(s)');
+    if (data['vendor_name'] != null) filledFields.add('Vendor: ${data['vendor_name']}');
+
+    final conf = ((data['overall_confidence'] as num?)?.toDouble() ?? 0.0) * 100;
+    final warnings = (data['warnings'] as List?)?.cast<String>() ?? [];
+
+    final msg = filledFields.isNotEmpty
+        ? 'Scanned (${conf.toStringAsFixed(0)}% confidence): ${filledFields.join(', ')}'
+        : 'Scan complete but no fields could be extracted. Please fill manually.';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: filledFields.isNotEmpty ? AppColors.success : AppColors.warning,
+        duration: const Duration(seconds: 4),
+        action: warnings.isNotEmpty
+            ? SnackBarAction(
+                label: 'Details',
+                textColor: Colors.white,
+                onPressed: () => _showScanWarnings(warnings),
+              )
+            : null,
+      ),
+    );
+
+    _recalculateTotals();
+  }
+
+  void _showScanWarnings(List<String> warnings) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Scan Notes'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: warnings
+              .map((w) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline,
+                            size: 14, color: AppColors.warning),
+                        const SizedBox(width: 6),
+                        Expanded(
+                            child: Text(w, style: AppTextStyles.bodySmall)),
+                      ],
+                    ),
+                  ))
+              .toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
@@ -348,6 +597,20 @@ class _BillFormViewState extends State<BillFormView> {
           ],
         ),
         actions: [
+          // Scan bill button
+          if (widget.editBill == null)
+            IconButton(
+              icon: _isScanning
+                  ? const SizedBox(
+                      width: 18, height: 18,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: AppColors.brandNavy),
+                    )
+                  : const Icon(Icons.document_scanner_outlined,
+                      color: AppColors.brandNavy, size: 22),
+              tooltip: 'Scan bill image',
+              onPressed: _isScanning || _isSaving ? null : _scanBill,
+            ),
           if (_isPreviewLoading)
             const Center(
               child: Padding(

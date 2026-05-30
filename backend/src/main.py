@@ -66,6 +66,7 @@ from src.api.v1.gst_verify import router as gst_verify_router
 from src.api.v1.hsn_lookup import router as hsn_lookup_router
 from src.api.v1.gstr2a import router as gstr2a_router
 from src.api.v1.vyapar_import import router as vyapar_import_router
+from src.api.v1.bill_scan import router as bill_scan_router
 from src.api.v1.eway_bills import router as eway_bills_router
 from src.api.idempotency_middleware import IdempotencyMiddleware
 from src.api.v1.reports import router as reports_router
@@ -336,6 +337,7 @@ app.include_router(reminders_router,  prefix="/api/v1")
 app.include_router(expenses_router,   prefix="/api/v1")
 app.include_router(gstr2a_router,     prefix="/api/v1")
 app.include_router(vyapar_import_router, prefix="/api/v1")
+app.include_router(bill_scan_router,     prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
