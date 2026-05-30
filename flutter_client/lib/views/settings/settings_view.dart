@@ -563,11 +563,23 @@ class _SettingsViewState extends State<SettingsView> {
           ElevatedButton(
             onPressed: () async {
               final prefix = prefixCtrl.text;
-              final nextVal = int.tryParse(nextNumberCtrl.text) ?? 1;
-              final padVal = int.tryParse(paddingCtrl.text) ?? 4;
+              final nextVal = int.tryParse(nextNumberCtrl.text);
+              final padVal = int.tryParse(paddingCtrl.text);
               final suffix = suffixCtrl.text.isNotEmpty ? suffixCtrl.text : null;
 
-              Navigator.pop(context);
+              if (nextVal == null || nextVal < 1) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Next Number must be 1 or greater'), backgroundColor: AppColors.error),
+                );
+                return;
+              }
+
+              if (padVal == null || padVal < 1 || padVal > 10) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Padding Digits must be between 1 and 10'), backgroundColor: AppColors.error),
+                );
+                return;
+              }
               
               final success = await context.read<SettingsProvider>().updateNumberingSeries(
                 series['id'],
@@ -580,6 +592,7 @@ class _SettingsViewState extends State<SettingsView> {
               );
               if (mounted) {
                 if (success) {
+                  Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(content: Text('Numbering series updated successfully'), backgroundColor: AppColors.success),
                   );
