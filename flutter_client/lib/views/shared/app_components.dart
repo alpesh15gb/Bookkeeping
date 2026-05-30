@@ -3,6 +3,8 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/document_status.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
+export 'package:flutter_client/views/shared/empty_state.dart';
+
 // ═══════════════════════════════════════════════════════════════════
 // STATUS BADGE
 // ═══════════════════════════════════════════════════════════════════
@@ -75,19 +77,22 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = color ?? AppColors.textMuted;
     final bg = backgroundColor ?? AppColors.typeDraftBg;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: AppRadius.badge,
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          color: c,
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.3,
+    return Semantics(
+      label: 'Status: $label',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: AppRadius.badge,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: c,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.3,
+          ),
         ),
       ),
     );
@@ -167,20 +172,24 @@ class ActionButton extends StatelessWidget {
 
     if (isDangerous) {
       // Dangerous uses outlined style with explicit red
-      return SizedBox(
-        height: h,
-        child: OutlinedButton.icon(
-          onPressed: isLoading ? null : onPressed,
-          icon: isLoading
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(icon ?? tier.icon, size: 16),
-          label: Text(label, style: AppTextStyles.buttonSmall),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: AppColors.actionDangerous,
-            side: BorderSide(color: AppColors.actionDangerous.withOpacity(0.3)),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
-            textStyle: AppTextStyles.buttonSmall,
+      return Semantics(
+        label: '$label button, ${tier.name} action',
+        button: true,
+        child: SizedBox(
+          height: h,
+          child: OutlinedButton.icon(
+            onPressed: isLoading ? null : onPressed,
+            icon: isLoading
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                : Icon(icon ?? tier.icon, size: 16),
+            label: Text(label, style: AppTextStyles.buttonSmall),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.actionDangerous,
+              side: BorderSide(color: AppColors.actionDangerous.withValues(alpha: 0.3)),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
+              textStyle: AppTextStyles.buttonSmall,
+            ),
           ),
         ),
       );
@@ -188,7 +197,33 @@ class ActionButton extends StatelessWidget {
 
     if (tier == ActionTier.warning) {
       // Warning uses elevated style with amber
-      return SizedBox(
+      return Semantics(
+        label: '$label button, ${tier.name} action',
+        button: true,
+        child: SizedBox(
+          height: h,
+          child: ElevatedButton.icon(
+            onPressed: isLoading ? null : onPressed,
+            icon: isLoading
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                : Icon(icon ?? tier.icon, size: 16),
+            label: Text(label),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.actionWarning,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Safe uses the standard gold accent button
+    return Semantics(
+      label: '$label button, ${tier.name} action',
+      button: true,
+      child: SizedBox(
         height: h,
         child: ElevatedButton.icon(
           onPressed: isLoading ? null : onPressed,
@@ -197,27 +232,9 @@ class ActionButton extends StatelessWidget {
               : Icon(icon ?? tier.icon, size: 16),
           label: Text(label),
           style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.actionWarning,
-            foregroundColor: Colors.white,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
             shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
           ),
-        ),
-      );
-    }
-
-    // Safe uses the standard gold accent button
-    return SizedBox(
-      height: h,
-      child: ElevatedButton.icon(
-        onPressed: isLoading ? null : onPressed,
-        icon: isLoading
-            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-            : Icon(icon ?? tier.icon, size: 16),
-        label: Text(label),
-        style: ElevatedButton.styleFrom(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
         ),
       ),
     );
@@ -630,67 +647,6 @@ class PageHeader extends StatelessWidget {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// EMPTY STATE
-// ═══════════════════════════════════════════════════════════════════
-
-class EmptyState extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String? subtitle;
-  final String? actionLabel;
-  final VoidCallback? onAction;
-
-  const EmptyState({
-    super.key,
-    required this.icon,
-    required this.title,
-    this.subtitle,
-    this.actionLabel,
-    this.onAction,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(
-                color: AppColors.borderLight,
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Icon(icon, size: 28, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 16),
-            Text(title, style: AppTextStyles.h3, textAlign: TextAlign.center),
-            if (subtitle != null) ...[
-              const SizedBox(height: 6),
-              Text(
-                subtitle!,
-                style: AppTextStyles.bodySmall,
-                textAlign: TextAlign.center,
-              ),
-            ],
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: onAction,
-                child: Text(actionLabel!),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════
 // LOADING STATE
 // ═══════════════════════════════════════════════════════════════════
 
@@ -862,7 +818,7 @@ class AppConfirmDialog extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: effectiveColor.withOpacity(0.1),
+              color: effectiveColor.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(

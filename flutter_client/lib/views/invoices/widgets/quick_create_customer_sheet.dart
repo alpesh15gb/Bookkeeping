@@ -169,7 +169,7 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: AppColors.brandNavy.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                    decoration: BoxDecoration(color: AppColors.brandNavy.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
                     child: Icon(Icons.person_add_rounded, color: AppColors.brandNavy, size: 20),
                   ),
                   const SizedBox(width: 10),

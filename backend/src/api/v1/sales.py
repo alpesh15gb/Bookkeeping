@@ -11,7 +11,7 @@ from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/sales", tags=["Sales Analytics"])
 
-FINALIZED_STATUSES = ["SENT", "PARTIALLY_PAID", "PAID"]
+FINALIZED_STATUSES = ["POSTED", "PARTIALLY_PAID", "PAID"]
 
 @router.get("/summary")
 def get_sales_summary(
@@ -28,7 +28,7 @@ def get_sales_summary(
             COALESCE(SUM(amount_paid), 0) AS total_received,
             COALESCE(SUM(cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount), 0) AS total_gst
         FROM invoices
-        WHERE status IN ('SENT', 'PARTIALLY_PAID', 'PAID')
+        WHERE status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')
           AND deleted_at IS NULL
           AND tenant_id = :tenant_id
     """)
@@ -63,7 +63,7 @@ def get_customer_wise_sales(
             COALESCE(SUM(i.total), 0) AS total_sales
         FROM contacts c
         JOIN invoices i ON c.id = i.contact_id
-        WHERE i.status IN ('SENT', 'PARTIALLY_PAID', 'PAID')
+        WHERE i.status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')
           AND i.deleted_at IS NULL
           AND c.deleted_at IS NULL
           AND i.tenant_id = :tenant_id
@@ -99,7 +99,7 @@ def get_period_wise_sales(
                 COUNT(id) AS invoice_count,
                 COALESCE(SUM(total), 0) AS total_sales
             FROM invoices
-            WHERE status IN ('SENT', 'PARTIALLY_PAID', 'PAID')
+            WHERE status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')
               AND deleted_at IS NULL
               AND tenant_id = :tenant_id
             GROUP BY strftime('%Y-%m', issue_date)
@@ -112,7 +112,7 @@ def get_period_wise_sales(
                 COUNT(id) AS invoice_count,
                 COALESCE(SUM(total), 0) AS total_sales
             FROM invoices
-            WHERE status IN ('SENT', 'PARTIALLY_PAID', 'PAID')
+            WHERE status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')
               AND deleted_at IS NULL
               AND tenant_id = :tenant_id
             GROUP BY DATE_TRUNC('month', issue_date)

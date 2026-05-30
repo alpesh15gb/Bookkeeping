@@ -4,7 +4,6 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/inventory_adjustment_provider.dart';
 import 'package:flutter_client/providers/product_provider.dart';
 import 'package:flutter_client/models/product.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class InventoryAdjustmentFormView extends StatefulWidget {
@@ -22,7 +21,6 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
 
   late final TextEditingController _dateCtrl;
   late final TextEditingController _reasonCtrl;
-  String _adjustmentType = 'STOCK_IN';
   final List<_AdjLineItem> _lines = [];
 
   @override
@@ -35,12 +33,12 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
     if (widget.adjustment != null) {
       _dateCtrl.text = widget.adjustment!['adjustment_date'] ?? _dateCtrl.text;
       _reasonCtrl.text = widget.adjustment!['reason'] ?? '';
-      _adjustmentType = widget.adjustment!['adjustment_type'] ?? 'STOCK_IN';
-      for (final item in (widget.adjustment!['lines'] as List? ?? [])) {
+      for (final item in (widget.adjustment!['lines'] as List? ?? widget.adjustment!['line_items'] as List? ?? [])) {
         _lines.add(_AdjLineItem(
           productId: item['product_id'],
           productName: item['product_name'] ?? '',
-          quantity: double.tryParse((item['quantity'] ?? 1).toString()) ?? 1,
+          quantityChange: double.tryParse((item['quantity'] ?? item['quantity_change'] ?? 0).toString()) ?? 0,
+          unitCost: double.tryParse((item['unit_cost'] ?? 0).toString()) ?? 0,
         ));
       }
     }
@@ -57,7 +55,11 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
   }
 
   void _addLine(ProductModel p) {
-    setState(() => _lines.add(_AdjLineItem(productId: p.id, productName: p.name)));
+    setState(() => _lines.add(_AdjLineItem(
+      productId: p.id,
+      productName: p.name,
+      unitCost: p.purchasePrice,
+    )));
   }
 
   void _removeLine(int i) {
@@ -67,13 +69,18 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_lines.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add at least one product'), backgroundColor: AppColors.error)); return; }
+    if (_lines.any((l) => l.quantityChange == 0)) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Quantity change cannot be 0 for any item'), backgroundColor: AppColors.error)); return; }
 
     setState(() => _isSaving = true);
     final payload = {
+      'adjustment_number': widget.adjustment != null ? widget.adjustment!['adjustment_number'] : 'ADJ-${DateTime.now().millisecondsSinceEpoch}',
       'adjustment_date': _dateCtrl.text,
-      'adjustment_type': _adjustmentType,
       'reason': _reasonCtrl.text.trim().isEmpty ? null : _reasonCtrl.text.trim(),
-      'lines': _lines.map((l) => {'product_id': l.productId, 'quantity': l.quantity}).toList(),
+      'line_items': _lines.map((l) => {
+        'product_id': l.productId,
+        'quantity_change': l.quantityChange,
+        if (l.unitCost > 0) 'unit_cost': l.unitCost,
+      }).toList(),
     };
 
     final provider = context.read<InventoryAdjustmentProvider>();
@@ -117,20 +124,6 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
               title: 'ADJUSTMENT DETAILS',
               child: Column(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: AppColors.borderLight, borderRadius: BorderRadius.circular(AppRadius.md)),
-                    child: Row(
-                      children: [
-                        Expanded(child: _TypeBtn(label: 'Stock In', value: 'STOCK_IN', selected: _adjustmentType == 'STOCK_IN', onTap: () => setState(() => _adjustmentType = 'STOCK_IN'))),
-                        const SizedBox(width: 8),
-                        Expanded(child: _TypeBtn(label: 'Stock Out', value: 'STOCK_OUT', selected: _adjustmentType == 'STOCK_OUT', onTap: () => setState(() => _adjustmentType = 'STOCK_OUT'))),
-                        const SizedBox(width: 8),
-                        Expanded(child: _TypeBtn(label: 'Write Off', value: 'WRITE_OFF', selected: _adjustmentType == 'WRITE_OFF', onTap: () => setState(() => _adjustmentType = 'WRITE_OFF'))),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   TextFormField(
                     controller: _dateCtrl,
                     readOnly: true,
@@ -142,6 +135,7 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
                   TextFormField(
                     controller: _reasonCtrl,
                     decoration: const InputDecoration(labelText: 'Reason', hintText: 'e.g. Physical count correction', prefixIcon: Icon(Icons.edit_note, size: 18)),
+                    maxLines: 3,
                   ),
                 ],
               ),
@@ -168,6 +162,7 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
                           child: const Row(children: [
                             Expanded(flex: 3, child: Text('PRODUCT', style: AppTextStyles.labelSmall)),
                             Expanded(flex: 1, child: Text('QTY', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                            Expanded(flex: 2, child: Text('COST/UNIT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
                             SizedBox(width: 28),
                           ]),
                         ),
@@ -185,10 +180,25 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
                                   child: TextField(
                                     controller: l.qtyCtrl,
                                     textAlign: TextAlign.center,
-                                    keyboardType: TextInputType.number,
+                                    keyboardType: const TextInputType.numberWithOptions(signed: true, decimal: true),
                                     style: const TextStyle(fontSize: 12),
                                     decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 4), border: OutlineInputBorder()),
-                                    onChanged: (v) => setState(() => l.quantity = double.tryParse(v) ?? 0),
+                                    onChanged: (v) => setState(() => l.quantityChange = double.tryParse(v) ?? 0),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                flex: 2,
+                                child: SizedBox(
+                                  height: 32,
+                                  child: TextField(
+                                    controller: l.costCtrl,
+                                    textAlign: TextAlign.right,
+                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    style: const TextStyle(fontSize: 12),
+                                    decoration: const InputDecoration(isDense: true, contentPadding: EdgeInsets.symmetric(horizontal: 4, vertical: 4), border: OutlineInputBorder()),
+                                    onChanged: (v) => setState(() => l.unitCost = double.tryParse(v) ?? 0),
                                   ),
                                 ),
                               ),
@@ -215,38 +225,19 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
 class _AdjLineItem {
   String productId;
   String productName;
-  double quantity;
+  double quantityChange;
+  double unitCost;
   late final TextEditingController qtyCtrl;
+  late final TextEditingController costCtrl;
 
-  _AdjLineItem({required this.productId, required this.productName, this.quantity = 1}) {
-    qtyCtrl = TextEditingController(text: quantity.toString());
+  _AdjLineItem({required this.productId, required this.productName, this.quantityChange = 1, this.unitCost = 0}) {
+    qtyCtrl = TextEditingController(text: quantityChange % 1 == 0 ? quantityChange.toInt().toString() : quantityChange.toString());
+    costCtrl = TextEditingController(text: unitCost == 0 ? '' : unitCost.toStringAsFixed(2));
   }
 
-  void dispose() { qtyCtrl.dispose(); }
-}
-
-class _TypeBtn extends StatelessWidget {
-  final String label;
-  final String value;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _TypeBtn({required this.label, required this.value, required this.selected, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.brandNavy : Colors.transparent,
-          borderRadius: BorderRadius.circular(AppRadius.sm),
-        ),
-        child: Text(label, textAlign: TextAlign.center, style: TextStyle(color: selected ? Colors.white : AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
-      ),
-    );
+  void dispose() {
+    qtyCtrl.dispose();
+    costCtrl.dispose();
   }
 }
 

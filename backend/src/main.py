@@ -13,6 +13,7 @@ Production hardening applied:
 """
 import logging
 import uuid
+import uuid as uuid_mod
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import List, Optional
@@ -32,13 +33,14 @@ from src.core.config import settings
 from src.core.database import engine, Base, SessionLocal, get_db_session
 from src.core.rate_limiter import limiter, rate_limiter_exceeded_handler
 from src.domains.accounting.services import LedgerValidationError
+from src.core.sentry import init_sentry
 
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    format="%(asctime)s [%(levelname)s] %(name)s [%(request_id)s]: %(message)s",
 )
 logger = logging.getLogger("bookkeeping")
 
@@ -71,7 +73,6 @@ from src.api.v1.audit import router as audit_router
 from src.api.v1.dashboard import router as dashboard_router
 from src.api.v1.reminders import router as reminders_router
 from src.api.v1.expenses import router as expenses_router
-from src.api.v1.vyapar_import import router as vyapar_import_router
 from src.schemas.document import ContactResponse, ProductResponse
 from src.infrastructure.database.models import Contact, Product
 from src.infrastructure.database.idempotency import IdempotencyRecord  # noqa: F401
@@ -89,6 +90,8 @@ async def lifespan(app: FastAPI):
     Runs once on startup, then yields (application runs), then shuts down.
     """
     logger.info("Starting Indian Accounting & GST Platform...")
+
+    init_sentry()
 
     # Create tables that don't exist yet (safe for all environments)
     Base.metadata.create_all(bind=engine)
@@ -227,6 +230,19 @@ async def add_security_headers(request: Request, call_next):
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
         response.headers["Content-Security-Policy"] = "default-src 'self'"
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Request ID Middleware
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = str(uuid_mod.uuid4())[:8]
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
     return response
 
 

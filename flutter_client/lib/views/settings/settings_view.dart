@@ -192,7 +192,7 @@ class _SettingsViewState extends State<SettingsView> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: AppColors.brandNavy.withOpacity(0.08),
+                        color: AppColors.brandNavy.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(AppRadius.sm),
                       ),
                       child: const Text('Active', style: TextStyle(fontSize: 11, color: AppColors.brandNavy, fontWeight: FontWeight.w600)),
@@ -237,7 +237,11 @@ class _SettingsViewState extends State<SettingsView> {
                 Text('Preferences', style: AppTextStyles.h3),
                 const SizedBox(height: 12),
                 _settingRow(Icons.monetization_on_outlined, 'Currency', currency),
-                _settingRow(Icons.calendar_month_outlined, 'Financial Year', '2025-2026'),
+                _settingRow(
+                  Icons.calendar_month_outlined,
+                  'Financial Year',
+                  DateTime.now().month >= 4 ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}' : '${(DateTime.now().year - 1)}-${DateTime.now().year.toString().substring(2)}',
+                ),
               ],
             ),
           ),

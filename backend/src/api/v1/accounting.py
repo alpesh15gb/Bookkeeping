@@ -102,29 +102,30 @@ def create_manual_journal_entry(
         JournalLineDraft(line.account_id, line.amount, line.direction, line.narration)
         for line in db_lines
     ]
+    entry_id = uuid.uuid4()
     draft = JournalEntryDraft(
         tenant_id=tenant_id,
         entry_date=payload.entry_date,
         reference_number=ref_num,
         description=payload.description,
         source_type="MANUAL",
-        source_id=uuid.UUID(int=0),  # placeholder, will be replaced after commit
+        source_id=entry_id,
         lines=draft_lines
     )
 
     journal_entry = JournalEntry(
+        id=entry_id,
         tenant_id=tenant_id,
         entry_date=payload.entry_date,
         reference_number=ref_num,
         description=payload.description,
         source_type="MANUAL",
+        source_id=entry_id,
         lines=db_lines
     )
 
     db.add(journal_entry)
     db.flush()
-    # Update source_id to the real ID now that it's generated
-    journal_entry.source_id = journal_entry.id
     affected = {line.account_id for line in db_lines}
     update_account_balances(db, tenant_id, affected)
     db.commit()

@@ -274,13 +274,19 @@ class _EstimateFormViewState extends State<EstimateFormView> {
       _showError('Select a product for every line item');
       return;
     }
+    if (_lines.any((l) => l.quantity <= 0)) {
+      _showError('Quantity must be greater than 0 for all line items');
+      return;
+    }
 
     setState(() => _isSaving = true);
 
     final payload = {
       'contact_id': _selectedCustomer!.id,
+      'proforma_number': widget.editEstimate != null ? widget.editEstimate!['proforma_number'] : 'EST-${DateTime.now().millisecondsSinceEpoch}',
       'issue_date': _dateCtrl.text,
-      'expiry_date': _expiryCtrl.text,
+      'due_date': _expiryCtrl.text,
+      'pos_state_code': _selectedCustomer!.stateCode,
       'notes': _notesCtrl.text.trim(),
       'line_items': _lines.map((l) => {
         'product_id': l.productId,
@@ -395,11 +401,11 @@ class _EstimateFormViewState extends State<EstimateFormView> {
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
                             decoration: BoxDecoration(
                               border: Border.all(
-                                color: state.hasError ? AppColors.error : (_selectedCustomer != null ? AppColors.brandNavy.withOpacity(0.4) : AppColors.border),
+                                color: state.hasError ? AppColors.error : (_selectedCustomer != null ? AppColors.brandNavy.withValues(alpha: 0.4) : AppColors.border),
                                 width: _selectedCustomer != null ? 1.5 : 1,
                               ),
                               borderRadius: BorderRadius.circular(AppRadius.md),
-                              color: _selectedCustomer != null ? AppColors.brandNavy.withOpacity(0.03) : null,
+                              color: _selectedCustomer != null ? AppColors.brandNavy.withValues(alpha: 0.03) : null,
                             ),
                             child: Row(
                               children: [
@@ -710,13 +716,13 @@ class _LineItemCardState extends State<_LineItemCard> {
         color: AppColors.bgSurface,
         borderRadius: AppRadius.card,
         border: Border.all(
-          color: _hasProduct ? AppColors.brandNavy.withOpacity(0.18) : AppColors.border,
+          color: _hasProduct ? AppColors.brandNavy.withValues(alpha: 0.18) : AppColors.border,
           width: _hasProduct ? 1.5 : 1,
         ),
         boxShadow: [
           if (_hasProduct)
             BoxShadow(
-              color: AppColors.brandNavy.withOpacity(0.06),
+              color: AppColors.brandNavy.withValues(alpha: 0.06),
               blurRadius: 6,
               offset: const Offset(0, 2),
             ),
@@ -729,7 +735,7 @@ class _LineItemCardState extends State<_LineItemCard> {
           Container(
             padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
             decoration: BoxDecoration(
-              color: _hasProduct ? AppColors.brandNavy.withOpacity(0.04) : AppColors.borderLight,
+              color: _hasProduct ? AppColors.brandNavy.withValues(alpha: 0.04) : AppColors.borderLight,
               borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
             ),
             child: Row(
@@ -792,9 +798,9 @@ class _LineItemCardState extends State<_LineItemCard> {
                     width: double.infinity,
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                     decoration: BoxDecoration(
-                      color: _hasProduct ? AppColors.brandNavy.withOpacity(0.04) : AppColors.bgLight,
+                      color: _hasProduct ? AppColors.brandNavy.withValues(alpha: 0.04) : AppColors.bgLight,
                       border: Border.all(
-                        color: _hasProduct ? AppColors.brandNavy.withOpacity(0.25) : AppColors.border,
+                        color: _hasProduct ? AppColors.brandNavy.withValues(alpha: 0.25) : AppColors.border,
                       ),
                       borderRadius: BorderRadius.circular(AppRadius.md),
                     ),

@@ -166,11 +166,11 @@ class PaymentProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> deleteReceipt(String id) async {
+  Future<bool> cancelReceiptById(String id) async {
     return cancelReceipt(id);
   }
 
-  Future<bool> deleteDisbursement(String id) async {
+  Future<bool> cancelDisbursementById(String id) async {
     return cancelDisbursement(id);
   }
 }

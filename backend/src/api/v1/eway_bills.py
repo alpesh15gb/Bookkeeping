@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List
 import uuid
+from decimal import Decimal
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import EWayBill
+from src.infrastructure.database.models import EWayBill, Invoice
 from src.schemas.eway_bill_schemas import (
     EWayBillCreate, EWayBillResponse, EWayBillVehicleUpdate, EWayBillCancelRequest,
     ConsolidatedEWayBillCreate, ConsolidatedEWayBillResponse
@@ -21,6 +22,21 @@ def create_eway_bill(
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
 ):
     """Generates an outward or inward e-Way Bill for transport of physical Goods."""
+    # E-Way Bill is required for goods movement exceeding ₹50,000
+    if payload.invoice_id:
+        invoice = db.query(Invoice).filter(Invoice.id == payload.invoice_id).first()
+        if invoice:
+            has_goods = any(line.product and line.product.product_type == "GOODS" for line in invoice.lines)
+            if not has_goods:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="e-Way Bill is only applicable for movement of GOODS. Services do not require an e-Way Bill."
+                )
+            if invoice.total < Decimal("50000"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="E-Way Bill is not required for invoices below ₹50,000 threshold."
+                )
     return EWayBillService.generate_eway_bill(db=db, tenant_id=tenant_id, payload=payload)
 
 @router.get("", response_model=List[EWayBillResponse])

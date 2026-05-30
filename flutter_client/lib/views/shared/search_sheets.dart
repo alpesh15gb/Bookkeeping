@@ -128,7 +128,7 @@ class _ContactSearchSheetState extends State<ContactSearchSheet> {
                     ),
                   ..._filtered.map((c) => ListTile(
                         leading: CircleAvatar(
-                          backgroundColor: AppColors.goldAccent.withOpacity(0.6),
+                          backgroundColor: AppColors.goldAccent.withValues(alpha: 0.6),
                           radius: 18,
                           child: Text(
                             c.name[0].toUpperCase(),

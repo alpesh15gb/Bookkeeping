@@ -2,10 +2,7 @@ from pydantic import BaseModel, Field
 from typing import Optional
 from datetime import datetime
 import uuid
-
-class SchemaBase(BaseModel):
-    class Config:
-        from_attributes = True
+from src.schemas import SchemaBase
 
 class EInvoiceResponse(SchemaBase):
     invoice_id: uuid.UUID

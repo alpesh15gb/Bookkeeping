@@ -4,12 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 // ─── Color Tokens ───────────────────────────────────────────────
 class AppColors {
   // Brand
-  static const Color brandNavy = Color(0xFF0F1B3D);
+  static const Color brandNavy = Color(0xFF0B1B3D);
   static const Color brandNavyLight = Color(0xFF16244D);
   static const Color brandNavyDark = Color(0xFF0A1330);
 
   // Accent
-  static const Color goldAccent = Color(0xFFD4A036);
+  static const Color goldAccent = Color(0xFFDCA035);
   static const Color goldAccentLight = Color(0xFFE8B94C);
   static const Color goldAccentDark = Color(0xFFB88728);
 

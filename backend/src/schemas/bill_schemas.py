@@ -3,13 +3,10 @@ from typing import List, Optional
 from datetime import date, datetime
 from decimal import Decimal
 import uuid
+from src.schemas import SchemaBase
 from src.schemas.document import ContactResponse
 from src.schemas.master_schemas import BankingProfileResponse
 from src.schemas.payment_schemas import PaymentResponse, BillPaymentResponse
-
-class SchemaBase(BaseModel):
-    class Config:
-        from_attributes = True
 
 # Bill Line Items Schemas
 class BillLineBase(SchemaBase):
@@ -91,6 +88,12 @@ class BillListResponse(SchemaBase):
     amount_paid: Decimal
     contact_name: str
     created_at: datetime
+
+class PaginatedBillResponse(SchemaBase):
+    items: List[BillListResponse]
+    total: int
+    page: int
+    limit: int
 
 # Bill Payments Schemas
 class BillPaymentAllocationSchema(SchemaBase):

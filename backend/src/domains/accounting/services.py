@@ -102,7 +102,8 @@ class LedgerPostingEngine:
             lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue (RCM): {invoice_number}"))
         else:
             tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-            invoice_total = net_subtotal + tax_total + round_off_amount
+            # Customer is debited for subtotal + taxes. Round-off handled separately below.
+            invoice_total = net_subtotal + tax_total
 
             lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable: {invoice_number}"))
             lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue: {invoice_number}"))
@@ -946,10 +947,11 @@ def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Opti
             JournalLine.direction == "CREDIT"
         ).scalar() or Decimal("0.0000")
 
+        op_bal = account.opening_balance or Decimal("0.0000")
         if account.account_type in ("ASSET", "EXPENSE"):
-            account.current_balance = (debit_sum - credit_sum).quantize(Decimal("0.0001"))
+            account.current_balance = (op_bal + debit_sum - credit_sum).quantize(Decimal("0.0001"))
         else:
-            account.current_balance = (credit_sum - debit_sum).quantize(Decimal("0.0001"))
+            account.current_balance = (op_bal + credit_sum - debit_sum).quantize(Decimal("0.0001"))
 
     # NOTE: Caller is responsible for db.commit()
 
@@ -1012,6 +1014,12 @@ def recalculate_all_account_balances(db: Session, tenant_id: uuid.UUID) -> None:
     balance_map = {row.account_id: (row.balance or Decimal("0.0000")) for row in db.query(subq).all()}
 
     for account in accounts:
-        account.current_balance = balance_map.get(account.id, Decimal("0.0000")).quantize(Decimal("0.0001"))
+        raw_balance = balance_map.get(account.id, Decimal("0.0000"))
+        # Apply correct sign: ASSET/EXPENSE use debit-positive, others use credit-positive
+        op_bal = account.opening_balance or Decimal("0.0000")
+        if account.account_type in ("ASSET", "EXPENSE"):
+            account.current_balance = (op_bal + raw_balance).quantize(Decimal("0.0001"))
+        else:
+            account.current_balance = (op_bal - raw_balance).quantize(Decimal("0.0001"))
 
     # NOTE: Caller is responsible for db.commit()

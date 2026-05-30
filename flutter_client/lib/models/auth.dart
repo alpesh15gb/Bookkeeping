@@ -22,4 +22,14 @@ class UserResponse {
       isActive: json['is_active'] ?? json['isActive'] ?? true,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'email': email,
+      'full_name': fullName,
+      'phone_number': phoneNumber,
+      'is_active': isActive,
+    };
+  }
 }

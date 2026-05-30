@@ -143,4 +143,34 @@ class InvoiceModel {
       cessAmount: double.parse((json['cess_amount'] ?? 0.0).toString()),
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'contact_id': contactId,
+      'invoice_number': invoiceNumber,
+      'issue_date': issueDate,
+      'due_date': dueDate,
+      'pos_state_code': posStateCode,
+      'status': status,
+      'subtotal': subtotal,
+      'discount_total': discountTotal,
+      'cgst_amount': cgstAmount,
+      'sgst_amount': sgstAmount,
+      'igst_amount': igstAmount,
+      'round_off': roundOff,
+      'total': total,
+      'amount_paid': amountPaid,
+      'irn': irn,
+      'qr_code': qrCode,
+      'e_invoice_status': eInvoiceStatus,
+      'e_invoice_error': eInvoiceError,
+      'lines': lines.map((l) => l.toJson()).toList(),
+      'notes': notes,
+      'billing_address': billingAddress,
+      'shipping_address': shippingAddress,
+      'utgst_amount': utgstAmount,
+      'cess_amount': cessAmount,
+    };
+  }
 }

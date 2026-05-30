@@ -40,6 +40,22 @@ class PaymentModel {
       invoiceNumber: json['invoice_number'],
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'contact_id': contactId,
+      'contact_name': contactName,
+      'amount': amount,
+      'payment_date': paymentDate,
+      'payment_mode': paymentMode,
+      'reference_number': referenceNumber,
+      'status': status,
+      'notes': notes,
+      'invoice_id': invoiceId,
+      'invoice_number': invoiceNumber,
+    };
+  }
 }
 
 class BillPaymentModel {
@@ -80,5 +96,20 @@ class BillPaymentModel {
       status: json['status'] ?? 'COMPLETED',
       notes: json['notes'],
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'bill_id': billId,
+      'bill_number': billNumber,
+      'vendor_name': vendorName,
+      'amount': amount,
+      'payment_date': paymentDate,
+      'payment_mode': paymentMode,
+      'reference_number': referenceNumber,
+      'status': status,
+      'notes': notes,
+    };
   }
 }

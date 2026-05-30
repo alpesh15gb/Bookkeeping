@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/auth_provider.dart';
 import 'package:flutter_client/models/auth.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/global_search.dart';
 import 'package:flutter_client/views/dashboard/sales_dashboard_view.dart';
 import 'package:flutter_client/views/invoices/invoice_list_view.dart';
 import 'package:flutter_client/views/products/product_list_view.dart';
@@ -81,14 +83,54 @@ class _ShellViewState extends State<ShellView> {
 
   Widget get _currentView => _menuItems[_selectedIndex].view;
 
+  void _openSearch() {
+    showSearch(context: context, delegate: GlobalSearchDelegate());
+  }
+
+  void _refreshCurrentView() {
+    setState(() {});
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
+
+    final isCtrlPressed = HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed;
+
+    if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyF) {
+      _openSearch();
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.f5) {
+      _refreshCurrentView();
+      return KeyEventResult.handled;
+    }
+
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      if (Navigator.canPop(context)) {
+        Navigator.pop(context);
+      }
+      return KeyEventResult.handled;
+    }
+
+    return KeyEventResult.ignored;
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
 
-    return AdaptiveLayout(
-      mobile: _buildMobileLayout(user),
-      desktop: _buildDesktopLayout(user),
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: AdaptiveLayout(
+        mobile: _buildMobileLayout(user),
+        desktop: _buildDesktopLayout(user),
+      ),
     );
   }
 
@@ -107,7 +149,10 @@ class _ShellViewState extends State<ShellView> {
           Expanded(
             child: Column(
               children: [
-                _TopBar(title: _menuItems[_selectedIndex].name),
+                _TopBar(
+                  title: _menuItems[_selectedIndex].name,
+                  onSearch: _openSearch,
+                ),
                 Expanded(
                   key: ValueKey(_selectedIndex),
                   child: _currentView,
@@ -137,6 +182,11 @@ class _ShellViewState extends State<ShellView> {
         ),
         title: Text(_menuItems[_selectedIndex].name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.search_rounded, size: 20),
+            onPressed: _openSearch,
+            tooltip: 'Search',
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded, size: 20),
             onPressed: () => context.read<AuthProvider>().logout(),
@@ -241,35 +291,40 @@ class _Sidebar extends StatelessWidget {
                 final isSelected = selectedIndex == i;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 2),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
-                      onTap: () => onItemSelected(i),
-                      borderRadius: AppRadius.sidebar,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 150),
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: isSelected ? AppColors.goldAccent : Colors.transparent,
-                          borderRadius: AppRadius.sidebar,
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              _menuItems[i].icon,
-                              size: 18,
-                              color: isSelected ? AppColors.brandNavy : AppColors.textWhiteMuted,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              _menuItems[i].name,
-                              style: TextStyle(
-                                color: isSelected ? AppColors.brandNavy : Colors.white,
-                                fontSize: 13,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                  child: Semantics(
+                    label: '${_menuItems[i].name} navigation item${isSelected ? ', selected' : ''}',
+                    button: true,
+                    selected: isSelected,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        onTap: () => onItemSelected(i),
+                        borderRadius: AppRadius.sidebar,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 150),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.goldAccent : Colors.transparent,
+                            borderRadius: AppRadius.sidebar,
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _menuItems[i].icon,
+                                size: 18,
+                                color: isSelected ? AppColors.brandNavy : AppColors.textWhiteMuted,
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 12),
+                              Text(
+                                _menuItems[i].name,
+                                style: TextStyle(
+                                  color: isSelected ? AppColors.brandNavy : Colors.white,
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -371,8 +426,9 @@ class _Sidebar extends StatelessWidget {
 // ─── Top Bar ────────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final String title;
+  final VoidCallback? onSearch;
 
-  const _TopBar({required this.title});
+  const _TopBar({required this.title, this.onSearch});
 
   @override
   Widget build(BuildContext context) {
@@ -384,15 +440,23 @@ class _TopBar extends StatelessWidget {
         children: [
           Text(title, style: AppTextStyles.h3),
           const Spacer(),
+          if (onSearch != null)
+            IconButton(
+              icon: const Icon(Icons.search_rounded, size: 20, color: AppColors.textSecondary),
+              onPressed: onSearch,
+              tooltip: 'Search (Ctrl+F)',
+              padding: const EdgeInsets.all(8),
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            ),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: AppColors.borderLight,
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
-            child: const Text(
-              'FY 2026-27',
-              style: TextStyle(
+            child: Text(
+              'FY ${DateTime.now().month >= 4 ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}' : '${(DateTime.now().year - 1)}-${DateTime.now().year.toString().substring(2)}'}',
+              style: const TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textSecondary,
@@ -465,27 +529,32 @@ class _MobileDrawer extends StatelessWidget {
                   final isSelected = selectedIndex == i;
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 2),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => onItemSelected(i),
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: isSelected ? AppColors.goldAccent : Colors.transparent,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(_menuItems[i].icon, size: 20, color: isSelected ? AppColors.brandNavy : AppColors.textWhiteMuted),
-                              const SizedBox(width: 12),
-                              Text(_menuItems[i].name, style: TextStyle(
-                                color: isSelected ? AppColors.brandNavy : Colors.white,
-                                fontSize: 14,
-                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                              )),
-                            ],
+                    child: Semantics(
+                      label: '${_menuItems[i].name} navigation item${isSelected ? ', selected' : ''}',
+                      button: true,
+                      selected: isSelected,
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          onTap: () => onItemSelected(i),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.goldAccent : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(_menuItems[i].icon, size: 20, color: isSelected ? AppColors.brandNavy : AppColors.textWhiteMuted),
+                                const SizedBox(width: 12),
+                                Text(_menuItems[i].name, style: TextStyle(
+                                  color: isSelected ? AppColors.brandNavy : Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                                )),
+                              ],
+                            ),
                           ),
                         ),
                       ),

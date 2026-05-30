@@ -44,6 +44,7 @@ class Permissions:
     PAYMENT_CREATE = "payment:create"
     PAYMENT_VIEW = "payment:view"
     PAYMENT_DELETE = "payment:delete"
+    PAYMENT_CANCEL = "payment:cancel"
 
     # Ledger & Accounting Context
     LEDGER_VIEW = "ledger:view"
@@ -82,7 +83,7 @@ ROLE_PERMISSIONS = {
         Permissions.CONTACT_UPDATE, Permissions.CONTACT_DELETE,
         Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW,
         Permissions.INVOICE_UPDATE, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_DELETE,
-        Permissions.PAYMENT_CREATE, Permissions.PAYMENT_VIEW, Permissions.PAYMENT_DELETE,
+        Permissions.PAYMENT_CREATE, Permissions.PAYMENT_VIEW, Permissions.PAYMENT_DELETE, Permissions.PAYMENT_CANCEL,
         Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
         Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
         Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
@@ -95,7 +96,7 @@ ROLE_PERMISSIONS = {
         Permissions.TENANT_VIEW,
         Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
         Permissions.INVOICE_VIEW, Permissions.INVOICE_FINALIZE,
-        Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE,
+        Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE, Permissions.PAYMENT_CANCEL,
         Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
         Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
         Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
@@ -167,7 +168,7 @@ def create_refresh_token(user_id: str) -> str:
 
 
 def decode_token(token: str, expected_type: str = None) -> dict:
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp", "iat", "sub"]})
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp", "sub"]})
     if expected_type and payload.get("type") != expected_type:
         raise jwt.InvalidTokenError(f"Expected token type '{expected_type}', got '{payload.get('type')}'")
     return payload

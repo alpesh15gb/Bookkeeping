@@ -3,10 +3,7 @@ from typing import Optional, List
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
-
-class SchemaBase(BaseModel):
-    class Config:
-        from_attributes = True
+from src.schemas import SchemaBase
 
 class ExpenseCreate(SchemaBase):
     expense_category_id: uuid.UUID
@@ -16,6 +13,7 @@ class ExpenseCreate(SchemaBase):
     description: Optional[str] = None
     amount: Decimal = Field(..., gt=Decimal("0.00"))
     gst_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
+    place_of_supply_state_code: Optional[str] = None
 
 class ExpenseUpdate(SchemaBase):
     expense_category_id: Optional[uuid.UUID] = None
@@ -25,6 +23,7 @@ class ExpenseUpdate(SchemaBase):
     description: Optional[str] = None
     amount: Optional[Decimal] = Field(None, gt=Decimal("0.00"))
     gst_rate: Optional[Decimal] = Field(None, ge=0, le=100)
+    place_of_supply_state_code: Optional[str] = None
 
 class ExpenseResponse(SchemaBase):
     id: uuid.UUID
@@ -64,6 +63,7 @@ class ExpenseListResponse(SchemaBase):
 class ExpensePreviewRequest(SchemaBase):
     amount: Decimal = Field(..., gt=Decimal("0.00"))
     gst_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
+    place_of_supply_state_code: Optional[str] = None
 
 class ExpensePreviewResponse(SchemaBase):
     amount: Decimal

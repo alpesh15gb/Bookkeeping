@@ -24,9 +24,9 @@ UNION_TERRITORIES: Set[str] = {
     "26",  # Dadra and Nagar Haveli and Daman and Diu (DNHDD)
     "04",  # Chandigarh
     "35",  # Andaman and Nicobar Islands
-    "38",  # Ladakh
-    # Note: Delhi (07), Puducherry (34), and Jammu & Kashmir (01) have their own legislatures
-    # and generally apply SGST, but UTGST applies to Union Territories without a legislature.
+    # Ladakh (38) has its own legislature and applies SGST, not UTGST
+    # Note: Delhi (07), Puducherry (34), Ladakh (38), and Jammu & Kashmir (01) have their own legislatures
+    # and apply SGST, but UTGST applies to Union Territories without a legislature.
 }
 
 def quantize_decimal(value: Decimal) -> Decimal:
@@ -126,6 +126,8 @@ class GSTEngine:
         
         if is_rcm:
             # Under RCM, buyer pays tax directly. Tax is computed and displayed but not added to total payable.
+            # RCM validation: if RCM is true, the caller must ensure tax amounts
+            # are handled correctly (buyer self-accounts for tax)
             total_amount = base_amount_q
         else:
             total_amount = base_amount_q + total_tax_added

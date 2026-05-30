@@ -21,7 +21,8 @@ class BillProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bills'));
       if (response.statusCode == 200) {
-        final List items = jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        final List items = data is Map ? (data['items'] ?? []) : data;
         _bills = items.map((x) => BillModel.fromJson(x)).toList();
       } else {
         _errorMessage = 'Failed to load vendor bills';

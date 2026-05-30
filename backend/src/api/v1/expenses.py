@@ -10,6 +10,7 @@ from src.infrastructure.database.models import Expense, ExpenseCategory
 from src.schemas.expense_schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseListResponse, ExpensePreviewRequest, ExpensePreviewResponse
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.taxation.services import GSTEngine
+from src.domains.company.services import resolve_origin_state_code
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -84,6 +85,32 @@ def _gen_expense_number(db: Session, tenant_id: uuid.UUID) -> str:
     return f"{prefix}{next_num:04d}"
 
 
+@router.post("/bulk-delete")
+def bulk_delete_expenses(
+    payload: dict,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("expense:delete")),
+):
+    """Bulk delete multiple expenses."""
+    ids = payload.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="No IDs provided.")
+
+    deleted = 0
+    for expense_id in ids:
+        expense = db.query(Expense).filter(
+            Expense.id == expense_id,
+            Expense.tenant_id == tenant_id,
+            Expense.deleted_at == None,
+        ).first()
+        if expense and expense.status == "DRAFT":
+            expense.deleted_at = func.now()
+            deleted += 1
+
+    db.commit()
+    return {"deleted": deleted}
+
+
 @router.post("/preview", response_model=ExpensePreviewResponse)
 def preview_expense(
     payload: ExpensePreviewRequest,
@@ -109,7 +136,8 @@ def create_expense(
         raise HTTPException(status_code=404, detail="Expense category not found.")
 
     expense_number = _gen_expense_number(db, tenant_id)
-    totals = _compute_expense_totals(db, tenant_id, payload.amount, payload.gst_rate, payload.place_of_supply_state_code or origin_state_code)
+    place_of_supply = payload.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
+    totals = _compute_expense_totals(db, tenant_id, payload.amount, payload.gst_rate, place_of_supply)
 
     expense = Expense(
         tenant_id=tenant_id,
@@ -227,7 +255,8 @@ def update_expense(
         expense.gst_rate = payload.gst_rate
 
     if recompute:
-        totals = _compute_expense_totals(db, tenant_id, expense.amount, expense.gst_rate, expense.pos_state_code or "27")
+        pos_state = payload.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
+        totals = _compute_expense_totals(db, tenant_id, expense.amount, expense.gst_rate, pos_state)
         expense.cgst_amount = totals["cgst_amount"]
         expense.sgst_amount = totals["sgst_amount"]
         expense.igst_amount = totals["igst_amount"]

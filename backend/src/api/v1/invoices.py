@@ -155,6 +155,7 @@ def create_invoice(
         utgst_amount=final_utgst,
         cess_amount=final_cess,
         round_off=round_off,
+        shipping_charges=header_shipping,
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
@@ -178,6 +179,7 @@ def list_invoices(
 ):
     offset = (page - 1) * limit
     q = db.query(Invoice, Contact.name.label("contact_name"))\
+        .options(joinedload(Invoice.contact))\
         .join(Contact, Invoice.contact_id == Contact.id)\
         .filter(Invoice.tenant_id == tenant_id, Invoice.deleted_at == None)
 
@@ -193,7 +195,9 @@ def list_invoices(
         elif status.upper() == "CANCELLED":
             q = q.filter(Invoice.status == "CANCELLED")
         elif status.upper() == "POSTED":
-            q = q.filter(Invoice.status.notin_(["PAID", "CANCELLED"]))
+            q = q.filter(Invoice.status == "POSTED")
+        elif status.upper() == "PARTIALLY_PAID":
+            q = q.filter(Invoice.status == "PARTIALLY_PAID")
         else:
             q = q.filter(Invoice.status == status.upper())
 
@@ -312,8 +316,6 @@ def preview_invoice(
         invoice_number="PREVIEW",
         issue_date=date.today(),
         due_date=date.today(),
-        billing_address={},
-        shipping_address=None,
         status="DRAFT",
         subtotal=inv_subtotal,
         discount_total=discount_amount,
@@ -524,9 +526,8 @@ def list_credit_notes(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
-    from sqlalchemy.orm import joinedload
     notes = db.query(CreditNote).options(
-        joinedload(CreditNote.invoice)
+        joinedload(CreditNote.invoice).joinedload(Invoice.contact)
     ).filter(
         CreditNote.tenant_id == tenant_id,
         CreditNote.deleted_at == None
@@ -1031,6 +1032,32 @@ def cancel_debit_note(
 # INVOICE ROUTES â€” statuses: DRAFT â†’ POSTED â†’ PARTIALLY_PAID/PAID â†’ CANCELLED
 # ==========================================
 
+@router.post("/bulk-delete")
+def bulk_delete_invoices(
+    payload: dict,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:delete")),
+):
+    """Bulk delete multiple invoices."""
+    ids = payload.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="No IDs provided.")
+
+    deleted = 0
+    for invoice_id in ids:
+        invoice = db.query(Invoice).filter(
+            Invoice.id == invoice_id,
+            Invoice.tenant_id == tenant_id,
+            Invoice.deleted_at == None,
+        ).first()
+        if invoice and invoice.status == "DRAFT":
+            invoice.deleted_at = datetime.now(timezone.utc)
+            deleted += 1
+
+    db.commit()
+    return {"deleted": deleted}
+
+
 @router.get("/{id}", response_model=InvoiceResponse)
 def get_invoice(
     id: uuid.UUID,
@@ -1203,6 +1230,7 @@ def update_invoice(
         invoice.utgst_amount = final_utgst
         invoice.cess_amount = final_cess
         invoice.round_off = round_off
+        invoice.shipping_charges = header_shipping
         invoice.total = rounded_total
         invoice.lines = db_lines
 
@@ -1521,6 +1549,57 @@ def delete_invoice(
     return
 
 
+@router.get("/{id}/print")
+def print_invoice(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    """Generates a PDF for the invoice."""
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    invoice = db.query(Invoice).filter(
+        Invoice.id == id,
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    items = []
+    for line in invoice.lines:
+        product = line.product
+        items.append({
+            'description': product.name if product else line.hsn_sac,
+            'quantity': float(line.quantity),
+            'rate': float(line.rate),
+            'total': float(line.total),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=invoice.invoice_number,
+        issue_date=invoice.issue_date,
+        due_date=invoice.due_date,
+        customer_name=invoice.contact.name if invoice.contact else "N/A",
+        customer_gstin=invoice.contact.gstin if invoice.contact else None,
+        items=items,
+        subtotal=invoice.subtotal,
+        cgst=invoice.cgst_amount,
+        sgst=invoice.sgst_amount,
+        igst=invoice.igst_amount,
+        round_off=invoice.round_off,
+        total=invoice.total,
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Invoice_{invoice.invoice_number}.pdf"}
+    )
+
+
 @router.delete("/credit-notes/{cn_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_credit_note(
     cn_id: uuid.UUID,
@@ -1569,3 +1648,30 @@ def delete_debit_note(
     dn.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return
+
+
+@router.post("/{id}/e-invoice", response_model=EInvoiceResponse)
+def generate_e_invoice_route(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+):
+    from src.domains.taxation.einvoice_service import EInvoiceService
+    return EInvoiceService.generate_einvoice(db=db, tenant_id=tenant_id, invoice_id=id)
+
+
+@router.post("/{id}/e-invoice/cancel", response_model=EInvoiceCancelResponse)
+def cancel_e_invoice_route(
+    id: uuid.UUID,
+    payload: EInvoiceCancelRequest,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+):
+    from src.domains.taxation.einvoice_service import EInvoiceService
+    return EInvoiceService.cancel_einvoice(
+        db=db,
+        tenant_id=tenant_id,
+        invoice_id=id,
+        cancel_reason=payload.cancel_reason,
+        cancel_remarks=payload.cancel_remarks
+    )

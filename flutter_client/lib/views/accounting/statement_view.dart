@@ -164,7 +164,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                 headingTextStyle: AppTextStyles.labelSmall,
                 dataTextStyle: AppTextStyles.bodySmall,
                 border: TableBorder(
-                  horizontalInside: BorderSide(color: AppColors.borderLight.withOpacity(0.5)),
+                  horizontalInside: BorderSide(color: AppColors.borderLight.withValues(alpha: 0.5)),
                 ),
                 columnSpacing: 24,
                 columns: const [

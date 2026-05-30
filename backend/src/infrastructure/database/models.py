@@ -57,7 +57,14 @@ class User(Base):
     full_name = Column(String(150), nullable=False)
     phone_number = Column(String(15))
     is_active = Column(Boolean, nullable=False, default=True)
+    failed_login_attempts = Column(Integer, nullable=False, default=0)
+    locked_until = Column(DateTime(timezone=True))
     last_login_at = Column(DateTime(timezone=True))
+    email_verified = Column(Boolean, nullable=False, default=False)
+    email_verify_token = Column(String(255))
+    email_verify_expires = Column(DateTime(timezone=True))
+    totp_secret = Column(String(32))
+    totp_enabled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -138,6 +145,9 @@ class Product(Base):
     __table_args__ = (
         Index("ix_products_tenant_id", "tenant_id"),
         Index("ix_products_tenant_deleted", "tenant_id", "deleted_at"),
+        CheckConstraint("sales_price >= 0", name="ck_products_sales_price"),
+        CheckConstraint("purchase_price >= 0", name="ck_products_purchase_price"),
+        CheckConstraint("current_stock >= 0", name="ck_products_current_stock"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -174,7 +184,7 @@ class Invoice(Base):
         UniqueConstraint("tenant_id", "invoice_number", name="uq_invoices_tenant_number"),
         UniqueConstraint("irn", name="uq_invoices_irn"),
         CheckConstraint(
-            "status IN ('DRAFT', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
+            "status IN ('DRAFT', 'POSTED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
             name="ck_invoices_status",
         ),
         CheckConstraint(
@@ -182,7 +192,7 @@ class Invoice(Base):
             name="ck_invoices_e_invoice_status",
         ),
         CheckConstraint(
-            "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total",
+            "round(total, 2) = round(subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total + shipping_charges, 2)",
             name="ck_invoices_total_balance",
         ),
         CheckConstraint(
@@ -206,6 +216,7 @@ class Invoice(Base):
     utgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
     cess_amount = Column(Numeric(15, 4), nullable=False, default=0)
     round_off = Column(Numeric(15, 4), nullable=False, default=0)
+    shipping_charges = Column(Numeric(15, 4), nullable=False, default=0)
     total = Column(Numeric(15, 4), nullable=False, default=0)
     amount_paid = Column(Numeric(15, 4), nullable=False, default=0)
     pos_state_code = Column(String(2), nullable=False)
@@ -225,6 +236,7 @@ class InvoiceLine(Base):
     __tablename__ = "invoice_lines"
     __table_args__ = (
         Index("ix_invoice_lines_invoice_id", "invoice_id"),
+        Index("ix_invoice_lines_invoice_product", "invoice_id", "product_id"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -295,6 +307,8 @@ class PaymentAllocation(Base):
     __table_args__ = (
         Index("ix_payment_allocations_payment_id", "payment_id"),
         Index("ix_payment_allocations_invoice_id", "invoice_id"),
+        Index("ix_payment_allocations_payment_invoice", "payment_id", "invoice_id"),
+        CheckConstraint("amount > 0", name="ck_payment_allocations_amount"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -320,11 +334,11 @@ class Bill(Base):
         Index("ix_bills_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "bill_number", name="uq_bills_tenant_number"),
         CheckConstraint(
-            "status IN ('DRAFT', 'POSTED', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
+            "status IN ('DRAFT', 'POSTED', 'UNPAID', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
             name="ck_bills_status",
         ),
         CheckConstraint(
-            "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total",
+            "round(total, 2) = round(subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off - discount_total, 2)",
             name="ck_bills_total_balance",
         ),
         CheckConstraint(
@@ -429,6 +443,7 @@ class BillPaymentAllocation(Base):
     __table_args__ = (
         Index("ix_bill_payment_allocations_payment_id", "payment_id"),
         Index("ix_bill_payment_allocations_bill_id", "bill_id"),
+        CheckConstraint("amount > 0", name="ck_bill_payment_allocations_amount"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -483,7 +498,9 @@ class JournalLine(Base):
     __table_args__ = (
         Index("ix_journal_lines_entry_id", "entry_id"),
         Index("ix_journal_lines_account_id", "account_id"),
+        Index("ix_journal_lines_entry_account", "entry_id", "account_id"),
         CheckConstraint("direction IN ('DEBIT', 'CREDIT')", name="ck_journal_lines_direction"),
+        CheckConstraint("amount > 0", name="ck_journal_lines_amount"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -547,7 +564,7 @@ class NumberingSeries(Base):
     next_number is incremented using SELECT FOR UPDATE to prevent race conditions.
     """
     __tablename__ = "numbering_series"
-    __table_args__ = tuple()
+
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
@@ -976,7 +993,7 @@ class AuditLog(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    tenant_id = Column(UUID(as_uuid=True), nullable=True)
     actor_id = Column(UUID(as_uuid=True))              # user_id who performed the action
     actor_email = Column(String(255))
     action = Column(String(100), nullable=False)        # e.g. 'invoice.created', 'invoice.finalized'
@@ -1097,7 +1114,7 @@ class ProformaInvoice(Base):
         UniqueConstraint("tenant_id", "proforma_number", name="uq_proforma_invoices_proforma_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'ISSUED', 'CONVERTED', 'CANCELLED')",
-            "ck_proforma_invoices_status",
+            name="ck_proforma_invoices_status",
         ),
     )
 
@@ -1213,11 +1230,11 @@ class CreditNote(Base):
         Index("ix_credit_notes_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "credit_note_number", name="uq_credit_notes_tenant_number"),
         CheckConstraint(
-            "status IN ('DRAFT', 'ISSUED', 'CANCELLED')",
+            "status IN ('DRAFT', 'POSTED', 'ISSUED', 'CANCELLED')",
             name="ck_credit_notes_status",
         ),
         CheckConstraint(
-            "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off",
+            "round(total, 2) = round(subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off, 2)",
             name="ck_credit_notes_total_balance",
         ),
     )
@@ -1283,11 +1300,11 @@ class DebitNote(Base):
         Index("ix_debit_notes_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "debit_note_number", name="uq_debit_notes_tenant_number"),
         CheckConstraint(
-            "status IN ('DRAFT', 'ISSUED', 'CANCELLED')",
+            "status IN ('DRAFT', 'POSTED', 'ISSUED', 'CANCELLED')",
             name="ck_debit_notes_status",
         ),
         CheckConstraint(
-            "total = subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off",
+            "round(total, 2) = round(subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off, 2)",
             name="ck_debit_notes_total_balance",
         ),
     )
@@ -1407,6 +1424,7 @@ class BankReconciliation(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     bank_transaction_id = Column(UUID(as_uuid=True), ForeignKey("bank_transactions.id"), nullable=False)
     payment_id = Column(UUID(as_uuid=True), ForeignKey("payments.id"), nullable=True)
     bill_payment_id = Column(UUID(as_uuid=True), ForeignKey("bill_payments.id"), nullable=True)

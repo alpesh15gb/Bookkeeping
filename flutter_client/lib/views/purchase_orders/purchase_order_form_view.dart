@@ -138,12 +138,19 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
       _showError('Add at least one line item');
       return;
     }
+    if (_lines.any((l) => l.quantity <= 0)) {
+      _showError('Quantity must be greater than 0 for all line items');
+      return;
+    }
 
     setState(() => _isSaving = true);
 
+    final poYear = DateTime.now().year;
+    final poFinYear = DateTime.now().month >= 4 ? '$poYear-${(poYear + 1).toString().substring(2)}' : '${poYear - 1}-${poYear.toString().substring(2)}';
+
     final payload = {
       'contact_id': _selectedVendor!.id,
-      'po_number': widget.editOrder != null ? widget.editOrder!['po_number'] : 'PO/2026-27/${1000 + DateTime.now().millisecond % 9000}',
+      'po_number': widget.editOrder != null ? widget.editOrder!['po_number'] : 'PO/$poFinYear/${1000 + DateTime.now().millisecond % 9000}',
       'order_date': _dateCtrl.text,
       'due_date': _deliveryDateCtrl.text,
       'pos_state_code': _selectedVendor!.stateCode,

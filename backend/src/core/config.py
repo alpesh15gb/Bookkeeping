@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     GST_VERIFY_BASE_URL: str = "https://api.gstverify.dubey.app"
 
     # ----------------------------------------------------------------
+    # Sentry
+    # ----------------------------------------------------------------
+    SENTRY_DSN: str = ""
+
+    # ----------------------------------------------------------------
     # Rate Limiting
     # ----------------------------------------------------------------
     RATE_LIMIT_ENABLED: bool = True                # Disable for tests

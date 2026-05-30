@@ -119,7 +119,7 @@ class TestVendorBills(unittest.TestCase):
         res_fin = self.client.post(f"/api/v1/bills/{bill_id}/finalize", headers=self.headers)
         self.assertEqual(res_fin.status_code, 200)
         data_fin = res_fin.json()
-        self.assertEqual(data_fin["status"], "UNPAID")
+        self.assertEqual(data_fin["status"], "POSTED")
 
         # Record payment out
         pay_payload = {

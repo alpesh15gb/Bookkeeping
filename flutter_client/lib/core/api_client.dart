@@ -171,7 +171,18 @@ class ApiClient extends http.BaseClient {
         ..bodyBytes = request.bodyBytes;
       return copy;
     }
-    // Simple fallback for other requests (e.g. MultipartRequest)
+    if (request is http.MultipartRequest) {
+      final copy = http.MultipartRequest(request.method, request.url)
+        ..headers.addAll(request.headers)
+        ..maxRedirects = request.maxRedirects
+        ..followRedirects = request.followRedirects
+        ..persistentConnection = request.persistentConnection
+        ..fields.addAll(request.fields);
+      for (final file in request.files) {
+        copy.files.add(file);
+      }
+      return copy;
+    }
     return request;
   }
 }

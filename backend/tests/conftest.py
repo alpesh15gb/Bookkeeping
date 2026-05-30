@@ -25,6 +25,7 @@ from src.core.config import settings
 settings.DATABASE_URL = "sqlite:///./test.db"
 settings.REDIS_URL = "redis://localhost:6379/1"
 settings.SECRET_KEY = "test-secret-key-for-testing-purposes-only"
+settings.JWT_SECRET_KEY = "test-jwt-secret-key-for-testing-purposes-only-32chars"
 settings.ACCESS_TOKEN_EXPIRE_MINUTES = 30
 settings.DEBUG = True
 settings.APP_ENV = "development"

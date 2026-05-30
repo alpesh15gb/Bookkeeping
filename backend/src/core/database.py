@@ -6,6 +6,7 @@ All connection config comes from src.core.config (never hardcoded).
 import contextvars
 from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
+from sqlalchemy.pool import QueuePool
 
 from src.core.config import settings
 
@@ -22,18 +23,19 @@ if DATABASE_URL.startswith("postgresql://"):
         import psycopg2  # noqa: F401 — just checking availability
     except ImportError:
         pass
-    engine_args = {
-        "pool_size": 20,
-        "max_overflow": 10,
-        "pool_pre_ping": True,
-        "pool_recycle": 1800,       # recycle connections every 30 min
-    }
+    engine = create_engine(
+        DATABASE_URL,
+        poolclass=QueuePool,
+        pool_size=5,
+        max_overflow=10,
+        pool_timeout=30,
+        pool_recycle=1800,
+        pool_pre_ping=True,
+    )
 else:
     # SQLite fallback for lightweight unit tests
     DATABASE_URL = DATABASE_URL or "sqlite:///./bookkeeping.db"
-    engine_args = {"connect_args": {"check_same_thread": False}}
-
-engine = create_engine(DATABASE_URL, **engine_args)
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

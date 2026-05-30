@@ -3,7 +3,8 @@ from typing import Optional, Dict, Any, List
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from src.schemas.company_schemas import AddressSchema, SchemaBase
+from src.schemas import SchemaBase
+from src.schemas.company_schemas import AddressSchema
 
 class ContactCreate(BaseModel):
     name: str = Field(..., max_length=150)

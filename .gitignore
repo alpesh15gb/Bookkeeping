@@ -54,6 +54,8 @@ htmlcov/
 .env
 .env.local
 .env.*.local
+.env.production
+.env.tauri
 *.pem
 *.key
 

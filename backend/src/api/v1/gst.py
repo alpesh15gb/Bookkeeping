@@ -8,6 +8,7 @@ from decimal import Decimal
 from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+import re
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import Invoice, Bill, CreditNote, DebitNote, Contact, Tenant, TenantSetting
@@ -20,6 +21,27 @@ from src.domains.accounting.report_services import GSTR3BService
 from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/gst", tags=["GST Compliance"])
+
+@router.get("/validate-gstin/{gstin}")
+def validate_gstin_format(gstin: str):
+    """Validates GSTIN format (15 characters, checksum)."""
+    if not gstin or len(gstin) != 15:
+        raise HTTPException(status_code=400, detail="GSTIN must be 15 characters.")
+    
+    pattern = r'^\d{2}[A-Z]{5}\d{4}[A-Z]\d[Z][A-Z\d]$'
+    if not re.match(pattern, gstin):
+        raise HTTPException(status_code=400, detail="Invalid GSTIN format.")
+    
+    state_code = gstin[:2]
+    valid_states = {
+        "01","02","03","04","05","06","07","08","09","10","11","12","13","14","15",
+        "16","17","18","19","20","21","22","23","24","25","26","27","28","29","30",
+        "31","32","33","34","35","36","37","38","97","99"
+    }
+    if state_code not in valid_states:
+        raise HTTPException(status_code=400, detail=f"Invalid state code: {state_code}")
+    
+    return {"valid": True, "state_code": state_code}
 
 @router.get("/gstr1", response_model=GSTR1Response)
 def get_gstr1_report(
@@ -35,7 +57,7 @@ def get_gstr1_report(
     # 2. Fetch finalized sales invoices
     q_inv = db.query(Invoice).filter(
         Invoice.tenant_id == tenant_id,
-        Invoice.status.in_(["SENT", "PARTIALLY_PAID", "PAID"]),
+        Invoice.status.in_(["POSTED", "PARTIALLY_PAID", "PAID"]),
         Invoice.deleted_at == None
     )
     if start_date:
@@ -169,7 +191,7 @@ def get_gstr1_report(
     # 2. Fetch finalized Credit and Debit Notes
     q_cn = db.query(CreditNote).filter(
         CreditNote.tenant_id == tenant_id,
-        CreditNote.status == "ISSUED",
+        CreditNote.status == "POSTED",
         CreditNote.deleted_at == None
     )
     if start_date:
@@ -180,7 +202,7 @@ def get_gstr1_report(
 
     q_dn = db.query(DebitNote).filter(
         DebitNote.tenant_id == tenant_id,
-        DebitNote.status == "ISSUED",
+        DebitNote.status == "POSTED",
         DebitNote.deleted_at == None
     )
     if start_date:
@@ -264,7 +286,7 @@ def get_gstr2_report(
     # Fetch finalized vendor bills
     q_bill = db.query(Bill).filter(
         Bill.tenant_id == tenant_id,
-        Bill.status.in_(["UNPAID", "PARTIALLY_PAID", "PAID"]),
+        Bill.status.in_(["POSTED", "PARTIALLY_PAID", "PAID"]),
         Bill.deleted_at == None
     )
     if start_date:
@@ -338,7 +360,7 @@ def export_gstr1(
 
     q_inv = db.query(Invoice).filter(
         Invoice.tenant_id == tenant_id,
-        Invoice.status.in_(["SENT", "PARTIALLY_PAID", "PAID"]),
+        Invoice.status.in_(["POSTED", "PARTIALLY_PAID", "PAID"]),
         Invoice.deleted_at == None
     )
     if start_date:
@@ -412,7 +434,7 @@ def export_gstr1(
     
     q_cn = db.query(CreditNote).filter(
         CreditNote.tenant_id == tenant_id,
-        CreditNote.status == "ISSUED",
+        CreditNote.status == "POSTED",
         CreditNote.deleted_at == None
     )
     if start_date:
@@ -448,7 +470,7 @@ def export_gstr1(
 
     q_dn = db.query(DebitNote).filter(
         DebitNote.tenant_id == tenant_id,
-        DebitNote.status == "ISSUED",
+        DebitNote.status == "POSTED",
         DebitNote.deleted_at == None
     )
     if start_date:
@@ -611,7 +633,7 @@ def export_gstr2(
 
     q_bill = db.query(Bill).filter(
         Bill.tenant_id == tenant_id,
-        Bill.status.in_(["UNPAID", "PARTIALLY_PAID", "PAID"]),
+        Bill.status.in_(["POSTED", "PARTIALLY_PAID", "PAID"]),
         Bill.deleted_at == None
     )
     if start_date:

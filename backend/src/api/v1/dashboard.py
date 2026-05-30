@@ -6,6 +6,7 @@ from decimal import Decimal
 from datetime import datetime
 
 from src.core.database import get_db_session
+from src.core.cache import cache_get, cache_set, make_cache_key
 from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard Analytics"])
@@ -16,6 +17,11 @@ def get_dashboard_metrics(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
 ):
+    cache_key = make_cache_key("dashboard_metrics", str(tenant_id))
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     result = db.execute(
         text("""
             SELECT
@@ -24,19 +30,22 @@ def get_dashboard_metrics(
                 COALESCE(SUM(igst_amount), 0) AS igst_total,
                 COALESCE(SUM(cess_amount), 0) AS cess_total
             FROM invoices
-            WHERE status IN ('SENT', 'PARTIALLY_PAID', 'PAID')
+            WHERE status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')
               AND deleted_at IS NULL
               AND tenant_id = :tenant_id
         """),
         {"tenant_id": str(tenant_id)},
     ).fetchone()
 
-    return {
+    response = {
         "cgst_total": float(result.cgst_total) if result else 0,
         "sgst_total": float(result.sgst_total) if result else 0,
         "igst_total": float(result.igst_total) if result else 0,
         "cess_total": float(result.cess_total) if result else 0,
     }
+
+    cache_set(cache_key, response, ttl_seconds=60)
+    return response
 
 
 @router.get("/revenue-trend")
@@ -51,7 +60,7 @@ def get_revenue_trend(
                 EXTRACT(YEAR FROM issue_date) AS year,
                 COALESCE(SUM(total), 0) AS total
             FROM invoices
-            WHERE status IN ('SENT', 'PARTIALLY_PAID', 'PAID')
+            WHERE status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')
               AND deleted_at IS NULL
               AND tenant_id = :tenant_id
               AND issue_date >= :cutoff

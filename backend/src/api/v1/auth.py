@@ -2,7 +2,9 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, sta
 from sqlalchemy.orm import Session
 import uuid
 import re
+import logging
 from typing import List, Optional
+from datetime import datetime, timedelta, timezone
 import redis
 
 from src.core.database import get_db_session
@@ -20,6 +22,8 @@ from pydantic import BaseModel
 from src.api.deps import get_current_user
 from src.core.config import settings
 from src.core.rate_limiter import limiter
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -82,12 +86,17 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
 
     # 2. Create User record
     hashed_password = get_password_hash(payload.password)
+    email_verify_token = uuid.uuid4().hex
+    email_verify_expires = datetime.now(timezone.utc) + timedelta(hours=24)
     user = User(
         email=payload.email,
         password_hash=hashed_password,
         full_name=payload.full_name,
         phone_number=payload.phone_number,
-        is_active=True
+        is_active=True,
+        email_verified=False,
+        email_verify_token=email_verify_token,
+        email_verify_expires=email_verify_expires,
     )
     db.add(user)
     db.flush() # Flushes to allocate user ID
@@ -113,6 +122,12 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
     _log_audit(db, "user.register", user_id=str(user.id), tenant_id=str(tenant.id), request=request)
     db.commit()
     db.refresh(user)
+
+    # 5. Log verification token (dev mode — no real email sent)
+    verify_url = f"{settings.APP_URL}/verify-email?token={email_verify_token}"
+    logger.info("Email verification token for %s: %s", payload.email, email_verify_token)
+    logger.info("Verification URL: %s", verify_url)
+
     return user
 
 @router.post("/login", response_model=TokenResponse)
@@ -120,13 +135,40 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
 def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_db_session)):
     # 1. Query user
     user = db.query(User).filter(User.email == payload.email, User.deleted_at == None).first()
-    if not user or not verify_password(payload.password, user.password_hash):
+    if not user:
         _log_audit(db, "login.failed", details={"email": payload.email}, request=request)
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password."
         )
+
+    # 2. Check account lockout
+    if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+        _log_audit(db, "login.blocked", user_id=str(user.id), details={"reason": "locked"}, request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account is temporarily locked due to too many failed login attempts. Try again later."
+        )
+
+    # 3. Verify password
+    if not verify_password(payload.password, user.password_hash):
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= 5:
+            user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
+            _log_audit(db, "login.locked", user_id=str(user.id), details={"attempts": user.failed_login_attempts}, request=request)
+        else:
+            _log_audit(db, "login.failed", user_id=str(user.id), details={"attempts": user.failed_login_attempts}, request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password."
+        )
+
+    # 4. Reset failed attempts on successful login
+    user.failed_login_attempts = 0
+    user.locked_until = None
 
     if not user.is_active:
         _log_audit(db, "login.blocked", user_id=str(user.id), details={"reason": "deactivated"}, request=request)
@@ -162,6 +204,7 @@ def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_d
     )
 
 @router.post("/refresh", response_model=TokenResponse)
+@limiter.limit("30/minute")
 def refresh_token(
     request: Request,
     payload: Optional[RefreshTokenRequest] = Body(None),
@@ -264,6 +307,7 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/change-password")
+@limiter.limit("5/minute")
 def change_password(
     request: Request,
     payload: ChangePasswordRequest,
@@ -305,6 +349,7 @@ class ForgotPasswordRequest(BaseModel):
 
 
 @router.post("/forgot-password")
+@limiter.limit("3/minute")
 def forgot_password(
     request: Request,
     payload: ForgotPasswordRequest,
@@ -403,3 +448,72 @@ def reset_password(
     db.commit()
 
     return {"detail": "Password reset successfully."}
+
+
+# ---------------------------------------------------------------------------
+# EMAIL VERIFICATION
+# ---------------------------------------------------------------------------
+
+@router.post("/verify-email")
+def verify_email(token: str, db: Session = Depends(get_db_session)):
+    user = db.query(User).filter(User.email_verify_token == token).first()
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid verification token.")
+    if user.email_verify_expires and user.email_verify_expires < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Verification token has expired.")
+    user.email_verified = True
+    user.email_verify_token = None
+    user.email_verify_expires = None
+    db.commit()
+    return {"detail": "Email verified successfully."}
+
+
+# ---------------------------------------------------------------------------
+# TWO-FACTOR AUTHENTICATION (TOTP)
+# ---------------------------------------------------------------------------
+
+class TwoFactorTokenPayload(BaseModel):
+    token: str
+
+
+@router.post("/2fa/enable")
+def enable_2fa(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    from src.domains.auth.totp_service import generate_totp_secret, get_totp_uri, generate_qr_base64
+    secret = generate_totp_secret()
+    current_user.totp_secret = secret
+    db.commit()
+    uri = get_totp_uri(secret, current_user.email)
+    qr = generate_qr_base64(uri)
+    return {"secret": secret, "qr_code": qr, "uri": uri}
+
+
+@router.post("/2fa/verify")
+def verify_2fa(
+    payload: TwoFactorTokenPayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    from src.domains.auth.totp_service import verify_totp
+    if not current_user.totp_secret or not verify_totp(current_user.totp_secret, payload.token):
+        raise HTTPException(status_code=400, detail="Invalid 2FA token.")
+    current_user.totp_enabled = True
+    db.commit()
+    return {"detail": "2FA enabled successfully."}
+
+
+@router.post("/2fa/disable")
+def disable_2fa(
+    payload: TwoFactorTokenPayload,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    from src.domains.auth.totp_service import verify_totp
+    if not current_user.totp_secret or not verify_totp(current_user.totp_secret, payload.token):
+        raise HTTPException(status_code=400, detail="Invalid 2FA token.")
+    current_user.totp_enabled = False
+    current_user.totp_secret = None
+    db.commit()
+    return {"detail": "2FA disabled successfully."}

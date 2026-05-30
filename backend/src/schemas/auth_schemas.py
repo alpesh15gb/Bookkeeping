@@ -3,10 +3,7 @@ from pydantic import BaseModel, Field, EmailStr, field_validator
 from typing import Optional
 import uuid
 from datetime import datetime
-
-class SchemaBase(BaseModel):
-    class Config:
-        from_attributes = True
+from src.schemas import SchemaBase
 
 class UserRegister(BaseModel):
     email: EmailStr
@@ -46,6 +43,8 @@ class UserResponse(SchemaBase):
     full_name: str
     phone_number: Optional[str]
     is_active: bool
+    email_verified: bool = False
+    totp_enabled: bool = False
     created_at: datetime
 
 class TenantResponse(SchemaBase):

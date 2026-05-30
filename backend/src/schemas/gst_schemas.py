@@ -3,10 +3,7 @@ from typing import List, Optional
 from datetime import date
 from decimal import Decimal
 import uuid
-
-class SchemaBase(BaseModel):
-    class Config:
-        from_attributes = True
+from src.schemas import SchemaBase
 
 # GSTR-1 B2B (Registered Customer Sales)
 class GSTR1B2BLine(SchemaBase):

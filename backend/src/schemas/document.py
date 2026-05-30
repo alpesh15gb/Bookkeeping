@@ -3,11 +3,7 @@ from typing import List, Optional
 from datetime import date, datetime
 from decimal import Decimal
 import uuid
-
-# Base configurations
-class SchemaBase(BaseModel):
-    class Config:
-        from_attributes = True
+from src.schemas import SchemaBase
 
 # Contact Schemas
 class ContactBase(SchemaBase):

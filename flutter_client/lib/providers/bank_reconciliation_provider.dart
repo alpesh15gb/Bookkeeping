@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_client/core/api_client.dart';
 
 class BankReconciliationProvider extends ChangeNotifier {
-  bool _isLoading = true;
+  bool _isLoading = false;
   String? _errorMessage;
   List<dynamic> _statements = [];
   List<dynamic> _reconciliations = [];

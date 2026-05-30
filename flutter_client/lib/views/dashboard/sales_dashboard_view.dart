@@ -73,14 +73,14 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
         .map((d) => double.tryParse((d['total'] ?? 0).toString()) ?? 0.0)
         .toList();
 
-    if (revSpark.isEmpty) revSpark.addAll([0, 2000, 1500, 3500, 3000]);
-    if (expSpark.isEmpty) expSpark.addAll([0, 1000, 800, 1200, 1000]);
+    if (revSpark.isEmpty) revSpark.addAll([0]);
+    if (expSpark.isEmpty) expSpark.addAll([0]);
 
     final profitSpark = List.generate(
       revSpark.length < expSpark.length ? revSpark.length : expSpark.length,
       (i) => revSpark[i] - expSpark[i],
     );
-    if (profitSpark.isEmpty) profitSpark.addAll([0, 1000, 700, 2300, 2000]);
+    if (profitSpark.isEmpty) profitSpark.addAll([0]);
 
     final taxSpark = revSpark.map((v) => v * 0.18).toList();
 
@@ -475,7 +475,7 @@ class _PeriodSelector extends StatelessWidget {
                     borderRadius: BorderRadius.circular(18),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
+                        color: Colors.black.withValues(alpha: 0.08),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -623,7 +623,7 @@ class _DashboardMetricCardState extends State<_DashboardMetricCard> {
             border: Border.all(color: AppColors.border),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.015),
+                color: Colors.black.withValues(alpha: 0.015),
                 blurRadius: 10,
                 offset: const Offset(0, 4),
               ),
@@ -647,7 +647,7 @@ class _DashboardMetricCardState extends State<_DashboardMetricCard> {
                       borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
-                          color: widget.iconGradient.first.withOpacity(0.15),
+                          color: widget.iconGradient.first.withValues(alpha: 0.15),
                           blurRadius: 6,
                           offset: const Offset(0, 3),
                         ),
@@ -742,7 +742,7 @@ class _InteractiveSplineAreaChartState extends State<_InteractiveSplineAreaChart
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.01),
+            color: Colors.black.withValues(alpha: 0.01),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -885,7 +885,7 @@ class _SplineChartPainter extends CustomPainter {
 
     final gridCount = 4;
     final gridPaint = Paint()
-      ..color = AppColors.border.withOpacity(0.35)
+      ..color = AppColors.border.withValues(alpha: 0.35)
       ..strokeWidth = 0.8
       ..style = PaintingStyle.stroke;
 
@@ -937,7 +937,7 @@ class _SplineChartPainter extends CustomPainter {
       final hoverX = revPoints[hoveredIndex!].dx;
 
       final dashedPaint = Paint()
-        ..color = AppColors.brandNavy.withOpacity(0.2)
+        ..color = AppColors.brandNavy.withValues(alpha: 0.2)
         ..strokeWidth = 1.2
         ..style = PaintingStyle.stroke;
 
@@ -981,7 +981,7 @@ class _SplineChartPainter extends CustomPainter {
       ..shader = ui.Gradient.linear(
         Offset(0, 15),
         Offset(0, bottomY),
-        [color.withOpacity(0.12), color.withOpacity(0.0)],
+        [color.withValues(alpha: 0.12), color.withValues(alpha: 0.0)],
       )
       ..style = PaintingStyle.fill;
     canvas.drawPath(fillPath, fillPaint);
@@ -996,7 +996,7 @@ class _SplineChartPainter extends CustomPainter {
 
   void _drawPulseDot(Canvas canvas, Offset pt, Color color) {
     final outerRing = Paint()
-      ..color = color.withOpacity(0.2)
+      ..color = color.withValues(alpha: 0.2)
       ..style = PaintingStyle.fill;
     final stroke = Paint()
       ..color = Colors.white
@@ -1037,11 +1037,11 @@ class _SplineChartPainter extends CustomPainter {
     );
 
     final bgPaint = Paint()
-      ..color = const Color(0xFF1E293B).withOpacity(0.92)
+      ..color = const Color(0xFF1E293B).withValues(alpha: 0.92)
       ..style = PaintingStyle.fill;
 
     final borderPaint = Paint()
-      ..color = Colors.white.withOpacity(0.12)
+      ..color = Colors.white.withValues(alpha: 0.12)
       ..strokeWidth = 1.0
       ..style = PaintingStyle.stroke;
 
@@ -1092,7 +1092,7 @@ class _DonutBreakdownChart extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.01),
+            color: Colors.black.withValues(alpha: 0.01),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -1339,12 +1339,12 @@ class _RecentInvoiceRowState extends State<_RecentInvoiceRow> {
             color: AppColors.bgSurface,
             borderRadius: AppRadius.card,
             border: Border.all(
-              color: _isHovered ? AppColors.brandNavy.withOpacity(0.15) : AppColors.border,
+              color: _isHovered ? AppColors.brandNavy.withValues(alpha: 0.15) : AppColors.border,
             ),
             boxShadow: [
               if (_isHovered)
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.02),
+                  color: Colors.black.withValues(alpha: 0.02),
                   blurRadius: 6,
                   offset: const Offset(0, 2),
                 ),
@@ -1451,12 +1451,12 @@ class _QuickActionCardState extends State<_QuickActionCard> {
             color: AppColors.bgSurface,
             borderRadius: AppRadius.card,
             border: Border.all(
-              color: _isHovered ? widget.gradient.first.withOpacity(0.3) : AppColors.border,
+              color: _isHovered ? widget.gradient.first.withValues(alpha: 0.3) : AppColors.border,
             ),
             boxShadow: [
               if (_isHovered)
                 BoxShadow(
-                  color: widget.gradient.first.withOpacity(0.06),
+                  color: widget.gradient.first.withValues(alpha: 0.06),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),

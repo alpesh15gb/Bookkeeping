@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Optional
 import uuid
 from decimal import Decimal
 from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import Bill, BillLine, Contact, Product, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
-from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate
+from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate, PaginatedBillResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.company.services import resolve_origin_state_code
@@ -255,22 +255,43 @@ def preview_bill(
 
     return preview_bill
 
-@router.get("", response_model=List[BillListResponse])
+@router.get("", response_model=PaginatedBillResponse)
 def list_bills(
     page: int = 1,
     limit: int = 50,
+    search: Optional[str] = None,
+    status: Optional[str] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
     offset = (page - 1) * limit
-    results = db.query(Bill, Contact.name.label("contact_name"))\
+    q = db.query(Bill, Contact.name.label("contact_name"))\
+        .options(joinedload(Bill.contact))\
         .join(Contact, Bill.contact_id == Contact.id)\
-        .filter(Bill.tenant_id == tenant_id, Bill.deleted_at == None)\
-        .offset(offset).limit(limit).all()
+        .filter(Bill.tenant_id == tenant_id, Bill.deleted_at == None)
 
-    response = []
+    if search:
+        q = q.filter(
+            Bill.bill_number.ilike(f"%{search}%") |
+            Contact.name.ilike(f"%{search}%")
+        )
+
+    if status and status.upper() != "ALL":
+        if status.upper() == "PAID":
+            q = q.filter(Bill.status == "PAID")
+        elif status.upper() == "CANCELLED":
+            q = q.filter(Bill.status == "CANCELLED")
+        elif status.upper() == "POSTED":
+            q = q.filter(Bill.status.notin_(["PAID", "CANCELLED"]))
+        else:
+            q = q.filter(Bill.status == status.upper())
+
+    total = q.count()
+    results = q.offset(offset).limit(limit).all()
+
+    items = []
     for b, contact_name in results:
-        response.append(BillListResponse(
+        items.append(BillListResponse(
             id=b.id,
             bill_number=b.bill_number,
             issue_date=b.issue_date,
@@ -281,7 +302,33 @@ def list_bills(
             contact_name=contact_name,
             created_at=b.created_at
         ))
-    return response
+    return PaginatedBillResponse(items=items, total=total, page=page, limit=limit)
+
+@router.post("/bulk-delete")
+def bulk_delete_bills(
+    payload: dict,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:delete")),
+):
+    """Bulk delete multiple bills."""
+    ids = payload.get("ids", [])
+    if not ids:
+        raise HTTPException(status_code=400, detail="No IDs provided.")
+
+    deleted = 0
+    for bill_id in ids:
+        bill = db.query(Bill).filter(
+            Bill.id == bill_id,
+            Bill.tenant_id == tenant_id,
+            Bill.deleted_at == None,
+        ).first()
+        if bill and bill.status == "DRAFT":
+            bill.deleted_at = datetime.now(timezone.utc)
+            deleted += 1
+
+    db.commit()
+    return {"deleted": deleted}
+
 
 @router.get("/{id}", response_model=BillResponse)
 def get_bill(
@@ -413,10 +460,14 @@ def update_bill(
         bill.pos_state_code = payload.pos_state_code
 
     if payload.line_items is not None:
-        db.query(BillLine).filter(BillLine.bill_id == id).delete()
-
         contact = db.query(Contact).filter(Contact.id == bill.contact_id).first()
         origin_state_code = contact.state_code if (contact and contact.state_code) else resolve_origin_state_code(db, tenant_id)
+
+        existing_lines = db.query(BillLine).filter(BillLine.bill_id == id).all()
+        existing_by_id = {str(line.id): line for line in existing_lines if line.id}
+        existing_by_key = {(line.product_id, line.hsn_sac, line.gst_rate, line.rate): line for line in existing_lines}
+
+        kept_ids = set()
         db_lines = []
         bill_subtotal = Decimal("0.0000")
         bill_cgst = Decimal("0.0000")
@@ -439,28 +490,59 @@ def update_bill(
                 gst_rate=line.gst_rate
             )
 
-            db_line = BillLine(
-                bill_id=bill.id,
-                product_id=line.product_id,
-                quantity=line.quantity,
-                rate=line.rate,
-                discount=line.discount,
-                subtotal=line_subtotal,
-                hsn_sac=line.hsn_sac,
-                gst_rate=line.gst_rate,
-                cgst_rate=tax_split.cgst_rate,
-                cgst_amount=tax_split.cgst_amount,
-                sgst_rate=tax_split.sgst_rate,
-                sgst_amount=tax_split.sgst_amount,
-                igst_rate=tax_split.igst_rate,
-                igst_amount=tax_split.igst_amount,
-                utgst_rate=tax_split.utgst_rate,
-                utgst_amount=tax_split.utgst_amount,
-                cess_rate=tax_split.cess_rate,
-                cess_amount=tax_split.cess_amount,
-                total=tax_split.total_amount
-            )
+            db_line = None
+            if line.id and str(line.id) in existing_by_id:
+                db_line = existing_by_id[str(line.id)]
+            if db_line is None:
+                key = (line.product_id, line.hsn_sac, line.gst_rate, line.rate)
+                db_line = existing_by_key.get(key)
+
+            if db_line is not None:
+                kept_ids.add(str(db_line.id))
+                db_line.quantity = line.quantity
+                db_line.rate = line.rate
+                db_line.discount = line.discount
+                db_line.subtotal = line_subtotal
+                db_line.hsn_sac = line.hsn_sac
+                db_line.gst_rate = line.gst_rate
+                db_line.cgst_rate = tax_split.cgst_rate
+                db_line.cgst_amount = tax_split.cgst_amount
+                db_line.sgst_rate = tax_split.sgst_rate
+                db_line.sgst_amount = tax_split.sgst_amount
+                db_line.igst_rate = tax_split.igst_rate
+                db_line.igst_amount = tax_split.igst_amount
+                db_line.utgst_rate = tax_split.utgst_rate
+                db_line.utgst_amount = tax_split.utgst_amount
+                db_line.cess_rate = tax_split.cess_rate
+                db_line.cess_amount = tax_split.cess_amount
+                db_line.total = tax_split.total_amount
+            else:
+                db_line = BillLine(
+                    bill_id=bill.id,
+                    product_id=line.product_id,
+                    quantity=line.quantity,
+                    rate=line.rate,
+                    discount=line.discount,
+                    subtotal=line_subtotal,
+                    hsn_sac=line.hsn_sac,
+                    gst_rate=line.gst_rate,
+                    cgst_rate=tax_split.cgst_rate,
+                    cgst_amount=tax_split.cgst_amount,
+                    sgst_rate=tax_split.sgst_rate,
+                    sgst_amount=tax_split.sgst_amount,
+                    igst_rate=tax_split.igst_rate,
+                    igst_amount=tax_split.igst_amount,
+                    utgst_rate=tax_split.utgst_rate,
+                    utgst_amount=tax_split.utgst_amount,
+                    cess_rate=tax_split.cess_rate,
+                    cess_amount=tax_split.cess_amount,
+                    total=tax_split.total_amount
+                )
+                db.add(db_line)
+
             db_lines.append(db_line)
+            if db_line.id:
+                kept_ids.add(str(db_line.id))
 
             bill_subtotal += db_line.subtotal
             bill_cgst += db_line.cgst_amount
@@ -469,6 +551,10 @@ def update_bill(
             bill_utgst += db_line.utgst_amount
             bill_cess += db_line.cess_amount
             bill_discount += db_line.discount
+
+        for existing_line in existing_lines:
+            if str(existing_line.id) not in kept_ids:
+                db.delete(existing_line)
 
         header_discount_rate = payload.discount_rate or Decimal("0.00")
         header_shipping = payload.shipping_charges or Decimal("0.0000")

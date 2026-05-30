@@ -3,10 +3,7 @@ from typing import List, Optional
 from datetime import date, datetime
 from decimal import Decimal
 import uuid
-
-class SchemaBase(BaseModel):
-    class Config:
-        from_attributes = True
+from src.schemas import SchemaBase
 
 # Journal Entry Creation & Response
 class JournalLineCreate(SchemaBase):

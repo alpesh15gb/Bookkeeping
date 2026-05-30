@@ -10,14 +10,46 @@ from fastapi.testclient import TestClient
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from src.main import app
-from src.core.database import SessionLocal, tenant_context
-from src.infrastructure.database.models import Invoice, Contact, Product
+from src.core.database import SessionLocal, tenant_context, Base, engine
+from src.infrastructure.database.models import Invoice, Contact, Product, User, Tenant, TenantMembership
 
 class TestSalesAnalytics(unittest.TestCase):
     def setUp(self):
+        # Reset database tables
+        Base.metadata.drop_all(bind=engine)
+        Base.metadata.create_all(bind=engine)
+
         self.client = TestClient(app)
-        self.tenant_id = uuid.UUID("0aa85f64-5717-4562-b3fc-2c963f66b110")
-        self.headers = {"X-Tenant-ID": str(self.tenant_id)}
+
+        # Register a tenant
+        reg_payload = {
+            "email": "owner@company.com",
+            "password": "SecurePassword123!",
+            "full_name": "Vijay Varma",
+            "phone_number": "+919999988888",
+            "company_legal_name": "Varma Ventures Pvt Ltd",
+            "company_gstin": "27BBBBB2222B2Z6",
+            "company_pan": "BBBBB2222B"
+        }
+        self.client.post("/api/v1/auth/register", json=reg_payload)
+        login_res = self.client.post("/api/v1/auth/login", json={
+            "email": "owner@company.com",
+            "password": "SecurePassword123!"
+        }).json()
+        self.access_token = login_res["access_token"]
+
+        # Fetch tenant ID
+        db = SessionLocal()
+        try:
+            membership = db.query(TenantMembership).first()
+            self.tenant_id = membership.tenant_id
+        finally:
+            db.close()
+
+        self.headers = {
+            "X-Tenant-ID": str(self.tenant_id),
+            "Authorization": f"Bearer {self.access_token}"
+        }
 
     def test_sales_summary_calculations(self):
         # Fetch initial dashboard summary

@@ -222,7 +222,7 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
             
             # Asset account mapping: uuid5(NAMESPACE_DNS, "account.assets.bank")
             asset_acc = uuid.uuid5(uuid.NAMESPACE_DNS, "account.assets.bank")
-            cust_acc = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.customer.{self.customer_a_id}")
+            cust_acc = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.customer.{self.customer_a_id}-{self.tenant_a_id}")
             self.assertEqual(bank_line.account_id, asset_acc)
             self.assertEqual(customer_line.account_id, cust_acc)
         finally:
@@ -247,9 +247,9 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
         res_inv1_post = self.client.get(f"/api/v1/invoices/{inv1['id']}", headers=self.headers_a).json()
         res_inv2_post = self.client.get(f"/api/v1/invoices/{inv2['id']}", headers=self.headers_a).json()
 
-        self.assertEqual(res_inv1_post["status"], "SENT")
+        self.assertEqual(res_inv1_post["status"], "POSTED")
         self.assertEqual(float(res_inv1_post["amount_paid"]), 0.0)
-        self.assertEqual(res_inv2_post["status"], "SENT")
+        self.assertEqual(res_inv2_post["status"], "POSTED")
         self.assertEqual(float(res_inv2_post["amount_paid"]), 0.0)
 
         # Verify reversal journal entry created
@@ -336,7 +336,7 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
             self.assertEqual(debits, credits)
             self.assertEqual(debits, Decimal("11800.00"))
 
-            vendor_acc = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.vendor.{self.vendor_a_id}")
+            vendor_acc = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.vendor.{self.vendor_a_id}-{self.tenant_a_id}")
             asset_acc = uuid.uuid5(uuid.NAMESPACE_DNS, "account.assets.bank")
 
             v_line = next(line for line in entry.lines if line.direction == "DEBIT")
@@ -353,7 +353,7 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
 
         # Verify bill rolled back
         res_bill_post = self.client.get(f"/api/v1/bills/{bill['id']}", headers=self.headers_a).json()
-        self.assertEqual(res_bill_post["status"], "UNPAID")
+        self.assertEqual(res_bill_post["status"], "POSTED")
         self.assertEqual(float(res_bill_post["amount_paid"]), 0.0)
 
         # Verify reversal journal entry created: Bank DEBIT, Vendor CREDIT
@@ -408,13 +408,33 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
 
 
     def test_tenant_boundary_isolation(self):
+        # Create an invoice in Tenant A context first
+        inv_payload = {
+            "contact_id": str(self.customer_a_id),
+            "issue_date": str(date.today()),
+            "due_date": str(date.today()),
+            "pos_state_code": "27",
+            "line_items": [
+                {
+                    "product_id": str(self.product_a_id),
+                    "quantity": 1,
+                    "rate": 100.00,
+                    "discount": 0.00,
+                    "hsn_sac": "84713010",
+                    "gst_rate": 0.0
+                }
+            ]
+        }
+        inv = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers_a).json()
+        self.client.post(f"/api/v1/invoices/{inv['id']}/finalize", headers=self.headers_a)
+
         # 1. Try to record payment under Tenant B using Tenant A's customer
         payload_b = {
             "contact_id": str(self.customer_a_id),
             "payment_date": str(date.today()),
             "payment_mode": "BANK",
             "amount": 100.00,
-            "allocations": []
+            "allocations": [{"invoice_id": inv["id"], "amount": 100.00}]
         }
         res = self.client.post("/api/v1/payments/receipts", json=payload_b, headers=self.headers_b)
         self.assertEqual(res.status_code, 404) # contact not found in tenant B context
@@ -425,7 +445,7 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
             "payment_date": str(date.today()),
             "payment_mode": "CASH",
             "amount": 100.00,
-            "allocations": []
+            "allocations": [{"invoice_id": inv["id"], "amount": 100.00}]
         }
         receipt = self.client.post("/api/v1/payments/receipts", json=payload_a, headers=self.headers_a).json()
 

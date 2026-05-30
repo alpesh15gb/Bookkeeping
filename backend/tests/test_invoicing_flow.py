@@ -236,7 +236,7 @@ class TestInvoicingFlow(unittest.TestCase):
         # Finalize Credit Note
         res_fin = self.client.post(f"/api/v1/invoices/credit-notes/{cn_id}/finalize", headers=self.headers)
         self.assertEqual(res_fin.status_code, 200)
-        self.assertEqual(res_fin.json()["status"], "ISSUED")
+        self.assertEqual(res_fin.json()["status"], "POSTED")
 
         # Verify ledger journal entry posted
         db = SessionLocal()
@@ -301,7 +301,7 @@ class TestInvoicingFlow(unittest.TestCase):
         # Finalize Debit Note
         res_fin = self.client.post(f"/api/v1/invoices/debit-notes/{dn_id}/finalize", headers=self.headers)
         self.assertEqual(res_fin.status_code, 200)
-        self.assertEqual(res_fin.json()["status"], "ISSUED")
+        self.assertEqual(res_fin.json()["status"], "POSTED")
 
         # Verify ledger journal entry posted
         db = SessionLocal()

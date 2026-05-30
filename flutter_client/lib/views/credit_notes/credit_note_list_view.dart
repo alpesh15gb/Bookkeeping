@@ -188,7 +188,7 @@ class _CreditNoteListViewState extends State<CreditNoteListView> with SingleTick
                             foregroundColor: AppColors.error,
                             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                             textStyle: AppTextStyles.buttonSmall,
-                            side: BorderSide(color: AppColors.error.withOpacity(0.3)),
+                            side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
                           ),
                         ),
                     ],

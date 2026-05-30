@@ -113,4 +113,24 @@ class BillModel {
       contact: json['contact'] != null ? ContactModel.fromJson(json['contact']) : null,
     );
   }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'contact_id': contactId,
+      'bill_number': billNumber,
+      'issue_date': billDate,
+      'due_date': dueDate,
+      'status': status,
+      'subtotal': subtotal,
+      'total': total,
+      'amount_paid': amountPaid,
+      'cgst_amount': cgstAmount,
+      'sgst_amount': sgstAmount,
+      'igst_amount': igstAmount,
+      'round_off': roundOff,
+      'discount_total': discountTotal,
+      'lines': lines.map((l) => l.toJson()).toList(),
+    };
+  }
 }

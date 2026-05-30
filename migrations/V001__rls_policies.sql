@@ -259,18 +259,90 @@ CREATE POLICY tenant_isolation_select ON tenant_invitations
   FOR SELECT USING (tenant_id = current_tenant_id());
 
 -- 5. Create INSERT/UPDATE/DELETE policies (same tenant-scoped rules)
---    Note: These apply BYPASSRLS to application users. The application
---    should connect with a role that has BYPASSRLS set, OR create
---    corresponding policies for each DML operation.
+--    These policies enforce tenant isolation for all DML operations.
+--    The application connects with a role that has BYPASSRLS set for simplicity,
+--    but these policies provide defense-in-depth if RLS is enforced.
 
--- For a production setup where the app connects as an unprivileged role,
--- uncomment and adapt the following pattern for each table:
---
--- CREATE POLICY tenant_isolation_insert ON invoices
---   FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
---
--- CREATE POLICY tenant_isolation_update ON invoices
---   FOR UPDATE USING (tenant_id = current_tenant_id());
---
--- CREATE POLICY tenant_isolation_delete ON invoices
---   FOR DELETE USING (tenant_id = current_tenant_id());
+-- INSERT policies: tenant_id must match the session's tenant
+CREATE POLICY tenant_isolation_insert ON invoices FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON invoice_lines FOR INSERT WITH CHECK (invoice_id IN (SELECT id FROM invoices WHERE tenant_id = current_tenant_id()));
+CREATE POLICY tenant_isolation_insert ON contacts FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON products FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON accounts FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON payments FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON payment_allocations FOR INSERT WITH CHECK (payment_id IN (SELECT id FROM payments WHERE tenant_id = current_tenant_id()));
+CREATE POLICY tenant_isolation_insert ON bills FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON bill_lines FOR INSERT WITH CHECK (bill_id IN (SELECT id FROM bills WHERE tenant_id = current_tenant_id()));
+CREATE POLICY tenant_isolation_insert ON bill_payments FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON bill_payment_allocations FOR INSERT WITH CHECK (payment_id IN (SELECT id FROM bill_payments WHERE tenant_id = current_tenant_id()));
+CREATE POLICY tenant_isolation_insert ON journal_entries FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON journal_lines FOR INSERT WITH CHECK (entry_id IN (SELECT id FROM journal_entries WHERE tenant_id = current_tenant_id()));
+CREATE POLICY tenant_isolation_insert ON credit_notes FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON debit_notes FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON expenses FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON expense_categories FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON banking_profiles FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON stock_ledger FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON audit_logs FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON proforma_invoices FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON delivery_challans FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON sales_orders FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON purchase_orders FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON inventory_adjustments FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON gst_returns FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON bank_statements FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON bank_reconciliations FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON numbering_series FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON branches FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON tenant_settings FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_insert ON webhook_events FOR INSERT WITH CHECK (tenant_id = current_tenant_id());
+
+-- UPDATE policies: can only update rows belonging to the session's tenant
+CREATE POLICY tenant_isolation_update ON invoices FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON contacts FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON products FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON accounts FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON payments FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON bills FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON bill_payments FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON journal_entries FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON credit_notes FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON debit_notes FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON expenses FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON banking_profiles FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON stock_ledger FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON proforma_invoices FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON delivery_challans FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON sales_orders FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON purchase_orders FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON inventory_adjustments FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON bank_statements FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON bank_reconciliations FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON numbering_series FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON branches FOR UPDATE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_update ON tenant_settings FOR UPDATE USING (tenant_id = current_tenant_id());
+
+-- DELETE policies: can only delete rows belonging to the session's tenant
+CREATE POLICY tenant_isolation_delete ON invoices FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON contacts FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON products FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON accounts FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON payments FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON bills FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON bill_payments FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON journal_entries FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON credit_notes FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON debit_notes FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON expenses FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON banking_profiles FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON stock_ledger FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON proforma_invoices FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON delivery_challans FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON sales_orders FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON purchase_orders FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON inventory_adjustments FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON bank_statements FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON bank_reconciliations FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON numbering_series FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON branches FOR DELETE USING (tenant_id = current_tenant_id());
+CREATE POLICY tenant_isolation_delete ON tenant_settings FOR DELETE USING (tenant_id = current_tenant_id());
