@@ -422,6 +422,19 @@ def import_vyapar_backup(
 
             # ── SALES INVOICES (type=1) ─────────────────────────────────────
             if txn_type == 1 and contact_id_str:
+                inv_number = _gen_inv_number(ref_number, "INV")
+                existing_inv = (
+                    db.query(Invoice)
+                    .filter(
+                        Invoice.tenant_id == tenant_id,
+                        Invoice.invoice_number == inv_number,
+                        Invoice.deleted_at == None,
+                    )
+                    .first()
+                )
+                if existing_inv:
+                    continue
+
                 cash_amt = float(txn["txn_cash_amount"] or 0)
                 bal_amt = float(txn["txn_balance_amount"] or 0)
                 total_from_txn = cash_amt + bal_amt
@@ -528,7 +541,7 @@ def import_vyapar_backup(
                 inv = Invoice(
                     tenant_id=tenant_id,
                     contact_id=uuid.UUID(contact_id_str),
-                    invoice_number=_gen_inv_number(ref_number, "INV"),
+                    invoice_number=inv_number,
                     issue_date=txn_date,
                     due_date=due_date,
                     status=inv_status,
@@ -556,6 +569,32 @@ def import_vyapar_backup(
             # ── PURCHASE BILLS / ESTIMATES (type=27) ────────────────────────
             elif txn_type == 27 and contact_id_str:
                 is_estimate = (txn.get("txn_sub_type") == 1)
+                doc_number = _gen_inv_number(ref_number, "EST" if is_estimate else "BILL")
+
+                if is_estimate:
+                    existing_est = (
+                        db.query(ProformaInvoice)
+                        .filter(
+                            ProformaInvoice.tenant_id == tenant_id,
+                            ProformaInvoice.proforma_number == doc_number,
+                            ProformaInvoice.deleted_at == None,
+                        )
+                        .first()
+                    )
+                    if existing_est:
+                        continue
+                else:
+                    existing_bill = (
+                        db.query(Bill)
+                        .filter(
+                            Bill.tenant_id == tenant_id,
+                            Bill.bill_number == doc_number,
+                            Bill.deleted_at == None,
+                        )
+                        .first()
+                    )
+                    if existing_bill:
+                        continue
 
                 cash_amt = float(txn["txn_cash_amount"] or 0)
                 bal_amt = float(txn["txn_balance_amount"] or 0)
@@ -695,7 +734,7 @@ def import_vyapar_backup(
                     est = ProformaInvoice(
                         tenant_id=tenant_id,
                         contact_id=uuid.UUID(contact_id_str),
-                        proforma_number=_gen_inv_number(ref_number, "EST"),
+                        proforma_number=doc_number,
                         issue_date=txn_date,
                         due_date=due_date,
                         status="ISSUED",
@@ -731,7 +770,7 @@ def import_vyapar_backup(
                     bill = Bill(
                         tenant_id=tenant_id,
                         contact_id=uuid.UUID(contact_id_str),
-                        bill_number=_gen_inv_number(ref_number, "BILL"),
+                        bill_number=doc_number,
                         issue_date=txn_date,
                         due_date=due_date,
                         status=bill_status,
@@ -778,6 +817,18 @@ def import_vyapar_backup(
                     continue
 
                 exp_num = ref_number or f"VYP-EXP-{txn_id}"
+                existing_exp = (
+                    db.query(Expense)
+                    .filter(
+                        Expense.tenant_id == tenant_id,
+                        Expense.expense_number == exp_num,
+                        Expense.deleted_at == None,
+                    )
+                    .first()
+                )
+                if existing_exp:
+                    continue
+
                 expense = Expense(
                     tenant_id=tenant_id,
                     expense_number=exp_num,
