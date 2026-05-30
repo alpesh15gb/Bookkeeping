@@ -8,14 +8,14 @@ import 'package:flutter_client/views/purchase_orders/purchase_order_form_view.da
 import 'package:flutter_client/core/print_share_helper.dart';
 
 class OrderListView extends StatefulWidget {
-  const OrderListView({super.key});
+  final String orderType; // 'purchase' or 'sales'
+  const OrderListView({super.key, required this.orderType});
 
   @override
   State<OrderListView> createState() => _OrderListViewState();
 }
 
-class _OrderListViewState extends State<OrderListView> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _OrderListViewState extends State<OrderListView> {
   List<dynamic> _purchaseOrders = [];
   List<dynamic> _salesOrders = [];
   bool _isLoading = true;
@@ -23,20 +23,27 @@ class _OrderListViewState extends State<OrderListView> with SingleTickerProvider
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
     _fetch();
   }
 
   void _fetch() async {
     setState(() => _isLoading = true);
-    final po = await context.read<DocumentProvider>().fetchPurchaseOrders();
-    final so = await context.read<DocumentProvider>().fetchSalesOrders();
-    if (mounted) {
-      setState(() {
-        _purchaseOrders = po;
-        _salesOrders = so;
-        _isLoading = false;
-      });
+    if (widget.orderType == 'purchase') {
+      final po = await context.read<DocumentProvider>().fetchPurchaseOrders();
+      if (mounted) {
+        setState(() {
+          _purchaseOrders = po;
+          _isLoading = false;
+        });
+      }
+    } else {
+      final so = await context.read<DocumentProvider>().fetchSalesOrders();
+      if (mounted) {
+        setState(() {
+          _salesOrders = so;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -129,41 +136,17 @@ class _OrderListViewState extends State<OrderListView> with SingleTickerProvider
   }
 
   @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final isPurchase = widget.orderType == 'purchase';
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(48),
-        child: Container(
-          color: AppColors.bgSurface,
-          child: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'Purchase Orders'),
-              Tab(text: 'Sales Orders'),
-            ],
-          ),
-        ),
-      ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showPOForm(type: _tabController.index == 0 ? 'PO' : 'SO'),
+        onPressed: () => _showPOForm(type: isPurchase ? 'PO' : 'SO'),
         child: const Icon(Icons.add),
       ),
       body: _isLoading
           ? const LoadingState(message: 'Loading orders...')
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildList(_purchaseOrders, 'PO'),
-                _buildList(_salesOrders, 'SO'),
-              ],
-            ),
+          : _buildList(isPurchase ? _purchaseOrders : _salesOrders, isPurchase ? 'PO' : 'SO'),
     );
   }
 

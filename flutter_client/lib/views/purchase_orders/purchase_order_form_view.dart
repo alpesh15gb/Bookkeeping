@@ -35,7 +35,7 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
   final List<_POLineItem> _lines = [];
   String? _errorMessage;
 
-  final bool _isPurchase = true;
+  bool get _isPurchase => widget.orderType == 'purchase';
 
   @override
   void initState() {
@@ -113,7 +113,7 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
         productName: product.name,
         hsnSac: product.hsnSac,
         quantity: 1,
-        rate: product.purchasePrice,
+        rate: _isPurchase ? product.purchasePrice : product.salesPrice,
         gstRate: product.gstRate,
       ));
     });
@@ -131,7 +131,7 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedVendor == null) {
-      _showError('Please select a vendor');
+      _showError(_isPurchase ? 'Please select a vendor' : 'Please select a customer');
       return;
     }
     if (_lines.isEmpty) {
@@ -148,9 +148,12 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
     final poYear = DateTime.now().year;
     final poFinYear = DateTime.now().month >= 4 ? '$poYear-${(poYear + 1).toString().substring(2)}' : '${poYear - 1}-${poYear.toString().substring(2)}';
 
+    final prefix = _isPurchase ? 'PO' : 'SO';
+    final numberKey = _isPurchase ? 'po_number' : 'so_number';
+
     final payload = {
       'contact_id': _selectedVendor!.id,
-      'po_number': widget.editOrder != null ? widget.editOrder!['po_number'] : 'PO/$poFinYear/${1000 + DateTime.now().millisecond % 9000}',
+      numberKey: widget.editOrder != null ? widget.editOrder![numberKey] : '$prefix/$poFinYear/${1000 + DateTime.now().millisecond % 9000}',
       'order_date': _dateCtrl.text,
       'due_date': _deliveryDateCtrl.text,
       'pos_state_code': RegExp(r'^[0-9]{2}$').hasMatch(_selectedVendor!.stateCode) ? _selectedVendor!.stateCode : '27',
@@ -166,16 +169,26 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
     };
 
     final provider = context.read<DocumentProvider>();
-    final success = widget.editOrder != null
-        ? await provider.updatePurchaseOrder(widget.editOrder!['id'], payload)
-        : await provider.createPurchaseOrder(payload);
+    bool success;
+    if (_isPurchase) {
+      success = widget.editOrder != null
+          ? await provider.updatePurchaseOrder(widget.editOrder!['id'], payload)
+          : await provider.createPurchaseOrder(payload);
+    } else {
+      success = widget.editOrder != null
+          ? await provider.updateSalesOrder(widget.editOrder!['id'], payload)
+          : await provider.createSalesOrder(payload);
+    }
 
     if (mounted) {
       setState(() => _isSaving = false);
       if (success) {
+        final successMsg = _isPurchase
+            ? (widget.editOrder != null ? 'Purchase Order updated' : 'Purchase Order created')
+            : (widget.editOrder != null ? 'Sales Order updated' : 'Sales Order created');
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.editOrder != null ? 'Purchase Order updated' : 'Purchase Order created'),
+            content: Text(successMsg),
             backgroundColor: AppColors.success,
           ),
         );
@@ -194,10 +207,14 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
 
   @override
   Widget build(BuildContext context) {
-    final vendors = context.watch<ContactProvider>().vendors;
+    final contacts = _isPurchase
+        ? context.watch<ContactProvider>().vendors
+        : context.watch<ContactProvider>().customers;
     final products = context.watch<ProductProvider>().products;
     final isMobile = AdaptiveLayout.isMobile(context);
-    final title = widget.editOrder != null ? 'Edit Purchase Order' : 'New Purchase Order';
+    final title = widget.editOrder != null
+        ? (_isPurchase ? 'Edit Purchase Order' : 'Edit Sales Order')
+        : (_isPurchase ? 'New Purchase Order' : 'New Sales Order');
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
@@ -219,22 +236,22 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
           children: [
             // ── Header ──
             _FormCard(
-              title: 'PURCHASE ORDER DETAILS',
+              title: _isPurchase ? 'PURCHASE ORDER DETAILS' : 'SALES ORDER DETAILS',
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   DropdownButtonFormField<ContactModel>(
                     value: _selectedVendor,
-                    decoration: const InputDecoration(
-                      labelText: 'Vendor *',
-                      prefixIcon: Icon(Icons.store_outlined, size: 18),
+                    decoration: InputDecoration(
+                      labelText: _isPurchase ? 'Vendor *' : 'Customer *',
+                      prefixIcon: Icon(_isPurchase ? Icons.store_outlined : Icons.person_outlined, size: 18),
                     ),
-                    items: vendors.map((v) => DropdownMenuItem(
+                    items: contacts.map((v) => DropdownMenuItem(
                       value: v,
                       child: Text(v.name),
                     )).toList(),
                     onChanged: (v) => setState(() => _selectedVendor = v),
-                    validator: (v) => v == null ? 'Vendor required' : null,
+                    validator: (v) => v == null ? (_isPurchase ? 'Vendor required' : 'Customer required') : null,
                   ),
                   const SizedBox(height: 16),
                   Row(
@@ -293,7 +310,7 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
                 ),
                 itemBuilder: (context) => products.map((p) => PopupMenuItem<ProductModel>(
                   value: p,
-                  child: Text('${p.name}  —  ₹${p.purchasePrice.toStringAsFixed(2)}'),
+                  child: Text('${p.name}  —  ₹${(_isPurchase ? p.purchasePrice : p.salesPrice).toStringAsFixed(2)}'),
                 )).toList(),
               ),
               child: _lines.isEmpty
