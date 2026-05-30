@@ -515,7 +515,7 @@ def import_vyapar_backup(
                 else:
                     inv_status = "SENT"
 
-                round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst)
+                round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst - discount_total)
 
                 inv = Invoice(
                     tenant_id=tenant_id,
@@ -643,7 +643,7 @@ def import_vyapar_backup(
                 else:
                     bill_status = "UNPAID"
 
-                round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst)
+                round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst - discount_total)
 
                 bill = Bill(
                     tenant_id=tenant_id,
@@ -659,6 +659,7 @@ def import_vyapar_backup(
                     igst_amount=total_igst,
                     utgst_amount=Decimal("0"),
                     cess_amount=Decimal("0"),
+                    round_off=round_off,
                     total=total_val,
                     amount_paid=amount_paid,
                     pos_state_code=origin_state_code,
