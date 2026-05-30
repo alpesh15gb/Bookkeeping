@@ -434,3 +434,60 @@ def cancel_purchase_order(
     db.commit()
     db.refresh(po)
     return po
+
+
+@router.get("/{id}/print")
+def print_purchase_order(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    po = db.query(PurchaseOrder).filter(
+        PurchaseOrder.id == id,
+        PurchaseOrder.tenant_id == tenant_id,
+        PurchaseOrder.deleted_at == None
+    ).first()
+    if not po:
+        raise HTTPException(status_code=404, detail="Purchase order not found.")
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
+    items = []
+    for line in po.lines:
+        product = line.product
+        items.append({
+            'description': product.name if product else line.hsn_sac,
+            'quantity': float(line.quantity),
+            'rate': float(line.rate),
+            'total': float(line.total),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=po.po_number,
+        issue_date=po.order_date,
+        due_date=po.due_date,
+        customer_name=po.contact.name if po.contact else "N/A",
+        customer_gstin=po.contact.gstin if po.contact else None,
+        items=items,
+        subtotal=po.subtotal,
+        cgst=po.cgst_amount,
+        sgst=po.sgst_amount,
+        igst=po.igst_amount,
+        round_off=Decimal("0.00"),
+        total=po.total,
+        template=template,
+        doc_type="PURCHASE ORDER",
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=PurchaseOrder_{po.po_number}.pdf"}
+    )

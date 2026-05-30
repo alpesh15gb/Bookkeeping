@@ -142,7 +142,7 @@ class _InvoiceFormViewState extends State<InvoiceFormView> {
     'contact_id': _selectedContact!.id,
     'issue_date': _issueDateCtrl.text,
     'due_date': _dueDateCtrl.text,
-    'pos_state_code': _posStateCode,
+    'pos_state_code': RegExp(r'^[0-9]{2}$').hasMatch(_posStateCode) ? _posStateCode : '27',
     'notes': _notesCtrl.text.trim(),
     if (_poNumberCtrl.text.trim().isNotEmpty)
       'po_number': _poNumberCtrl.text.trim(),
@@ -153,7 +153,7 @@ class _InvoiceFormViewState extends State<InvoiceFormView> {
       'quantity': l.quantity,
       'rate': l.rate,
       'discount': l.discount,
-      'hsn_sac': l.hsnSac,
+      'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac) ? l.hsnSac : '84716050',
       'gst_rate': l.gstRate,
       if (l.descCtrl.text.trim().isNotEmpty)
         'description': l.descCtrl.text.trim(),

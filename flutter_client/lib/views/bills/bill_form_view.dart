@@ -188,14 +188,14 @@ class _BillFormViewState extends State<BillFormView> {
         'bill_number': widget.editBill != null ? widget.editBill!.billNumber : 'BILL-TEMP',
         'issue_date': _billDateCtrl.text,
         'due_date': _dueDateCtrl.text,
-        'pos_state_code': _selectedVendor!.stateCode,
+        'pos_state_code': RegExp(r'^[0-9]{2}$').hasMatch(_selectedVendor!.stateCode) ? _selectedVendor!.stateCode : '27',
         'notes': _notesCtrl.text.trim(),
         'line_items': _lines.map((l) => {
           'product_id': l.productId,
           'quantity': l.quantity,
           'rate': l.rate,
           'discount': l.discount,
-          'hsn_sac': l.hsnSac,
+          'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac) ? l.hsnSac : '84716050',
           'gst_rate': l.gstRate,
         }).toList(),
       };
@@ -283,14 +283,14 @@ class _BillFormViewState extends State<BillFormView> {
       'bill_number': widget.editBill != null ? widget.editBill!.billNumber : 'BILL-${DateTime.now().millisecondsSinceEpoch}',
       'issue_date': _billDateCtrl.text,
       'due_date': _dueDateCtrl.text,
-      'pos_state_code': _selectedVendor!.stateCode,
+      'pos_state_code': RegExp(r'^[0-9]{2}$').hasMatch(_selectedVendor!.stateCode) ? _selectedVendor!.stateCode : '27',
       'notes': _notesCtrl.text.trim(),
       'line_items': _lines.map((l) => {
         'product_id': l.productId,
         'quantity': l.quantity,
         'rate': l.rate,
         'discount': l.discount,
-        'hsn_sac': l.hsnSac,
+        'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac) ? l.hsnSac : '84716050',
         'gst_rate': l.gstRate,
       }).toList(),
     };

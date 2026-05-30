@@ -6,6 +6,8 @@ import 'package:flutter_client/models/bill.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/bills/bill_form_view.dart';
 
+import 'package:flutter_client/core/print_share_helper.dart';
+
 class BillDetailView extends StatefulWidget {
   final String billId;
 
@@ -43,6 +45,19 @@ class _BillDetailViewState extends State<BillDetailView> {
         title: Text(_bill?.billNumber ?? 'Bill Detail'),
         actions: [
           if (_bill != null) ...[
+            IconButton(
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () {
+                PrintShareHelper.showShareSheet(
+                  context,
+                  docLabel: 'Bill',
+                  docNumber: _bill!.billNumber,
+                  docType: 'bills',
+                  docId: _bill!.id,
+                );
+              },
+              tooltip: 'Share / Export',
+            ),
             if (_bill!.status == 'DRAFT')
               IconButton(
                 icon: const Icon(Icons.edit_outlined),

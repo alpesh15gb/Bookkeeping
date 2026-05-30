@@ -8,13 +8,21 @@ from src.infrastructure.database.models import User, TenantMembership
 from src.core.security import decode_token, ROLE_PERMISSIONS
 from src.common.audit_log import set_audit_context
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 def get_current_user(
+    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db_session)
 ) -> User:
     """Validates JWT auth token and returns active User model."""
+    if not token:
+        token = request.query_params.get("token")
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials."
+        )
     try:
         payload = decode_token(token, expected_type="access")
         user_id_str = payload.get("sub")
@@ -40,7 +48,7 @@ def get_current_user(
 
 def get_tenant_context(
     request: Request,
-    x_tenant_id: str = Header(...),
+    x_tenant_id: str = Header(None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
 ) -> uuid.UUID:
@@ -49,12 +57,18 @@ def get_tenant_context(
     Verifies user has active membership in the target Tenant.
     Sets 'tenant_context' contextvar to configure PostgreSQL RLS session.
     """
+    tenant_str = x_tenant_id or request.query_params.get("tenant_id")
+    if not tenant_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-Tenant-ID must be a valid UUID or tenant_id query parameter."
+        )
     try:
-        tenant_uuid = uuid.UUID(x_tenant_id)
+        tenant_uuid = uuid.UUID(tenant_str)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="X-Tenant-ID must be a valid UUID."
+            detail="X-Tenant-ID or tenant_id must be a valid UUID."
         )
 
     membership = db.query(TenantMembership).filter(
@@ -86,16 +100,22 @@ def enforce_permission(required_permission: str):
     """
     def check_scopes(
         request: Request,
-        x_tenant_id: str = Header(...),
+        x_tenant_id: str = Header(None),
         current_user: User = Depends(get_current_user),
         db: Session = Depends(get_db_session)
     ) -> uuid.UUID:
+        tenant_str = x_tenant_id or request.query_params.get("tenant_id")
+        if not tenant_str:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="X-Tenant-ID must be a valid UUID or tenant_id query parameter."
+            )
         try:
-            tenant_uuid = uuid.UUID(x_tenant_id)
+            tenant_uuid = uuid.UUID(tenant_str)
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="X-Tenant-ID must be a valid UUID."
+                detail="X-Tenant-ID or tenant_id must be a valid UUID."
             )
 
         membership = db.query(TenantMembership).filter(

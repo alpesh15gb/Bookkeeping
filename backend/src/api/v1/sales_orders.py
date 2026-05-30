@@ -434,3 +434,60 @@ def cancel_sales_order(
     db.commit()
     db.refresh(so)
     return so
+
+
+@router.get("/{id}/print")
+def print_sales_order(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    so = db.query(SalesOrder).filter(
+        SalesOrder.id == id,
+        SalesOrder.tenant_id == tenant_id,
+        SalesOrder.deleted_at == None
+    ).first()
+    if not so:
+        raise HTTPException(status_code=404, detail="Sales order not found.")
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
+    items = []
+    for line in so.lines:
+        product = line.product
+        items.append({
+            'description': product.name if product else line.hsn_sac,
+            'quantity': float(line.quantity),
+            'rate': float(line.rate),
+            'total': float(line.total),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=so.so_number,
+        issue_date=so.order_date,
+        due_date=so.due_date,
+        customer_name=so.contact.name if so.contact else "N/A",
+        customer_gstin=so.contact.gstin if so.contact else None,
+        items=items,
+        subtotal=so.subtotal,
+        cgst=so.cgst_amount,
+        sgst=so.sgst_amount,
+        igst=so.igst_amount,
+        round_off=Decimal("0.00"),
+        total=so.total,
+        template=template,
+        doc_type="SALES ORDER",
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=SalesOrder_{so.so_number}.pdf"}
+    )

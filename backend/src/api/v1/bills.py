@@ -817,3 +817,60 @@ def delete_bill(
     db.commit()
     return
 
+
+@router.get("/{id}/print")
+def print_bill(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    bill = db.query(Bill).filter(
+        Bill.id == id,
+        Bill.tenant_id == tenant_id,
+        Bill.deleted_at == None
+    ).first()
+    if not bill:
+        raise HTTPException(status_code=404, detail="Bill not found.")
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
+    items = []
+    for line in bill.lines:
+        product = line.product
+        items.append({
+            'description': product.name if product else line.hsn_sac,
+            'quantity': float(line.quantity),
+            'rate': float(line.rate),
+            'total': float(line.total),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=bill.bill_number,
+        issue_date=bill.issue_date,
+        due_date=bill.due_date,
+        customer_name=bill.contact.name if bill.contact else "N/A",
+        customer_gstin=bill.contact.gstin if bill.contact else None,
+        items=items,
+        subtotal=bill.subtotal,
+        cgst=bill.cgst_amount,
+        sgst=bill.sgst_amount,
+        igst=bill.igst_amount,
+        round_off=bill.round_off,
+        total=bill.total,
+        template=template,
+        doc_type="BILL",
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Bill_{bill.bill_number}.pdf"}
+    )
+

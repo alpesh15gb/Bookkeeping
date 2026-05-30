@@ -165,12 +165,12 @@ class _CreditDebitNoteFormViewState extends State<CreditDebitNoteFormView> {
         'credit_note_number': widget.isCredit && widget.editNote != null ? widget.editNote!['credit_note_number'] : null,
         'debit_note_number': !widget.isCredit && widget.editNote != null ? widget.editNote!['debit_note_number'] : null,
         'issue_date': _dateCtrl.text,
-        'reason': _reasonCtrl.text.trim(),
+        'reason': _reasonCtrl.text.trim().isEmpty ? (widget.isCredit ? 'Sales Return' : 'Sales Correction') : _reasonCtrl.text.trim(),
         'line_items': _lines.map((l) => {
           'product_id': l.productId,
           'quantity': l.quantity,
           'rate': l.rate,
-          'hsn_sac': l.hsnSac.isNotEmpty ? l.hsnSac : '84716050',
+          'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac) ? l.hsnSac : '84716050',
           'gst_rate': l.gstRate,
         }).toList(),
       };
@@ -232,12 +232,12 @@ class _CreditDebitNoteFormViewState extends State<CreditDebitNoteFormView> {
       'credit_note_number': widget.isCredit && widget.editNote != null ? widget.editNote!['credit_note_number'] : null,
       'debit_note_number': !widget.isCredit && widget.editNote != null ? widget.editNote!['debit_note_number'] : null,
       'issue_date': _dateCtrl.text,
-      'reason': _reasonCtrl.text.trim().isEmpty ? null : _reasonCtrl.text.trim(),
+      'reason': _reasonCtrl.text.trim().isEmpty ? (widget.isCredit ? 'Sales Return' : 'Sales Correction') : _reasonCtrl.text.trim(),
       'line_items': _lines.map((l) => {
         'product_id': l.productId,
         'quantity': l.quantity,
         'rate': l.rate,
-        'hsn_sac': l.hsnSac.isNotEmpty ? l.hsnSac : '84716050',
+        'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac) ? l.hsnSac : '84716050',
         'gst_rate': l.gstRate,
       }).toList(),
     };

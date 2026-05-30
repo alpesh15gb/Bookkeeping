@@ -88,8 +88,25 @@ class DashboardProvider extends ChangeNotifier {
       }
 
       _salesSummary = jsonDecode(core[0].body) as Map<String, dynamic>;
-      _expenses = jsonDecode(core[1].body) as List? ?? [];
-      _bills = jsonDecode(core[2].body) as List? ?? [];
+      
+      final expRaw = jsonDecode(core[1].body);
+      if (expRaw is List) {
+        _expenses = expRaw;
+      } else if (expRaw is Map<String, dynamic>) {
+        _expenses = (expRaw['items'] as List?) ?? [];
+      } else {
+        _expenses = [];
+      }
+
+      final billsRaw = jsonDecode(core[2].body);
+      if (billsRaw is List) {
+        _bills = billsRaw;
+      } else if (billsRaw is Map<String, dynamic>) {
+        _bills = (billsRaw['items'] as List?) ?? [];
+      } else {
+        _bills = [];
+      }
+
       _metrics = jsonDecode(core[3].body) as Map<String, dynamic>;
       final invRaw = jsonDecode(core[4].body);
       if (invRaw is List) {

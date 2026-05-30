@@ -609,3 +609,60 @@ def delete_proforma_invoice(
     pi.deleted_at = datetime.now(timezone.utc)
     db.commit()
     return
+
+
+@router.get("/{id}/print")
+def print_proforma_invoice(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    pi = db.query(ProformaInvoice).filter(
+        ProformaInvoice.id == id,
+        ProformaInvoice.tenant_id == tenant_id,
+        ProformaInvoice.deleted_at == None
+    ).first()
+    if not pi:
+        raise HTTPException(status_code=404, detail="Proforma invoice not found.")
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
+    items = []
+    for line in pi.lines:
+        product = line.product
+        items.append({
+            'description': product.name if product else line.hsn_sac,
+            'quantity': float(line.quantity),
+            'rate': float(line.rate),
+            'total': float(line.total),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=pi.proforma_number,
+        issue_date=pi.issue_date,
+        due_date=pi.due_date,
+        customer_name=pi.contact.name if pi.contact else "N/A",
+        customer_gstin=pi.contact.gstin if pi.contact else None,
+        items=items,
+        subtotal=pi.subtotal,
+        cgst=pi.cgst_amount,
+        sgst=pi.sgst_amount,
+        igst=pi.igst_amount,
+        round_off=Decimal("0.00"),  # Estimates/proforma don't have separate round_off field in DB
+        total=pi.total,
+        template=template,
+        doc_type="ESTIMATE",
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Estimate_{pi.proforma_number}.pdf"}
+    )

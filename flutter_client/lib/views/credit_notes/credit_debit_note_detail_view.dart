@@ -6,6 +6,8 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/credit_notes/credit_debit_note_form_view.dart';
 
+import 'package:flutter_client/core/print_share_helper.dart';
+
 class CreditDebitNoteDetailView extends StatefulWidget {
   final String noteId;
   final bool isCredit;
@@ -119,6 +121,19 @@ class _CreditDebitNoteDetailViewState extends State<CreditDebitNoteDetailView> {
       appBar: AppBar(
         title: Text(number ?? 'Note Details'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.share_outlined),
+            onPressed: () {
+              PrintShareHelper.showShareSheet(
+                context,
+                docLabel: widget.isCredit ? 'Credit Note' : 'Debit Note',
+                docNumber: number ?? 'N/A',
+                docType: widget.isCredit ? 'invoices/credit-notes' : 'invoices/debit-notes',
+                docId: widget.noteId,
+              );
+            },
+            tooltip: 'Share / Export',
+          ),
           if (status == 'DRAFT')
             IconButton(
               icon: const Icon(Icons.edit_outlined),

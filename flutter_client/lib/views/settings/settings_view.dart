@@ -40,6 +40,8 @@ class _SettingsViewState extends State<SettingsView> {
     super.dispose();
   }
 
+  String _selectedTemplate = 'professional';
+
   void _showEditDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
     _legalNameCtrl.text = company['legal_name'] ?? '';
     _tradeNameCtrl.text = company['trade_name'] ?? '';
@@ -47,66 +49,89 @@ class _SettingsViewState extends State<SettingsView> {
     _panCtrl.text = company['pan'] ?? '';
     _stateCodeCtrl.text = settings['origin_state_code'] ?? '';
 
+    final extraSettings = settings['extra_settings'] as Map<String, dynamic>? ?? {};
+    _selectedTemplate = extraSettings['pdf_template'] ?? 'professional';
+
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Company Settings'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _legalNameCtrl,
-                decoration: const InputDecoration(labelText: 'Legal Name *'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _tradeNameCtrl,
-                decoration: const InputDecoration(labelText: 'Trade Name'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _gstinCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'GSTIN',
-                  hintText: 'e.g. 27AAPFU0939F1ZV',
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Edit Company Settings'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _legalNameCtrl,
+                  decoration: const InputDecoration(labelText: 'Legal Name *'),
                 ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _panCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'PAN',
-                  hintText: 'e.g. AAPFU0939F',
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _tradeNameCtrl,
+                  decoration: const InputDecoration(labelText: 'Trade Name'),
                 ),
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _stateCodeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Origin State Code',
-                  hintText: 'e.g. 27 for Maharashtra',
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _gstinCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'GSTIN',
+                    hintText: 'e.g. 27AAPFU0939F1ZV',
+                  ),
+                  textCapitalization: TextCapitalization.characters,
                 ),
-                keyboardType: TextInputType.number,
-              ),
-            ],
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _panCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'PAN',
+                    hintText: 'e.g. AAPFU0939F',
+                  ),
+                  textCapitalization: TextCapitalization.characters,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _stateCodeCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Origin State Code',
+                    hintText: 'e.g. 27 for Maharashtra',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  value: _selectedTemplate,
+                  decoration: const InputDecoration(
+                    labelText: 'Default PDF Template',
+                    prefixIcon: Icon(Icons.picture_as_pdf_outlined, size: 18),
+                  ),
+                  items: const [
+                    DropdownMenuItem(value: 'professional', child: Text('Professional (Navy)')),
+                    DropdownMenuItem(value: 'modern', child: Text('Modern (Indigo)')),
+                    DropdownMenuItem(value: 'thermal', child: Text('Thermal / POS')),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      setDialogState(() => _selectedTemplate = v);
+                    }
+                  },
+                ),
+              ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _saveSettings();
+              },
+              child: const Text('Save'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _saveSettings();
-            },
-            child: const Text('Save'),
-          ),
-        ],
       ),
     );
   }
@@ -119,12 +144,20 @@ class _SettingsViewState extends State<SettingsView> {
       'pan': _panCtrl.text.isNotEmpty ? _panCtrl.text : null,
     };
 
-    final settingsPayload = <String, dynamic>{};
+    final provider = context.read<SettingsProvider>();
+    final extraSettings = provider.settings['extra_settings'] as Map<String, dynamic>? ?? {};
+    
+    final settingsPayload = <String, dynamic>{
+      'extra_settings': {
+        ...extraSettings,
+        'pdf_template': _selectedTemplate,
+      }
+    };
     if (_stateCodeCtrl.text.isNotEmpty) {
       settingsPayload['origin_state_code'] = _stateCodeCtrl.text;
     }
 
-    final success = await context.read<SettingsProvider>().saveSettings(
+    final success = await provider.saveSettings(
       companyPayload: companyPayload,
       settingsPayload: settingsPayload,
     );
@@ -174,6 +207,8 @@ class _SettingsViewState extends State<SettingsView> {
     final currency = settings['currency'] ?? 'INR';
     final gstEnabled = settings['gst_enabled'] == true;
     final stateCode = settings['origin_state_code'] ?? 'Not configured';
+    final extraSettings = settings['extra_settings'] as Map<String, dynamic>? ?? {};
+    final pdfTemplate = extraSettings['pdf_template'] ?? 'professional';
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
@@ -241,6 +276,11 @@ class _SettingsViewState extends State<SettingsView> {
                   Icons.calendar_month_outlined,
                   'Financial Year',
                   DateTime.now().month >= 4 ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}' : '${(DateTime.now().year - 1)}-${DateTime.now().year.toString().substring(2)}',
+                ),
+                _settingRow(
+                  Icons.picture_as_pdf_outlined,
+                  'PDF Template Style',
+                  pdfTemplate.toString().toUpperCase(),
                 ),
               ],
             ),

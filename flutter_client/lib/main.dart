@@ -8,6 +8,7 @@ import 'package:flutter_client/providers/product_provider.dart';
 import 'package:flutter_client/providers/invoice_provider.dart';
 import 'package:flutter_client/providers/accounting_provider.dart';
 import 'package:flutter_client/providers/document_provider.dart';
+import 'package:flutter_client/providers/expense_provider.dart';
 import 'package:flutter_client/providers/payment_provider.dart';
 import 'package:flutter_client/providers/bill_provider.dart';
 import 'package:flutter_client/providers/dashboard_provider.dart';
@@ -43,6 +44,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => BillProvider()),
         ChangeNotifierProvider(create: (_) => AccountingProvider()),
         ChangeNotifierProvider(create: (_) => DocumentProvider()),
+        ChangeNotifierProvider(create: (_) => ExpenseProvider()),
         ChangeNotifierProvider(create: (_) => PaymentProvider()),
         ChangeNotifierProvider(create: (_) => BankingProfileProvider()),
         ChangeNotifierProvider(create: (_) => EwayBillProvider()),

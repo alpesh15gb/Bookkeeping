@@ -5,6 +5,8 @@ import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/estimates/estimate_form_view.dart';
 
+import 'package:flutter_client/core/print_share_helper.dart';
+
 class EstimateDetailView extends StatefulWidget {
   final String estimateId;
 
@@ -44,6 +46,19 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
         title: Text(_estimate?['proforma_number'] ?? 'Estimate Detail'),
         actions: [
           if (_estimate != null) ...[
+            IconButton(
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () {
+                PrintShareHelper.showShareSheet(
+                  context,
+                  docLabel: 'Estimate',
+                  docNumber: _estimate!['proforma_number'] ?? 'N/A',
+                  docType: 'proforma-invoices',
+                  docId: widget.estimateId,
+                );
+              },
+              tooltip: 'Share / Export',
+            ),
             if (status == 'DRAFT')
               IconButton(
                 icon: const Icon(Icons.edit_outlined),

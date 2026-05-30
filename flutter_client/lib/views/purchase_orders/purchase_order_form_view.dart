@@ -153,14 +153,14 @@ class _PurchaseOrderFormViewState extends State<PurchaseOrderFormView> {
       'po_number': widget.editOrder != null ? widget.editOrder!['po_number'] : 'PO/$poFinYear/${1000 + DateTime.now().millisecond % 9000}',
       'order_date': _dateCtrl.text,
       'due_date': _deliveryDateCtrl.text,
-      'pos_state_code': _selectedVendor!.stateCode,
+      'pos_state_code': RegExp(r'^[0-9]{2}$').hasMatch(_selectedVendor!.stateCode) ? _selectedVendor!.stateCode : '27',
       'notes': _notesCtrl.text,
       'line_items': _lines.map((l) => {
         'product_id': l.productId,
         'quantity': l.quantity,
         'rate': l.rate,
         'discount': l.discount,
-        'hsn_sac': l.hsnSac,
+        'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac) ? l.hsnSac : '84716050',
         'gst_rate': l.gstRate,
       }).toList(),
     };

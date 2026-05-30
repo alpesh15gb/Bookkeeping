@@ -6,6 +6,8 @@ import 'package:flutter_client/models/invoice.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 
+import 'package:flutter_client/core/print_share_helper.dart';
+
 class InvoiceDetailView extends StatefulWidget {
   final String invoiceId;
 
@@ -43,6 +45,19 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
         title: Text(_invoice?.invoiceNumber ?? 'Invoice Detail'),
         actions: [
           if (_invoice != null) ...[
+            IconButton(
+              icon: const Icon(Icons.share_outlined),
+              onPressed: () {
+                PrintShareHelper.showShareSheet(
+                  context,
+                  docLabel: 'Invoice',
+                  docNumber: _invoice!.invoiceNumber,
+                  docType: 'invoices',
+                  docId: _invoice!.id,
+                );
+              },
+              tooltip: 'Share / Export',
+            ),
             IconButton(
               icon: const Icon(Icons.edit_outlined),
               onPressed: () {

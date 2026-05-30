@@ -193,13 +193,13 @@ class _EstimateFormViewState extends State<EstimateFormView> {
         'proforma_number': widget.editEstimate != null ? (widget.editEstimate!['proforma_number'] ?? 'EST') : 'EST',
         'issue_date': _dateCtrl.text,
         'due_date': _expiryCtrl.text,
-        'pos_state_code': _selectedCustomer!.stateCode,
+        'pos_state_code': RegExp(r'^[0-9]{2}$').hasMatch(_selectedCustomer!.stateCode) ? _selectedCustomer!.stateCode : '27',
         'line_items': _lines.map((l) => {
           'product_id': l.productId,
           'quantity': l.quantity,
           'rate': l.rate,
           'discount': l.discount,
-          'hsn_sac': l.hsnSac,
+          'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac) ? l.hsnSac : '84716050',
           'gst_rate': l.gstRate,
         }).toList(),
       };
@@ -286,14 +286,14 @@ class _EstimateFormViewState extends State<EstimateFormView> {
       'proforma_number': widget.editEstimate != null ? widget.editEstimate!['proforma_number'] : 'EST-${DateTime.now().millisecondsSinceEpoch}',
       'issue_date': _dateCtrl.text,
       'due_date': _expiryCtrl.text,
-      'pos_state_code': _selectedCustomer!.stateCode,
+      'pos_state_code': RegExp(r'^[0-9]{2}$').hasMatch(_selectedCustomer!.stateCode) ? _selectedCustomer!.stateCode : '27',
       'notes': _notesCtrl.text.trim(),
       'line_items': _lines.map((l) => {
         'product_id': l.productId,
         'quantity': l.quantity,
         'rate': l.rate,
         'discount': l.discount,
-        'hsn_sac': l.hsnSac,
+        'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac) ? l.hsnSac : '84716050',
         'gst_rate': l.gstRate,
         if (l.descCtrl.text.trim().isNotEmpty)
           'description': l.descCtrl.text.trim(),

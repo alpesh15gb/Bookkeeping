@@ -1568,6 +1568,11 @@ def print_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found.")
 
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
     items = []
     for line in invoice.lines:
         product = line.product
@@ -1591,12 +1596,128 @@ def print_invoice(
         igst=invoice.igst_amount,
         round_off=invoice.round_off,
         total=invoice.total,
+        template=template,
+        doc_type="INVOICE",
     )
 
     return StreamingResponse(
         BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=Invoice_{invoice.invoice_number}.pdf"}
+    )
+
+
+@router.get("/credit-notes/{id}/print")
+def print_credit_note(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    cn = db.query(CreditNote).filter(
+        CreditNote.id == id,
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.deleted_at == None
+    ).first()
+    if not cn:
+        raise HTTPException(status_code=404, detail="Credit Note not found.")
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
+    items = []
+    for line in cn.lines:
+        product = line.product
+        items.append({
+            'description': product.name if product else line.hsn_sac,
+            'quantity': float(line.quantity),
+            'rate': float(line.rate),
+            'total': float(line.total),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=cn.credit_note_number,
+        issue_date=cn.issue_date,
+        due_date=cn.issue_date,
+        customer_name=cn.invoice.contact.name if (cn.invoice and cn.invoice.contact) else "N/A",
+        customer_gstin=cn.invoice.contact.gstin if (cn.invoice and cn.invoice.contact) else None,
+        items=items,
+        subtotal=cn.subtotal,
+        cgst=cn.cgst_amount,
+        sgst=cn.sgst_amount,
+        igst=cn.igst_amount,
+        round_off=cn.round_off,
+        total=cn.total,
+        template=template,
+        doc_type="CREDIT NOTE",
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=CreditNote_{cn.credit_note_number}.pdf"}
+    )
+
+
+@router.get("/debit-notes/{id}/print")
+def print_debit_note(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    dn = db.query(DebitNote).filter(
+        DebitNote.id == id,
+        DebitNote.tenant_id == tenant_id,
+        DebitNote.deleted_at == None
+    ).first()
+    if not dn:
+        raise HTTPException(status_code=404, detail="Debit Note not found.")
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
+    items = []
+    for line in dn.lines:
+        product = line.product
+        items.append({
+            'description': product.name if product else line.hsn_sac,
+            'quantity': float(line.quantity),
+            'rate': float(line.rate),
+            'total': float(line.total),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=dn.debit_note_number,
+        issue_date=dn.issue_date,
+        due_date=dn.issue_date,
+        customer_name=dn.invoice.contact.name if (dn.invoice and dn.invoice.contact) else "N/A",
+        customer_gstin=dn.invoice.contact.gstin if (dn.invoice and dn.invoice.contact) else None,
+        items=items,
+        subtotal=dn.subtotal,
+        cgst=dn.cgst_amount,
+        sgst=dn.sgst_amount,
+        igst=dn.igst_amount,
+        round_off=dn.round_off,
+        total=dn.total,
+        template=template,
+        doc_type="DEBIT NOTE",
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=DebitNote_{dn.debit_note_number}.pdf"}
     )
 
 

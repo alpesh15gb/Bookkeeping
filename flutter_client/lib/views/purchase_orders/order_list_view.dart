@@ -5,6 +5,7 @@ import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/purchase_orders/purchase_order_form_view.dart';
+import 'package:flutter_client/core/print_share_helper.dart';
 
 class OrderListView extends StatefulWidget {
   const OrderListView({super.key});
@@ -216,6 +217,20 @@ class _OrderListViewState extends State<OrderListView> with SingleTickerProvider
                   Text('₹${double.parse((order['total'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numericLarge),
                   Row(
                     children: [
+                      IconButton(
+                        icon: const Icon(Icons.share_outlined, size: 16),
+                        onPressed: () {
+                          PrintShareHelper.showShareSheet(
+                            context,
+                            docLabel: type == 'PO' ? 'Purchase Order' : 'Sales Order',
+                            docNumber: numVal?.toString() ?? 'N/A',
+                            docType: type == 'PO' ? 'purchase-orders' : 'sales-orders',
+                            docId: order['id'],
+                          );
+                        },
+                        tooltip: 'Share / Print',
+                      ),
+                      const SizedBox(width: 4),
                       if (order['status'] == 'DRAFT') ...[
                         OutlinedButton.icon(
                           onPressed: () => _showPOForm(order: order, type: type),
