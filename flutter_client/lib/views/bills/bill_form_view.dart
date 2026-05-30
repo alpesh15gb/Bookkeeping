@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
@@ -332,101 +332,29 @@ class _BillFormViewState extends State<BillFormView> {
   /// Show a bottom sheet letting the user choose camera or gallery,
   /// then upload the photo/PDF to the scan endpoint and pre-fill the form.
   Future<void> _scanBill() async {
-    final source = await showModalBottomSheet<ImageSource>(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => Container(
-        decoration: const BoxDecoration(
-          color: AppColors.bgSurface,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40, height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36, height: 36,
-                      decoration: BoxDecoration(
-                        color: AppColors.brandNavy.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.document_scanner_outlined,
-                          color: AppColors.brandNavy, size: 20),
-                    ),
-                    const SizedBox(width: 12),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Scan Bill', style: AppTextStyles.h3),
-                        Text('Auto-fill from a photo or PDF',
-                            style: AppTextStyles.caption),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.camera_alt_outlined,
-                    color: AppColors.brandNavy),
-                title: const Text('Take a Photo', style: AppTextStyles.body),
-                subtitle: const Text('Use camera to photograph the bill',
-                    style: AppTextStyles.caption),
-                onTap: () => Navigator.pop(ctx, ImageSource.camera),
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_library_outlined,
-                    color: AppColors.brandNavy),
-                title: const Text('Choose from Gallery',
-                    style: AppTextStyles.body),
-                subtitle: const Text('Select a saved photo or PDF',
-                    style: AppTextStyles.caption),
-                onTap: () => Navigator.pop(ctx, ImageSource.gallery),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        ),
-      ),
-    );
-
-    if (source == null || !mounted) return;
-
-    // Pick the image
-    final picker = ImagePicker();
-    XFile? picked;
-    try {
-      picked = await picker.pickImage(
-        source: source,
-        imageQuality: 85,
-        maxWidth: 2400,
-        maxHeight: 3400,
-      );
-    } catch (e) {
-      if (mounted) _showError('Could not access camera/gallery: $e');
-      return;
-    }
-
-    if (picked == null || !mounted) return;
-
     setState(() => _isScanning = true);
-
     try {
-      final bytes = await picked.readAsBytes();
+      // Pick image or PDF using file_picker (already installed)
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'tiff', 'bmp'],
+        withData: true,
+        dialogTitle: 'Select Bill Image or PDF',
+      );
+
+      if (result == null || result.files.isEmpty || !mounted) {
+        setState(() => _isScanning = false);
+        return;
+      }
+
+      final picked = result.files.first;
+      final bytes = picked.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        _showError('Could not read file. Please try again.');
+        setState(() => _isScanning = false);
+        return;
+      }
+
       final uri = Uri.parse('${ApiClient.baseUrl}/bills/scan-image');
       final request = http.MultipartRequest('POST', uri);
 
