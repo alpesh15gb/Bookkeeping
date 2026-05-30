@@ -392,3 +392,156 @@ def update_series(
     db.commit()
     db.refresh(series)
     return series
+
+
+# ── Purge Company Data endpoints ──────────────────────────────────────────────
+import secrets
+import smtplib
+from email.mime.text import MIMEText
+import logging
+from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+_PURGE_OTP_CACHE = {}
+
+
+class VerifyPurgeRequest(BaseModel):
+    otp: str
+
+
+@router.post("/purge/request", status_code=status.HTTP_200_OK)
+def request_purge_otp(
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
+):
+    """Generates a 6-digit OTP to authorize purging of the company data, and emails it to the owner."""
+    otp = f"{secrets.randbelow(900000) + 100000}"
+    
+    import redis
+    redis_client = None
+    try:
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1)
+        redis_client.ping()
+    except Exception:
+        pass
+
+    cache_key = f"purge_otp:{tenant_id}:{current_user.id}"
+    if redis_client:
+        redis_client.setex(cache_key, 300, otp)
+    else:
+        _PURGE_OTP_CACHE[cache_key] = (otp, datetime.now(timezone.utc))
+
+    msg = MIMEText(
+        f"Hello {current_user.full_name or 'User'},\n\n"
+        f"You have requested to purge all data for your company context (Tenant ID: {tenant_id}).\n\n"
+        f"Your verification OTP code is: {otp}\n\n"
+        f"This OTP is valid for 5 minutes. Enter this code in the settings panel to confirm the purge.\n"
+        f"WARNING: Purging data will permanently delete all invoices, bills, payments, contacts, products, and expenses. This action cannot be undone.\n\n"
+        f"Regards,\n"
+        f"Apex Books Team"
+    )
+    msg["Subject"] = "Verify Company Data Purge - Apex Books"
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = current_user.email
+
+    try:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+            if settings.SMTP_USER and settings.SMTP_PASSWORD:
+                server.starttls()
+                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+            server.send_message(msg)
+    except Exception as e:
+        logger.error(f"Failed to send purge OTP email to {current_user.email}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send OTP email. Please ensure SMTP configuration is correct."
+        )
+
+    return {"detail": "Verification OTP sent to your email address."}
+
+
+@router.post("/purge/verify", status_code=status.HTTP_200_OK)
+def verify_and_execute_purge(
+    payload: VerifyPurgeRequest,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
+):
+    """Verifies the OTP and purges all transactional and master data for the tenant."""
+    import redis
+    redis_client = None
+    try:
+        redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1)
+        redis_client.ping()
+    except Exception:
+        pass
+
+    cache_key = f"purge_otp:{tenant_id}:{current_user.id}"
+    valid_otp = None
+
+    if redis_client:
+        valid_otp = redis_client.get(cache_key)
+        if valid_otp:
+            redis_client.delete(cache_key)
+    else:
+        cached = _PURGE_OTP_CACHE.get(cache_key)
+        if cached:
+            otp_val, created_at = cached
+            if (datetime.now(timezone.utc) - created_at).total_seconds() <= 300:
+                valid_otp = otp_val
+            del _PURGE_OTP_CACHE[cache_key]
+
+    if not valid_otp or valid_otp != payload.otp.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification OTP."
+        )
+
+    from src.infrastructure.database.models import (
+        Invoice, Bill, ProformaInvoice, Payment, BillPayment, Expense,
+        JournalEntry, InventoryAdjustment, CreditNote, DebitNote,
+        DeliveryChallan, SalesOrder, PurchaseOrder, EWayBill,
+        BankReconciliation, Contact, Product, AuditLog
+    )
+
+    try:
+        db.query(Invoice).filter(Invoice.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(Bill).filter(Bill.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(ProformaInvoice).filter(ProformaInvoice.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(Payment).filter(Payment.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(BillPayment).filter(BillPayment.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(Expense).filter(Expense.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(JournalEntry).filter(JournalEntry.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(InventoryAdjustment).filter(InventoryAdjustment.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(CreditNote).filter(CreditNote.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(DebitNote).filter(DebitNote.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(DeliveryChallan).filter(DeliveryChallan.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(SalesOrder).filter(SalesOrder.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(PurchaseOrder).filter(PurchaseOrder.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(EWayBill).filter(EWayBill.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(BankReconciliation).filter(BankReconciliation.tenant_id == tenant_id).delete(synchronize_session=False)
+        
+        db.query(Contact).filter(Contact.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(Product).filter(Product.tenant_id == tenant_id).delete(synchronize_session=False)
+        db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id).delete(synchronize_session=False)
+
+        log = AuditLog(
+            action="tenant.purge",
+            actor_id=current_user.id,
+            tenant_id=tenant_id,
+            entity_type="Tenant",
+            after_state={"purged_by": current_user.email, "timestamp": datetime.now(timezone.utc).isoformat()},
+        )
+        db.add(log)
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to purge company data: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"An error occurred while purging company data: {str(e)}"
+        )
+
+    return {"detail": "Company data purged successfully. All transactions, contacts, and products have been deleted."}

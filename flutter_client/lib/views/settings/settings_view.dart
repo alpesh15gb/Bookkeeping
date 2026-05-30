@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
+import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
@@ -500,6 +502,13 @@ class _SettingsViewState extends State<SettingsView> {
                       icon: const Icon(Icons.lock_outlined, size: 16),
                       label: const Text('Change Password'),
                     ),
+                    const SizedBox(height: 12),
+                    ActionButton(
+                      label: 'Purge Company Data',
+                      tier: ActionTier.dangerous,
+                      icon: Icons.delete_forever_outlined,
+                      onPressed: _requestPurge,
+                    ),
                   ],
                 ),
           const SizedBox(height: 32),
@@ -608,6 +617,172 @@ class _SettingsViewState extends State<SettingsView> {
           ),
         ],
       ),
+    );
+  }
+
+  Future<void> _requestPurge() async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.error),
+            SizedBox(width: 8),
+            Text('Purge Company Data'),
+          ],
+        ),
+        content: const Text(
+          'WARNING: This will permanently delete all invoices, bills, estimates, '
+          'payments, contacts, products, and expenses for this company context.\n\n'
+          'This action CANNOT be undone. Are you sure you want to proceed and receive a verification OTP on your email?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              _sendPurgeOtpRequest();
+            },
+            child: const Text('Yes, Request OTP'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendPurgeOtpRequest() async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Requesting verification OTP...')),
+    );
+    try {
+      final response = await http.post(
+        Uri.parse('${ApiClient.baseUrl}/purge/request'),
+        headers: {
+          if (ApiClient.accessToken != null)
+            'Authorization': 'Bearer ${ApiClient.accessToken}',
+          if (ApiClient.tenantId != null)
+            'X-Tenant-ID': ApiClient.tenantId!,
+        },
+      );
+
+      if (response.statusCode == 200) {
+        _showOtpVerifyDialog();
+      } else {
+        String msg = 'Failed to request OTP';
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map) msg = body['detail']?.toString() ?? msg;
+        } catch (_) {}
+        _showError(msg);
+      }
+    } catch (e) {
+      _showError('Connection error: $e');
+    }
+  }
+
+  Future<void> _showOtpVerifyDialog() {
+    final otpCtrl = TextEditingController();
+    bool verifying = false;
+
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Enter Verification OTP'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('A 6-digit OTP code has been sent to your registered email address.'),
+              const SizedBox(height: 16),
+              TextField(
+                controller: otpCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'OTP Code',
+                  hintText: 'e.g. 123456',
+                ),
+                keyboardType: TextInputType.number,
+                maxLength: 6,
+              ),
+              if (verifying) ...[
+                const SizedBox(height: 12),
+                const CircularProgressIndicator(),
+              ]
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: verifying ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: verifying
+                  ? null
+                  : () async {
+                      final otp = otpCtrl.text.trim();
+                      if (otp.length != 6) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          const SnackBar(content: Text('OTP must be 6 digits')),
+                        );
+                        return;
+                      }
+
+                      setDialogState(() => verifying = true);
+                      try {
+                        final res = await http.post(
+                          Uri.parse('${ApiClient.baseUrl}/purge/verify'),
+                          headers: {
+                            'Content-Type': 'application/json',
+                            if (ApiClient.accessToken != null)
+                              'Authorization': 'Bearer ${ApiClient.accessToken}',
+                            if (ApiClient.tenantId != null)
+                              'X-Tenant-ID': ApiClient.tenantId!,
+                          },
+                          body: jsonEncode({'otp': otp}),
+                        );
+
+                        if (res.statusCode == 200) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Company data purged successfully.'),
+                              backgroundColor: AppColors.success,
+                            ),
+                          );
+                          context.read<SettingsProvider>().fetchAllSettings();
+                        } else {
+                          String msg = 'Purge verification failed';
+                          try {
+                            final body = jsonDecode(res.body);
+                            if (body is Map) msg = body['detail']?.toString() ?? msg;
+                          } catch (_) {}
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+                          );
+                        }
+                      } catch (e) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+                        );
+                      } finally {
+                        setDialogState(() => verifying = false);
+                      }
+                    },
+              child: const Text('Purge Data'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: AppColors.error),
     );
   }
 }
