@@ -249,10 +249,10 @@ def generate_invoice_pdf(
         elements.append(Spacer(1, 2*mm))
         
         total_data = [
-            [Paragraph("Subtotal:", normal_style), Paragraph(f"₹{subtotal:.2f}", right_style)],
-            [Paragraph("CGST:", normal_style), Paragraph(f"₹{cgst:.2f}", right_style)],
-            [Paragraph("SGST:", normal_style), Paragraph(f"₹{sgst:.2f}", right_style)],
-            [Paragraph("Total:", bold_style), Paragraph(f"₹{total:.2f}", bold_right)],
+            [Paragraph("Subtotal:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
+            [Paragraph("CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)],
+            [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
+            [Paragraph("Total:", bold_style), Paragraph(f"Rs. {total:.2f}", bold_right)],
         ]
         t_total = Table(total_data, colWidths=[40*mm, 34*mm])
         t_total.setStyle(TableStyle([
@@ -353,12 +353,12 @@ def generate_invoice_pdf(
         bank_details_str = f"<b>Company's Bank Details:</b><br/>Bank: {bank_name or 'N/A'}<br/>A/c No: {bank_account_no or 'N/A'}<br/>IFSC: {bank_ifsc or 'N/A'}<br/>Branch: {bank_branch or 'N/A'}"
         
         totals_col = [
-            [Paragraph("Subtotal:", normal_style), Paragraph(f"₹{subtotal:.2f}", right_style)],
-            [Paragraph("CGST:", normal_style), Paragraph(f"₹{cgst:.2f}", right_style)],
-            [Paragraph("SGST:", normal_style), Paragraph(f"₹{sgst:.2f}", right_style)],
-            [Paragraph("IGST:", normal_style), Paragraph(f"₹{igst:.2f}", right_style)],
-            [Paragraph("Round Off:", normal_style), Paragraph(f"₹{round_off:.2f}", right_style)],
-            [Paragraph("<b>TOTAL:</b>", bold_style), Paragraph(f"<b>₹{total:.2f}</b>", bold_right)],
+            [Paragraph("Subtotal:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
+            [Paragraph("CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)],
+            [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
+            [Paragraph("IGST:", normal_style), Paragraph(f"Rs. {igst:.2f}", right_style)],
+            [Paragraph("Round Off:", normal_style), Paragraph(f"Rs. {round_off:.2f}", right_style)],
+            [Paragraph("<b>TOTAL:</b>", bold_style), Paragraph(f"<b>Rs. {total:.2f}</b>", bold_right)],
         ]
         totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[
             ('PADDING', (0,0), (-1,-1), 2),
@@ -449,10 +449,10 @@ def generate_invoice_pdf(
         # Bank, QR and Totals
         bank_details_str = f"<b>Bank Details:</b><br/>Bank: {bank_name or 'N/A'}<br/>A/c No: {bank_account_no or 'N/A'}<br/>IFSC: {bank_ifsc or 'N/A'}"
         totals_col = [
-            [Paragraph("Subtotal:", normal_style), Paragraph(f"₹{subtotal:.2f}", right_style)],
-            [Paragraph("CGST:", normal_style), Paragraph(f"₹{cgst:.2f}", right_style)],
-            [Paragraph("SGST:", normal_style), Paragraph(f"₹{sgst:.2f}", right_style)],
-            [Paragraph("Total Amount:", bold_style), Paragraph(f"₹{total:.2f}", bold_right)],
+            [Paragraph("Subtotal:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
+            [Paragraph("CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)],
+            [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
+            [Paragraph("Total Amount:", bold_style), Paragraph(f"Rs. {total:.2f}", bold_right)],
         ]
         totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[
             ('PADDING', (0,0), (-1,-1), 2),

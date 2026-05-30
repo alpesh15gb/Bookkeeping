@@ -309,6 +309,8 @@ def update_settings(
         setting.origin_state_code = payload.origin_state_code
     if payload.extra_settings is not None:
         setting.extra_settings = payload.extra_settings
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(setting, "extra_settings")
 
     db.commit()
     db.refresh(setting)
