@@ -45,6 +45,7 @@ services:
       - SECRET_KEY
       - ALLOWED_ORIGINS=https://apexbooks.in,https://api.apexbooks.in,tauri://localhost,https://tauri.localhost,tauri://com.apexbooks.desktop
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - EMAIL_FROM=${EMAIL_FROM:-noreply@apexbooks.in}
@@ -75,6 +76,11 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - EMAIL_FROM=${EMAIL_FROM:-noreply@apexbooks.in}
     depends_on:
       db:
         condition: service_healthy
