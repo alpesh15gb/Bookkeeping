@@ -659,6 +659,8 @@ def print_proforma_invoice(
         total=pi.total,
         template=template,
         doc_type="ESTIMATE",
+        tenant_id=tenant_id,
+        db=db,
     )
 
     return StreamingResponse(

@@ -21,6 +21,15 @@ class _SettingsViewState extends State<SettingsView> {
   final _gstinCtrl = TextEditingController();
   final _panCtrl = TextEditingController();
   final _stateCodeCtrl = TextEditingController();
+  final _addressCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
+  final _websiteCtrl = TextEditingController();
+  final _bankNameCtrl = TextEditingController();
+  final _bankAccCtrl = TextEditingController();
+  final _bankIfscCtrl = TextEditingController();
+  final _bankBranchCtrl = TextEditingController();
+  final _termsCtrl = TextEditingController();
 
   @override
   void initState() {
@@ -37,6 +46,15 @@ class _SettingsViewState extends State<SettingsView> {
     _gstinCtrl.dispose();
     _panCtrl.dispose();
     _stateCodeCtrl.dispose();
+    _addressCtrl.dispose();
+    _phoneCtrl.dispose();
+    _emailCtrl.dispose();
+    _websiteCtrl.dispose();
+    _bankNameCtrl.dispose();
+    _bankAccCtrl.dispose();
+    _bankIfscCtrl.dispose();
+    _bankBranchCtrl.dispose();
+    _termsCtrl.dispose();
     super.dispose();
   }
 
@@ -51,6 +69,15 @@ class _SettingsViewState extends State<SettingsView> {
 
     final extraSettings = settings['extra_settings'] as Map<String, dynamic>? ?? {};
     _selectedTemplate = extraSettings['pdf_template'] ?? 'professional';
+    _addressCtrl.text = extraSettings['company_address'] ?? '';
+    _phoneCtrl.text = extraSettings['company_phone'] ?? '';
+    _emailCtrl.text = extraSettings['company_email'] ?? '';
+    _websiteCtrl.text = extraSettings['company_website'] ?? '';
+    _bankNameCtrl.text = extraSettings['bank_name'] ?? '';
+    _bankAccCtrl.text = extraSettings['bank_account_no'] ?? '';
+    _bankIfscCtrl.text = extraSettings['bank_ifsc'] ?? '';
+    _bankBranchCtrl.text = extraSettings['bank_branch'] ?? '';
+    _termsCtrl.text = extraSettings['terms'] ?? '';
 
     showDialog(
       context: context,
@@ -96,6 +123,78 @@ class _SettingsViewState extends State<SettingsView> {
                     hintText: 'e.g. 27 for Maharashtra',
                   ),
                   keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _addressCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Address',
+                    hintText: 'Company physical address',
+                  ),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _phoneCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Contact Phone',
+                    hintText: 'e.g. 8521794522',
+                  ),
+                  keyboardType: TextInputType.phone,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _emailCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Contact Email',
+                    hintText: 'e.g. info@company.com',
+                  ),
+                  keyboardType: TextInputType.emailAddress,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _websiteCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Website',
+                    hintText: 'e.g. www.company.com',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Bank Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+                TextField(
+                  controller: _bankNameCtrl,
+                  decoration: const InputDecoration(labelText: 'Bank Name'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _bankAccCtrl,
+                  decoration: const InputDecoration(labelText: 'Account Number'),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _bankIfscCtrl,
+                  decoration: const InputDecoration(labelText: 'IFSC Code'),
+                  textCapitalization: TextCapitalization.characters,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _bankBranchCtrl,
+                  decoration: const InputDecoration(labelText: 'Branch Name'),
+                ),
+                const SizedBox(height: 12),
+                const Divider(),
+                TextField(
+                  controller: _termsCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Terms & Conditions',
+                    hintText: 'Default terms for invoices',
+                  ),
+                  maxLines: 3,
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -146,11 +245,20 @@ class _SettingsViewState extends State<SettingsView> {
 
     final provider = context.read<SettingsProvider>();
     final extraSettings = provider.settings['extra_settings'] as Map<String, dynamic>? ?? {};
-    
+
     final settingsPayload = <String, dynamic>{
       'extra_settings': {
         ...extraSettings,
         'pdf_template': _selectedTemplate,
+        'company_address': _addressCtrl.text,
+        'company_phone': _phoneCtrl.text,
+        'company_email': _emailCtrl.text,
+        'company_website': _websiteCtrl.text,
+        'bank_name': _bankNameCtrl.text,
+        'bank_account_no': _bankAccCtrl.text,
+        'bank_ifsc': _bankIfscCtrl.text,
+        'bank_branch': _bankBranchCtrl.text,
+        'terms': _termsCtrl.text,
       }
     };
     if (_stateCodeCtrl.text.isNotEmpty) {

@@ -484,6 +484,8 @@ def print_sales_order(
         total=so.total,
         template=template,
         doc_type="SALES ORDER",
+        tenant_id=tenant_id,
+        db=db,
     )
 
     return StreamingResponse(

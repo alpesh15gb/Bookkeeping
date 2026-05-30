@@ -1598,6 +1598,8 @@ def print_invoice(
         total=invoice.total,
         template=template,
         doc_type="INVOICE",
+        tenant_id=tenant_id,
+        db=db,
     )
 
     return StreamingResponse(
@@ -1655,6 +1657,8 @@ def print_credit_note(
         total=cn.total,
         template=template,
         doc_type="CREDIT NOTE",
+        tenant_id=tenant_id,
+        db=db,
     )
 
     return StreamingResponse(
@@ -1712,6 +1716,8 @@ def print_debit_note(
         total=dn.total,
         template=template,
         doc_type="DEBIT NOTE",
+        tenant_id=tenant_id,
+        db=db,
     )
 
     return StreamingResponse(

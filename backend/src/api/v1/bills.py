@@ -866,6 +866,8 @@ def print_bill(
         total=bill.total,
         template=template,
         doc_type="BILL",
+        tenant_id=tenant_id,
+        db=db,
     )
 
     return StreamingResponse(

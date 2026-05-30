@@ -484,6 +484,8 @@ def print_purchase_order(
         total=po.total,
         template=template,
         doc_type="PURCHASE ORDER",
+        tenant_id=tenant_id,
+        db=db,
     )
 
     return StreamingResponse(
