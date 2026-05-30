@@ -508,6 +508,8 @@ def import_vyapar_backup(
 
                 # Determine payment status
                 amount_paid = Decimal(str(round(cash_amt, 2)))
+                if amount_paid > total_val:
+                    amount_paid = total_val
                 if amount_paid >= total_val:
                     inv_status = "PAID"
                 elif amount_paid > 0:
@@ -636,6 +638,8 @@ def import_vyapar_backup(
                     ))
 
                 amount_paid = Decimal(str(round(cash_amt, 2)))
+                if amount_paid > total_val:
+                    amount_paid = total_val
                 if amount_paid >= total_val:
                     bill_status = "PAID"
                 elif amount_paid > 0:
