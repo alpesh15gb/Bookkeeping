@@ -313,7 +313,7 @@ def import_vyapar_backup(
                 .filter(
                     ExpenseCategory.tenant_id == tenant_id,
                     ExpenseCategory.name == cat_name,
-                    ExpenseCategory.deleted_at == None,  # noqa: E711
+                    ExpenseCategory.is_active == True,  # noqa: E712
                 )
                 .first()
             )
