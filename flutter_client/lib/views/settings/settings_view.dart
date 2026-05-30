@@ -415,16 +415,24 @@ class _SettingsViewState extends State<SettingsView> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          series['name'] ?? 'Unknown',
-                          style: const TextStyle(fontSize: 13),
+                          series['document_type'] ?? 'Unknown',
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                         ),
                       ),
                       Text(
-                        '${series['prefix'] ?? ''}{NNNN}',
+                        '${series['prefix'] ?? ''}${'0' * (series['padding_digits'] ?? 4)}${series['suffix'] ?? ''}',
                         style: AppTextStyles.caption.copyWith(
                           fontFamily: 'monospace',
                           fontSize: 11,
                         ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        icon: const Icon(Icons.edit_outlined, size: 16, color: AppColors.brandNavy),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => _showEditSeriesDialog(series),
+                        tooltip: 'Edit numbering series',
                       ),
                     ],
                   ),
@@ -495,6 +503,87 @@ class _SettingsViewState extends State<SettingsView> {
                   ],
                 ),
           const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+
+  void _showEditSeriesDialog(Map<String, dynamic> series) {
+    final prefixCtrl = TextEditingController(text: series['prefix'] ?? '');
+    final nextNumberCtrl = TextEditingController(text: (series['next_number'] ?? 1).toString());
+    final paddingCtrl = TextEditingController(text: (series['padding_digits'] ?? 4).toString());
+    final suffixCtrl = TextEditingController(text: series['suffix'] ?? '');
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit Series: ${series['document_type']}'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: prefixCtrl,
+                decoration: const InputDecoration(labelText: 'Prefix', hintText: 'e.g. INV/2026/'),
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: nextNumberCtrl,
+                decoration: const InputDecoration(labelText: 'Next Number'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: paddingCtrl,
+                decoration: const InputDecoration(labelText: 'Padding Digits (e.g. 4 for 0001)'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: suffixCtrl,
+                decoration: const InputDecoration(labelText: 'Suffix (Optional)'),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final prefix = prefixCtrl.text;
+              final nextVal = int.tryParse(nextNumberCtrl.text) ?? 1;
+              final padVal = int.tryParse(paddingCtrl.text) ?? 4;
+              final suffix = suffixCtrl.text.isNotEmpty ? suffixCtrl.text : null;
+
+              Navigator.pop(context);
+              
+              final success = await context.read<SettingsProvider>().updateNumberingSeries(
+                series['id'],
+                {
+                  'prefix': prefix,
+                  'next_number': nextVal,
+                  'padding_digits': padVal,
+                  'suffix': suffix,
+                },
+              );
+              if (mounted) {
+                if (success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Numbering series updated successfully'), backgroundColor: AppColors.success),
+                  );
+                } else {
+                  final err = context.read<SettingsProvider>().errorMessage ?? 'Update failed';
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(err), backgroundColor: AppColors.error),
+                  );
+                }
+              }
+            },
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
