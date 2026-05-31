@@ -10,7 +10,7 @@ When a document is cancelled:
 1. Creates reversing journal entries
 2. Sets CANCELLED status
 
-This removes the manual DRAFT → POSTED step for all financial documents.
+This removes the manual DRAFT -> POSTED step for all financial documents.
 """
 import uuid
 from datetime import date, datetime, timezone
@@ -27,9 +27,8 @@ from src.domains.accounting.services import (
 from src.common.audit_log import set_audit_context
 
 
-# ─── Status Mapping ───────────────────────────────────────────
+# --- Status Mapping -------------------------------------------------------
 
-# Maps internal status + payment state → user-facing business status
 def get_display_status(invoice: Invoice) -> str:
     """Map Invoice internal status to visible business status."""
     if invoice.status == "CANCELLED":
@@ -97,17 +96,53 @@ def get_debit_note_display_status(dn: DebitNote) -> str:
     return dn.status
 
 
-# ─── Auto-Post Invoice ───────────────────────────────────────
+# --- Helper to resolve all standard tax/round-off accounts ---------------
+
+def _resolve_tax_accounts(resolver: AccountResolver, mode: str = "output"):
+    """Returns dict of account IDs for CGST, SGST, IGST, UTGST, Cess, RoundOff.
+    mode: 'output' for sales tax accounts, 'input' for purchase tax accounts.
+    """
+    suffix = "_output" if mode == "output" else "_input"
+    return {
+        "cgst": resolver.resolve(f"cgst{suffix}"),
+        "sgst": resolver.resolve(f"sgst{suffix}"),
+        "igst": resolver.resolve(f"igst{suffix}"),
+        "utgst": resolver.resolve(f"utgst{suffix}"),
+        "cess": resolver.resolve(f"cess{suffix}"),
+        "round_off": resolver.resolve("round_off"),
+    }
+
+
+# --- Auto-Post Invoice ----------------------------------------------------
 
 def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> JournalEntry:
-    """
-    Auto-post an invoice on creation.
-    Creates journal entry and sets status to POSTED.
-    """
+    """Auto-post an invoice on creation. Creates journal entry and sets status to POSTED."""
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    tax = _resolve_tax_accounts(resolver, "output")
+
     draft = LedgerPostingEngine.create_invoice_posting(
-        db=db,
         tenant_id=tenant_id,
-        invoice=invoice,
+        invoice_id=invoice.id,
+        invoice_number=invoice.invoice_number,
+        invoice_date=invoice.issue_date,
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=invoice.subtotal,
+        discount_total=invoice.discount_total,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=invoice.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=invoice.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=invoice.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=invoice.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=invoice.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=invoice.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -117,17 +152,36 @@ def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> Jo
     return invoice
 
 
-# ─── Auto-Post Bill ──────────────────────────────────────────
+# --- Auto-Post Bill ------------------------------------------------------
 
 def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntry:
-    """
-    Auto-post a bill on creation.
-    Creates journal entry and sets status to POSTED (displayed as "Unpaid").
-    """
+    """Auto-post a bill on creation. Creates journal entry and sets status to POSTED."""
+    resolver = AccountResolver(db, tenant_id)
+    vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
+    purchase_expense_account_id = resolver.resolve("purchases")
+    tax = _resolve_tax_accounts(resolver, "input")
+
     draft = LedgerPostingEngine.create_bill_posting(
-        db=db,
         tenant_id=tenant_id,
-        bill=bill,
+        bill_id=bill.id,
+        bill_number=bill.bill_number,
+        bill_date=bill.issue_date,
+        vendor_account_id=vendor_account_id,
+        purchase_expense_account_id=purchase_expense_account_id,
+        subtotal=bill.subtotal,
+        discount_total=bill.discount_total,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=bill.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=bill.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=bill.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=bill.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=bill.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=bill.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -137,17 +191,46 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
     return bill
 
 
-# ─── Auto-Post Expense ───────────────────────────────────────
+# --- Auto-Post Expense ---------------------------------------------------
 
 def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> JournalEntry:
-    """
-    Auto-post an expense on creation.
-    Creates journal entry and sets status to POSTED (displayed as "Paid").
-    """
+    """Auto-post an expense on creation. Creates journal entry and sets status to POSTED."""
+    from src.infrastructure.database.models import ExpenseCategory
+
+    # Category relationship may not be loaded after flush; query explicitly
+    category = db.query(ExpenseCategory).filter(
+        ExpenseCategory.id == expense.expense_category_id,
+        ExpenseCategory.tenant_id == tenant_id,
+    ).first()
+    expense_account_id = category.linked_account_id if category else None
+    if not expense_account_id:
+        resolver = AccountResolver(db, tenant_id)
+        expense_account_id = resolver.resolve("expense.misc")
+
+    resolver = AccountResolver(db, tenant_id)
+    cash_account_id = resolver.resolve("assets.cash")
+    tax = _resolve_tax_accounts(resolver, "input")
+
     draft = LedgerPostingEngine.create_expense_posting(
-        db=db,
         tenant_id=tenant_id,
-        expense=expense,
+        expense_id=expense.id,
+        expense_number=expense.expense_number,
+        expense_date=expense.expense_date,
+        expense_account_id=expense_account_id,
+        cash_account_id=cash_account_id,
+        amount=expense.amount,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=expense.cgst_amount or Decimal("0"),
+        sgst_account_id=tax["sgst"],
+        sgst_amount=expense.sgst_amount or Decimal("0"),
+        igst_account_id=tax["igst"],
+        igst_amount=expense.igst_amount or Decimal("0"),
+        utgst_account_id=tax["utgst"],
+        utgst_amount=expense.utgst_amount or Decimal("0"),
+        cess_account_id=tax["cess"],
+        cess_amount=expense.cess_amount or Decimal("0"),
+        round_off_account_id=tax["round_off"],
+        round_off_amount=expense.round_off or Decimal("0"),
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -156,17 +239,35 @@ def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> Jo
     return expense
 
 
-# ─── Auto-Post Credit Note ───────────────────────────────────
+# --- Auto-Post Credit Note -----------------------------------------------
 
 def auto_post_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote) -> JournalEntry:
-    """
-    Auto-post a credit note on creation.
-    Creates reversal journal entry and sets status to POSTED (displayed as "Open").
-    """
+    """Auto-post a credit note on creation."""
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{cn.contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    tax = _resolve_tax_accounts(resolver, "output")
+
     draft = LedgerPostingEngine.create_credit_note_posting(
-        db=db,
         tenant_id=tenant_id,
-        credit_note=cn,
+        credit_note_id=cn.id,
+        credit_note_number=cn.credit_note_number,
+        issue_date=cn.issue_date,
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=cn.subtotal,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=cn.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=cn.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=cn.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=cn.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=cn.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=cn.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -175,17 +276,35 @@ def auto_post_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote) -> 
     return cn
 
 
-# ─── Auto-Post Debit Note ────────────────────────────────────
+# --- Auto-Post Debit Note ------------------------------------------------
 
 def auto_post_debit_note(db: Session, tenant_id: uuid.UUID, dn: DebitNote) -> JournalEntry:
-    """
-    Auto-post a debit note on creation.
-    Creates journal entry and sets status to POSTED (displayed as "Open").
-    """
+    """Auto-post a debit note on creation."""
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{dn.contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    tax = _resolve_tax_accounts(resolver, "output")
+
     draft = LedgerPostingEngine.create_debit_note_posting(
-        db=db,
         tenant_id=tenant_id,
-        debit_note=dn,
+        debit_note_id=dn.id,
+        debit_note_number=dn.debit_note_number,
+        issue_date=dn.issue_date,
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=dn.subtotal,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=dn.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=dn.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=dn.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=dn.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=dn.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=dn.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -194,13 +313,10 @@ def auto_post_debit_note(db: Session, tenant_id: uuid.UUID, dn: DebitNote) -> Jo
     return dn
 
 
-# ─── Cancel Invoice ──────────────────────────────────────────
+# --- Cancel Invoice ------------------------------------------------------
 
 def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id: uuid.UUID) -> None:
-    """
-    Cancel a posted invoice.
-    Creates reversing journal entries and sets CANCELLED status.
-    """
+    """Cancel a posted invoice. Creates reversing journal entries and sets CANCELLED status."""
     if invoice.status not in ("POSTED", "PARTIALLY_PAID"):
         raise ValueError(f"Cannot cancel invoice in status {invoice.status}")
 
@@ -211,10 +327,32 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
     if allocations:
         raise ValueError("Cannot cancel invoice with existing payments. Reverse payments first.")
 
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    tax = _resolve_tax_accounts(resolver, "output")
+
     draft = LedgerPostingEngine.create_invoice_reversal_posting(
-        db=db,
         tenant_id=tenant_id,
-        invoice=invoice,
+        invoice_id=invoice.id,
+        invoice_number=invoice.invoice_number,
+        cancel_date=date.today(),
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=invoice.subtotal,
+        discount_total=invoice.discount_total,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=invoice.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=invoice.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=invoice.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=invoice.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=invoice.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=invoice.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -225,7 +363,7 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
     db.flush()
 
 
-# ─── Cancel Bill ─────────────────────────────────────────────
+# --- Cancel Bill ---------------------------------------------------------
 
 def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUID) -> None:
     """Cancel a posted bill with reversing journal entries."""
@@ -239,10 +377,32 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
     if allocations:
         raise ValueError("Cannot cancel bill with existing payments. Reverse payments first.")
 
+    resolver = AccountResolver(db, tenant_id)
+    vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
+    purchase_expense_account_id = resolver.resolve("purchases")
+    tax = _resolve_tax_accounts(resolver, "input")
+
     draft = LedgerPostingEngine.create_bill_reversal_posting(
-        db=db,
         tenant_id=tenant_id,
-        bill=bill,
+        bill_id=bill.id,
+        bill_number=bill.bill_number,
+        cancel_date=date.today(),
+        vendor_account_id=vendor_account_id,
+        purchase_expense_account_id=purchase_expense_account_id,
+        subtotal=bill.subtotal,
+        discount_total=bill.discount_total,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=bill.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=bill.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=bill.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=bill.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=bill.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=bill.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -253,17 +413,38 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
     db.flush()
 
 
-# ─── Cancel Expense ──────────────────────────────────────────
+# --- Cancel Expense ------------------------------------------------------
 
 def cancel_expense(db: Session, tenant_id: uuid.UUID, expense: Expense, user_id: uuid.UUID) -> None:
     """Cancel a posted expense with reversing journal entries."""
     if expense.status != "POSTED":
         raise ValueError(f"Cannot cancel expense in status {expense.status}")
 
+    resolver = AccountResolver(db, tenant_id)
+    expense_account_id = expense.category.linked_account_id if expense.category else resolver.resolve("expense.misc")
+    cash_account_id = resolver.resolve("assets.cash")
+    tax = _resolve_tax_accounts(resolver, "input")
+
     draft = LedgerPostingEngine.create_expense_reversal_posting(
-        db=db,
         tenant_id=tenant_id,
-        expense=expense,
+        expense_id=expense.id,
+        expense_number=expense.expense_number,
+        cancel_date=date.today(),
+        expense_account_id=expense_account_id,
+        cash_account_id=cash_account_id,
+        amount=expense.amount,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=expense.cgst_amount or Decimal("0"),
+        sgst_account_id=tax["sgst"],
+        sgst_amount=expense.sgst_amount or Decimal("0"),
+        igst_account_id=tax["igst"],
+        igst_amount=expense.igst_amount or Decimal("0"),
+        utgst_account_id=tax["utgst"],
+        utgst_amount=expense.utgst_amount or Decimal("0"),
+        cess_account_id=tax["cess"],
+        cess_amount=expense.cess_amount or Decimal("0"),
+        round_off_account_id=tax["round_off"],
+        round_off_amount=expense.round_off or Decimal("0"),
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -273,17 +454,38 @@ def cancel_expense(db: Session, tenant_id: uuid.UUID, expense: Expense, user_id:
     db.flush()
 
 
-# ─── Cancel Credit Note ──────────────────────────────────────
+# --- Cancel Credit Note --------------------------------------------------
 
 def cancel_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote, user_id: uuid.UUID) -> None:
     """Cancel a posted credit note with reversing journal entries."""
     if cn.status != "POSTED":
         raise ValueError(f"Cannot cancel credit note in status {cn.status}")
 
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{cn.contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    tax = _resolve_tax_accounts(resolver, "output")
+
     draft = LedgerPostingEngine.create_credit_note_reversal_posting(
-        db=db,
         tenant_id=tenant_id,
-        credit_note=cn,
+        credit_note_id=cn.id,
+        credit_note_number=cn.credit_note_number,
+        cancel_date=date.today(),
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=cn.subtotal,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=cn.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=cn.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=cn.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=cn.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=cn.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=cn.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -293,17 +495,38 @@ def cancel_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote, user_i
     db.flush()
 
 
-# ─── Cancel Debit Note ───────────────────────────────────────
+# --- Cancel Debit Note ---------------------------------------------------
 
 def cancel_debit_note(db: Session, tenant_id: uuid.UUID, dn: DebitNote, user_id: uuid.UUID) -> None:
     """Cancel a posted debit note with reversing journal entries."""
     if dn.status != "POSTED":
         raise ValueError(f"Cannot cancel debit note in status {dn.status}")
 
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{dn.contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    tax = _resolve_tax_accounts(resolver, "output")
+
     draft = LedgerPostingEngine.create_debit_note_reversal_posting(
-        db=db,
         tenant_id=tenant_id,
-        debit_note=dn,
+        debit_note_id=dn.id,
+        debit_note_number=dn.debit_note_number,
+        cancel_date=date.today(),
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=dn.subtotal,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=dn.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=dn.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=dn.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=dn.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=dn.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=dn.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -313,7 +536,7 @@ def cancel_debit_note(db: Session, tenant_id: uuid.UUID, dn: DebitNote, user_id:
     db.flush()
 
 
-# ─── Record Invoice Payment ──────────────────────────────────
+# --- Record Invoice Payment ----------------------------------------------
 
 def record_invoice_payment(
     db: Session,
@@ -322,10 +545,7 @@ def record_invoice_payment(
     payment_amount: Decimal,
     user_id: uuid.UUID,
 ) -> None:
-    """
-    Record a payment against an invoice.
-    Updates amount_paid, status, and creates journal entry.
-    """
+    """Record a payment against an invoice. Updates amount_paid and status."""
     if invoice.status not in ("POSTED", "PARTIALLY_PAID"):
         raise ValueError(f"Cannot record payment for invoice in status {invoice.status}")
 
@@ -334,16 +554,14 @@ def record_invoice_payment(
         raise ValueError(f"Payment amount {payment_amount} exceeds outstanding {outstanding}")
 
     invoice.amount_paid = (invoice.amount_paid or Decimal("0")) + payment_amount
-
     if invoice.amount_paid >= invoice.total:
         invoice.status = "PAID"
     else:
         invoice.status = "PARTIALLY_PAID"
-
     db.flush()
 
 
-# ─── Record Bill Payment ─────────────────────────────────────
+# --- Record Bill Payment -------------------------------------------------
 
 def record_bill_payment(
     db: Session,
@@ -361,10 +579,8 @@ def record_bill_payment(
         raise ValueError(f"Payment amount {payment_amount} exceeds outstanding {outstanding}")
 
     bill.amount_paid = (bill.amount_paid or Decimal("0")) + payment_amount
-
     if bill.amount_paid >= bill.total:
         bill.status = "PAID"
     else:
         bill.status = "PARTIALLY_PAID"
-
     db.flush()
