@@ -11,8 +11,8 @@ from src.infrastructure.database.models import (
     Contact, Product,
 )
 from src.schemas.document import (
-    SalesReturnCreate, SalesReturnUpdate, SalesReturnResponse, SalesReturnListResponse,
-    PurchaseReturnCreate, PurchaseReturnUpdate, PurchaseReturnResponse, PurchaseReturnListResponse,
+    SalesReturnCreate, SalesReturnResponse, SalesReturnListResponse,
+    PurchaseReturnCreate, PurchaseReturnResponse, PurchaseReturnListResponse,
 )
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, commit_ledger_draft
