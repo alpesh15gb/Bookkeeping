@@ -67,7 +67,7 @@ class _CashFlowViewState extends State<CashFlowView> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _data == null
-              ? const EmptyState(message: 'No cash flow data available')
+              ? const EmptyState(icon: Icons.account_balance_wallet_outlined, title: 'No cash flow data available')
               : SingleChildScrollView(
                   padding: const EdgeInsets.all(16),
                   child: Column(

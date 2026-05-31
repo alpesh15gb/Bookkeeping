@@ -319,7 +319,7 @@ class _ShellViewState extends State<ShellView> {
                 if (!syncManager.isOnline || syncManager.pendingCount > 0)
                   _OfflineBanner(syncManager: syncManager),
                 Expanded(
-                  key: ValueKey('${_selectedIndex}_${authProvider.activeTenantId ?? ''}'),
+                  key: ValueKey('${_selectedIndex}_${context.read<AuthProvider>().activeTenantId ?? ''}'),
                   child: _currentView,
                 ),
               ],
@@ -372,14 +372,14 @@ class _ShellViewState extends State<ShellView> {
         children: [
           if (!syncManager.isOnline || syncManager.pendingCount > 0)
             _OfflineBanner(syncManager: syncManager),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: KeyedSubtree(
-                key: ValueKey('${_selectedIndex}_${authProvider.activeTenantId ?? ''}'),
-                child: _currentView,
-              ),
-            ),
+              Expanded(
+                child: AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 200),
+                  child: KeyedSubtree(
+                    key: ValueKey('${_selectedIndex}_${context.read<AuthProvider>().activeTenantId ?? ''}'),
+                    child: _currentView,
+                  ),
+                ),
           ),
         ],
       ),

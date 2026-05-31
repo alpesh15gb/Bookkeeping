@@ -26,8 +26,8 @@ class _OutstandingReceivablesViewState extends State<OutstandingReceivablesView>
     final provider = context.read<AccountingProvider>();
     final result = await provider.fetchOutstandingReceivables();
     setState(() {
-      _items = result['items'] ?? [];
-      _total = double.tryParse(result['total']?.toString() ?? '0') ?? 0;
+      _items = result?['items'] ?? [];
+      _total = double.tryParse(result?['total']?.toString() ?? '0') ?? 0;
       _loading = false;
     });
   }
@@ -48,7 +48,7 @@ class _OutstandingReceivablesViewState extends State<OutstandingReceivablesView>
                 _TotalHeader(total: _total, label: 'Total Outstanding'),
                 Expanded(
                   child: _items.isEmpty
-                      ? const EmptyState(message: 'No outstanding receivables')
+                      ? const EmptyState(icon: Icons.people_outline, title: 'No outstanding receivables')
                       : ListView.builder(
                           itemCount: _items.length,
                           itemBuilder: (context, index) {
@@ -140,8 +140,8 @@ class _OutstandingPayablesViewState extends State<OutstandingPayablesView> {
     final provider = context.read<AccountingProvider>();
     final result = await provider.fetchOutstandingPayables();
     setState(() {
-      _items = result['items'] ?? [];
-      _total = double.tryParse(result['total']?.toString() ?? '0') ?? 0;
+      _items = result?['items'] ?? [];
+      _total = double.tryParse(result?['total']?.toString() ?? '0') ?? 0;
       _loading = false;
     });
   }
@@ -162,7 +162,7 @@ class _OutstandingPayablesViewState extends State<OutstandingPayablesView> {
                 _TotalHeader(total: _total, label: 'Total Payables'),
                 Expanded(
                   child: _items.isEmpty
-                      ? const EmptyState(message: 'No outstanding payables')
+                      ? const EmptyState(icon: Icons.receipt_long_outlined, title: 'No outstanding payables')
                       : ListView.builder(
                           itemCount: _items.length,
                           itemBuilder: (context, index) {

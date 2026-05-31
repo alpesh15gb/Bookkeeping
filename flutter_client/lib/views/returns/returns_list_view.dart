@@ -95,7 +95,7 @@ class _ReturnsListViewState extends State<ReturnsListView> with SingleTickerProv
   }
 
   Widget _buildList(List<dynamic> items, bool isSales) {
-    if (items.isEmpty) return const EmptyState(message: 'No returns found');
+    if (items.isEmpty) return const EmptyState(icon: Icons.assignment_return_outlined, title: 'No returns found');
     return ListView.builder(
       itemCount: items.length,
       itemBuilder: (context, index) {
