@@ -132,6 +132,16 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
         ("Transport & Travel", "expense.transport"),
         ("Rent", "expense.rent"),
         ("Salary & Wages", "expense.salary"),
+        ("Office Supplies & Stationery", "expense.office"),
+        ("Telephone & Internet", "expense.telephone"),
+        ("Electricity & Utilities", "expense.electricity"),
+        ("Advertising & Marketing", "expense.advertising"),
+        ("Insurance", "expense.insurance"),
+        ("Professional Fees", "expense.professional"),
+        ("Repairs & Maintenance", "expense.repairs"),
+        ("Bank Charges", "expense.bank_charges"),
+        ("Depreciation", "expense.depreciation"),
+        ("Miscellaneous Expense", "expense.misc"),
     ]:
         linked_account_id = resolver.resolve(account_key)
         db.add(ExpenseCategory(

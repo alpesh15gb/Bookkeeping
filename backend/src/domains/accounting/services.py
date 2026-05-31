@@ -772,27 +772,69 @@ class LedgerPostingEngine:
 # Standard Chart of Accounts
 # ---------------------------------------------------------------------------
 _STANDARD_ACCOUNTS: Dict[str, Dict[str, str]] = {
+    # ── Revenue ──
     "sales_revenue": {"name": "Sales Revenue", "code": "SRV", "type": "REVENUE"},
+    "interest_income": {"name": "Interest Income", "code": "INC-INT", "type": "REVENUE"},
+    "other_income": {"name": "Other Income", "code": "INC-OTH", "type": "REVENUE"},
+
+    # ── Purchases ──
     "purchases": {"name": "Purchases", "code": "PUR", "type": "EXPENSE"},
+
+    # ── GST Output (Liability) ──
     "cgst_output": {"name": "CGST Output Tax", "code": "CGST-OUT", "type": "LIABILITY"},
     "sgst_output": {"name": "SGST Output Tax", "code": "SGST-OUT", "type": "LIABILITY"},
     "igst_output": {"name": "IGST Output Tax", "code": "IGST-OUT", "type": "LIABILITY"},
     "utgst_output": {"name": "UTGST Output Tax", "code": "UTGST-OUT", "type": "LIABILITY"},
     "cess_output": {"name": "Cess Output Tax", "code": "CESS-OUT", "type": "LIABILITY"},
+
+    # ── GST Input (Asset) ──
     "cgst_input": {"name": "CGST Input Tax", "code": "CGST-IN", "type": "ASSET"},
     "sgst_input": {"name": "SGST Input Tax", "code": "SGST-IN", "type": "ASSET"},
     "igst_input": {"name": "IGST Input Tax", "code": "IGST-IN", "type": "ASSET"},
     "utgst_input": {"name": "UTGST Input Tax", "code": "UTGST-IN", "type": "ASSET"},
     "cess_input": {"name": "Cess Input Tax", "code": "CESS-IN", "type": "ASSET"},
+
+    # ── Cash & Bank (Asset) ──
     "assets.cash": {"name": "Cash on Hand", "code": "CASH", "type": "ASSET"},
     "assets.bank": {"name": "Bank Account", "code": "BANK", "type": "ASSET"},
     "assets.upi": {"name": "UPI Collections", "code": "UPI", "type": "ASSET"},
     "assets.pos": {"name": "POS Collections", "code": "POS", "type": "ASSET"},
+
+    # ── Fixed Assets ──
+    "assets.furniture": {"name": "Furniture & Fixtures", "code": "AST-FUR", "type": "ASSET"},
+    "assets.computer": {"name": "Computer & Equipment", "code": "AST-CMP", "type": "ASSET"},
+    "assets.security_deposit": {"name": "Security Deposits", "code": "AST-SEC", "type": "ASSET"},
+    "assets.prepaid": {"name": "Prepaid Expenses", "code": "AST-PRD", "type": "ASSET"},
+
+    # ── Expenses ──
     "round_off": {"name": "Round Off Account", "code": "ROF", "type": "EXPENSE"},
     "expense.tea": {"name": "Tea & Refreshments", "code": "EXP-TEA", "type": "EXPENSE"},
     "expense.transport": {"name": "Transport & Travel", "code": "EXP-TRN", "type": "EXPENSE"},
     "expense.rent": {"name": "Rent", "code": "EXP-RNT", "type": "EXPENSE"},
     "expense.salary": {"name": "Salary & Wages", "code": "EXP-SAL", "type": "EXPENSE"},
+    "expense.office": {"name": "Office Supplies & Stationery", "code": "EXP-OFC", "type": "EXPENSE"},
+    "expense.telephone": {"name": "Telephone & Internet", "code": "EXP-TEL", "type": "EXPENSE"},
+    "expense.electricity": {"name": "Electricity & Utilities", "code": "EXP-UTL", "type": "EXPENSE"},
+    "expense.advertising": {"name": "Advertising & Marketing", "code": "EXP-ADV", "type": "EXPENSE"},
+    "expense.insurance": {"name": "Insurance", "code": "EXP-INS", "type": "EXPENSE"},
+    "expense.professional": {"name": "Professional Fees", "code": "EXP-PRO", "type": "EXPENSE"},
+    "expense.repairs": {"name": "Repairs & Maintenance", "code": "EXP-RPR", "type": "EXPENSE"},
+    "expense.bank_charges": {"name": "Bank Charges", "code": "EXP-BNK", "type": "EXPENSE"},
+    "expense.depreciation": {"name": "Depreciation", "code": "EXP-DEP", "type": "EXPENSE"},
+    "expense.misc": {"name": "Miscellaneous Expense", "code": "EXP-MSC", "type": "EXPENSE"},
+
+    # ── Statutory Liabilities ──
+    "liability.tds": {"name": "TDS Payable", "code": "LTD-TDS", "type": "LIABILITY"},
+    "liability.gst_payable": {"name": "GST Payable", "code": "LTD-GST", "type": "LIABILITY"},
+    "liability.pf": {"name": "PF Payable", "code": "LTD-PF", "type": "LIABILITY"},
+    "liability.esi": {"name": "ESI Payable", "code": "LTD-ESI", "type": "LIABILITY"},
+    "liability.loan": {"name": "Loan Account", "code": "LTD-LOAN", "type": "LIABILITY"},
+    "liability.advance": {"name": "Advance from Customers", "code": "LTD-ADV", "type": "LIABILITY"},
+
+    # ── Equity ──
+    "equity.capital": {"name": "Owner's Capital", "code": "EQT-CAP", "type": "EQUITY"},
+    "equity.drawings": {"name": "Drawings", "code": "EQT-DRW", "type": "EQUITY"},
+    "equity.retained": {"name": "Retained Earnings", "code": "EQT-RE", "type": "EQUITY"},
 }
 
 
