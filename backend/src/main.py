@@ -301,11 +301,13 @@ async def no_result_handler(request: Request, exc: NoResultFound):
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
-    logger.exception(f"Unhandled exception on {request.method} {request.url}: {exc}")
+    import traceback
+    tb = traceback.format_exc()
+    logger.error(f"Unhandled exception on {request.method} {request.url}: {type(exc).__name__}: {exc}\n{tb}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
-            "detail": "An internal server error occurred. Our team has been notified.",
+            "detail": f"{type(exc).__name__}: {exc}",
             "code": "INTERNAL_SERVER_ERROR",
         },
     )
