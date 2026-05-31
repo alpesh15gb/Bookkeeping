@@ -377,12 +377,14 @@ def forgot_password(
     db.add(reset)
 
     from src.core.config import settings
+    from src.common.email_helper import password_reset_email
     import smtplib
     from email.mime.text import MIMEText
 
     reset_link = f"{settings.APP_URL}/reset-password?token={token_str}&email={payload.email}"
-    msg = MIMEText(f"Click the link to reset your password: {reset_link}\n\nThis link expires in 1 hour.")
-    msg["Subject"] = "Password Reset - Bookkeeping App"
+    subject, html_body = password_reset_email(reset_link, user_name=user.full_name or "User")
+    msg = MIMEText(html_body, "html")
+    msg["Subject"] = subject
     msg["From"] = settings.EMAIL_FROM
     msg["To"] = payload.email
 

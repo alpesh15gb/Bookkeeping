@@ -85,11 +85,14 @@ def send_invoice_email(invoice_id: str, recipient_email: str) -> bool:
         import smtplib
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
+        from src.common.email_helper import invoice_email
 
+        subject, html_body = invoice_email(invoice_id)
         msg = MIMEMultipart()
         msg["From"] = settings.EMAIL_FROM
         msg["To"] = recipient_email
-        msg["Subject"] = f"Invoice #{invoice_id}"
+        msg["Subject"] = subject
+        msg.attach(MIMEText(html_body, "html"))
 
         with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
             if settings.SMTP_USER and settings.SMTP_PASSWORD:

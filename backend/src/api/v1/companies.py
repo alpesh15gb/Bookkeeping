@@ -397,6 +397,7 @@ def update_series(
 # ── Purge Company Data endpoints ──────────────────────────────────────────────
 import secrets
 import smtplib
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import logging
 from pydantic import BaseModel
@@ -432,18 +433,14 @@ def request_purge_otp(
     else:
         _PURGE_OTP_CACHE[cache_key] = (otp, datetime.now(timezone.utc))
 
-    msg = MIMEText(
-        f"Hello {current_user.full_name or 'User'},\n\n"
-        f"You have requested to purge all data for your company context (Tenant ID: {tenant_id}).\n\n"
-        f"Your verification OTP code is: {otp}\n\n"
-        f"This OTP is valid for 5 minutes. Enter this code in the settings panel to confirm the purge.\n"
-        f"WARNING: Purging data will permanently delete all invoices, bills, payments, contacts, products, and expenses. This action cannot be undone.\n\n"
-        f"Regards,\n"
-        f"Apex Books Team"
-    )
-    msg["Subject"] = "Verify Company Data Purge - Apex Books"
+    msg = MIMEMultipart()
     msg["From"] = settings.EMAIL_FROM
     msg["To"] = current_user.email
+    msg["Subject"] = "Verify Company Data Purge - ApexBooks"
+
+    from src.common.email_helper import purge_otp_email
+    _, html_body = purge_otp_email(otp, str(tenant_id), user_name=current_user.full_name or "User")
+    msg.attach(MIMEText(html_body, "html"))
 
     try:
         with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
