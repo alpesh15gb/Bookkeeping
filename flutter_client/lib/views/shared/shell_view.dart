@@ -438,8 +438,8 @@ class _GroupedNavState extends State<_GroupedNav> {
     final fontSize = widget.isMobile ? 14.0 : 13.0;
     final childPadH = widget.isMobile ? 14.0 : 16.0;
 
-    return Theme(
-      data: Theme.of(context).copyWith(canvasColor: AppColors.bgSidebar),
+    return Material(
+      color: AppColors.bgSidebar,
       child: ListView.builder(
         padding: EdgeInsets.symmetric(horizontal: padH),
         itemCount: _sidebarEntries.length,
