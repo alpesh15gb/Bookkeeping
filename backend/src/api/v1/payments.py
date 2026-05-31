@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -27,6 +27,7 @@ VALID_PAYMENT_MODES = {"cash", "bank", "upi", "pos", "other"}
 @router.post("/receipts", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_payment_receipt(
+    request: Request,
     payload: PaymentCreate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:create"))
@@ -250,6 +251,7 @@ def cancel_payment_receipt(
 @router.post("/disbursements", response_model=BillPaymentResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_vendor_payment(
+    request: Request,
     payload: BillPaymentCreate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:create"))

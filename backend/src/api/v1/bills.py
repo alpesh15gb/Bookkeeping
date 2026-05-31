@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import uuid
@@ -21,6 +21,7 @@ router = APIRouter(prefix="/bills", tags=["Vendor Bills (Purchases)"])
 @router.post("", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_bill(
+    request: Request,
     payload: BillCreate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))

@@ -67,12 +67,16 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    debugPrint('🟡 [Auth] Login started for $email');
+    debugPrint('🟡 [Auth] API URL: ${ApiClient.baseUrl}');
     try {
       final response = await http.post(
         Uri.parse('${ApiClient.baseUrl}/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
       );
+      debugPrint('🟡 [Auth] Login response status: ${response.statusCode}');
+      debugPrint('🟡 [Auth] Login response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -81,6 +85,7 @@ class AuthProvider extends ChangeNotifier {
 
         // Fetch memberships to select default tenant ID
         final memResponse = await _client.get(Uri.parse('${ApiClient.baseUrl}/auth/memberships'));
+        debugPrint('🟡 [Auth] Memberships response status: ${memResponse.statusCode}');
         if (memResponse.statusCode == 200) {
           final List data = jsonDecode(memResponse.body);
           _memberships = data.map((e) => TenantMembership.fromJson(e)).toList();
@@ -92,19 +97,32 @@ class AuthProvider extends ChangeNotifier {
 
         // Fetch user info
         final userResponse = await _client.get(Uri.parse('${ApiClient.baseUrl}/auth/me'));
+        debugPrint('🟡 [Auth] Me response status: ${userResponse.statusCode}');
         if (userResponse.statusCode == 200) {
           _currentUser = UserResponse.fromJson(jsonDecode(userResponse.body));
           _isAuthenticated = true;
           _isLoading = false;
           notifyListeners();
+          debugPrint('✅ [Auth] Login successful');
           return true;
         }
       } else {
-        final errorData = jsonDecode(response.body);
-        _errorMessage = errorData['detail'] ?? 'Login failed';
+        try {
+          final errorData = jsonDecode(response.body);
+          _errorMessage = errorData['detail'] ?? 'Login failed (HTTP ${response.statusCode})';
+        } catch (_) {
+          if (response.statusCode >= 500) {
+            _errorMessage = 'Server error (${response.statusCode}). Please try again later.';
+          } else {
+            _errorMessage = 'Login failed (HTTP ${response.statusCode})';
+          }
+        }
+        debugPrint('❌ [Auth] Login failed: $_errorMessage');
       }
-    } catch (e) {
-      _errorMessage = 'An error occurred. Please try again.';
+    } catch (e, stack) {
+      _errorMessage = 'Error: $e';
+      debugPrint('❌ [Auth] Login exception: $e');
+      debugPrint('❌ [Auth] Login stack: $stack');
     }
     _isLoading = false;
     notifyListeners();

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 import uuid
@@ -33,6 +33,7 @@ router = APIRouter(prefix="/returns", tags=["Returns"])
 @router.post("/sales", response_model=SalesReturnResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_sales_return(
+    request: Request,
     payload: SalesReturnCreate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
@@ -202,6 +203,7 @@ def cancel_sales_return_route(
 @router.post("/purchase", response_model=PurchaseReturnResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_purchase_return(
+    request: Request,
     payload: PurchaseReturnCreate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
