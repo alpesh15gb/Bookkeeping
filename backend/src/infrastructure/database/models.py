@@ -224,6 +224,10 @@ class Invoice(Base):
     qr_code = Column(Text)
     e_invoice_status = Column(String(20), nullable=False, default="PENDING")
     e_invoice_error = Column(Text)
+    notes = Column(Text)                       # internal / customer-facing notes
+    terms_and_conditions = Column(Text)          # printed on invoice
+    reference_number = Column(String(50))        # PO ref, order number
+    sales_person_id = Column(UUID(as_uuid=True)) # who made the sale
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
@@ -367,6 +371,11 @@ class Bill(Base):
     total = Column(Numeric(15, 4), nullable=False, default=0)
     amount_paid = Column(Numeric(15, 4), nullable=False, default=0)
     pos_state_code = Column(String(2), nullable=False)
+    notes = Column(Text)
+    terms_and_conditions = Column(Text)
+    reference_number = Column(String(50))
+    tds_rate = Column(Numeric(5, 2), nullable=False, default=0)    # TDS %
+    tds_amount = Column(Numeric(15, 4), nullable=False, default=0)  # TDS deducted
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
@@ -674,6 +683,8 @@ class Expense(Base):
     round_off = Column(Numeric(15, 4), nullable=False, default=0)
     total = Column(Numeric(15, 4), nullable=False, default=0)
     status = Column(String(20), nullable=False, default="DRAFT")
+    notes = Column(Text)
+    reference_number = Column(String(50))
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)

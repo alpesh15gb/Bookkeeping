@@ -477,3 +477,180 @@ def generate_invoice_pdf(
 
     doc.build(elements)
     return buffer.getvalue()
+
+
+def generate_party_statement_pdf(
+    statement,  # PartyStatementResponse model or dict
+    company_name: str,
+    company_address: Optional[str] = None,
+    company_gstin: Optional[str] = None,
+    company_phone: Optional[str] = None,
+) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        leftMargin=12*mm,
+        rightMargin=12*mm,
+        topMargin=12*mm,
+        bottomMargin=12*mm
+    )
+
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')  # Deep Navy Blue
+    text_color = colors.HexColor('#1E293B')
+    muted_color = colors.HexColor('#475569')
+    table_header_bg = colors.HexColor('#E2E8F0')
+    border_color = colors.HexColor('#94A3B8')
+
+    title_style = ParagraphStyle(
+        'RepTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        leading=22,
+        textColor=primary_color,
+        alignment=TA_CENTER
+    )
+
+    bold_style = ParagraphStyle(
+        'RepBold',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=11,
+        textColor=text_color
+    )
+
+    normal_style = ParagraphStyle(
+        'RepNormal',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=9,
+        leading=11,
+        textColor=text_color
+    )
+
+    right_style = ParagraphStyle(
+        'RepRight',
+        parent=normal_style,
+        alignment=TA_RIGHT
+    )
+
+    right_bold_style = ParagraphStyle(
+        'RepRightBold',
+        parent=bold_style,
+        alignment=TA_RIGHT
+    )
+
+    center_style = ParagraphStyle(
+        'RepCenter',
+        parent=normal_style,
+        alignment=TA_CENTER
+    )
+
+    # 1. Header Title
+    elements.append(Paragraph("Party Statement", title_style))
+    elements.append(Spacer(1, 6*mm))
+
+    # 2. Company & Party Details Table
+    co_addr = company_address or "N/A"
+    co_gst = f"GSTIN: {company_gstin}" if company_gstin else "GSTIN: N/A"
+    co_ph = f"Mobile: {company_phone}" if company_phone else ""
+
+    party_name = statement.contact_name
+    party_addr = statement.address or "N/A"
+    party_gst = f"GSTIN: {statement.gstin}" if statement.gstin else "GSTIN: N/A"
+    party_ph = f"Mobile: {statement.phone}" if statement.phone else "Mobile: N/A"
+
+    details_data = [
+        [
+            Paragraph(f"<b>From:</b><br/>{company_name}<br/>{co_addr}<br/>{co_gst}<br/>{co_ph}", normal_style),
+            Paragraph(f"<b>To (Party Details):</b><br/>{party_name}<br/>{party_addr}<br/>{party_gst}<br/>{party_ph}", normal_style)
+        ]
+    ]
+    details_table = Table(details_data, colWidths=[93*mm, 93*mm], style=[
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('PADDING', (0,0), (-1,-1), 0),
+    ])
+    elements.append(details_table)
+    elements.append(Spacer(1, 4*mm))
+
+    # Period
+    start_str = statement.start_date.strftime("%d-%b-%Y")
+    end_str = statement.end_date.strftime("%d-%b-%Y")
+    elements.append(Paragraph(f"<b>Statement Period:</b> {start_str} to {end_str}", normal_style))
+    elements.append(Spacer(1, 4*mm))
+
+    # 3. Ledger Table
+    ledger_header = [
+        Paragraph("<b>Date</b>", normal_style),
+        Paragraph("<b>Particulars</b>", normal_style),
+        Paragraph("<b>Voucher Type</b>", normal_style),
+        Paragraph("<b>Voucher No.</b>", normal_style),
+        Paragraph("<b>Debit (₹)</b>", right_style),
+        Paragraph("<b>Credit (₹)</b>", right_style),
+        Paragraph("<b>Balance (₹)</b>", right_style),
+    ]
+
+    ledger_data = [ledger_header]
+    for row in statement.ledger:
+        date_str = row.date.strftime("%d-%b-%Y")
+        deb_val = f"{row.debit:,.2f}" if row.debit is not None else "-"
+        cred_val = f"{row.credit:,.2f}" if row.credit is not None else "-"
+        
+        ledger_data.append([
+            Paragraph(date_str, normal_style),
+            Paragraph(row.particulars, normal_style),
+            Paragraph(row.voucher_type, normal_style),
+            Paragraph(row.voucher_no, normal_style),
+            Paragraph(deb_val, right_style),
+            Paragraph(cred_val, right_style),
+            Paragraph(row.balance, right_style),
+        ])
+
+    ledger_table = Table(ledger_data, colWidths=[24*mm, 36*mm, 24*mm, 26*mm, 24*mm, 24*mm, 28*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.2, primary_color),
+        ('LINEBELOW', (0,1), (-1,-1), 0.5, border_color),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ])
+    elements.append(ledger_table)
+    elements.append(Spacer(1, 6*mm))
+
+    # 4. Summary section
+    elements.append(Paragraph("<b>Summary</b>", bold_style))
+    elements.append(Spacer(1, 2*mm))
+
+    summary = statement.summary
+    summary_data = [
+        [Paragraph("<b>Particulars</b>", normal_style), Paragraph("<b>Amount (₹)</b>", right_style)],
+        [Paragraph("Opening Balance", normal_style), Paragraph(f"{summary.opening_balance:,.2f}", right_style)],
+    ]
+    
+    # Conditionally add sales/receipts or purchases/payments based on contact type/non-zero values
+    if statement.contact_type in ["CUSTOMER", "BOTH"] or summary.total_sales > 0 or summary.total_receipts > 0:
+        summary_data.append([Paragraph("Total Sales", normal_style), Paragraph(f"{summary.total_sales:,.2f}", right_style)])
+        summary_data.append([Paragraph("Total Receipts", normal_style), Paragraph(f"{summary.total_receipts:,.2f}", right_style)])
+
+    if statement.contact_type in ["VENDOR", "BOTH"] or summary.total_purchases > 0 or summary.total_payments > 0:
+        summary_data.append([Paragraph("Total Purchases", normal_style), Paragraph(f"{summary.total_purchases:,.2f}", right_style)])
+        summary_data.append([Paragraph("Total Payments", normal_style), Paragraph(f"{summary.total_payments:,.2f}", right_style)])
+
+    summary_data.append([Paragraph("<b>Closing Outstanding</b>", bold_style), Paragraph(f"<b>{summary.closing_outstanding:,.2f}</b>", right_bold_style)])
+
+    summary_table = Table(summary_data, colWidths=[80*mm, 40*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.0, primary_color),
+        ('LINEBELOW', (0,1), (-1,-1), 0.5, border_color),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ])
+    elements.append(summary_table)
+
+    doc.build(elements)
+    return buffer.getvalue()
+

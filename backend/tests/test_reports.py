@@ -752,6 +752,59 @@ class TestReports(unittest.TestCase):
         # Auditor is in their own tenant with no invoices — but 200 is expected
         self.assertEqual(resp.status_code, 200)
 
+    # ----------------------------------------------------------------
+    # Party Statement Tests
+    # ----------------------------------------------------------------
+
+    def test_party_statement_json(self):
+        resp = self.client.get(
+            "/api/v1/reports/party-statement",
+            params={
+                "contact_id": str(self.customer_id),
+                "start_date": self.start,
+                "end_date": self.end
+            },
+            headers=self.headers_a
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        self.assertEqual(data["contact_name"], "TCS Ltd")
+        self.assertEqual(data["contact_type"], "CUSTOMER")
+        self.assertIn("ledger", data)
+        self.assertIn("summary", data)
+        # Check Opening balance, rows, and closing outstanding
+        ledger = data["ledger"]
+        self.assertGreaterEqual(len(ledger), 2)  # Opening and Closing always present
+        self.assertEqual(ledger[0]["particulars"], "Opening Balance")
+        self.assertEqual(ledger[-1]["particulars"], "Closing Balance")
+
+    def test_party_statement_pdf(self):
+        resp = self.client.get(
+            "/api/v1/reports/party-statement/pdf",
+            params={
+                "contact_id": str(self.customer_id),
+                "start_date": self.start,
+                "end_date": self.end
+            },
+            headers=self.headers_a
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers["content-type"], "application/pdf")
+        self.assertTrue(resp.content.startswith(b"%PDF"))
+
+    def test_party_statement_excel(self):
+        resp = self.client.get(
+            "/api/v1/reports/party-statement/excel",
+            params={
+                "contact_id": str(self.customer_id),
+                "start_date": self.start,
+                "end_date": self.end
+            },
+            headers=self.headers_a
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", resp.headers["content-type"])
+
 
 if __name__ == "__main__":
     unittest.main()

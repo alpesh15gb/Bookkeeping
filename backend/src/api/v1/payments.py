@@ -17,12 +17,15 @@ from src.schemas.payment_schemas import (
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.company.services import NumberingSeriesService
 from src.api.deps import enforce_permission
+from src.core.rate_limiter import limiter
+from src.core.config import settings
 
 router = APIRouter(prefix="/payments", tags=["Payments and Receipts"])
 
 VALID_PAYMENT_MODES = {"cash", "bank", "upi", "pos", "other"}
 
 @router.post("/receipts", response_model=PaymentResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_payment_receipt(
     payload: PaymentCreate,
     db: Session = Depends(get_db_session),
@@ -245,6 +248,7 @@ def cancel_payment_receipt(
 
 
 @router.post("/disbursements", response_model=BillPaymentResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_vendor_payment(
     payload: BillPaymentCreate,
     db: Session = Depends(get_db_session),

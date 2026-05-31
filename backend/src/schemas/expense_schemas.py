@@ -14,6 +14,8 @@ class ExpenseCreate(SchemaBase):
     amount: Decimal = Field(..., gt=Decimal("0.00"))
     gst_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
     place_of_supply_state_code: Optional[str] = None
+    notes: Optional[str] = None
+    reference_number: Optional[str] = Field(None, max_length=50)
 
 class ExpenseUpdate(SchemaBase):
     expense_category_id: Optional[uuid.UUID] = None
@@ -24,6 +26,8 @@ class ExpenseUpdate(SchemaBase):
     amount: Optional[Decimal] = Field(None, gt=Decimal("0.00"))
     gst_rate: Optional[Decimal] = Field(None, ge=0, le=100)
     place_of_supply_state_code: Optional[str] = None
+    notes: Optional[str] = None
+    reference_number: Optional[str] = None
 
 class ExpenseResponse(SchemaBase):
     id: uuid.UUID
@@ -44,6 +48,8 @@ class ExpenseResponse(SchemaBase):
     round_off: Decimal = Decimal("0.00")
     total: Decimal
     status: str
+    notes: Optional[str] = None
+    reference_number: Optional[str] = None
     category_name: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -57,6 +63,8 @@ class ExpenseListResponse(SchemaBase):
     amount: Decimal
     total: Decimal
     status: str
+    notes: Optional[str] = None
+    reference_number: Optional[str] = None
     category_name: Optional[str] = None
     created_at: datetime
 

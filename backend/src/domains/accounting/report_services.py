@@ -18,7 +18,8 @@ from sqlalchemy import func, case, and_, cast, Numeric as SaNumeric
 
 from src.infrastructure.database.models import (
     Invoice, InvoiceLine, Bill, BillLine,
-    Contact, Account, JournalEntry, JournalLine
+    Contact, Account, JournalEntry, JournalLine,
+    Payment, BillPayment
 )
 from src.schemas.report_schemas import (
     BalanceSheetSection, BalanceSheetResponse, ReportLineItem,
@@ -30,6 +31,7 @@ from src.schemas.report_schemas import (
     TopVendorLine, PurchaseAnalyticsResponse,
     OutstandingInvoiceLine, OutstandingBillLine,
     OutstandingARResponse, OutstandingAPResponse,
+    PartyStatementRow, PartyStatementSummary, PartyStatementResponse,
 )
 
 D = Decimal
@@ -896,3 +898,222 @@ class OutstandingService:
             ))
 
         return OutstandingAPResponse(as_of_date=as_of_date, bills=lines, total_outstanding=_q(total))
+
+
+class PartyStatementService:
+    @staticmethod
+    def get(db: Session, tenant_id: uuid.UUID, contact_id: uuid.UUID, start_date: date, end_date: date) -> PartyStatementResponse:
+        contact = db.get(Contact, contact_id)
+        if not contact or contact.tenant_id != tenant_id or contact.deleted_at is not None:
+            raise ValueError("Contact not found")
+
+        # 1. Opening Balance Calculation (transactions before start_date)
+        inv_before = db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(
+            Invoice.tenant_id == tenant_id,
+            Invoice.contact_id == contact_id,
+            Invoice.issue_date < start_date,
+            Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+            Invoice.deleted_at == None
+        ).scalar()
+        
+        pay_before = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+            Payment.tenant_id == tenant_id,
+            Payment.contact_id == contact_id,
+            Payment.payment_date < start_date,
+            Payment.status == "ACTIVE",
+            Payment.deleted_at == None
+        ).scalar()
+
+        bill_before = db.query(func.coalesce(func.sum(Bill.total), 0)).filter(
+            Bill.tenant_id == tenant_id,
+            Bill.contact_id == contact_id,
+            Bill.issue_date < start_date,
+            Bill.status.notin_(["DRAFT", "CANCELLED"]),
+            Bill.deleted_at == None
+        ).scalar()
+
+        bp_before = db.query(func.coalesce(func.sum(BillPayment.amount), 0)).filter(
+            BillPayment.tenant_id == tenant_id,
+            BillPayment.contact_id == contact_id,
+            BillPayment.payment_date < start_date,
+            BillPayment.status == "ACTIVE",
+            BillPayment.deleted_at == None
+        ).scalar()
+
+        debits_before = _q(inv_before) + _q(bp_before)
+        credits_before = _q(pay_before) + _q(bill_before)
+        opening_balance = debits_before - credits_before
+
+        # 2. Get all transactions during the period
+        invoices = db.query(Invoice).filter(
+            Invoice.tenant_id == tenant_id,
+            Invoice.contact_id == contact_id,
+            Invoice.issue_date >= start_date,
+            Invoice.issue_date <= end_date,
+            Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+            Invoice.deleted_at == None
+        ).all()
+
+        payments = db.query(Payment).filter(
+            Payment.tenant_id == tenant_id,
+            Payment.contact_id == contact_id,
+            Payment.payment_date >= start_date,
+            Payment.payment_date <= end_date,
+            Payment.status == "ACTIVE",
+            Payment.deleted_at == None
+        ).all()
+
+        bills = db.query(Bill).filter(
+            Bill.tenant_id == tenant_id,
+            Bill.contact_id == contact_id,
+            Bill.issue_date >= start_date,
+            Bill.issue_date <= end_date,
+            Bill.status.notin_(["DRAFT", "CANCELLED"]),
+            Bill.deleted_at == None
+        ).all()
+
+        bill_payments = db.query(BillPayment).filter(
+            BillPayment.tenant_id == tenant_id,
+            BillPayment.contact_id == contact_id,
+            BillPayment.payment_date >= start_date,
+            BillPayment.payment_date <= end_date,
+            BillPayment.status == "ACTIVE",
+            BillPayment.deleted_at == None
+        ).all()
+
+        raw_ledger = []
+        for x in invoices:
+            raw_ledger.append({
+                "date": x.issue_date,
+                "particulars": "Sales Invoice",
+                "voucher_type": "Sales",
+                "voucher_no": x.invoice_number,
+                "debit": _q(x.total),
+                "credit": None,
+            })
+        for x in payments:
+            raw_ledger.append({
+                "date": x.payment_date,
+                "particulars": "Receipt Received",
+                "voucher_type": "Receipt",
+                "voucher_no": x.payment_number,
+                "debit": None,
+                "credit": _q(x.amount),
+            })
+        for x in bills:
+            raw_ledger.append({
+                "date": x.issue_date,
+                "particulars": "Purchase Bill",
+                "voucher_type": "Purchase",
+                "voucher_no": x.bill_number,
+                "debit": None,
+                "credit": _q(x.total),
+            })
+        for x in bill_payments:
+            raw_ledger.append({
+                "date": x.payment_date,
+                "particulars": "Payment Made",
+                "voucher_type": "Payment",
+                "voucher_no": x.payment_number,
+                "debit": _q(x.amount),
+                "credit": None,
+            })
+
+        # Sort chronologically by date
+        raw_ledger.sort(key=lambda item: (item["date"], item["voucher_type"], item["voucher_no"]))
+
+        # Build final ledger rows with running balance
+        running_balance = opening_balance
+        ledger_rows = []
+
+        def format_bal(val: Decimal) -> str:
+            if val >= ZERO:
+                return f"{abs(val):,.2f} Dr"
+            else:
+                return f"{abs(val):,.2f} Cr"
+
+        # Add initial Opening Balance row
+        op_row = PartyStatementRow(
+            date=start_date,
+            particulars="Opening Balance",
+            voucher_type="Opening",
+            voucher_no="-",
+            debit=abs(opening_balance) if opening_balance >= ZERO else None,
+            credit=abs(opening_balance) if opening_balance < ZERO else None,
+            balance=format_bal(opening_balance)
+        )
+        ledger_rows.append(op_row)
+
+        total_sales = ZERO
+        total_receipts = ZERO
+        total_purchases = ZERO
+        total_payments = ZERO
+
+        for item in raw_ledger:
+            deb = item["debit"]
+            cred = item["credit"]
+            if deb is not None:
+                running_balance += deb
+                if item["voucher_type"] == "Sales":
+                    total_sales += deb
+                elif item["voucher_type"] == "Payment":
+                    total_payments += deb
+            if cred is not None:
+                running_balance -= cred
+                if item["voucher_type"] == "Receipt":
+                    total_receipts += cred
+                elif item["voucher_type"] == "Purchase":
+                    total_purchases += cred
+
+            ledger_rows.append(PartyStatementRow(
+                date=item["date"],
+                particulars=item["particulars"],
+                voucher_type=item["voucher_type"],
+                voucher_no=item["voucher_no"],
+                debit=deb,
+                credit=cred,
+                balance=format_bal(running_balance)
+            ))
+
+        # Add Closing Balance row
+        cl_row = PartyStatementRow(
+            date=end_date,
+            particulars="Closing Balance",
+            voucher_type="-",
+            voucher_no="-",
+            debit=None,
+            credit=None,
+            balance=format_bal(running_balance)
+        )
+        ledger_rows.append(cl_row)
+
+        summary = PartyStatementSummary(
+            opening_balance=abs(opening_balance),
+            total_sales=total_sales,
+            total_receipts=total_receipts,
+            total_purchases=total_purchases,
+            total_payments=total_payments,
+            closing_outstanding=abs(running_balance)
+        )
+
+        billing_addr = contact.billing_address or {}
+        address_parts = []
+        if isinstance(billing_addr, dict):
+            for k in ["address_line1", "address_line2", "city", "state", "postal_code"]:
+                if billing_addr.get(k):
+                    address_parts.append(str(billing_addr[k]))
+        addr_str = ", ".join(address_parts) if address_parts else None
+
+        return PartyStatementResponse(
+            contact_id=str(contact.id),
+            contact_name=contact.name,
+            contact_type=contact.contact_type,
+            address=addr_str,
+            gstin=contact.gstin,
+            phone=contact.phone,
+            start_date=start_date,
+            end_date=end_date,
+            ledger=ledger_rows,
+            summary=summary
+        )
+

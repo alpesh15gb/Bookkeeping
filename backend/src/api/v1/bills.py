@@ -13,10 +13,13 @@ from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
 from src.domains.accounting.auto_post import auto_post_bill, cancel_bill, get_bill_display_status
 from src.domains.company.services import resolve_origin_state_code
 from src.api.deps import get_tenant_context, enforce_permission
+from src.core.rate_limiter import limiter
+from src.core.config import settings
 
 router = APIRouter(prefix="/bills", tags=["Vendor Bills (Purchases)"])
 
 @router.post("", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_bill(
     payload: BillCreate,
     db: Session = Depends(get_db_session),
@@ -114,6 +117,10 @@ def create_bill(
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
+    # TDS calculation
+    tds_rate = payload.tds_rate or Decimal("0.00")
+    tds_amount = (adjusted_subtotal * tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
+
     bill = Bill(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
@@ -132,6 +139,11 @@ def create_bill(
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
+        notes=payload.notes,
+        terms_and_conditions=payload.terms_and_conditions,
+        reference_number=payload.reference_number,
+        tds_rate=tds_rate,
+        tds_amount=tds_amount,
         lines=db_lines
     )
 
@@ -883,4 +895,78 @@ def print_bill(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=Bill_{bill.bill_number}.pdf"}
     )
+
+
+@router.post("/{id}/clone", response_model=BillResponse, status_code=status.HTTP_201_CREATED)
+def clone_bill(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+):
+    """Clone an existing bill into a new DRAFT bill."""
+    original = db.query(Bill).filter(
+        Bill.id == id,
+        Bill.tenant_id == tenant_id,
+        Bill.deleted_at == None
+    ).first()
+    if not original:
+        raise HTTPException(status_code=404, detail="Bill not found.")
+
+    new_number = NumberingSeriesService.generate_next_number(db, tenant_id, "BILL")
+
+    cloned = Bill(
+        tenant_id=tenant_id,
+        contact_id=original.contact_id,
+        bill_number=new_number,
+        issue_date=date.today(),
+        due_date=original.due_date,
+        status="DRAFT",
+        subtotal=original.subtotal,
+        discount_total=original.discount_total,
+        cgst_amount=original.cgst_amount,
+        sgst_amount=original.sgst_amount,
+        igst_amount=original.igst_amount,
+        utgst_amount=original.utgst_amount,
+        cess_amount=original.cess_amount,
+        round_off=original.round_off,
+        total=original.total,
+        amount_paid=Decimal("0.0000"),
+        pos_state_code=original.pos_state_code,
+        notes=original.notes,
+        terms_and_conditions=original.terms_and_conditions,
+        reference_number=original.reference_number,
+        tds_rate=original.tds_rate,
+        tds_amount=original.tds_amount,
+        lines=[
+            BillLine(
+                product_id=line.product_id,
+                description=line.description,
+                quantity=line.quantity,
+                rate=line.rate,
+                discount=line.discount,
+                subtotal=line.subtotal,
+                hsn_sac=line.hsn_sac,
+                gst_rate=line.gst_rate,
+                cgst_rate=line.cgst_rate,
+                cgst_amount=line.cgst_amount,
+                sgst_rate=line.sgst_rate,
+                sgst_amount=line.sgst_amount,
+                igst_rate=line.igst_rate,
+                igst_amount=line.igst_amount,
+                utgst_rate=line.utgst_rate,
+                utgst_amount=line.utgst_amount,
+                cess_rate=line.cess_rate,
+                cess_amount=line.cess_amount,
+                total=line.total,
+            )
+            for line in original.lines
+        ]
+    )
+
+    db.add(cloned)
+    db.flush()
+    auto_post_bill(db, tenant_id, cloned)
+    db.commit()
+    db.refresh(cloned)
+    return cloned
 

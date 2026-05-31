@@ -272,3 +272,38 @@ class OutstandingAPResponse(BaseModel):
     as_of_date: date
     bills: List[OutstandingBillLine]
     total_outstanding: Decimal
+
+
+# ---------------------------------------------------------------------------
+# Party Statement
+# ---------------------------------------------------------------------------
+
+class PartyStatementRow(BaseModel):
+    date: date
+    particulars: str
+    voucher_type: str
+    voucher_no: str
+    debit: Optional[Decimal] = None
+    credit: Optional[Decimal] = None
+    balance: str
+
+class PartyStatementSummary(BaseModel):
+    opening_balance: Decimal
+    total_sales: Decimal
+    total_receipts: Decimal
+    total_purchases: Decimal
+    total_payments: Decimal
+    closing_outstanding: Decimal
+
+class PartyStatementResponse(BaseModel):
+    contact_id: str
+    contact_name: str
+    contact_type: str
+    address: Optional[str] = None
+    gstin: Optional[str] = None
+    phone: Optional[str] = None
+    start_date: date
+    end_date: date
+    ledger: List[PartyStatementRow]
+    summary: PartyStatementSummary
+

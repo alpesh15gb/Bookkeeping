@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from src.infrastructure.database.models import (
     Invoice, InvoiceLine, Bill, BillLine, Expense, CreditNote, DebitNote,
-    JournalEntry, Account, Contact, TenantMembership,
+    JournalEntry, Account, Contact, TenantMembership, StockLedger, Product,
 )
 from src.domains.accounting.services import (
     LedgerPostingEngine, JournalEntryDraft, commit_ledger_draft, AccountResolver,
@@ -146,6 +146,22 @@ def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> Jo
     )
     commit_ledger_draft(db, tenant_id, draft)
 
+    # Stock ledger: decrement stock for each product line
+    for line in invoice.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) - line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    document_type="INVOICE",
+                    document_id=invoice.id,
+                    quantity=-line.quantity,
+                    balance_after=product.current_stock,
+                    notes=f"Invoice {invoice.invoice_number}",
+                ))
+
     invoice.status = "POSTED"
     invoice.amount_paid = Decimal("0")
     db.flush()
@@ -184,6 +200,22 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
         round_off_amount=bill.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
+
+    # Stock ledger: increment stock for each product line
+    for line in bill.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    document_type="BILL",
+                    document_id=bill.id,
+                    quantity=line.quantity,
+                    balance_after=product.current_stock,
+                    notes=f"Bill {bill.bill_number}",
+                ))
 
     bill.status = "POSTED"
     bill.amount_paid = Decimal("0")

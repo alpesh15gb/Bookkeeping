@@ -88,6 +88,10 @@ class InvoiceCreate(InvoiceBase):
     line_items: List[InvoiceLineCreate]
     discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
+    notes: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+    reference_number: Optional[str] = Field(None, max_length=50)
+    sales_person_id: Optional[uuid.UUID] = None
 
 class InvoicePreviewRequest(SchemaBase):
     pos_state_code: str = Field(..., pattern="[0-9]{2}$")
@@ -104,6 +108,10 @@ class InvoiceUpdate(SchemaBase):
     line_items: Optional[List[InvoiceLineCreate]] = None
     discount_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
     shipping_charges: Optional[Decimal] = Field(default=None, ge=0)
+    notes: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+    reference_number: Optional[str] = None
+    sales_person_id: Optional[uuid.UUID] = None
 
 class InvoiceResponse(InvoiceBase):
     id: uuid.UUID
@@ -123,6 +131,10 @@ class InvoiceResponse(InvoiceBase):
     qr_code: Optional[str] = None
     e_invoice_status: str
     e_invoice_error: Optional[str] = None
+    notes: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+    reference_number: Optional[str] = None
+    sales_person_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     lines: List[InvoiceLineResponse]
@@ -137,6 +149,7 @@ class InvoiceListResponse(SchemaBase):
     total: Decimal
     amount_paid: Decimal
     contact_name: str
+    reference_number: Optional[str] = None
     created_at: datetime
 
 class PaginatedInvoiceResponse(SchemaBase):

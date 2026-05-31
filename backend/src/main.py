@@ -265,6 +265,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 
 app.add_middleware(IdempotencyMiddleware)
+app.add_middleware(SlowAPIMiddleware)
 
 
 # ---------------------------------------------------------------------------

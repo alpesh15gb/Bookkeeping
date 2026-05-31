@@ -286,3 +286,97 @@ def undo_bank_reconciliation(
     
     # Return the reconciliation object before deletion (for API consistency)
     return reconciliation
+
+
+@router.post("/auto-match")
+def auto_match_bank_transactions(
+    statement_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
+):
+    """Auto-match unreconciled bank transactions to payments and bills."""
+    from difflib import SequenceMatcher
+
+    statement = db.query(BankStatement).filter(
+        BankStatement.id == statement_id,
+        BankStatement.tenant_id == tenant_id
+    ).first()
+    if not statement:
+        raise HTTPException(status_code=404, detail="Bank statement not found.")
+
+    unmatched_txns = db.query(BankTransaction).filter(
+        BankTransaction.bank_statement_id == statement_id,
+        BankTransaction.status == "PENDING"
+    ).all()
+
+    payments = db.query(Payment).filter(
+        Payment.tenant_id == tenant_id,
+        Payment.status == "ACTIVE",
+        Payment.deleted_at == None
+    ).all()
+
+    bill_payments = db.query(BillPayment).filter(
+        BillPayment.tenant_id == tenant_id,
+        BillPayment.status == "ACTIVE",
+        BillPayment.deleted_at == None
+    ).all()
+
+    matches = []
+    for txn in unmatched_txns:
+        best_match = None
+        best_score = 0
+
+        # Try matching payments (receipts)
+        for pmt in payments:
+            score = 0
+            # Amount exact match = 40 pts
+            if abs(txn.amount - pmt.amount) < Decimal("0.01"):
+                score += 40
+            # Date within 3 days = 30 pts
+            if abs((txn.transaction_date - pmt.payment_date).days) <= 3:
+                score += 30
+            # Reference similarity = up to 30 pts
+            if txn.reference and pmt.reference_number:
+                ratio = SequenceMatcher(None, txn.reference.lower(), pmt.reference_number.lower()).ratio()
+                score += int(ratio * 30)
+
+            if score > best_score and score >= 60:
+                best_score = score
+                best_match = ("payment", pmt)
+
+        # Try matching bill payments (disbursements)
+        for bp in bill_payments:
+            score = 0
+            if abs(abs(txn.amount) - bp.amount) < Decimal("0.01"):
+                score += 40
+            if abs((txn.transaction_date - bp.payment_date).days) <= 3:
+                score += 30
+            if txn.reference and bp.reference_number:
+                ratio = SequenceMatcher(None, txn.reference.lower(), bp.reference_number.lower()).ratio()
+                score += int(ratio * 30)
+
+            if score > best_score and score >= 60:
+                best_score = score
+                best_match = ("bill_payment", bp)
+
+        if best_match:
+            match_type, matched_doc = best_match
+            recon = BankReconciliation(
+                bank_transaction_id=txn.id,
+                payment_id=matched_doc.id if match_type == "payment" else None,
+                bill_payment_id=matched_doc.id if match_type == "bill_payment" else None,
+                amount=matched_doc.amount,
+                notes=f"Auto-matched (score: {best_score})",
+            )
+            txn.status = "RECONCILED"
+            db.add(recon)
+            matches.append({
+                "transaction_id": str(txn.id),
+                "matched_type": match_type,
+                "matched_id": str(matched_doc.id),
+                "amount": str(matched_doc.amount),
+                "score": best_score,
+            })
+
+    db.commit()
+    return {"matched": len(matches), "matches": matches}

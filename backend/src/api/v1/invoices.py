@@ -24,10 +24,13 @@ from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
 from src.domains.accounting.auto_post import auto_post_invoice, cancel_invoice, get_display_status
 from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
 from src.api.deps import enforce_permission
+from src.core.rate_limiter import limiter
+from src.core.config import settings
 
 router = APIRouter(prefix="/invoices", tags=["Invoices"])
 
 @router.post("", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_invoice(
     payload: InvoiceCreate,
     db: Session = Depends(get_db_session),
@@ -161,6 +164,10 @@ def create_invoice(
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
         e_invoice_status="PENDING",
+        notes=payload.notes,
+        terms_and_conditions=payload.terms_and_conditions,
+        reference_number=payload.reference_number,
+        sales_person_id=payload.sales_person_id,
         lines=db_lines
     )
 
@@ -169,6 +176,12 @@ def create_invoice(
 
     # Auto-post: create journal entry immediately
     auto_post_invoice(db, tenant_id, invoice)
+
+    # Trigger e-invoice generation if tenant has e-invoicing enabled
+    tenant_settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    if tenant_settings and tenant_settings.e_invoicing_enabled:
+        from src.workers.tasks import submit_e_invoice_to_irp
+        submit_e_invoice_to_irp.delay(str(invoice.id))
 
     db.commit()
     db.refresh(invoice)
@@ -1822,3 +1835,78 @@ def cancel_e_invoice_route(
         cancel_reason=payload.cancel_reason,
         cancel_remarks=payload.cancel_remarks
     )
+
+
+@router.post("/{id}/clone", response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED)
+def clone_invoice(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+):
+    """Clone an existing invoice into a new DRAFT invoice."""
+    original = db.query(Invoice).filter(
+        Invoice.id == id,
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None
+    ).first()
+    if not original:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    new_number = NumberingSeriesService.generate_next_number(db, tenant_id, "INVOICE")
+
+    cloned = Invoice(
+        tenant_id=tenant_id,
+        contact_id=original.contact_id,
+        invoice_number=new_number,
+        issue_date=date.today(),
+        due_date=original.due_date,
+        status="DRAFT",
+        subtotal=original.subtotal,
+        discount_total=original.discount_total,
+        cgst_amount=original.cgst_amount,
+        sgst_amount=original.sgst_amount,
+        igst_amount=original.igst_amount,
+        utgst_amount=original.utgst_amount,
+        cess_amount=original.cess_amount,
+        round_off=original.round_off,
+        shipping_charges=original.shipping_charges,
+        total=original.total,
+        amount_paid=Decimal("0.0000"),
+        pos_state_code=original.pos_state_code,
+        e_invoice_status="PENDING",
+        notes=original.notes,
+        terms_and_conditions=original.terms_and_conditions,
+        reference_number=original.reference_number,
+        sales_person_id=original.sales_person_id,
+        lines=[
+            InvoiceLine(
+                product_id=line.product_id,
+                description=line.description,
+                quantity=line.quantity,
+                rate=line.rate,
+                discount=line.discount,
+                subtotal=line.subtotal,
+                hsn_sac=line.hsn_sac,
+                gst_rate=line.gst_rate,
+                cgst_rate=line.cgst_rate,
+                cgst_amount=line.cgst_amount,
+                sgst_rate=line.sgst_rate,
+                sgst_amount=line.sgst_amount,
+                igst_rate=line.igst_rate,
+                igst_amount=line.igst_amount,
+                utgst_rate=line.utgst_rate,
+                utgst_amount=line.utgst_amount,
+                cess_rate=line.cess_rate,
+                cess_amount=line.cess_amount,
+                total=line.total,
+            )
+            for line in original.lines
+        ]
+    )
+
+    db.add(cloned)
+    db.flush()
+    auto_post_invoice(db, tenant_id, cloned)
+    db.commit()
+    db.refresh(cloned)
+    return cloned

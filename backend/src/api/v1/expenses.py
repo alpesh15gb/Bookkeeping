@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 from src.api.deps import get_db_session, enforce_permission
 from src.infrastructure.database.models import Expense, ExpenseCategory
+from src.core.rate_limiter import limiter
+from src.core.config import settings
 from src.schemas.expense_schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseListResponse, ExpensePreviewRequest, ExpensePreviewResponse
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.accounting.auto_post import auto_post_expense, cancel_expense as cancel_expense_fn
@@ -123,6 +125,7 @@ def preview_expense(
 
 
 @router.post("", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def create_expense(
     payload: ExpenseCreate,
     db: Session = Depends(get_db_session),
@@ -158,6 +161,8 @@ def create_expense(
         round_off=totals["round_off"],
         total=totals["total"],
         status="DRAFT",
+        notes=payload.notes,
+        reference_number=payload.reference_number,
     )
     db.add(expense)
     db.flush()
@@ -433,3 +438,50 @@ def cancel_expense(
 
     db.refresh(expense)
     return _expense_to_response(expense)
+
+
+@router.post("/{id}/clone", response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED)
+def clone_expense(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("expense:create")),
+):
+    """Clone an existing expense into a new DRAFT expense."""
+    original = db.query(Expense).filter(
+        Expense.id == id,
+        Expense.tenant_id == tenant_id,
+        Expense.deleted_at == None
+    ).first()
+    if not original:
+        raise HTTPException(status_code=404, detail="Expense not found.")
+
+    new_number = _gen_expense_number(db, tenant_id)
+
+    cloned = Expense(
+        tenant_id=tenant_id,
+        expense_number=new_number,
+        expense_category_id=original.expense_category_id,
+        bank_account_id=original.bank_account_id,
+        expense_date=date.today(),
+        vendor_name=original.vendor_name,
+        description=original.description,
+        amount=original.amount,
+        gst_rate=original.gst_rate,
+        cgst_amount=original.cgst_amount,
+        sgst_amount=original.sgst_amount,
+        igst_amount=original.igst_amount,
+        utgst_amount=original.utgst_amount,
+        cess_amount=original.cess_amount,
+        round_off=original.round_off,
+        total=original.total,
+        status="DRAFT",
+        notes=original.notes,
+        reference_number=original.reference_number,
+    )
+
+    db.add(cloned)
+    db.flush()
+    auto_post_expense(db, tenant_id, cloned)
+    db.commit()
+    db.refresh(cloned)
+    return _expense_to_response(cloned)
