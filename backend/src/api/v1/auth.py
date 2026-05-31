@@ -119,6 +119,28 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
         is_active=True
     )
     db.add(membership)
+
+    # Seed numbering series + default expense categories
+    from src.domains.company.services import NumberingSeriesService
+    from src.infrastructure.database.models import ExpenseCategory
+    from src.domains.accounting.services import AccountResolver
+    NumberingSeriesService.seed_all_defaults(db, tenant.id)
+
+    resolver = AccountResolver(db, tenant.id)
+    for cat_name, account_key in [
+        ("Tea & Refreshments", "expense.tea"),
+        ("Transport & Travel", "expense.transport"),
+        ("Rent", "expense.rent"),
+        ("Salary & Wages", "expense.salary"),
+    ]:
+        linked_account_id = resolver.resolve(account_key)
+        db.add(ExpenseCategory(
+            tenant_id=tenant.id,
+            name=cat_name,
+            linked_account_id=linked_account_id,
+            is_active=True,
+        ))
+
     _log_audit(db, "user.register", user_id=str(user.id), tenant_id=str(tenant.id), request=request)
     db.commit()
     db.refresh(user)

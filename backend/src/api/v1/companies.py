@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 
 from src.core.config import settings
 from src.core.database import get_db_session
-from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries
+from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries, ExpenseCategory
 from src.schemas.company_schemas import (
     CompanyCreate, CompanyResponse,
     BranchCreate, BranchUpdate, BranchResponse,
@@ -46,6 +46,30 @@ def create_company(
 
     # Seed default configurations
     NumberingSeriesService.seed_all_defaults(db, tenant.id)
+
+    # Seed default expense categories with linked accounts
+    from src.domains.accounting.services import AccountResolver
+    resolver = AccountResolver(db, tenant.id)
+    default_expense_cats = [
+        ("Tea & Refreshments", "expense.tea"),
+        ("Transport & Travel", "expense.transport"),
+        ("Rent", "expense.rent"),
+        ("Salary & Wages", "expense.salary"),
+    ]
+    for cat_name, account_key in default_expense_cats:
+        existing = db.query(ExpenseCategory).filter(
+            ExpenseCategory.tenant_id == tenant.id,
+            ExpenseCategory.name == cat_name,
+        ).first()
+        if not existing:
+            linked_account_id = resolver.resolve(account_key)
+            cat = ExpenseCategory(
+                tenant_id=tenant.id,
+                name=cat_name,
+                linked_account_id=linked_account_id,
+                is_active=True,
+            )
+            db.add(cat)
 
     setting = TenantSetting(
         tenant_id=tenant.id,

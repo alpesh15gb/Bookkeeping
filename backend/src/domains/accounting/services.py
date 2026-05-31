@@ -789,6 +789,10 @@ _STANDARD_ACCOUNTS: Dict[str, Dict[str, str]] = {
     "assets.upi": {"name": "UPI Collections", "code": "UPI", "type": "ASSET"},
     "assets.pos": {"name": "POS Collections", "code": "POS", "type": "ASSET"},
     "round_off": {"name": "Round Off Account", "code": "ROF", "type": "EXPENSE"},
+    "expense.tea": {"name": "Tea & Refreshments", "code": "EXP-TEA", "type": "EXPENSE"},
+    "expense.transport": {"name": "Transport & Travel", "code": "EXP-TRN", "type": "EXPENSE"},
+    "expense.rent": {"name": "Rent", "code": "EXP-RNT", "type": "EXPENSE"},
+    "expense.salary": {"name": "Salary & Wages", "code": "EXP-SAL", "type": "EXPENSE"},
 }
 
 
