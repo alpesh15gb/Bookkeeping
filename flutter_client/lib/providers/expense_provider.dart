@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_client/core/api_client.dart';
+import 'package:flutter_client/core/local_database.dart';
+import 'package:flutter_client/core/sync_manager.dart';
 
 class ExpenseProvider extends ChangeNotifier {
   bool _isLoading = false;
@@ -49,16 +51,30 @@ class ExpenseProvider extends ChangeNotifier {
           _totalItems = _items.length;
         }
         _currentPage = page;
-        _isLoading = false;
-        notifyListeners();
-        return _items;
+        await SyncManager.instance?.cacheGetResponse('/expenses', _items);
       }
     } catch (_) {
       _errorMessage = 'Failed to load expenses';
     }
+    if (_items.isEmpty && !(SyncManager.instance?.isOnline ?? true)) {
+      try {
+        final cached = await LocalDatabase.query(
+          'cached_expenses',
+          where: 'tenant_id = ?',
+          whereArgs: [ApiClient.tenantId],
+        );
+        _items = cached.map((row) {
+          final jsonStr = row['json'] as String?;
+          return jsonStr != null ? jsonDecode(jsonStr) : row;
+        }).toList();
+        _totalItems = _items.length;
+        _totalPages = 1;
+        _errorMessage = _items.isNotEmpty ? null : 'No cached expenses available';
+      } catch (_) {}
+    }
     _isLoading = false;
     notifyListeners();
-    return [];
+    return _items;
   }
 
   void nextPage() {
@@ -73,10 +89,24 @@ class ExpenseProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    final body = jsonEncode(payload);
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'create_expense',
+        endpoint: '${ApiClient.baseUrl}/expenses',
+        method: 'POST',
+        body: body,
+      );
+      if (queued) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.post(
         Uri.parse('${ApiClient.baseUrl}/expenses'),
-        body: jsonEncode(payload),
+        body: body,
       );
       if (response.statusCode == 201) {
         _isLoading = false;
@@ -93,10 +123,24 @@ class ExpenseProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    final body = jsonEncode(payload);
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'update_expense',
+        endpoint: '${ApiClient.baseUrl}/expenses/$id',
+        method: 'PUT',
+        body: body,
+      );
+      if (queued) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.put(
         Uri.parse('${ApiClient.baseUrl}/expenses/$id'),
-        body: jsonEncode(payload),
+        body: body,
       );
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -121,6 +165,18 @@ class ExpenseProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'post_expense',
+        endpoint: '${ApiClient.baseUrl}/expenses/$id/post',
+        method: 'POST',
+      );
+      if (queued) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/expenses/$id/post'));
       if (response.statusCode == 200) {
@@ -146,9 +202,17 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/expenses/$id'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        await SyncManager.instance?.cacheDocumentDetail('/expenses/$id', data);
+        return data;
       }
     } catch (_) {}
+    if (!(SyncManager.instance?.isOnline ?? true)) {
+      final cached = await LocalDatabase.getCachedDocumentDetail(
+        ApiClient.tenantId ?? '', 'expense', id,
+      );
+      if (cached != null) return cached;
+    }
     return null;
   }
 
@@ -273,6 +337,20 @@ class ExpenseProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    final id = url.split('/').last;
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'delete_expense',
+        endpoint: url,
+        method: 'DELETE',
+      );
+      if (queued) {
+        _items.removeWhere((e) => (e['id']?.toString()) == id);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.delete(Uri.parse(url));
       if (response.statusCode == 204) {

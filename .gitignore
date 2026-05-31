@@ -73,3 +73,5 @@ Thumbs.db
 
 # Uploads
 uploads/*.vyb
+
+dump/

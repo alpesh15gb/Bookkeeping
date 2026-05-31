@@ -604,3 +604,27 @@ def get_balance_sheet(
         total_equity=total_equity.quantize(Decimal("0.01")),
         net_profit=net_profit.quantize(Decimal("0.01")),
     )
+
+
+@router.get("/cash-bank-balances")
+def get_cash_bank_balances(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
+):
+    """Returns current balances for cash and bank accounts."""
+    accounts = db.query(Account).filter(
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None,
+        Account.account_type == "ASSET",
+        Account.code.in_(["CASH", "BANK", "UPI", "POS"])
+    ).order_by(Account.code.asc()).all()
+
+    return [
+        {
+            "id": str(a.id),
+            "name": a.name,
+            "code": a.code,
+            "current_balance": float(a.current_balance)
+        }
+        for a in accounts
+    ]

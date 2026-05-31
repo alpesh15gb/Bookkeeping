@@ -268,20 +268,6 @@ class AccountingProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<Map<String, dynamic>?> fetchCashFlow({String? startDate, String? endDate}) async {
-    try {
-      final params = <String>[];
-      if (startDate != null) params.add('start_date=$startDate');
-      if (endDate != null) params.add('end_date=$endDate');
-      final query = params.isNotEmpty ? '?${params.join('&')}' : '';
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/reports/cash-flow$query'));
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      }
-    } catch (_) {}
-    return null;
-  }
-
   Future<Map<String, dynamic>?> fetchSalesAnalytics({String? startDate, String? endDate}) async {
     try {
       final params = <String>[];

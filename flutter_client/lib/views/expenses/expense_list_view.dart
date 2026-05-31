@@ -70,6 +70,29 @@ class _ExpenseListViewState extends State<ExpenseListView> {
     }
   }
 
+  void _bulkCancel() async {
+    final confirm = await AppConfirmDialog.show(
+      context,
+      title: 'Cancel ${_selectedIds.length} expenses?',
+      message: 'This will reverse ledger entries for each selected expense.',
+    );
+    if (confirm == true) {
+      final provider = context.read<ExpenseProvider>();
+      int successCount = 0;
+      for (final id in _selectedIds) {
+        final ok = await provider.cancelExpense(id);
+        if (ok) successCount++;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successCount of ${_selectedIds.length} expenses cancelled')),
+        );
+      }
+      _clearSelection();
+      provider.fetchExpenses(page: provider.currentPage);
+    }
+  }
+
   void _showForm({Map<String, dynamic>? expense}) {
     Navigator.push(
       context,
@@ -305,7 +328,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                       OutlinedButton.icon(
                                         onPressed: _clearSelection,
                                         icon: const Icon(Icons.close, size: 14),
-                                        label: const Text('Cancel'),
+                                        label: const Text('Clear'),
                                         style: OutlinedButton.styleFrom(
                                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                           textStyle: AppTextStyles.buttonSmall,
@@ -313,16 +336,14 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                       ),
                                       const SizedBox(width: 8),
                                       OutlinedButton.icon(
-                                        onPressed: () {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(content: Text('Export selected - coming soon')),
-                                          );
-                                        },
-                                        icon: const Icon(Icons.file_download_outlined, size: 14),
-                                        label: const Text('Export'),
+                                        onPressed: _bulkCancel,
+                                        icon: const Icon(Icons.cancel_outlined, size: 14),
+                                        label: const Text('Cancel'),
                                         style: OutlinedButton.styleFrom(
+                                          foregroundColor: AppColors.error,
                                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                           textStyle: AppTextStyles.buttonSmall,
+                                          side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
                                         ),
                                       ),
                                       const SizedBox(width: 8),

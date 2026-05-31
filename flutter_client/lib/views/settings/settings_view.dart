@@ -6,6 +6,7 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
+import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/auth/change_password_view.dart';
@@ -284,6 +285,8 @@ class _SettingsViewState extends State<SettingsView> {
                   items: const [
                     DropdownMenuItem(value: 'professional', child: Text('Professional (Navy)')),
                     DropdownMenuItem(value: 'modern', child: Text('Modern (Indigo)')),
+                    DropdownMenuItem(value: 'minimal', child: Text('Minimal (Clean)')),
+                    DropdownMenuItem(value: 'elegant', child: Text('Elegant (Green)')),
                     DropdownMenuItem(value: 'thermal', child: Text('Thermal / POS')),
                   ],
                   onChanged: (v) {
@@ -544,6 +547,88 @@ class _SettingsViewState extends State<SettingsView> {
                         value: themeProvider.isDarkMode,
                         onChanged: (_) => themeProvider.toggleTheme(),
                       ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // Offline & Sync Section
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text('Offline & Sync', style: AppTextStyles.h3),
+                    const Spacer(),
+                    Consumer<SyncManager>(
+                      builder: (context, sync, _) {
+                        if (!sync.isOnline) {
+                          return const Icon(Icons.cloud_off, color: AppColors.warning, size: 18);
+                        }
+                        if (sync.pendingCount > 0) {
+                          return Badge(
+                            label: Text('${sync.pendingCount}'),
+                            child: const Icon(Icons.sync, color: AppColors.info, size: 18),
+                          );
+                        }
+                        return const Icon(Icons.cloud_done, color: AppColors.success, size: 18);
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Consumer<SyncManager>(
+                  builder: (context, sync, _) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _settingRow(
+                          Icons.wifi,
+                          'Connection',
+                          sync.isOnline ? 'Online' : 'Offline',
+                          valueColor: sync.isOnline ? AppColors.success : AppColors.error,
+                        ),
+                        _settingRow(
+                          Icons.pending_actions,
+                          'Pending Sync Items',
+                          '${sync.pendingCount}',
+                          valueColor: sync.pendingCount > 0 ? AppColors.warning : AppColors.textMuted,
+                        ),
+                        if (sync.lastSyncMessage != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: Text(
+                              sync.lastSyncMessage!,
+                              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                            ),
+                          ),
+                        const SizedBox(height: 12),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: sync.isSyncing ? null : () => sync.fullSync(),
+                                icon: sync.isSyncing
+                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                    : const Icon(Icons.sync, size: 18),
+                                label: Text(sync.isSyncing ? 'Syncing...' : 'Full Sync'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: sync.isSyncing || sync.pendingCount == 0 ? null : () => sync.syncPendingActions(),
+                                icon: const Icon(Icons.cloud_upload, size: 18),
+                                label: const Text('Upload Pending'),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     );
                   },
                 ),

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_client/core/api_client.dart';
+import 'package:flutter_client/core/local_database.dart';
+import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/models/invoice.dart';
 
 class InvoiceProvider extends ChangeNotifier {
@@ -32,17 +34,30 @@ class InvoiceProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         final List items = data['items'] ?? [];
-        // Note: list response fields might be minimal, so we convert them to full Models with fallback values.
         _invoices = items.map((x) => InvoiceModel.fromJson(x)).toList();
+        await SyncManager.instance?.cacheGetResponse('/invoices', items);
       } else {
         _errorMessage = 'Failed to load invoices';
       }
     } catch (e) {
       _errorMessage = 'An error occurred';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
+    if (_invoices.isEmpty && !(SyncManager.instance?.isOnline ?? true)) {
+      try {
+        final cached = await LocalDatabase.query(
+          'cached_invoices',
+          where: 'tenant_id = ?',
+          whereArgs: [ApiClient.tenantId],
+        );
+        _invoices = cached.map((row) {
+          final jsonStr = row['json'] as String?;
+          return InvoiceModel.fromJson(jsonStr != null ? jsonDecode(jsonStr) : row);
+        }).toList();
+        _errorMessage = _invoices.isNotEmpty ? null : 'No cached invoices available';
+      } catch (_) {}
+    }
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<InvoiceModel?> previewInvoice(Map<String, dynamic> payload) async {
@@ -62,10 +77,24 @@ class InvoiceProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    final body = jsonEncode(payload);
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'create_invoice',
+        endpoint: '${ApiClient.baseUrl}/invoices',
+        method: 'POST',
+        body: body,
+      );
+      if (queued) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.post(
         Uri.parse('${ApiClient.baseUrl}/invoices'),
-        body: jsonEncode(payload),
+        body: body,
       );
       if (response.statusCode == 201) {
         await fetchInvoices();
@@ -86,9 +115,17 @@ class InvoiceProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/$id'));
       if (response.statusCode == 200) {
-        return InvoiceModel.fromJson(jsonDecode(response.body));
+        final data = jsonDecode(response.body);
+        await SyncManager.instance?.cacheDocumentDetail('/invoices/$id', data);
+        return InvoiceModel.fromJson(data);
       }
     } catch (_) {}
+    if (!(SyncManager.instance?.isOnline ?? true)) {
+      final cached = await LocalDatabase.getCachedDocumentDetail(
+        ApiClient.tenantId ?? '', 'invoice', id,
+      );
+      if (cached != null) return InvoiceModel.fromJson(cached);
+    }
     return null;
   }
 
@@ -96,10 +133,24 @@ class InvoiceProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    final body = jsonEncode(payload);
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'update_invoice',
+        endpoint: '${ApiClient.baseUrl}/invoices/$id',
+        method: 'PUT',
+        body: body,
+      );
+      if (queued) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.put(
         Uri.parse('${ApiClient.baseUrl}/invoices/$id'),
-        body: jsonEncode(payload),
+        body: body,
       );
       if (response.statusCode == 200) {
         await fetchInvoices();
@@ -120,6 +171,18 @@ class InvoiceProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'cancel_invoice',
+        endpoint: '${ApiClient.baseUrl}/invoices/$id/cancel',
+        method: 'POST',
+      );
+      if (queued) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.post(
         Uri.parse('${ApiClient.baseUrl}/invoices/$id/cancel'),
@@ -144,6 +207,18 @@ class InvoiceProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'finalize_invoice',
+        endpoint: '${ApiClient.baseUrl}/invoices/$id/finalize',
+        method: 'POST',
+      );
+      if (queued) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.post(
         Uri.parse('${ApiClient.baseUrl}/invoices/$id/finalize'),
@@ -168,10 +243,24 @@ class InvoiceProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    final body = jsonEncode(payload);
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'record_payment',
+        endpoint: '${ApiClient.baseUrl}/invoices/$id/payment',
+        method: 'POST',
+        body: body,
+      );
+      if (queued) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.post(
         Uri.parse('${ApiClient.baseUrl}/invoices/$id/payment'),
-        body: jsonEncode(payload),
+        body: body,
       );
       if (response.statusCode == 200) {
         await fetchInvoices();
@@ -193,6 +282,19 @@ class InvoiceProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'delete_invoice',
+        endpoint: '${ApiClient.baseUrl}/invoices/$id',
+        method: 'DELETE',
+      );
+      if (queued) {
+        _invoices.removeWhere((inv) => inv.id == id);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.delete(
         Uri.parse('${ApiClient.baseUrl}/invoices/$id'),

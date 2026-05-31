@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 import uuid
 import re
 import logging
@@ -317,6 +317,7 @@ def get_me(current_user: User = Depends(get_current_user)):
 class MembershipResponse(SchemaBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
+    tenant_name: str
     role: str
     is_active: bool
 
@@ -326,11 +327,22 @@ def get_memberships(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
 ):
-    memberships = db.query(TenantMembership).filter(
+    memberships = db.query(TenantMembership).options(
+        joinedload(TenantMembership.tenant)
+    ).filter(
         TenantMembership.user_id == current_user.id,
         TenantMembership.is_active == True
     ).all()
-    return memberships
+    return [
+        {
+            "id": m.id,
+            "tenant_id": m.tenant_id,
+            "tenant_name": m.tenant.legal_name if m.tenant else None,
+            "role": m.role,
+            "is_active": m.is_active,
+        }
+        for m in memberships
+    ]
 
 
 class ChangePasswordRequest(BaseModel):

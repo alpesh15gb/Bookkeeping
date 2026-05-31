@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_client/core/api_client.dart';
+import 'package:flutter_client/core/local_database.dart';
+import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/models/contact.dart';
 
 class ContactProvider extends ChangeNotifier {
@@ -25,25 +27,55 @@ class ContactProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         final List data = jsonDecode(response.body);
         _contacts = data.map((x) => ContactModel.fromJson(x)).toList();
+        await SyncManager.instance?.cacheGetResponse('/masters/contacts', data);
       } else {
         _errorMessage = 'Failed to load contacts';
       }
     } catch (e) {
       _errorMessage = 'An error occurred';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
+    // Offline fallback
+    if (_contacts.isEmpty && !(SyncManager.instance?.isOnline ?? true)) {
+      try {
+        final cached = await LocalDatabase.query(
+          'cached_contacts',
+          where: 'tenant_id = ?',
+          whereArgs: [ApiClient.tenantId],
+        );
+        _contacts = cached.map((row) {
+          final jsonStr = row['json'] as String?;
+          return ContactModel.fromJson(jsonStr != null ? jsonDecode(jsonStr) : row);
+        }).toList();
+        _errorMessage = _contacts.isNotEmpty ? null : 'No cached contacts available';
+      } catch (_) {}
+    }
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<bool> addContact(ContactModel contact) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    final body = jsonEncode(contact.toJson());
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'create_contact',
+        endpoint: '${ApiClient.baseUrl}/masters/contacts',
+        method: 'POST',
+        body: body,
+      );
+      if (queued) {
+        _contacts.add(contact);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.post(
         Uri.parse('${ApiClient.baseUrl}/masters/contacts'),
-        body: jsonEncode(contact.toJson()),
+        body: body,
       );
       debugPrint('Add contact response status: ${response.statusCode}');
       debugPrint('Add contact response body: ${response.body}');
@@ -67,10 +99,26 @@ class ContactProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    final body = jsonEncode(contact.toJson());
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'update_contact',
+        endpoint: '${ApiClient.baseUrl}/masters/contacts/$id',
+        method: 'PUT',
+        body: body,
+      );
+      if (queued) {
+        final idx = _contacts.indexWhere((c) => c.id == id);
+        if (idx >= 0) _contacts[idx] = contact;
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.put(
         Uri.parse('${ApiClient.baseUrl}/masters/contacts/$id'),
-        body: jsonEncode(contact.toJson()),
+        body: body,
       );
       if (response.statusCode == 200) {
         await fetchContacts();
@@ -92,6 +140,19 @@ class ContactProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
+    if (SyncManager.instance != null && !SyncManager.instance!.isOnline) {
+      final queued = await SyncManager.instance!.handleWrite(
+        action: 'delete_contact',
+        endpoint: '${ApiClient.baseUrl}/masters/contacts/$id',
+        method: 'DELETE',
+      );
+      if (queued) {
+        _contacts.removeWhere((c) => c.id == id);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    }
     try {
       final response = await _client.delete(Uri.parse('${ApiClient.baseUrl}/masters/contacts/$id'));
       if (response.statusCode == 204) {

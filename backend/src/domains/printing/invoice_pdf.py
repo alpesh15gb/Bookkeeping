@@ -113,6 +113,18 @@ def generate_invoice_pdf(
         muted_color = colors.black
         table_header_bg = colors.white
         border_color = colors.black
+    elif template == "minimal":
+        primary_color = colors.HexColor('#111827')  # Near black
+        text_color = colors.HexColor('#374151')
+        muted_color = colors.HexColor('#6B7280')
+        table_header_bg = colors.white
+        border_color = colors.HexColor('#E5E7EB')
+    elif template == "elegant":
+        primary_color = colors.HexColor('#1B4332')  # Forest green
+        text_color = colors.HexColor('#1E293B')
+        muted_color = colors.HexColor('#52796F')
+        table_header_bg = colors.HexColor('#E8F5E9')
+        border_color = colors.HexColor('#A5D6A7')
     else:  # professional (default / Format 1 & 3 layout style)
         primary_color = colors.HexColor('#0F1B3D')  # Deep Navy Blue
         text_color = colors.HexColor('#1E293B')
@@ -387,6 +399,121 @@ def generate_invoice_pdf(
             ('PADDING', (0,0), (-1,-1), 0),
         ])
         elements.append(bottom_table)
+
+    # Render Minimal Layout (clean, black & white, no borders)
+    elif template == "minimal":
+        elements.append(Paragraph(company_name, company_title))
+        if company_address:
+            elements.append(Paragraph(company_address, center_style))
+        elements.append(Spacer(1, 4*mm))
+
+        # Simple meta
+        meta = [
+            [Paragraph(f"<b>{doc_type}:</b> {invoice_number}", bold_style), Paragraph(f"Date: {issue_date}", normal_style)],
+            [Paragraph(f"Customer: {customer_name}", normal_style), Paragraph(f"Due: {due_date}", normal_style)],
+        ]
+        if customer_gstin:
+            meta.append([Paragraph(f"GSTIN: {customer_gstin}", normal_style), ""])
+        meta_table = Table(meta, colWidths=[93*mm, 93*mm], style=[('PADDING', (0,0), (-1,-1), 3)])
+        elements.append(meta_table)
+        elements.append(Spacer(1, 6*mm))
+
+        # Minimal items table — no vertical borders, only horizontal lines
+        grid_data = [[Paragraph(f"<b>{h}</b>", bold_style) for h in ['Description', 'Qty', 'Rate', 'Amount']]]
+        for item in items:
+            desc = item.get('description') or item.get('product_name') or 'N/A'
+            qty = float(item.get('quantity', 0))
+            rate = float(item.get('rate', 0))
+            amt = float(item.get('total', item.get('amount', 0)))
+            grid_data.append([
+                Paragraph(desc, normal_style),
+                Paragraph(f"{qty:.0f}", normal_style),
+                Paragraph(f"{rate:.2f}", normal_style),
+                Paragraph(f"{amt:.2f}", normal_style),
+            ])
+        items_table = Table(grid_data, colWidths=[106*mm, 20*mm, 25*mm, 25*mm], style=[
+            ('LINEBELOW', (0,0), (-1,0), 1, primary_color),
+            ('LINEBELOW', (0,1), (-1,-1), 0.5, border_color),
+            ('PADDING', (0,0), (-1,-1), 4),
+        ])
+        elements.append(items_table)
+        elements.append(Spacer(1, 6*mm))
+
+        # Totals right-aligned
+        totals_col = [
+            [Paragraph("Subtotal:", normal_style), Paragraph(f"₹{subtotal:.2f}", right_style)],
+            [Paragraph("CGST:", normal_style), Paragraph(f"₹{cgst:.2f}", right_style)],
+            [Paragraph("SGST:", normal_style), Paragraph(f"₹{sgst:.2f}", right_style)],
+            [Paragraph("<b>Total:</b>", bold_style), Paragraph(f"<b>₹{total:.2f}</b>", bold_right)],
+        ]
+        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
+        elements.append(Table([["", totals_table]], colWidths=[111*mm, 75*mm], style=[('ALIGN', (1,0), (1,0), 'RIGHT')]))
+        elements.append(Spacer(1, 8*mm))
+        elements.append(Paragraph("Thank you.", center_style))
+
+    # Render Elegant Layout (green accent, softer)
+    elif template == "elegant":
+        # Header with green accent line
+        elements.append(Table([[""]], colWidths=[186*mm], style=[
+            ('BACKGROUND', (0,0), (-1,-1), primary_color),
+            ('PADDING', (0,0), (-1,-1), 3),
+        ]))
+        elements.append(Spacer(1, 2*mm))
+        elements.append(Paragraph(company_name, company_title))
+        if company_gstin:
+            elements.append(Paragraph(f"GSTIN: {company_gstin}", center_style))
+        elements.append(Spacer(1, 4*mm))
+
+        # Two-column info
+        info_row = [
+            [
+                Paragraph(f"<b>Billed To</b><br/>{customer_name}<br/>{customer_gstin or 'Unregistered'}", normal_style),
+                Paragraph(f"<b>{doc_type}</b><br/>No: {invoice_number}<br/>Date: {issue_date}<br/>Due: {due_date}", normal_style),
+            ]
+        ]
+        info_table = Table(info_row, colWidths=[93*mm, 93*mm], style=[
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 6),
+        ])
+        elements.append(info_table)
+        elements.append(Spacer(1, 4*mm))
+
+        # Items
+        grid_data = [[Paragraph(f"<b>{h}</b>", bold_style) for h in ['S.No.', 'Description', 'Qty', 'Rate', 'Amount']]]
+        for i, item in enumerate(items, 1):
+            desc = item.get('description') or item.get('product_name') or 'N/A'
+            qty = float(item.get('quantity', 0))
+            rate = float(item.get('rate', 0))
+            amt = float(item.get('total', item.get('amount', 0)))
+            grid_data.append([
+                Paragraph(str(i), normal_style),
+                Paragraph(desc, normal_style),
+                Paragraph(f"{qty:.0f}", normal_style),
+                Paragraph(f"{rate:.2f}", normal_style),
+                Paragraph(f"{amt:.2f}", normal_style),
+            ])
+        items_table = Table(grid_data, colWidths=[15*mm, 101*mm, 20*mm, 25*mm, 25*mm], style=[
+            ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+            ('LINEBELOW', (0,0), (-1,0), 1.5, primary_color),
+            ('LINEBELOW', (0,1), (-1,-1), 0.5, border_color),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('PADDING', (0,0), (-1,-1), 4),
+        ])
+        elements.append(items_table)
+        elements.append(Spacer(1, 4*mm))
+
+        # Totals
+        totals_col = [
+            [Paragraph("Subtotal:", normal_style), Paragraph(f"₹{subtotal:.2f}", right_style)],
+            [Paragraph("CGST:", normal_style), Paragraph(f"₹{cgst:.2f}", right_style)],
+            [Paragraph("SGST:", normal_style), Paragraph(f"₹{sgst:.2f}", right_style)],
+            [Paragraph("<b>Total:</b>", bold_style), Paragraph(f"<b>₹{total:.2f}</b>", bold_right)],
+        ]
+        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm])
+        elements.append(Table([["", totals_table]], colWidths=[111*mm, 75*mm], style=[('ALIGN', (1,0), (1,0), 'RIGHT')]))
+        elements.append(Spacer(1, 6*mm))
+        sign_block = f"<br/><br/>For <b>{company_name}</b><br/><br/>Authorised Signatory"
+        elements.append(Paragraph(sign_block, right_style))
 
     # Render A4 Modern Layout (Self Learning Indigo Layout)
     else:

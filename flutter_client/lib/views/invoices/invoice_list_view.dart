@@ -88,6 +88,54 @@ class _InvoiceListViewState extends State<InvoiceListView> {
     }
   }
 
+  void _bulkCancel() async {
+    final confirm = await AppConfirmDialog.show(
+      context,
+      title: 'Cancel ${_selectedIds.length} invoices?',
+      message: 'This will reverse ledger entries for each selected invoice.',
+    );
+    if (confirm == true) {
+      final provider = context.read<InvoiceProvider>();
+      int successCount = 0;
+      for (final id in _selectedIds) {
+        final ok = await provider.cancelInvoice(id);
+        if (ok) successCount++;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successCount of ${_selectedIds.length} invoices cancelled')),
+        );
+      }
+      _clearSelection();
+      _fetch();
+    }
+  }
+
+  void _bulkEmail() async {
+    final confirm = await AppConfirmDialog.show(
+      context,
+      title: 'Email ${_selectedIds.length} invoices?',
+      message: 'Invoice PDFs will be emailed to each customer.',
+    );
+    if (confirm == true) {
+      int successCount = 0;
+      for (final id in _selectedIds) {
+        try {
+          final response = await ApiClient().post(
+            Uri.parse('${ApiClient.baseUrl}/invoices/$id/email'),
+          );
+          if (response.statusCode == 200) successCount++;
+        } catch (_) {}
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successCount of ${_selectedIds.length} emails queued')),
+        );
+      }
+      _clearSelection();
+    }
+  }
+
   void _showForm({InvoiceModel? invoice}) async {
     InvoiceModel? fullInvoice = invoice;
     if (invoice != null) {
@@ -464,7 +512,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                           OutlinedButton.icon(
                                             onPressed: _clearSelection,
                                             icon: const Icon(Icons.close, size: 14),
-                                            label: const Text('Cancel'),
+                                            label: const Text('Clear'),
                                             style: OutlinedButton.styleFrom(
                                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                               textStyle: AppTextStyles.buttonSmall,
@@ -472,13 +520,21 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                           ),
                                           const SizedBox(width: 8),
                                           OutlinedButton.icon(
-                                            onPressed: () {
-                                              ScaffoldMessenger.of(context).showSnackBar(
-                                                const SnackBar(content: Text('Export selected - coming soon')),
-                                              );
-                                            },
-                                            icon: const Icon(Icons.file_download_outlined, size: 14),
-                                            label: const Text('Export'),
+                                            onPressed: _bulkCancel,
+                                            icon: const Icon(Icons.cancel_outlined, size: 14),
+                                            label: const Text('Cancel'),
+                                            style: OutlinedButton.styleFrom(
+                                              foregroundColor: AppColors.error,
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                              textStyle: AppTextStyles.buttonSmall,
+                                              side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          OutlinedButton.icon(
+                                            onPressed: _bulkEmail,
+                                            icon: const Icon(Icons.email_outlined, size: 14),
+                                            label: const Text('Email'),
                                             style: OutlinedButton.styleFrom(
                                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                                               textStyle: AppTextStyles.buttonSmall,

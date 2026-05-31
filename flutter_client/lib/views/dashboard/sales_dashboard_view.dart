@@ -266,6 +266,93 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
             ),
             const SizedBox(height: 24),
 
+            // Cash & Bank Balances + Top Debtors
+            GridView.count(
+              crossAxisCount: isMobile ? 1 : 2,
+              crossAxisSpacing: 12,
+              mainAxisSpacing: 12,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              childAspectRatio: isMobile ? 2.2 : 3.0,
+              children: [
+                // Cash & Bank Balances
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.account_balance_wallet_outlined, size: 18, color: AppColors.brandNavy),
+                          const SizedBox(width: 8),
+                          Text('Cash & Bank', style: AppTextStyles.h3),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (dashboard.cashBankBalances.isEmpty)
+                        Text('No accounts configured', style: AppTextStyles.bodySmall)
+                      else
+                        ...dashboard.cashBankBalances.map((a) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  a['name'] ?? 'Account',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                ),
+                              ),
+                              Text(
+                                '₹${_format((a['current_balance'] ?? 0).toDouble())}',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
+                              ),
+                            ],
+                          ),
+                        )),
+                    ],
+                  ),
+                ),
+                // Top Debtors
+                AppCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.people_outline, size: 18, color: AppColors.warning),
+                          const SizedBox(width: 8),
+                          Text('Top Debtors', style: AppTextStyles.h3),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (dashboard.topDebtors.isEmpty)
+                        Text('No outstanding receivables', style: AppTextStyles.bodySmall)
+                      else
+                        ...dashboard.topDebtors.map((d) => Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 4),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  d['name'] ?? 'Customer',
+                                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                '₹${_format((d['outstanding'] ?? 0).toDouble())}',
+                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace', color: AppColors.warning),
+                              ),
+                            ],
+                          ),
+                        )),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
             // Interactive Charts Layout
             if (isMobile) ...[
               _InteractiveSplineAreaChart(

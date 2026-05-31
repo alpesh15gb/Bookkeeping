@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/auth_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
+import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/models/auth.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/global_search.dart';
@@ -33,6 +34,67 @@ import 'package:flutter_client/views/sales_analytics/sales_analytics_view.dart';
 import 'package:flutter_client/views/banking/banking_profile_list_view.dart';
 import 'package:flutter_client/views/returns/returns_list_view.dart';
 import 'package:flutter_client/views/tools/backup_restore_view.dart';
+
+// ─── Offline Banner Widget ────────────────────────────────────
+
+class _OfflineBanner extends StatelessWidget {
+  final SyncManager syncManager;
+  const _OfflineBanner({required this.syncManager});
+
+  @override
+  Widget build(BuildContext context) {
+    final isOffline = !syncManager.isOnline;
+    final pending = syncManager.pendingCount;
+
+    Color bgColor;
+    Color textColor;
+    IconData icon;
+    String text;
+
+    if (isOffline && pending > 0) {
+      bgColor = const Color(0xFFFFF3E0);
+      textColor = const Color(0xFFE65100);
+      icon = Icons.cloud_off;
+      text = 'Offline — $pending change${pending == 1 ? '' : 's'} queued';
+    } else if (isOffline) {
+      bgColor = const Color(0xFFF2F2F4);
+      textColor = const Color(0xFF5F6572);
+      icon = Icons.cloud_off;
+      text = 'Working offline';
+    } else if (pending > 0) {
+      bgColor = const Color(0xFFFFF8E1);
+      textColor = const Color(0xFFF57F17);
+      icon = Icons.sync;
+      text = 'Syncing $pending item${pending == 1 ? '' : 's'}...';
+    } else {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      color: bgColor,
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: textColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              text,
+              style: TextStyle(fontSize: 12, color: textColor, fontWeight: FontWeight.w500),
+            ),
+          ),
+          if (!isOffline && pending > 0)
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2, color: textColor),
+            ),
+        ],
+      ),
+    );
+  }
+}
 
 // ─── Menu Data Model ──────────────────────────────────────────
 
@@ -236,6 +298,7 @@ class _ShellViewState extends State<ShellView> {
   }
 
   Widget _buildDesktopLayout(UserResponse? user) {
+    final syncManager = context.watch<SyncManager>();
     return Scaffold(
       backgroundColor: AppColors.bgLight,
       body: Row(
@@ -253,8 +316,10 @@ class _ShellViewState extends State<ShellView> {
                   title: _flatItems[_selectedIndex].name,
                   onSearch: _openSearch,
                 ),
+                if (!syncManager.isOnline || syncManager.pendingCount > 0)
+                  _OfflineBanner(syncManager: syncManager),
                 Expanded(
-                  key: ValueKey(_selectedIndex),
+                  key: ValueKey('${_selectedIndex}_${authProvider.activeTenantId ?? ''}'),
                   child: _currentView,
                 ),
               ],
@@ -266,6 +331,7 @@ class _ShellViewState extends State<ShellView> {
   }
 
   Widget _buildMobileLayout(UserResponse? user) {
+    final syncManager = context.watch<SyncManager>();
     return Scaffold(
       backgroundColor: AppColors.bgLight,
       appBar: AppBar(
@@ -302,12 +368,20 @@ class _ShellViewState extends State<ShellView> {
         user: user,
         onLogout: () => context.read<AuthProvider>().logout(),
       ),
-      body: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 200),
-        child: KeyedSubtree(
-          key: ValueKey(_selectedIndex),
-          child: _currentView,
-        ),
+      body: Column(
+        children: [
+          if (!syncManager.isOnline || syncManager.pendingCount > 0)
+            _OfflineBanner(syncManager: syncManager),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: KeyedSubtree(
+                key: ValueKey('${_selectedIndex}_${authProvider.activeTenantId ?? ''}'),
+                child: _currentView,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -556,6 +630,10 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+    final memberships = authProvider.memberships;
+    final activeTenantId = authProvider.activeTenantId;
+
     return Container(
       width: 240,
       color: AppColors.bgSidebar,
@@ -627,6 +705,83 @@ class _Sidebar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Company Switcher
+                if (memberships.length > 1)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: InkWell(
+                      onTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          backgroundColor: AppColors.bgSidebar,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                          ),
+                          builder: (ctx) {
+                            return SafeArea(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: const BoxDecoration(
+                                      border: Border(bottom: BorderSide(color: Colors.white12)),
+                                    ),
+                                    child: const Text(
+                                      'Switch Company',
+                                      style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                                    ),
+                                  ),
+                                  ...memberships.map((m) => ListTile(
+                                    leading: Icon(
+                                      m.tenantId == activeTenantId ? Icons.check_circle : Icons.circle_outlined,
+                                      color: m.tenantId == activeTenantId ? AppColors.goldAccent : Colors.white54,
+                                    ),
+                                    title: Text(
+                                      m.tenantName ?? 'Company',
+                                      style: const TextStyle(color: Colors.white),
+                                    ),
+                                    subtitle: Text(
+                                      m.role.toUpperCase(),
+                                      style: const TextStyle(color: AppColors.textWhiteMuted, fontSize: 11),
+                                    ),
+                                    onTap: () {
+                                      authProvider.switchTenant(m.tenantId);
+                                      Navigator.pop(ctx);
+                                    },
+                                  )),
+                                ],
+                              ),
+                            );
+                          },
+                        );
+                      },
+                      borderRadius: AppRadius.sidebar,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          borderRadius: AppRadius.sidebar,
+                          border: Border.all(color: Colors.white12),
+                          color: Colors.white.withOpacity(0.05),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.business, size: 16, color: AppColors.textWhiteMuted),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                memberships.firstWhere((m) => m.tenantId == activeTenantId, orElse: () => memberships.first).tenantName ?? 'Company',
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const Icon(Icons.expand_more, size: 16, color: AppColors.textWhiteMuted),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
                 Row(
                   children: [
                     CircleAvatar(
@@ -820,6 +975,90 @@ class _MobileDrawer extends StatelessWidget {
               ),
               child: Column(
                 children: [
+                  // Company Switcher
+                  Consumer<AuthProvider>(
+                    builder: (context, auth, _) {
+                      final memberships = auth.memberships;
+                      final activeTenantId = auth.activeTenantId;
+                      if (memberships.length <= 1) return const SizedBox.shrink();
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: InkWell(
+                          onTap: () {
+                            showModalBottomSheet(
+                              context: context,
+                              backgroundColor: AppColors.bgSidebar,
+                              shape: const RoundedRectangleBorder(
+                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                              ),
+                              builder: (ctx) {
+                                return SafeArea(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(16),
+                                        decoration: const BoxDecoration(
+                                          border: Border(bottom: BorderSide(color: Colors.white12)),
+                                        ),
+                                        child: const Text(
+                                          'Switch Company',
+                                          style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                                        ),
+                                      ),
+                                      ...memberships.map((m) => ListTile(
+                                        leading: Icon(
+                                          m.tenantId == activeTenantId ? Icons.check_circle : Icons.circle_outlined,
+                                          color: m.tenantId == activeTenantId ? AppColors.goldAccent : Colors.white54,
+                                        ),
+                                        title: Text(
+                                          m.tenantName ?? 'Company',
+                                          style: const TextStyle(color: Colors.white),
+                                        ),
+                                        subtitle: Text(
+                                          m.role.toUpperCase(),
+                                          style: const TextStyle(color: AppColors.textWhiteMuted, fontSize: 11),
+                                        ),
+                                        onTap: () {
+                                          auth.switchTenant(m.tenantId);
+                                          Navigator.pop(ctx);
+                                          Navigator.pop(context); // Close drawer
+                                        },
+                                      )),
+                                    ],
+                                  ),
+                                );
+                              },
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white12),
+                              color: Colors.white.withOpacity(0.05),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.business, size: 16, color: AppColors.textWhiteMuted),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    memberships.firstWhere((m) => m.tenantId == activeTenantId, orElse: () => memberships.first).tenantName ?? 'Company',
+                                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                                const Icon(Icons.expand_more, size: 16, color: AppColors.textWhiteMuted),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   Row(
                     children: [
                       CircleAvatar(

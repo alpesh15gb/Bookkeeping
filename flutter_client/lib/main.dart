@@ -21,6 +21,7 @@ import 'package:flutter_client/providers/misc_provider.dart';
 import 'package:flutter_client/providers/sales_analytics_provider.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
+import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/views/auth/login_view.dart';
 import 'package:flutter_client/views/shared/shell_view.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
@@ -56,6 +57,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => MiscProvider()),
         ChangeNotifierProvider(create: (_) => SalesAnalyticsProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+        ChangeNotifierProvider(create: (_) => SyncManager()),
       ],
       child: const MainAppShell(),
     );

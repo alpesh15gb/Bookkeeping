@@ -13,6 +13,8 @@ class DashboardProvider extends ChangeNotifier {
   List<dynamic> _recentInvoices = [];
   List<dynamic> _revenueTrend = [];
   List<dynamic> _expenseTrend = [];
+  List<dynamic> _cashBankBalances = [];
+  List<dynamic> _topDebtors = [];
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -21,6 +23,8 @@ class DashboardProvider extends ChangeNotifier {
   List<dynamic> get recentInvoices => _recentInvoices;
   List<dynamic> get revenueTrend => _revenueTrend;
   List<dynamic> get expenseTrend => _expenseTrend;
+  List<dynamic> get cashBankBalances => _cashBankBalances;
+  List<dynamic> get topDebtors => _topDebtors;
 
   double get revenue => _safeDouble(_salesSummary['total_sales']);
   double get cashReceived => _safeDouble(_salesSummary['total_received']);
@@ -131,6 +135,33 @@ class DashboardProvider extends ChangeNotifier {
         if (expenseTrendRes.statusCode == 200) _expenseTrend = jsonDecode(expenseTrendRes.body) as List? ?? [];
         debugPrint('🟡 [Dashboard] Expense trend: ${expenseTrendRes.statusCode}, ${_expenseTrend.length} items');
       } catch (e) { debugPrint('⚠️ [Dashboard] Expense trend failed: $e'); }
+
+      // Cash/Bank balances
+      try {
+        final cbRes = await _client.get(Uri.parse('${ApiClient.baseUrl}/accounting/cash-bank-balances'));
+        if (cbRes.statusCode == 200) {
+          _cashBankBalances = jsonDecode(cbRes.body) as List? ?? [];
+        }
+      } catch (e) { debugPrint('⚠️ [Dashboard] Cash/Bank balances failed: $e'); }
+
+      // Top debtors
+      try {
+        final now = DateTime.now();
+        final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        final arRes = await _client.get(Uri.parse('${ApiClient.baseUrl}/reports/outstanding/receivables?as_of_date=$dateStr'));
+        if (arRes.statusCode == 200) {
+          final arData = jsonDecode(arRes.body);
+          final items = (arData['invoices'] as List?) ?? [];
+          final Map<String, double> debtorMap = {};
+          for (final inv in items) {
+            final name = inv['contact_name'] ?? 'Unknown';
+            final outstanding = double.tryParse((inv['outstanding_amount'] ?? 0).toString()) ?? 0.0;
+            debtorMap[name] = (debtorMap[name] ?? 0.0) + outstanding;
+          }
+          final sorted = debtorMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+          _topDebtors = sorted.take(5).map((e) => {'name': e.key, 'outstanding': e.value}).toList();
+        }
+      } catch (e) { debugPrint('⚠️ [Dashboard] Top debtors failed: $e'); }
 
       _isLoading = false;
       debugPrint('✅ [Dashboard] fetchDashboard() COMPLETE');

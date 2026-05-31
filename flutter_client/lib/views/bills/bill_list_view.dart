@@ -16,12 +16,83 @@ class BillListView extends StatefulWidget {
 }
 
 class _BillListViewState extends State<BillListView> {
+  Set<String> _selectedIds = {};
+  bool _isSelectionMode = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<BillProvider>().fetchBills();
     });
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+        if (_selectedIds.isEmpty) _isSelectionMode = false;
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _selectAll() {
+    final provider = context.read<BillProvider>();
+    setState(() {
+      if (_selectedIds.length == provider.bills.length) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds = provider.bills.map((e) => e.id.toString()).toSet();
+      }
+    });
+  }
+
+  void _clearSelection() {
+    setState(() {
+      _selectedIds.clear();
+      _isSelectionMode = false;
+    });
+  }
+
+  void _bulkDelete() async {
+    final confirm = await AppConfirmDialog.show(
+      context,
+      title: 'Delete ${_selectedIds.length} bills?',
+      message: 'This action cannot be undone.',
+    );
+    if (confirm == true) {
+      final provider = context.read<BillProvider>();
+      for (final id in _selectedIds) {
+        await provider.deleteBill(id);
+      }
+      _clearSelection();
+      provider.fetchBills();
+    }
+  }
+
+  void _bulkCancel() async {
+    final confirm = await AppConfirmDialog.show(
+      context,
+      title: 'Cancel ${_selectedIds.length} bills?',
+      message: 'This will reverse ledger entries for each selected bill.',
+    );
+    if (confirm == true) {
+      final provider = context.read<BillProvider>();
+      int successCount = 0;
+      for (final id in _selectedIds) {
+        final ok = await provider.cancelBill(id);
+        if (ok) successCount++;
+      }
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$successCount of ${_selectedIds.length} bills cancelled')),
+        );
+      }
+      _clearSelection();
+      provider.fetchBills();
+    }
   }
 
   void _showForm({BillModel? bill}) async {
@@ -100,87 +171,220 @@ class _BillListViewState extends State<BillListView> {
               actionLabel: 'Add Bill',
               onAction: () => _showForm(),
             )
-          : ListView.separated(
-              padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-              itemCount: billProvider.bills.length,
-              separatorBuilder: (context, _) => const SizedBox(height: 10),
-              itemBuilder: (context, i) {
-                final bill = billProvider.bills[i];
-                return AppCard(
-                  onTap: () => _showDetail(bill.id),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(child: Text(bill.billNumber, style: AppTextStyles.h3)),
-                          StatusBadge(label: bill.status),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Row(
-                        children: [
-                          Icon(Icons.person_outlined, size: 14, color: AppColors.textMuted),
-                          const SizedBox(width: 6),
-                          Text(bill.contact?.name ?? 'N/A', style: AppTextStyles.bodySmall),
-                          const SizedBox(width: 16),
-                          Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textMuted),
-                          const SizedBox(width: 6),
-                          Text(bill.billDate, style: AppTextStyles.caption),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('₹${bill.total.toStringAsFixed(2)}', style: AppTextStyles.numericLarge),
-                          Row(
-                            children: [
-                              OutlinedButton.icon(
-                                onPressed: () => _showDetail(bill.id),
-                                icon: const Icon(Icons.remove_red_eye_outlined, size: 14),
-                                label: const Text('View'),
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                  textStyle: AppTextStyles.buttonSmall,
-                                  side: const BorderSide(color: AppColors.borderInput),
+          : Stack(
+              children: [
+                ListView.separated(
+                  padding: EdgeInsets.only(
+                    left: isMobile ? 12 : 20,
+                    right: isMobile ? 12 : 20,
+                    top: isMobile ? 12 : 20,
+                    bottom: _selectedIds.isNotEmpty ? 80 : (isMobile ? 12 : 20),
+                  ),
+                  itemCount: billProvider.bills.length,
+                  separatorBuilder: (context, _) => const SizedBox(height: 10),
+                  itemBuilder: (context, i) {
+                    final bill = billProvider.bills[i];
+                    final id = bill.id.toString();
+                    final isSelected = _selectedIds.contains(id);
+                    return GestureDetector(
+                      onLongPress: () {
+                        if (!_isSelectionMode) {
+                          setState(() {
+                            _isSelectionMode = true;
+                            _selectedIds.add(id);
+                          });
+                        }
+                      },
+                      child: AppCard(
+                        onTap: () {
+                          if (_isSelectionMode) {
+                            _toggleSelection(id);
+                          } else {
+                            _showDetail(bill.id);
+                          }
+                        },
+                        child: Row(
+                          children: [
+                            if (_isSelectionMode)
+                              Padding(
+                                padding: const EdgeInsets.only(right: 12),
+                                child: Icon(
+                                  isSelected ? Icons.check_circle : Icons.circle_outlined,
+                                  size: 22,
+                                  color: isSelected ? AppColors.brandNavy : AppColors.textMuted,
                                 ),
                               ),
-                              if (bill.status == 'DRAFT') ...[
-                                const SizedBox(width: 8),
-                                OutlinedButton.icon(
-                                  onPressed: () => _showForm(bill: bill),
-                                  icon: const Icon(Icons.edit_outlined, size: 14),
-                                  label: const Text('Edit'),
-                                  style: OutlinedButton.styleFrom(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    textStyle: AppTextStyles.buttonSmall,
-                                    side: const BorderSide(color: AppColors.borderInput),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(child: Text(bill.billNumber, style: AppTextStyles.h3)),
+                                      StatusBadge(label: bill.status),
+                                    ],
                                   ),
-                                ),
-                              ],
-                              if (bill.status != 'CANCELLED') ...[
-                                const SizedBox(width: 8),
-                                OutlinedButton.icon(
-                                  onPressed: () => _cancelBill(bill.id),
-                                  icon: const Icon(Icons.cancel_outlined, size: 14),
-                                  label: const Text('Cancel'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: AppColors.error,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    textStyle: AppTextStyles.buttonSmall,
-                                    side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
+                                  const SizedBox(height: 8),
+                                  Row(
+                                    children: [
+                                      Icon(Icons.person_outlined, size: 14, color: AppColors.textMuted),
+                                      const SizedBox(width: 6),
+                                      Text(bill.contact?.name ?? 'N/A', style: AppTextStyles.bodySmall),
+                                      const SizedBox(width: 16),
+                                      Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textMuted),
+                                      const SizedBox(width: 6),
+                                      Text(bill.billDate, style: AppTextStyles.caption),
+                                    ],
                                   ),
-                                ),
-                              ],
-                            ],
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text('₹${bill.total.toStringAsFixed(2)}', style: AppTextStyles.numericLarge),
+                                      if (!_isSelectionMode)
+                                        Row(
+                                          children: [
+                                            OutlinedButton.icon(
+                                              onPressed: () => _showDetail(bill.id),
+                                              icon: const Icon(Icons.remove_red_eye_outlined, size: 14),
+                                              label: const Text('View'),
+                                              style: OutlinedButton.styleFrom(
+                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                textStyle: AppTextStyles.buttonSmall,
+                                                side: const BorderSide(color: AppColors.borderInput),
+                                              ),
+                                            ),
+                                            if (bill.status == 'DRAFT') ...[
+                                              const SizedBox(width: 8),
+                                              OutlinedButton.icon(
+                                                onPressed: () => _showForm(bill: bill),
+                                                icon: const Icon(Icons.edit_outlined, size: 14),
+                                                label: const Text('Edit'),
+                                                style: OutlinedButton.styleFrom(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                  textStyle: AppTextStyles.buttonSmall,
+                                                  side: const BorderSide(color: AppColors.borderInput),
+                                                ),
+                                              ),
+                                            ],
+                                            if (bill.status != 'CANCELLED') ...[
+                                              const SizedBox(width: 8),
+                                              OutlinedButton.icon(
+                                                onPressed: () => _cancelBill(bill.id),
+                                                icon: const Icon(Icons.cancel_outlined, size: 14),
+                                                label: const Text('Cancel'),
+                                                style: OutlinedButton.styleFrom(
+                                                  foregroundColor: AppColors.error,
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                                  textStyle: AppTextStyles.buttonSmall,
+                                                  side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                if (_selectedIds.isNotEmpty)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: AppColors.bgSurface,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, -2),
                           ),
                         ],
                       ),
-                    ],
+                      padding: EdgeInsets.symmetric(
+                        horizontal: isMobile ? 12 : 20,
+                        vertical: 12,
+                      ),
+                      child: SafeArea(
+                        top: false,
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: _selectAll,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _selectedIds.length == billProvider.bills.length
+                                        ? Icons.check_circle
+                                        : Icons.circle_outlined,
+                                    size: 22,
+                                    color: _selectedIds.length == billProvider.bills.length
+                                        ? AppColors.brandNavy
+                                        : AppColors.textMuted,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Select All',
+                                    style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Text(
+                              '${_selectedIds.length} selected',
+                              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                            ),
+                            const Spacer(),
+                            OutlinedButton.icon(
+                              onPressed: _clearSelection,
+                              icon: const Icon(Icons.close, size: 14),
+                              label: const Text('Clear'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                textStyle: AppTextStyles.buttonSmall,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: _bulkCancel,
+                              icon: const Icon(Icons.cancel_outlined, size: 14),
+                              label: const Text('Cancel'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.error,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                textStyle: AppTextStyles.buttonSmall,
+                                side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: _bulkDelete,
+                              icon: const Icon(Icons.delete_outline, size: 14),
+                              label: const Text('Delete'),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: AppColors.error,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                textStyle: AppTextStyles.buttonSmall,
+                                side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ),
-                );
-              },
+              ],
             ),
     );
   }

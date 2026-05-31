@@ -1910,3 +1910,35 @@ def clone_invoice(
     db.commit()
     db.refresh(cloned)
     return cloned
+
+
+class EmailInvoiceRequest(BaseModel):
+    recipient_email: Optional[str] = None
+
+@router.post("/{id}/email")
+def email_invoice(
+    id: uuid.UUID,
+    payload: EmailInvoiceRequest = Body(None),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:update")),
+):
+    """Queues an invoice email to the customer. Defaults to contact email."""
+    invoice = db.query(Invoice).filter(
+        Invoice.id == id,
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    recipient = payload.recipient_email if payload else None
+    if not recipient:
+        contact = db.query(Contact).filter(Contact.id == invoice.contact_id).first()
+        recipient = contact.email if contact and contact.email else None
+
+    if not recipient:
+        raise HTTPException(status_code=400, detail="No recipient email available.")
+
+    from src.workers.tasks import send_invoice_email
+    send_invoice_email.delay(str(invoice.id), recipient)
+    return {"detail": f"Invoice email queued to {recipient}."}

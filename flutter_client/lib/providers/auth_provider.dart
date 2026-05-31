@@ -9,11 +9,15 @@ class AuthProvider extends ChangeNotifier {
   bool _isLoading = false;
   UserResponse? _currentUser;
   String? _errorMessage;
+  List<TenantMembership> _memberships = [];
+  String? _activeTenantId;
 
   bool get isAuthenticated => _isAuthenticated;
   bool get isLoading => _isLoading;
   UserResponse? get currentUser => _currentUser;
   String? get errorMessage => _errorMessage;
+  List<TenantMembership> get memberships => _memberships;
+  String? get activeTenantId => _activeTenantId;
 
   final ApiClient _client = ApiClient();
 
@@ -36,6 +40,18 @@ class AuthProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         _currentUser = UserResponse.fromJson(jsonDecode(response.body));
         _isAuthenticated = true;
+        // Fetch memberships
+        final memResponse = await _client.get(Uri.parse('${ApiClient.baseUrl}/auth/memberships'));
+        if (memResponse.statusCode == 200) {
+          final List data = jsonDecode(memResponse.body);
+          _memberships = data.map((e) => TenantMembership.fromJson(e)).toList();
+          _activeTenantId = ApiClient.tenantId;
+          // If no active tenant, default to first membership
+          if (_activeTenantId == null && _memberships.isNotEmpty) {
+            _activeTenantId = _memberships[0].tenantId;
+            ApiClient.setTenantId(_activeTenantId);
+          }
+        }
       } else {
         await ApiClient.clearSession();
       }
@@ -66,9 +82,11 @@ class AuthProvider extends ChangeNotifier {
         // Fetch memberships to select default tenant ID
         final memResponse = await _client.get(Uri.parse('${ApiClient.baseUrl}/auth/memberships'));
         if (memResponse.statusCode == 200) {
-          final List memberships = jsonDecode(memResponse.body);
-          if (memberships.isNotEmpty) {
-            ApiClient.setTenantId(memberships[0]['tenant_id']);
+          final List data = jsonDecode(memResponse.body);
+          _memberships = data.map((e) => TenantMembership.fromJson(e)).toList();
+          if (_memberships.isNotEmpty) {
+            _activeTenantId = _memberships[0].tenantId;
+            ApiClient.setTenantId(_activeTenantId);
           }
         }
 
@@ -218,6 +236,15 @@ class AuthProvider extends ChangeNotifier {
     await ApiClient.clearSession();
     _currentUser = null;
     _isAuthenticated = false;
+    _memberships = [];
+    _activeTenantId = null;
+    notifyListeners();
+  }
+
+  Future<void> switchTenant(String tenantId) async {
+    if (tenantId == _activeTenantId) return;
+    _activeTenantId = tenantId;
+    ApiClient.setTenantId(tenantId);
     notifyListeners();
   }
 }
