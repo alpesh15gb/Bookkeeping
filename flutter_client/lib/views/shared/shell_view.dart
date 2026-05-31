@@ -958,14 +958,17 @@ class _MobileDrawer extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            // Navigation items
-            Expanded(
-              child: _GroupedNav(
-                selectedIndex: selectedIndex,
-                onItemSelected: onItemSelected,
-                isMobile: true,
-              ),
+        // Navigation items
+        Expanded(
+          child: Container(
+            color: AppColors.bgSidebar,
+            child: _GroupedNav(
+              selectedIndex: selectedIndex,
+              onItemSelected: onItemSelected,
+              isMobile: true,
             ),
+          ),
+        ),
             // User & Sign out
             Container(
               padding: const EdgeInsets.all(16),
