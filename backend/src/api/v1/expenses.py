@@ -9,6 +9,7 @@ from src.api.deps import get_db_session, enforce_permission
 from src.infrastructure.database.models import Expense, ExpenseCategory
 from src.schemas.expense_schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseListResponse, ExpensePreviewRequest, ExpensePreviewResponse
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
+from src.domains.accounting.auto_post import auto_post_expense, cancel_expense as cancel_expense_fn
 from src.domains.taxation.services import GSTEngine
 from src.domains.company.services import resolve_origin_state_code
 
@@ -159,6 +160,11 @@ def create_expense(
         status="DRAFT",
     )
     db.add(expense)
+    db.flush()
+
+    # Auto-post: create journal entry immediately
+    auto_post_expense(db, tenant_id, expense)
+
     db.commit()
     db.refresh(expense)
     return _expense_to_response(expense)
@@ -420,6 +426,9 @@ def cancel_expense(
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     expense.status = "CANCELLED"
+    from datetime import datetime, timezone
+    expense.cancelled_at = datetime.now(timezone.utc)
+    expense.cancelled_by = tenant_id
     db.commit()
 
     db.refresh(expense)

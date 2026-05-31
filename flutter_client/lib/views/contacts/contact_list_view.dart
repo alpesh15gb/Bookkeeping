@@ -4,6 +4,7 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
 import 'package:flutter_client/models/contact.dart';
 import 'package:flutter_client/views/contacts/contact_form_view.dart';
+import 'package:flutter_client/views/reports/party_statement_view.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
@@ -192,6 +193,25 @@ class _ContactListViewState extends State<ContactListView> {
                                     Row(
                                       mainAxisAlignment: MainAxisAlignment.end,
                                       children: [
+                                        OutlinedButton.icon(
+                                          onPressed: () {
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => const PartyStatementView(),
+                                              ),
+                                            );
+                                          },
+                                          icon: const Icon(Icons.receipt_long_outlined, size: 14),
+                                          label: const Text('Statement'),
+                                          style: OutlinedButton.styleFrom(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            textStyle: AppTextStyles.buttonSmall,
+                                            side: const BorderSide(color: AppColors.brandNavy),
+                                            foregroundColor: AppColors.brandNavy,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
                                         OutlinedButton.icon(
                                           onPressed: () => _showForm(contact: contact),
                                           icon: const Icon(Icons.edit_outlined, size: 14),

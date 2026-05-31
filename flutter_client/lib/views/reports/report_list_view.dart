@@ -7,6 +7,7 @@ import 'package:flutter_client/views/reports/balance_sheet_view.dart';
 import 'package:flutter_client/views/reports/profit_loss_view.dart';
 import 'package:flutter_client/views/reports/gst_returns_view.dart';
 import 'package:flutter_client/views/reports/aging_report_view.dart';
+import 'package:flutter_client/views/reports/party_statement_view.dart';
 
 class ReportListView extends StatefulWidget {
   const ReportListView({super.key});
@@ -22,6 +23,7 @@ class _ReportListViewState extends State<ReportListView> {
     {'icon': Icons.trending_up_outlined, 'title': 'Profit & Loss', 'subtitle': 'Revenue and expenses', 'view': const ProfitLossView()},
     {'icon': Icons.receipt_long_outlined, 'title': 'GST Returns', 'subtitle': 'GSTR-1, GSTR-3B & more', 'view': const GstReturnsView()},
     {'icon': Icons.bar_chart_outlined, 'title': 'Aging Report', 'subtitle': 'Outstanding receivables/payables', 'view': const AgingReportView()},
+    {'icon': Icons.receipt_long_outlined, 'title': 'Party Statement', 'subtitle': 'Ledger & summary for a specific party', 'view': const PartyStatementView()},
     {'icon': Icons.description_outlined, 'title': 'Day Book', 'subtitle': 'All transactions for a day', 'view': null},
   ];
 

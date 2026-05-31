@@ -69,18 +69,10 @@ class _LoginViewState extends State<LoginView> {
                   children: [
                     // Logo
                     Center(
-                      child: Container(
-                        width: 56,
-                        height: 56,
-                        decoration: BoxDecoration(
-                          color: AppColors.brandNavy,
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: const Icon(
-                          Icons.menu_book_rounded,
-                          size: 28,
-                          color: AppColors.goldAccent,
-                        ),
+                      child: Image.asset(
+                        'assets/logo.png',
+                        width: 140,
+                        height: 140,
                       ),
                     ),
                     const SizedBox(height: 20),

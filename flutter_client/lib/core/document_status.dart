@@ -149,14 +149,20 @@ enum DocumentStatus {
       case 'POSTED':
       case 'APPROVED':
       case 'CONFIRMED':
+      case 'SENT':
+      case 'UNPAID':
+      case 'OPEN':
         return DocumentStatus.posted;
       case 'PARTIAL':
       case 'PARTIALLY_PAID':
       case 'PARTIALLYPAID':
+      case 'PARTIALLY_RECEIVED':
+      case 'PARTIALLY_FULFILLED':
         return DocumentStatus.partiallyPaid;
       case 'PAID':
       case 'SETTLED':
       case 'CLOSED':
+      case 'ADJUSTED':
         return DocumentStatus.paid;
       case 'CANCELLED':
       case 'CANCELED':

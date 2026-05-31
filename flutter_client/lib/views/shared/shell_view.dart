@@ -5,7 +5,6 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/auth_provider.dart';
 import 'package:flutter_client/models/auth.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/global_search.dart';
 import 'package:flutter_client/views/dashboard/sales_dashboard_view.dart';
 import 'package:flutter_client/views/invoices/invoice_list_view.dart';
@@ -32,45 +31,103 @@ import 'package:flutter_client/views/vyapar_import/vyapar_import_view.dart';
 import 'package:flutter_client/views/sales_analytics/sales_analytics_view.dart';
 import 'package:flutter_client/views/banking/banking_profile_list_view.dart';
 
-class MenuItem {
+// ─── Menu Data Model ──────────────────────────────────────────
+
+class _MenuItem {
   final String name;
   final IconData icon;
   final Widget view;
 
-  const MenuItem({
-    required this.name,
-    required this.icon,
-    required this.view,
-  });
+  const _MenuItem({required this.name, required this.icon, required this.view});
 }
 
-final List<MenuItem> _menuItems = [
-  MenuItem(name: 'Dashboard', icon: Icons.dashboard_rounded, view: const SalesDashboardView()),
-  MenuItem(name: 'Invoices', icon: Icons.description_rounded, view: const InvoiceListView()),
-  MenuItem(name: 'Estimates', icon: Icons.request_quote_rounded, view: const EstimateListView()),
-  MenuItem(name: 'Vendor Bills', icon: Icons.receipt_rounded, view: const BillListView()),
-  MenuItem(name: 'Expenses', icon: Icons.money_off_rounded, view: const ExpenseListView()),
-  MenuItem(name: 'Credit/Debit Notes', icon: Icons.compare_arrows_rounded, view: const CreditNoteListView()),
-  MenuItem(name: 'Purchase Orders', icon: Icons.shopping_cart_outlined, view: const OrderListView(orderType: 'purchase')),
-  MenuItem(name: 'Sales Orders', icon: Icons.receipt_long_outlined, view: const OrderListView(orderType: 'sales')),
-  MenuItem(name: 'Parties', icon: Icons.people_rounded, view: const ContactListView()),
-  MenuItem(name: 'Inventory', icon: Icons.inventory_2_rounded, view: const ProductListView()),
-  MenuItem(name: 'Del. Challans', icon: Icons.local_shipping_rounded, view: const DeliveryChallanListView()),
-  MenuItem(name: 'Inventory Adj.', icon: Icons.inventory_2_rounded, view: const InventoryAdjustmentListView()),
-  MenuItem(name: 'Journal Entry', icon: Icons.book_rounded, view: const JournalEntryView()),
-  MenuItem(name: 'Payments', icon: Icons.payments_rounded, view: const PaymentListView()),
-  MenuItem(name: 'Bank Recon.', icon: Icons.account_balance_outlined, view: const BankReconciliationListView()),
-  MenuItem(name: 'Banking', icon: Icons.account_balance_wallet_outlined, view: const BankingProfileListView()),
-  MenuItem(name: 'Chart of Accounts', icon: Icons.account_balance_rounded, view: const AccountListView()),
-  MenuItem(name: 'E-Way Bills', icon: Icons.local_shipping_outlined, view: const EwayBillListView()),
-  MenuItem(name: 'Sales Analytics', icon: Icons.analytics_rounded, view: const SalesAnalyticsView()),
-  MenuItem(name: 'Reports', icon: Icons.bar_chart_rounded, view: const ReportListView()),
-  MenuItem(name: 'Statements', icon: Icons.assessment_rounded, view: const StatementView()),
-  MenuItem(name: 'Audit Log', icon: Icons.history_rounded, view: const AuditLogListView()),
-  MenuItem(name: 'Reminders', icon: Icons.notifications_outlined, view: const ReminderListView()),
-  MenuItem(name: 'Vyapar Import', icon: Icons.file_upload_outlined, view: const VyaparImportView()),
-  MenuItem(name: 'Settings', icon: Icons.settings_rounded, view: const SettingsView()),
+class _MenuGroupDef {
+  final String label;
+  final IconData icon;
+  final List<int> childIndices;
+
+  const _MenuGroupDef({required this.label, required this.icon, required this.childIndices});
+}
+
+class _MenuLeaf extends _MenuEntry {
+  final int index;
+  const _MenuLeaf({required this.index});
+}
+
+class _MenuGroupEntry extends _MenuEntry {
+  final _MenuGroupDef group;
+  const _MenuGroupEntry(this.group);
+}
+
+class _MenuEntry {
+  const _MenuEntry();
+}
+
+// ─── Flat view list (index matches _currentView) ───────────────
+final List<_MenuItem> _flatItems = [
+  _MenuItem(name: 'Dashboard', icon: Icons.dashboard_rounded, view: const SalesDashboardView()),
+  _MenuItem(name: 'Invoices', icon: Icons.description_rounded, view: const InvoiceListView()),
+  _MenuItem(name: 'Estimates', icon: Icons.request_quote_rounded, view: const EstimateListView()),
+  _MenuItem(name: 'Sales Orders', icon: Icons.receipt_long_outlined, view: const OrderListView(orderType: 'sales')),
+  _MenuItem(name: 'Credit/Debit Notes', icon: Icons.compare_arrows_rounded, view: const CreditNoteListView()),
+  _MenuItem(name: 'Sales Analytics', icon: Icons.analytics_rounded, view: const SalesAnalyticsView()),
+  _MenuItem(name: 'Vendor Bills', icon: Icons.receipt_rounded, view: const BillListView()),
+  _MenuItem(name: 'Expenses', icon: Icons.money_off_rounded, view: const ExpenseListView()),
+  _MenuItem(name: 'Purchase Orders', icon: Icons.shopping_cart_outlined, view: const OrderListView(orderType: 'purchase')),
+  _MenuItem(name: 'Parties', icon: Icons.people_rounded, view: const ContactListView()),
+  _MenuItem(name: 'Products', icon: Icons.inventory_2_rounded, view: const ProductListView()),
+  _MenuItem(name: 'Del. Challans', icon: Icons.local_shipping_rounded, view: const DeliveryChallanListView()),
+  _MenuItem(name: 'Inventory Adj.', icon: Icons.tune_rounded, view: const InventoryAdjustmentListView()),
+  _MenuItem(name: 'Journal Entry', icon: Icons.book_rounded, view: const JournalEntryView()),
+  _MenuItem(name: 'Payments', icon: Icons.payments_rounded, view: const PaymentListView()),
+  _MenuItem(name: 'Bank Recon.', icon: Icons.account_balance_outlined, view: const BankReconciliationListView()),
+  _MenuItem(name: 'Banking', icon: Icons.account_balance_wallet_outlined, view: const BankingProfileListView()),
+  _MenuItem(name: 'Chart of Accounts', icon: Icons.account_balance_rounded, view: const AccountListView()),
+  _MenuItem(name: 'Reports', icon: Icons.bar_chart_rounded, view: const ReportListView()),
+  _MenuItem(name: 'Statements', icon: Icons.assessment_rounded, view: const StatementView()),
+  _MenuItem(name: 'E-Way Bills', icon: Icons.local_shipping_outlined, view: const EwayBillListView()),
+  _MenuItem(name: 'Audit Log', icon: Icons.history_rounded, view: const AuditLogListView()),
+  _MenuItem(name: 'Reminders', icon: Icons.notifications_outlined, view: const ReminderListView()),
+  _MenuItem(name: 'Vyapar Import', icon: Icons.file_upload_outlined, view: const VyaparImportView()),
+  _MenuItem(name: 'Settings', icon: Icons.settings_rounded, view: const SettingsView()),
 ];
+
+// ─── Grouped sidebar structure ────────────────────────────────
+final List<_MenuEntry> _sidebarEntries = [
+  const _MenuLeaf(index: 0), // Dashboard
+  _MenuGroupEntry(_MenuGroupDef(
+    label: 'Sales',
+    icon: Icons.point_of_sale_rounded,
+    childIndices: [1, 2, 3, 4, 5], // Invoices, Estimates, Sales Orders, C/D Notes, Sales Analytics
+  )),
+  _MenuGroupEntry(_MenuGroupDef(
+    label: 'Purchases',
+    icon: Icons.shopping_bag_outlined,
+    childIndices: [6, 7, 8], // Vendor Bills, Expenses, Purchase Orders
+  )),
+  _MenuGroupEntry(_MenuGroupDef(
+    label: 'Parties & Inventory',
+    icon: Icons.inventory_2_outlined,
+    childIndices: [9, 10, 11, 12], // Parties, Products, Del. Challans, Inventory Adj.
+  )),
+  _MenuGroupEntry(_MenuGroupDef(
+    label: 'Accounting',
+    icon: Icons.account_balance_outlined,
+    childIndices: [13, 14, 15, 16, 17], // Journal Entry, Payments, Bank Recon., Banking, Chart of Accounts
+  )),
+  _MenuGroupEntry(_MenuGroupDef(
+    label: 'Reports & Compliance',
+    icon: Icons.assessment_outlined,
+    childIndices: [18, 19, 20], // Reports, Statements, E-Way Bills
+  )),
+  _MenuGroupEntry(_MenuGroupDef(
+    label: 'Tools',
+    icon: Icons.build_outlined,
+    childIndices: [21, 22, 23, 24], // Audit Log, Reminders, Vyapar Import, Settings
+  )),
+];
+
+// ─── Shell View ───────────────────────────────────────────────
 
 class ShellView extends StatefulWidget {
   const ShellView({super.key});
@@ -82,7 +139,7 @@ class ShellView extends StatefulWidget {
 class _ShellViewState extends State<ShellView> {
   int _selectedIndex = 0;
 
-  Widget get _currentView => _menuItems[_selectedIndex].view;
+  Widget get _currentView => _flatItems[_selectedIndex].view;
 
   void _openSearch() {
     showSearch(context: context, delegate: GlobalSearchDelegate());
@@ -135,7 +192,6 @@ class _ShellViewState extends State<ShellView> {
     );
   }
 
-  // ─── Desktop Layout ─────────────────────────────────────────
   Widget _buildDesktopLayout(UserResponse? user) {
     return Scaffold(
       backgroundColor: AppColors.bgLight,
@@ -151,7 +207,7 @@ class _ShellViewState extends State<ShellView> {
             child: Column(
               children: [
                 _TopBar(
-                  title: _menuItems[_selectedIndex].name,
+                  title: _flatItems[_selectedIndex].name,
                   onSearch: _openSearch,
                 ),
                 Expanded(
@@ -166,7 +222,6 @@ class _ShellViewState extends State<ShellView> {
     );
   }
 
-  // ─── Mobile Layout ──────────────────────────────────────────
   Widget _buildMobileLayout(UserResponse? user) {
     return Scaffold(
       backgroundColor: AppColors.bgLight,
@@ -181,7 +236,7 @@ class _ShellViewState extends State<ShellView> {
             tooltip: 'Menu',
           ),
         ),
-        title: Text(_menuItems[_selectedIndex].name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+        title: Text(_flatItems[_selectedIndex].name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         actions: [
           IconButton(
             icon: const Icon(Icons.search_rounded, size: 20),
@@ -215,7 +270,234 @@ class _ShellViewState extends State<ShellView> {
   }
 }
 
-// ─── Sidebar ────────────────────────────────────────────────────
+class _GroupedNav extends StatefulWidget {
+  final int selectedIndex;
+  final ValueChanged<int> onItemSelected;
+  final bool isMobile;
+
+  const _GroupedNav({
+    required this.selectedIndex,
+    required this.onItemSelected,
+    required this.isMobile,
+  });
+
+  @override
+  State<_GroupedNav> createState() => _GroupedNavState();
+}
+
+class _GroupedNavState extends State<_GroupedNav> {
+  final Set<int> _expandedGroups = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _autoExpandContainingGroup();
+  }
+
+  @override
+  void didUpdateWidget(covariant _GroupedNav oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedIndex != widget.selectedIndex) {
+      _autoExpandContainingGroup();
+    }
+  }
+
+  void _autoExpandContainingGroup() {
+    for (var entry in _sidebarEntries) {
+      if (entry is _MenuGroupEntry) {
+        final gIdx = _sidebarEntries.indexOf(entry);
+        if (entry.group.childIndices.contains(widget.selectedIndex)) {
+          _expandedGroups.add(gIdx);
+        }
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final padH = widget.isMobile ? 8.0 : 10.0;
+    final itemPadV = widget.isMobile ? 12.0 : 10.0;
+    final iconSize = widget.isMobile ? 20.0 : 18.0;
+    final fontSize = widget.isMobile ? 14.0 : 13.0;
+    final childPadH = widget.isMobile ? 14.0 : 16.0;
+
+    return ListView.builder(
+      padding: EdgeInsets.symmetric(horizontal: padH),
+      itemCount: _sidebarEntries.length,
+      itemBuilder: (context, i) {
+        final entry = _sidebarEntries[i];
+
+        if (entry is _MenuLeaf) {
+          final item = _flatItems[entry.index];
+          final isSelected = widget.selectedIndex == entry.index;
+          return _buildLeafItem(
+            item: item,
+            isSelected: isSelected,
+            onTap: () => widget.onItemSelected(entry.index),
+            itemPadV: itemPadV,
+            iconSize: iconSize,
+            fontSize: fontSize,
+          );
+        }
+
+        if (entry is _MenuGroupEntry) {
+          final group = entry.group;
+          final isExpanded = _expandedGroups.contains(i);
+          final hasActiveChild = group.childIndices.contains(widget.selectedIndex);
+
+          return _buildGroupItem(
+            group: group,
+            isExpanded: isExpanded,
+            hasActiveChild: hasActiveChild,
+            onToggle: () => setState(() {
+              if (_expandedGroups.contains(i)) {
+                _expandedGroups.remove(i);
+              } else {
+                _expandedGroups.add(i);
+              }
+            }),
+            itemPadV: itemPadV,
+            iconSize: iconSize,
+            fontSize: fontSize,
+            childPadH: childPadH,
+            selectedIndex: widget.selectedIndex,
+            onItemSelected: widget.onItemSelected,
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+
+  Widget _buildLeafItem({
+    required _MenuItem item,
+    required bool isSelected,
+    required VoidCallback onTap,
+    required double itemPadV,
+    required double iconSize,
+    required double fontSize,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppRadius.sidebar,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: itemPadV),
+            decoration: BoxDecoration(
+              color: isSelected ? AppColors.goldAccent : Colors.transparent,
+              borderRadius: AppRadius.sidebar,
+            ),
+            child: Row(
+              children: [
+                Icon(item.icon, size: iconSize, color: isSelected ? AppColors.brandNavy : AppColors.textWhiteMuted),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    item.name,
+                    style: TextStyle(
+                      color: isSelected ? AppColors.brandNavy : Colors.white,
+                      fontSize: fontSize,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupItem({
+    required _MenuGroupDef group,
+    required bool isExpanded,
+    required bool hasActiveChild,
+    required VoidCallback onToggle,
+    required double itemPadV,
+    required double iconSize,
+    required double fontSize,
+    required double childPadH,
+    required int selectedIndex,
+    required ValueChanged<int> onItemSelected,
+  }) {
+    final groupTextColor = hasActiveChild ? AppColors.goldAccent : Colors.white;
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Material(
+            color: Colors.transparent,
+            child: InkWell(
+              onTap: onToggle,
+              borderRadius: AppRadius.sidebar,
+              child: Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12, vertical: itemPadV - 2),
+                child: Row(
+                  children: [
+                    Icon(group.icon, size: iconSize, color: groupTextColor),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        group.label,
+                        style: TextStyle(
+                          color: groupTextColor,
+                          fontSize: fontSize,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                    ),
+                    AnimatedRotation(
+                      turns: isExpanded ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 200),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: AppColors.textWhiteMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          AnimatedCrossFade(
+            firstChild: const SizedBox.shrink(),
+            secondChild: Padding(
+              padding: EdgeInsets.only(left: childPadH),
+              child: Column(
+                children: group.childIndices.map((childIdx) {
+                  final childItem = _flatItems[childIdx];
+                  final isSelected = selectedIndex == childIdx;
+                  return _buildLeafItem(
+                    item: childItem,
+                    isSelected: isSelected,
+                    onTap: () => onItemSelected(childIdx),
+                    itemPadV: itemPadV - 2,
+                    iconSize: iconSize - 2,
+                    fontSize: fontSize - 1,
+                  );
+                }).toList(),
+              ),
+            ),
+            crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+            duration: const Duration(milliseconds: 200),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Desktop Sidebar ──────────────────────────────────────────
 class _Sidebar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
@@ -244,14 +526,14 @@ class _Sidebar extends StatelessWidget {
             ),
             child: Row(
               children: [
-                Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: AppColors.goldAccent,
-                    borderRadius: BorderRadius.circular(9),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(9),
+                  child: Image.asset(
+                    'assets/logo.png',
+                    width: 36,
+                    height: 36,
+                    fit: BoxFit.cover,
                   ),
-                  child: const Icon(Icons.menu_book_rounded, size: 20, color: AppColors.brandNavy),
                 ),
                 const SizedBox(width: 12),
                 const Column(
@@ -285,53 +567,10 @@ class _Sidebar extends StatelessWidget {
 
           // Navigation
           Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              itemCount: _menuItems.length,
-              itemBuilder: (context, i) {
-                final isSelected = selectedIndex == i;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 2),
-                  child: Semantics(
-                    label: '${_menuItems[i].name} navigation item${isSelected ? ', selected' : ''}',
-                    button: true,
-                    selected: isSelected,
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: () => onItemSelected(i),
-                        borderRadius: AppRadius.sidebar,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 150),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: isSelected ? AppColors.goldAccent : Colors.transparent,
-                            borderRadius: AppRadius.sidebar,
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                _menuItems[i].icon,
-                                size: 18,
-                                color: isSelected ? AppColors.brandNavy : AppColors.textWhiteMuted,
-                              ),
-                              const SizedBox(width: 12),
-                              Text(
-                                _menuItems[i].name,
-                                style: TextStyle(
-                                  color: isSelected ? AppColors.brandNavy : Colors.white,
-                                  fontSize: 13,
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                );
-              },
+            child: _GroupedNav(
+              selectedIndex: selectedIndex,
+              onItemSelected: onItemSelected,
+              isMobile: false,
             ),
           ),
 
@@ -424,7 +663,7 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-// ─── Top Bar ────────────────────────────────────────────────────
+// ─── Top Bar ──────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final String title;
   final VoidCallback? onSearch;
@@ -470,7 +709,7 @@ class _TopBar extends StatelessWidget {
   }
 }
 
-// ─── Mobile Drawer ──────────────────────────────────────────────
+// ─── Mobile Drawer ────────────────────────────────────────────
 class _MobileDrawer extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
@@ -499,14 +738,14 @@ class _MobileDrawer extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: AppColors.goldAccent,
-                      borderRadius: BorderRadius.circular(8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: Image.asset(
+                      'assets/logo.png',
+                      width: 32,
+                      height: 32,
+                      fit: BoxFit.cover,
                     ),
-                    child: const Icon(Icons.menu_book_rounded, size: 18, color: AppColors.brandNavy),
                   ),
                   const SizedBox(width: 12),
                   const Column(
@@ -523,45 +762,10 @@ class _MobileDrawer extends StatelessWidget {
             const SizedBox(height: 8),
             // Navigation items
             Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                itemCount: _menuItems.length,
-                itemBuilder: (context, i) {
-                  final isSelected = selectedIndex == i;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 2),
-                    child: Semantics(
-                      label: '${_menuItems[i].name} navigation item${isSelected ? ', selected' : ''}',
-                      button: true,
-                      selected: isSelected,
-                      child: Material(
-                        color: Colors.transparent,
-                        child: InkWell(
-                          onTap: () => onItemSelected(i),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-                            decoration: BoxDecoration(
-                              color: isSelected ? AppColors.goldAccent : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Row(
-                              children: [
-                                Icon(_menuItems[i].icon, size: 20, color: isSelected ? AppColors.brandNavy : AppColors.textWhiteMuted),
-                                const SizedBox(width: 12),
-                                Text(_menuItems[i].name, style: TextStyle(
-                                  color: isSelected ? AppColors.brandNavy : Colors.white,
-                                  fontSize: 14,
-                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                                )),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
+              child: _GroupedNav(
+                selectedIndex: selectedIndex,
+                onItemSelected: onItemSelected,
+                isMobile: true,
               ),
             ),
             // User & Sign out

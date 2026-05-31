@@ -21,6 +21,7 @@ from src.schemas.document import (
 from src.schemas.einvoice_schemas import EInvoiceResponse, EInvoiceCancelRequest, EInvoiceCancelResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
+from src.domains.accounting.auto_post import auto_post_invoice, cancel_invoice, get_display_status
 from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
 from src.api.deps import enforce_permission
 
@@ -164,6 +165,11 @@ def create_invoice(
     )
 
     db.add(invoice)
+    db.flush()
+
+    # Auto-post: create journal entry immediately
+    auto_post_invoice(db, tenant_id, invoice)
+
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -427,6 +433,12 @@ def create_credit_note(
         lines=db_lines
     )
     db.add(cn)
+    db.flush()
+
+    # Auto-post: create journal entry immediately
+    from src.domains.accounting.auto_post import auto_post_credit_note
+    auto_post_credit_note(db, tenant_id, cn)
+
     db.commit()
     db.refresh(cn)
     return cn
@@ -814,6 +826,12 @@ def create_debit_note(
         lines=db_lines
     )
     db.add(dn)
+    db.flush()
+
+    # Auto-post: create journal entry immediately
+    from src.domains.accounting.auto_post import auto_post_debit_note
+    auto_post_debit_note(db, tenant_id, dn)
+
     db.commit()
     db.refresh(dn)
     return dn
@@ -1024,11 +1042,11 @@ def cancel_debit_note(
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     dn.status = "CANCELLED"
+    dn.cancelled_at = datetime.now(timezone.utc)
+    dn.cancelled_by = tenant_id
     db.commit()
     db.refresh(dn)
     return dn
-
-# ==========================================
 # INVOICE ROUTES â€” statuses: DRAFT â†’ POSTED â†’ PARTIALLY_PAID/PAID â†’ CANCELLED
 # ==========================================
 
@@ -1438,6 +1456,8 @@ def cancel_invoice(
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     invoice.status = "CANCELLED"
+    invoice.cancelled_at = datetime.now(timezone.utc)
+    invoice.cancelled_by = tenant_id  # Using tenant_id as placeholder; real user_id from auth
     db.commit()
     db.refresh(invoice)
     return invoice

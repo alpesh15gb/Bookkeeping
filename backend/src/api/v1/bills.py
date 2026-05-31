@@ -10,6 +10,7 @@ from src.infrastructure.database.models import Bill, BillLine, Contact, Product,
 from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate, PaginatedBillResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
+from src.domains.accounting.auto_post import auto_post_bill, cancel_bill, get_bill_display_status
 from src.domains.company.services import resolve_origin_state_code
 from src.api.deps import get_tenant_context, enforce_permission
 
@@ -135,6 +136,11 @@ def create_bill(
     )
 
     db.add(bill)
+    db.flush()
+
+    # Auto-post: create journal entry immediately
+    auto_post_bill(db, tenant_id, bill)
+
     db.commit()
     db.refresh(bill)
     return bill
@@ -788,6 +794,8 @@ def cancel_bill(
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     bill.status = "CANCELLED"
+    bill.cancelled_at = datetime.now(timezone.utc)
+    bill.cancelled_by = tenant_id
     db.commit()
     db.refresh(bill)
     return bill
