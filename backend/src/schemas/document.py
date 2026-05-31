@@ -302,3 +302,139 @@ class PaymentCreate(SchemaBase):
     reference_number: Optional[str] = None
     description: Optional[str] = None
     allocations: List[PaymentAllocationSchema]
+
+
+# ── SALES RETURN SCHEMAS ──
+class SalesReturnLineCreate(SchemaBase):
+    product_id: uuid.UUID
+    description: Optional[str] = None
+    quantity: Decimal = Field(..., gt=0)
+    rate: Decimal = Field(..., ge=0)
+    hsn_sac: str = Field(..., pattern="^[0-9]{4,8}$")
+    gst_rate: Decimal = Field(..., ge=0, le=100)
+
+class SalesReturnLineResponse(SchemaBase):
+    id: uuid.UUID
+    product_id: uuid.UUID
+    product_name: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Decimal
+    rate: Decimal
+    subtotal: Decimal
+    hsn_sac: str
+    gst_rate: Decimal
+    cgst_rate: Decimal
+    cgst_amount: Decimal
+    sgst_rate: Decimal
+    sgst_amount: Decimal
+    igst_rate: Decimal
+    igst_amount: Decimal
+    utgst_rate: Decimal
+    utgst_amount: Decimal
+    cess_rate: Decimal
+    cess_amount: Decimal
+    total: Decimal
+
+class SalesReturnCreate(SchemaBase):
+    contact_id: uuid.UUID
+    issue_date: date
+    pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
+    line_items: List[SalesReturnLineCreate]
+    notes: Optional[str] = None
+
+class SalesReturnResponse(SchemaBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    contact_id: uuid.UUID
+    return_number: str
+    issue_date: date
+    status: str
+    subtotal: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    utgst_amount: Decimal
+    cess_amount: Decimal
+    round_off: Decimal
+    total: Decimal
+    pos_state_code: str
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    lines: List[SalesReturnLineResponse]
+
+class SalesReturnListResponse(SchemaBase):
+    id: uuid.UUID
+    return_number: str
+    issue_date: date
+    status: str
+    total: Decimal
+    contact_name: Optional[str] = None
+
+
+# ── PURCHASE RETURN SCHEMAS ──
+class PurchaseReturnLineCreate(SchemaBase):
+    product_id: uuid.UUID
+    description: Optional[str] = None
+    quantity: Decimal = Field(..., gt=0)
+    rate: Decimal = Field(..., ge=0)
+    hsn_sac: str = Field(..., pattern="^[0-9]{4,8}$")
+    gst_rate: Decimal = Field(..., ge=0, le=100)
+
+class PurchaseReturnLineResponse(SchemaBase):
+    id: uuid.UUID
+    product_id: uuid.UUID
+    product_name: Optional[str] = None
+    description: Optional[str] = None
+    quantity: Decimal
+    rate: Decimal
+    subtotal: Decimal
+    hsn_sac: str
+    gst_rate: Decimal
+    cgst_rate: Decimal
+    cgst_amount: Decimal
+    sgst_rate: Decimal
+    sgst_amount: Decimal
+    igst_rate: Decimal
+    igst_amount: Decimal
+    utgst_rate: Decimal
+    utgst_amount: Decimal
+    cess_rate: Decimal
+    cess_amount: Decimal
+    total: Decimal
+
+class PurchaseReturnCreate(SchemaBase):
+    contact_id: uuid.UUID
+    issue_date: date
+    pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
+    line_items: List[PurchaseReturnLineCreate]
+    notes: Optional[str] = None
+
+class PurchaseReturnResponse(SchemaBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    contact_id: uuid.UUID
+    return_number: str
+    issue_date: date
+    status: str
+    subtotal: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    utgst_amount: Decimal
+    cess_amount: Decimal
+    round_off: Decimal
+    total: Decimal
+    pos_state_code: str
+    notes: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    lines: List[PurchaseReturnLineResponse]
+
+class PurchaseReturnListResponse(SchemaBase):
+    id: uuid.UUID
+    return_number: str
+    issue_date: date
+    status: str
+    total: Decimal
+    contact_name: Optional[str] = None

@@ -1510,3 +1510,153 @@ class AccountingPeriod(Base):
     is_closed = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+
+# ---------------------------------------------------------------------------
+# SALES RETURNS (standalone — customer returns goods without original invoice ref)
+# ---------------------------------------------------------------------------
+
+class SalesReturn(Base):
+    __tablename__ = "sales_returns"
+    __table_args__ = (
+        Index("ix_sales_returns_tenant_date_status", "tenant_id", "issue_date", "status"),
+        Index("ix_sales_returns_tenant_contact", "tenant_id", "contact_id"),
+        Index("ix_sales_returns_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "return_number", name="uq_sales_returns_tenant_number"),
+        CheckConstraint(
+            "status IN ('DRAFT', 'POSTED', 'CANCELLED')",
+            name="ck_sales_returns_status",
+        ),
+        CheckConstraint(
+            "round(total, 2) = round(subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off, 2)",
+            name="ck_sales_returns_total_balance",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    return_number = Column(String(50), nullable=False)
+    issue_date = Column(Date, nullable=False)
+    status = Column(String(20), nullable=False, default="DRAFT")
+    subtotal = Column(Numeric(15, 4), nullable=False, default=0)
+    cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    sgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    igst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    utgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    cess_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    round_off = Column(Numeric(15, 4), nullable=False, default=0)
+    total = Column(Numeric(15, 4), nullable=False, default=0)
+    pos_state_code = Column(String(2), nullable=False)
+    notes = Column(Text)
+    cancelled_at = Column(DateTime(timezone=True))
+    cancelled_by = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    deleted_at = Column(DateTime(timezone=True))
+
+    contact = relationship("Contact")
+    lines = relationship("SalesReturnLine", back_populates="sales_return", cascade="all, delete-orphan")
+
+
+class SalesReturnLine(Base):
+    __tablename__ = "sales_return_lines"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sales_return_id = Column(UUID(as_uuid=True), ForeignKey("sales_returns.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
+    description = Column(String(255))
+    quantity = Column(Numeric(12, 4), nullable=False)
+    rate = Column(Numeric(15, 4), nullable=False)
+    subtotal = Column(Numeric(15, 4), nullable=False)
+    hsn_sac = Column(String(8))
+    gst_rate = Column(Numeric(5, 2), nullable=False)
+    cgst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    sgst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    sgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    igst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    igst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    utgst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    utgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    cess_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    cess_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    total = Column(Numeric(15, 4), nullable=False)
+
+    sales_return = relationship("SalesReturn", back_populates="lines")
+    product = relationship("Product")
+
+
+# ---------------------------------------------------------------------------
+# PURCHASE RETURNS (standalone — we return goods to vendor without original bill ref)
+# ---------------------------------------------------------------------------
+
+class PurchaseReturn(Base):
+    __tablename__ = "purchase_returns"
+    __table_args__ = (
+        Index("ix_purchase_returns_tenant_date_status", "tenant_id", "issue_date", "status"),
+        Index("ix_purchase_returns_tenant_contact", "tenant_id", "contact_id"),
+        Index("ix_purchase_returns_tenant_deleted", "tenant_id", "deleted_at"),
+        UniqueConstraint("tenant_id", "return_number", name="uq_purchase_returns_tenant_number"),
+        CheckConstraint(
+            "status IN ('DRAFT', 'POSTED', 'CANCELLED')",
+            name="ck_purchase_returns_status",
+        ),
+        CheckConstraint(
+            "round(total, 2) = round(subtotal + cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount + round_off, 2)",
+            name="ck_purchase_returns_total_balance",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    return_number = Column(String(50), nullable=False)
+    issue_date = Column(Date, nullable=False)
+    status = Column(String(20), nullable=False, default="DRAFT")
+    subtotal = Column(Numeric(15, 4), nullable=False, default=0)
+    cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    sgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    igst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    utgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    cess_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    round_off = Column(Numeric(15, 4), nullable=False, default=0)
+    total = Column(Numeric(15, 4), nullable=False, default=0)
+    pos_state_code = Column(String(2), nullable=False)
+    notes = Column(Text)
+    cancelled_at = Column(DateTime(timezone=True))
+    cancelled_by = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    deleted_at = Column(DateTime(timezone=True))
+
+    contact = relationship("Contact")
+    lines = relationship("PurchaseReturnLine", back_populates="purchase_return", cascade="all, delete-orphan")
+
+
+class PurchaseReturnLine(Base):
+    __tablename__ = "purchase_return_lines"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    purchase_return_id = Column(UUID(as_uuid=True), ForeignKey("purchase_returns.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
+    description = Column(String(255))
+    quantity = Column(Numeric(12, 4), nullable=False)
+    rate = Column(Numeric(15, 4), nullable=False)
+    subtotal = Column(Numeric(15, 4), nullable=False)
+    hsn_sac = Column(String(8))
+    gst_rate = Column(Numeric(5, 2), nullable=False)
+    cgst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    sgst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    sgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    igst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    igst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    utgst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    utgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    cess_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    cess_amount = Column(Numeric(15, 4), nullable=False, default=0)
+    total = Column(Numeric(15, 4), nullable=False)
+
+    purchase_return = relationship("PurchaseReturn", back_populates="lines")
+    product = relationship("Product")

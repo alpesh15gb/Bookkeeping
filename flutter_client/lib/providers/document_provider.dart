@@ -782,4 +782,88 @@ class DocumentProvider extends ChangeNotifier {
     notifyListeners();
     return false;
   }
+
+  // ── Sales Returns ──
+  Future<List<dynamic>> fetchSalesReturns() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/returns/sales'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (_) {}
+    _isLoading = false;
+    notifyListeners();
+    return [];
+  }
+
+  Future<bool> createSalesReturn(Map<String, dynamic> payload) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final response = await _client.post(
+        Uri.parse('${ApiClient.baseUrl}/returns/sales'),
+        body: jsonEncode(payload),
+      );
+      if (response.statusCode == 201) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    } catch (_) {}
+    _isLoading = false;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> cancelSalesReturn(String id) async {
+    try {
+      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/returns/sales/$id/cancel'));
+      return response.statusCode == 200;
+    } catch (_) {}
+    return false;
+  }
+
+  // ── Purchase Returns ──
+  Future<List<dynamic>> fetchPurchaseReturns() async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/returns/purchase'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (_) {}
+    _isLoading = false;
+    notifyListeners();
+    return [];
+  }
+
+  Future<bool> createPurchaseReturn(Map<String, dynamic> payload) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final response = await _client.post(
+        Uri.parse('${ApiClient.baseUrl}/returns/purchase'),
+        body: jsonEncode(payload),
+      );
+      if (response.statusCode == 201) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+    } catch (_) {}
+    _isLoading = false;
+    notifyListeners();
+    return false;
+  }
+
+  Future<bool> cancelPurchaseReturn(String id) async {
+    try {
+      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/returns/purchase/$id/cancel'));
+      return response.statusCode == 200;
+    } catch (_) {}
+    return false;
+  }
 }

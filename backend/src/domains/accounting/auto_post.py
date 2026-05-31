@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from src.infrastructure.database.models import (
     Invoice, InvoiceLine, Bill, BillLine, Expense, CreditNote, DebitNote,
+    SalesReturn, SalesReturnLine, PurchaseReturn, PurchaseReturnLine,
     JournalEntry, Account, Contact, TenantMembership, StockLedger, Product,
 )
 from src.domains.accounting.services import (
@@ -615,4 +616,193 @@ def record_bill_payment(
         bill.status = "PAID"
     else:
         bill.status = "PARTIALLY_PAID"
+    db.flush()
+
+
+# --- Auto-Post Sales Return ----------------------------------------------
+
+def auto_post_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn) -> JournalEntry:
+    """Auto-post a sales return on creation. Stock comes IN."""
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{sr.contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    tax = _resolve_tax_accounts(resolver, "output")
+
+    draft = LedgerPostingEngine.create_sales_return_posting(
+        tenant_id=tenant_id,
+        return_id=sr.id,
+        return_number=sr.return_number,
+        return_date=sr.issue_date,
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=sr.subtotal,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=sr.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=sr.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=sr.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=sr.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=sr.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=sr.round_off,
+    )
+    commit_ledger_draft(db, tenant_id, draft)
+
+    # Stock ledger: increment stock for each product line (goods returned)
+    for line in sr.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    document_type="SALES_RETURN",
+                    document_id=sr.id,
+                    quantity=line.quantity,
+                    balance_after=product.current_stock,
+                    notes=f"Sales Return {sr.return_number}",
+                ))
+
+    sr.status = "POSTED"
+    db.flush()
+    return sr
+
+
+# --- Auto-Post Purchase Return -----------------------------------------
+
+def auto_post_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseReturn) -> JournalEntry:
+    """Auto-post a purchase return on creation. Stock goes OUT."""
+    resolver = AccountResolver(db, tenant_id)
+    vendor_account_id = resolver.resolve(f"vendor.{pr.contact_id}")
+    purchase_expense_account_id = resolver.resolve("purchases")
+    tax = _resolve_tax_accounts(resolver, "input")
+
+    draft = LedgerPostingEngine.create_purchase_return_posting(
+        tenant_id=tenant_id,
+        return_id=pr.id,
+        return_number=pr.return_number,
+        return_date=pr.issue_date,
+        vendor_account_id=vendor_account_id,
+        purchase_expense_account_id=purchase_expense_account_id,
+        subtotal=pr.subtotal,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=pr.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=pr.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=pr.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=pr.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=pr.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=pr.round_off,
+    )
+    commit_ledger_draft(db, tenant_id, draft)
+
+    # Stock ledger: decrement stock for each product line (goods returned to vendor)
+    for line in pr.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) - line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    document_type="PURCHASE_RETURN",
+                    document_id=pr.id,
+                    quantity=-line.quantity,
+                    balance_after=product.current_stock,
+                    notes=f"Purchase Return {pr.return_number}",
+                ))
+
+    pr.status = "POSTED"
+    db.flush()
+    return pr
+
+
+# --- Cancel Sales Return -------------------------------------------------
+
+def cancel_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn, user_id: uuid.UUID) -> None:
+    """Cancel a posted sales return with reversing journal entries."""
+    if sr.status != "POSTED":
+        raise ValueError(f"Cannot cancel sales return in status {sr.status}")
+
+    resolver = AccountResolver(db, tenant_id)
+    customer_account_id = resolver.resolve(f"customer.{sr.contact_id}")
+    sales_revenue_account_id = resolver.resolve("sales_revenue")
+    tax = _resolve_tax_accounts(resolver, "output")
+
+    # Reversal: opposite of sales return posting
+    draft = LedgerPostingEngine.create_sales_return_posting(
+        tenant_id=tenant_id,
+        return_id=sr.id,
+        return_number=sr.return_number,
+        return_date=date.today(),
+        customer_account_id=customer_account_id,
+        sales_revenue_account_id=sales_revenue_account_id,
+        subtotal=sr.subtotal,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=sr.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=sr.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=sr.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=sr.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=sr.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=sr.round_off,
+    )
+    commit_ledger_draft(db, tenant_id, draft)
+
+    sr.status = "CANCELLED"
+    sr.cancelled_at = datetime.now(timezone.utc)
+    sr.cancelled_by = user_id
+    db.flush()
+
+
+# --- Cancel Purchase Return ----------------------------------------------
+
+def cancel_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseReturn, user_id: uuid.UUID) -> None:
+    """Cancel a posted purchase return with reversing journal entries."""
+    if pr.status != "POSTED":
+        raise ValueError(f"Cannot cancel purchase return in status {pr.status}")
+
+    resolver = AccountResolver(db, tenant_id)
+    vendor_account_id = resolver.resolve(f"vendor.{pr.contact_id}")
+    purchase_expense_account_id = resolver.resolve("purchases")
+    tax = _resolve_tax_accounts(resolver, "input")
+
+    draft = LedgerPostingEngine.create_purchase_return_posting(
+        tenant_id=tenant_id,
+        return_id=pr.id,
+        return_number=pr.return_number,
+        return_date=date.today(),
+        vendor_account_id=vendor_account_id,
+        purchase_expense_account_id=purchase_expense_account_id,
+        subtotal=pr.subtotal,
+        cgst_account_id=tax["cgst"],
+        cgst_amount=pr.cgst_amount,
+        sgst_account_id=tax["sgst"],
+        sgst_amount=pr.sgst_amount,
+        igst_account_id=tax["igst"],
+        igst_amount=pr.igst_amount,
+        utgst_account_id=tax["utgst"],
+        utgst_amount=pr.utgst_amount,
+        cess_account_id=tax["cess"],
+        cess_amount=pr.cess_amount,
+        round_off_account_id=tax["round_off"],
+        round_off_amount=pr.round_off,
+    )
+    commit_ledger_draft(db, tenant_id, draft)
+
+    pr.status = "CANCELLED"
+    pr.cancelled_at = datetime.now(timezone.utc)
+    pr.cancelled_by = user_id
     db.flush()

@@ -31,6 +31,8 @@ import 'package:flutter_client/views/reminders/reminder_list_view.dart';
 import 'package:flutter_client/views/vyapar_import/vyapar_import_view.dart';
 import 'package:flutter_client/views/sales_analytics/sales_analytics_view.dart';
 import 'package:flutter_client/views/banking/banking_profile_list_view.dart';
+import 'package:flutter_client/views/returns/returns_list_view.dart';
+import 'package:flutter_client/views/tools/backup_restore_view.dart';
 
 // ─── Menu Data Model ──────────────────────────────────────────
 
@@ -89,7 +91,9 @@ final List<_MenuItem> _flatItems = [
   _MenuItem(name: 'E-Way Bills', icon: Icons.local_shipping_outlined, view: const EwayBillListView()),
   _MenuItem(name: 'Audit Log', icon: Icons.history_rounded, view: const AuditLogListView()),
   _MenuItem(name: 'Reminders', icon: Icons.notifications_outlined, view: const ReminderListView()),
+  _MenuItem(name: 'Returns', icon: Icons.assignment_return_rounded, view: const ReturnsListView()),
   _MenuItem(name: 'Vyapar Import', icon: Icons.file_upload_outlined, view: const VyaparImportView()),
+  _MenuItem(name: 'Backup/Restore', icon: Icons.backup_rounded, view: const BackupRestoreView()),
   _MenuItem(name: 'Settings', icon: Icons.settings_rounded, view: const SettingsView()),
 ];
 
@@ -104,7 +108,7 @@ final List<_MenuEntry> _sidebarEntries = [
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Purchases',
     icon: Icons.shopping_bag_outlined,
-    childIndices: [6, 7, 8], // Vendor Bills, Expenses, Purchase Orders
+    childIndices: [6, 7, 8, 24], // Vendor Bills, Expenses, Purchase Orders, Returns
   )),
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Parties & Inventory',
@@ -124,7 +128,7 @@ final List<_MenuEntry> _sidebarEntries = [
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Tools',
     icon: Icons.build_outlined,
-    childIndices: [21, 22, 23, 24], // Audit Log, Reminders, Vyapar Import, Settings
+    childIndices: [21, 22, 25, 26, 27], // Audit Log, Reminders, Backup/Restore, Vyapar Import, Settings
   )),
 ];
 

@@ -620,3 +620,86 @@ def verify_and_execute_purge(
         )
 
     return {"detail": "Company data purged successfully. All transactions, contacts, and products have been deleted."}
+
+
+# ─── Data Export / Backup ───
+
+@router.get("/companies/{tenant_id}/export")
+def export_tenant_data(
+    tenant_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
+    """Export all tenant data as a JSON backup."""
+    from sqlalchemy import inspect
+    from src.infrastructure.database.models import (
+        Contact, Product, Invoice, Bill, Expense, JournalEntry, Account,
+        Payment, BillPayment, CreditNote, DebitNote, SalesReturn, PurchaseReturn,
+        StockLedger, InventoryAdjustment, DeliveryChallan, PurchaseOrder, SalesOrder,
+        EWayBill, BankingProfile, ExpenseCategory, TenantSetting, NumberingSeries,
+    )
+
+    membership = db.query(TenantMembership).filter(
+        TenantMembership.user_id == current_user.id,
+        TenantMembership.tenant_id == tenant_id,
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    def serialize_rows(rows):
+        result = []
+        for row in rows:
+            d = {}
+            for col in inspect(row).mapper.column_attrs:
+                val = getattr(row, col.key)
+                if val is None:
+                    d[col.key] = None
+                elif isinstance(val, (datetime, date)):
+                    d[col.key] = val.isoformat()
+                elif isinstance(val, uuid.UUID):
+                    d[col.key] = str(val)
+                elif hasattr(val, 'quantize'):
+                    d[col.key] = str(val)
+                else:
+                    d[col.key] = val
+            result.append(d)
+        return result
+
+    def load_and_serialize(model, tenant_filter=True):
+        q = db.query(model)
+        if tenant_filter and hasattr(model, 'tenant_id'):
+            q = q.filter(model.tenant_id == tenant_id)
+        if hasattr(model, 'deleted_at'):
+            q = q.filter(model.deleted_at == None)
+        return serialize_rows(q.all())
+
+    backup = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "tenant_id": str(tenant_id),
+        "user_email": current_user.email,
+        "contacts": load_and_serialize(Contact),
+        "products": load_and_serialize(Product),
+        "accounts": load_and_serialize(Account),
+        "expense_categories": load_and_serialize(ExpenseCategory),
+        "banking_profiles": load_and_serialize(BankingProfile),
+        "invoices": load_and_serialize(Invoice),
+        "bills": load_and_serialize(Bill),
+        "expenses": load_and_serialize(Expense),
+        "payments": load_and_serialize(Payment),
+        "bill_payments": load_and_serialize(BillPayment),
+        "credit_notes": load_and_serialize(CreditNote),
+        "debit_notes": load_and_serialize(DebitNote),
+        "sales_returns": load_and_serialize(SalesReturn),
+        "purchase_returns": load_and_serialize(PurchaseReturn),
+        "journal_entries": load_and_serialize(JournalEntry),
+        "stock_ledger": load_and_serialize(StockLedger),
+        "inventory_adjustments": load_and_serialize(InventoryAdjustment),
+        "delivery_challans": load_and_serialize(DeliveryChallan),
+        "purchase_orders": load_and_serialize(PurchaseOrder),
+        "sales_orders": load_and_serialize(SalesOrder),
+        "e_way_bills": load_and_serialize(EWayBill),
+        "settings": load_and_serialize(TenantSetting),
+        "numbering_series": load_and_serialize(NumberingSeries),
+    }
+
+    return JSONResponse(content=backup)
