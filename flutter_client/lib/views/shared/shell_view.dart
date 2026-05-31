@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/auth_provider.dart';
+import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/models/auth.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/global_search.dart';
@@ -156,9 +157,47 @@ class _ShellViewState extends State<ShellView> {
 
     final isCtrlPressed = HardwareKeyboard.instance.isControlPressed ||
         HardwareKeyboard.instance.isMetaPressed;
+    final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
 
     if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyF) {
       _openSearch();
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyD) {
+      setState(() => _selectedIndex = 0); // Dashboard
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyI) {
+      setState(() => _selectedIndex = 1); // Invoices
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyB) {
+      setState(() => _selectedIndex = 6); // Bills
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyE) {
+      setState(() => _selectedIndex = 7); // Expenses
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyR) {
+      setState(() => _selectedIndex = 18); // Reports
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlPressed && isShiftPressed && event.logicalKey == LogicalKeyboardKey.keyN) {
+      // Ctrl+Shift+N → New Invoice
+      Navigator.pushNamed(context, '/invoices/new');
+      return KeyEventResult.handled;
+    }
+
+    if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyT) {
+      // Ctrl+T → Toggle dark mode
+      context.read<ThemeProvider>().toggleTheme();
       return KeyEventResult.handled;
     }
 

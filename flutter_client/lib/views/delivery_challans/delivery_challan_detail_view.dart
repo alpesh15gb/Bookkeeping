@@ -108,6 +108,25 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
                 }
               }),
             ],
+            if (status == 'ISSUED') ...[
+              const SizedBox(height: 12),
+              ActionButton(label: 'Convert to Invoice', tier: ActionTier.safe, onPressed: () {
+                // Navigate to invoice form with pre-filled data from challan
+                final lines = (c['lines'] as List?) ?? [];
+                Navigator.pushNamed(context, '/invoices/new', arguments: {
+                  'contact_id': c['contact_id'],
+                  'contact_name': c['contact_name'] ?? c['customer_name'],
+                  'lines': lines.map((l) => {
+                    'product_id': l['product_id'],
+                    'product_name': l['product_name'],
+                    'quantity': l['quantity'],
+                    'rate': l['rate'] ?? 0,
+                    'hsn_sac': l['hsn_sac'] ?? '',
+                    'gst_rate': l['gst_rate'] ?? 0,
+                  }).toList(),
+                });
+              }),
+            ],
             const SizedBox(height: 32),
           ],
         ),

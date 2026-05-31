@@ -8,6 +8,8 @@ import 'package:flutter_client/views/reports/profit_loss_view.dart';
 import 'package:flutter_client/views/reports/gst_returns_view.dart';
 import 'package:flutter_client/views/reports/aging_report_view.dart';
 import 'package:flutter_client/views/reports/party_statement_view.dart';
+import 'package:flutter_client/views/reports/cash_flow_view.dart';
+import 'package:flutter_client/views/reports/outstanding_view.dart';
 
 class ReportListView extends StatefulWidget {
   const ReportListView({super.key});
@@ -24,6 +26,9 @@ class _ReportListViewState extends State<ReportListView> {
     {'icon': Icons.receipt_long_outlined, 'title': 'GST Returns', 'subtitle': 'GSTR-1, GSTR-3B & more', 'view': const GstReturnsView()},
     {'icon': Icons.bar_chart_outlined, 'title': 'Aging Report', 'subtitle': 'Outstanding receivables/payables', 'view': const AgingReportView()},
     {'icon': Icons.receipt_long_outlined, 'title': 'Party Statement', 'subtitle': 'Ledger & summary for a specific party', 'view': const PartyStatementView()},
+    {'icon': Icons.account_balance_wallet_outlined, 'title': 'Cash Flow', 'subtitle': 'Operating, investing & financing flows', 'view': const CashFlowView()},
+    {'icon': Icons.arrow_circle_up_outlined, 'title': 'Outstanding Receivables', 'subtitle': 'Who owes you money', 'view': const OutstandingReceivablesView()},
+    {'icon': Icons.arrow_circle_down_outlined, 'title': 'Outstanding Payables', 'subtitle': 'Who you owe money to', 'view': const OutstandingPayablesView()},
     {'icon': Icons.description_outlined, 'title': 'Day Book', 'subtitle': 'All transactions for a day', 'view': null},
   ];
 

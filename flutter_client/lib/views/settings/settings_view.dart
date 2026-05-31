@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
+import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/auth/change_password_view.dart';
@@ -534,6 +535,18 @@ class _SettingsViewState extends State<SettingsView> {
                   pdfTemplate.toString().toUpperCase(),
                 ),
                 _settingRow(Icons.description_outlined, 'Terms & Conditions', terms),
+                Consumer<ThemeProvider>(
+                  builder: (context, themeProvider, _) {
+                    return ListTile(
+                      leading: Icon(themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode),
+                      title: const Text('Dark Mode'),
+                      trailing: Switch(
+                        value: themeProvider.isDarkMode,
+                        onChanged: (_) => themeProvider.toggleTheme(),
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),

@@ -20,6 +20,7 @@ import 'package:flutter_client/providers/inventory_adjustment_provider.dart';
 import 'package:flutter_client/providers/misc_provider.dart';
 import 'package:flutter_client/providers/sales_analytics_provider.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
+import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/views/auth/login_view.dart';
 import 'package:flutter_client/views/shared/shell_view.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
@@ -37,6 +38,7 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => DashboardProvider()),
         ChangeNotifierProvider(create: (_) => ContactProvider()),
         ChangeNotifierProvider(create: (_) => ProductProvider()),
@@ -87,12 +89,15 @@ class _MainAppShellState extends State<MainAppShell> {
   @override
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
+    final themeProvider = context.watch<ThemeProvider>();
 
     return MaterialApp(
       navigatorKey: _navigatorKey,
       title: 'Apex Books',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light,
+      theme: themeProvider.lightTheme,
+      darkTheme: themeProvider.darkTheme,
+      themeMode: themeProvider.themeMode,
       home: authProvider.isLoading
           ? const Scaffold(
               body: Center(

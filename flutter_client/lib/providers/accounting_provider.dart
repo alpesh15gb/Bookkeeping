@@ -331,4 +331,28 @@ class AccountingProvider extends ChangeNotifier {
     } catch (_) {}
     return null;
   }
+
+  Future<Map<String, dynamic>?> fetchCashFlow(DateTime from, DateTime to) async {
+    try {
+      final start = '${from.year}-${from.month.toString().padLeft(2, '0')}-${from.day.toString().padLeft(2, '0')}';
+      final end = '${to.year}-${to.month.toString().padLeft(2, '0')}-${to.day.toString().padLeft(2, '0')}';
+      final response = await _client.get(Uri.parse(
+          '${ApiClient.baseUrl}/reports/cash-flow?start_date=$start&end_date=$end'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> fetchPartyStatement(String contactId, String startDate, String endDate) async {
+    try {
+      final response = await _client.get(Uri.parse(
+          '${ApiClient.baseUrl}/reports/party-statement?contact_id=$contactId&start_date=$startDate&end_date=$endDate'));
+      if (response.statusCode == 200) {
+        return jsonDecode(response.body);
+      }
+    } catch (_) {}
+    return null;
+  }
 }
