@@ -170,7 +170,7 @@ final List<_MenuEntry> _sidebarEntries = [
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Purchases',
     icon: Icons.shopping_bag_outlined,
-    childIndices: [6, 7, 8, 24], // Vendor Bills, Expenses, Purchase Orders, Returns
+    childIndices: [6, 7, 8, 23], // Vendor Bills, Expenses, Purchase Orders, Returns
   )),
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Parties & Inventory',
@@ -190,7 +190,7 @@ final List<_MenuEntry> _sidebarEntries = [
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Tools',
     icon: Icons.build_outlined,
-    childIndices: [21, 22, 25, 26, 27], // Audit Log, Reminders, Backup/Restore, Vyapar Import, Settings
+    childIndices: [21, 22, 25, 24, 26], // Audit Log, Reminders, Backup/Restore, Vyapar Import, Settings
   )),
 ];
 
@@ -438,60 +438,52 @@ class _GroupedNavState extends State<_GroupedNav> {
     final fontSize = widget.isMobile ? 14.0 : 13.0;
     final childPadH = widget.isMobile ? 14.0 : 16.0;
 
-    return CustomScrollView(
-      slivers: [
-        SliverPadding(
-          padding: EdgeInsets.symmetric(horizontal: padH),
-          sliver: SliverList(
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                final entry = _sidebarEntries[i];
+    return ListView.builder(
+      padding: EdgeInsets.symmetric(horizontal: padH),
+      itemCount: _sidebarEntries.length,
+      itemBuilder: (context, i) {
+        final entry = _sidebarEntries[i];
 
-                if (entry is _MenuLeaf) {
-                  final item = _flatItems[entry.index];
-                  final isSelected = widget.selectedIndex == entry.index;
-                  return _buildLeafItem(
-                    item: item,
-                    isSelected: isSelected,
-                    onTap: () => widget.onItemSelected(entry.index),
-                    itemPadV: itemPadV,
-                    iconSize: iconSize,
-                    fontSize: fontSize,
-                  );
-                }
+        if (entry is _MenuLeaf) {
+          final item = _flatItems[entry.index];
+          final isSelected = widget.selectedIndex == entry.index;
+          return _buildLeafItem(
+            item: item,
+            isSelected: isSelected,
+            onTap: () => widget.onItemSelected(entry.index),
+            itemPadV: itemPadV,
+            iconSize: iconSize,
+            fontSize: fontSize,
+          );
+        }
 
-                if (entry is _MenuGroupEntry) {
-                  final group = entry.group;
-                  final isExpanded = _expandedGroups.contains(i);
-                  final hasActiveChild = group.childIndices.contains(widget.selectedIndex);
+        if (entry is _MenuGroupEntry) {
+          final group = entry.group;
+          final isExpanded = _expandedGroups.contains(i);
+          final hasActiveChild = group.childIndices.contains(widget.selectedIndex);
 
-                  return _buildGroupItem(
-                    group: group,
-                    isExpanded: isExpanded,
-                    hasActiveChild: hasActiveChild,
-                    onToggle: () => setState(() {
-                      if (_expandedGroups.contains(i)) {
-                        _expandedGroups.remove(i);
-                      } else {
-                        _expandedGroups.add(i);
-                      }
-                    }),
-                    itemPadV: itemPadV,
-                    iconSize: iconSize,
-                    fontSize: fontSize,
-                    childPadH: childPadH,
-                    selectedIndex: widget.selectedIndex,
-                    onItemSelected: widget.onItemSelected,
-                  );
-                }
+          return _buildGroupItem(
+            group: group,
+            isExpanded: isExpanded,
+            hasActiveChild: hasActiveChild,
+            onToggle: () => setState(() {
+              if (_expandedGroups.contains(i)) {
+                _expandedGroups.remove(i);
+              } else {
+                _expandedGroups.add(i);
+              }
+            }),
+            itemPadV: itemPadV,
+            iconSize: iconSize,
+            fontSize: fontSize,
+            childPadH: childPadH,
+            selectedIndex: widget.selectedIndex,
+            onItemSelected: widget.onItemSelected,
+          );
+        }
 
-                return const SizedBox.shrink();
-              },
-              childCount: _sidebarEntries.length,
-            ),
-          ),
-        ),
-      ],
+        return const SizedBox.shrink();
+      },
     );
   }
 
@@ -968,13 +960,10 @@ class _MobileDrawer extends StatelessWidget {
             const SizedBox(height: 8),
         // Navigation items
         Expanded(
-          child: Container(
-            color: AppColors.bgSidebar,
-            child: _GroupedNav(
-              selectedIndex: selectedIndex,
-              onItemSelected: onItemSelected,
-              isMobile: true,
-            ),
+          child: _GroupedNav(
+            selectedIndex: selectedIndex,
+            onItemSelected: onItemSelected,
+            isMobile: true,
           ),
         ),
             // User & Sign out
