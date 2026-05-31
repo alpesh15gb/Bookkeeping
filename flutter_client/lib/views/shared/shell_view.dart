@@ -438,54 +438,53 @@ class _GroupedNavState extends State<_GroupedNav> {
     final fontSize = widget.isMobile ? 14.0 : 13.0;
     final childPadH = widget.isMobile ? 14.0 : 16.0;
 
-    return Material(
-      color: AppColors.bgSidebar,
-      child: ListView.builder(
-        padding: EdgeInsets.symmetric(horizontal: padH),
-        itemCount: _sidebarEntries.length,
-        itemBuilder: (context, i) {
-        final entry = _sidebarEntries[i];
+    final items = <Widget>[];
+    for (var i = 0; i < _sidebarEntries.length; i++) {
+      final entry = _sidebarEntries[i];
 
-        if (entry is _MenuLeaf) {
-          final item = _flatItems[entry.index];
-          final isSelected = widget.selectedIndex == entry.index;
-          return _buildLeafItem(
-            item: item,
-            isSelected: isSelected,
-            onTap: () => widget.onItemSelected(entry.index),
-            itemPadV: itemPadV,
-            iconSize: iconSize,
-            fontSize: fontSize,
-          );
-        }
+      if (entry is _MenuLeaf) {
+        final item = _flatItems[entry.index];
+        final isSelected = widget.selectedIndex == entry.index;
+        items.add(_buildLeafItem(
+          item: item,
+          isSelected: isSelected,
+          onTap: () => widget.onItemSelected(entry.index),
+          itemPadV: itemPadV,
+          iconSize: iconSize,
+          fontSize: fontSize,
+        ));
+      } else if (entry is _MenuGroupEntry) {
+        final group = entry.group;
+        final isExpanded = _expandedGroups.contains(i);
+        final hasActiveChild = group.childIndices.contains(widget.selectedIndex);
 
-        if (entry is _MenuGroupEntry) {
-          final group = entry.group;
-          final isExpanded = _expandedGroups.contains(i);
-          final hasActiveChild = group.childIndices.contains(widget.selectedIndex);
+        items.add(_buildGroupItem(
+          group: group,
+          isExpanded: isExpanded,
+          hasActiveChild: hasActiveChild,
+          onToggle: () => setState(() {
+            if (_expandedGroups.contains(i)) {
+              _expandedGroups.remove(i);
+            } else {
+              _expandedGroups.add(i);
+            }
+          }),
+          itemPadV: itemPadV,
+          iconSize: iconSize,
+          fontSize: fontSize,
+          childPadH: childPadH,
+          selectedIndex: widget.selectedIndex,
+          onItemSelected: widget.onItemSelected,
+        ));
+      } else {
+        items.add(const SizedBox.shrink());
+      }
+    }
 
-          return _buildGroupItem(
-            group: group,
-            isExpanded: isExpanded,
-            hasActiveChild: hasActiveChild,
-            onToggle: () => setState(() {
-              if (_expandedGroups.contains(i)) {
-                _expandedGroups.remove(i);
-              } else {
-                _expandedGroups.add(i);
-              }
-            }),
-            itemPadV: itemPadV,
-            iconSize: iconSize,
-            fontSize: fontSize,
-            childPadH: childPadH,
-            selectedIndex: widget.selectedIndex,
-            onItemSelected: widget.onItemSelected,
-          );
-        }
-
-        return const SizedBox.shrink();
-      },
+    return SingleChildScrollView(
+      padding: EdgeInsets.symmetric(horizontal: padH),
+      child: Column(
+        children: items,
       ),
     );
   }
