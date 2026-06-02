@@ -28,6 +28,9 @@ jobs:
           pip install -r backend/requirements.txt pytest Faker freezegun mock anyio pytest-asyncio httpx
 
       - name: Run Backend Tests
+        env:
+          JWT_SECRET_KEY: test-jwt-secret-key-for-testing-purposes-only-32chars
+          SECRET_KEY: test-secret-key-for-testing-purposes-only
         run: |
           cd backend
           PYTHONPATH=. python -m pytest
