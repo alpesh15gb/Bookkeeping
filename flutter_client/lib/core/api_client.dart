@@ -139,12 +139,12 @@ class ApiClient extends http.BaseClient {
         path.contains('/auth/logout');
 
     if (response.statusCode == 401 && !isAuthEndpoint) {
+      final hadAccessToken = _accessToken != null;
       if (_accessToken == null && _refreshToken == null) {
         return response;
       }
 
       bool refreshSucceeded;
-      // Mutex: if a refresh is already in progress, wait for it
       if (_refreshCompleter != null && !_refreshCompleter!.isCompleted) {
         refreshSucceeded = await _refreshCompleter!.future;
       } else {
@@ -163,7 +163,7 @@ class ApiClient extends http.BaseClient {
         return await _inner.send(newRequest).timeout(_requestTimeout);
       } else {
         await clearSession();
-        if (onSessionExpired != null) {
+        if (hadAccessToken && onSessionExpired != null) {
           onSessionExpired!();
         }
       }
