@@ -413,11 +413,19 @@ class TestAccountResolver:
     def test_resolve_customer_auto_creates(self, resolver):
         """resolve('customer.<uuid>') with existing contact creates AR account."""
         contact_id = uuid4()
-        # First query (contact lookup) returns a contact
         fake_contact = MagicMock()
         fake_contact.name = "Acme Corp"
-        # Second query (existing account check) returns None
-        resolver.db.query.return_value.filter.return_value.first.side_effect = [fake_contact, None]
+
+        contact_query = MagicMock()
+        contact_query.filter.return_value.first.return_value = fake_contact
+
+        account_by_id_query = MagicMock()
+        account_by_id_query.filter.return_value.first.return_value = None
+
+        account_by_name_query = MagicMock()
+        account_by_name_query.filter.return_value.all.return_value = []
+
+        resolver.db.query.side_effect = [contact_query, account_by_id_query, account_by_name_query]
 
         result = resolver.resolve(f"customer.{contact_id}")
 
@@ -430,7 +438,17 @@ class TestAccountResolver:
         contact_id = uuid4()
         fake_contact = MagicMock()
         fake_contact.name = "Acme Corp"
-        resolver.db.query.return_value.filter.return_value.first.side_effect = [fake_contact, None]
+
+        contact_query = MagicMock()
+        contact_query.filter.return_value.first.return_value = fake_contact
+
+        account_by_id_query = MagicMock()
+        account_by_id_query.filter.return_value.first.return_value = None
+
+        account_by_name_query = MagicMock()
+        account_by_name_query.filter.return_value.all.return_value = []
+
+        resolver.db.query.side_effect = [contact_query, account_by_id_query, account_by_name_query]
 
         resolver.resolve(f"customer.{contact_id}")
 
@@ -445,7 +463,17 @@ class TestAccountResolver:
         contact_id = uuid4()
         fake_contact = MagicMock()
         fake_contact.name = "Supplier Inc"
-        resolver.db.query.return_value.filter.return_value.first.side_effect = [fake_contact, None]
+
+        contact_query = MagicMock()
+        contact_query.filter.return_value.first.return_value = fake_contact
+
+        account_by_id_query = MagicMock()
+        account_by_id_query.filter.return_value.first.return_value = None
+
+        account_by_name_query = MagicMock()
+        account_by_name_query.filter.return_value.all.return_value = []
+
+        resolver.db.query.side_effect = [contact_query, account_by_id_query, account_by_name_query]
 
         result = resolver.resolve(f"vendor.{contact_id}")
 
@@ -473,7 +501,17 @@ class TestAccountResolver:
         contact_id = uuid4()
         fake_contact = MagicMock()
         fake_contact.name = "Acme Corp"
-        resolver.db.query.return_value.filter.return_value.first.side_effect = [fake_contact, None]
+
+        contact_query = MagicMock()
+        contact_query.filter.return_value.first.return_value = fake_contact
+
+        account_by_id_query = MagicMock()
+        account_by_id_query.filter.return_value.first.return_value = None
+
+        account_by_name_query = MagicMock()
+        account_by_name_query.filter.return_value.all.return_value = []
+
+        resolver.db.query.side_effect = [contact_query, account_by_id_query, account_by_name_query]
 
         resolver.resolve(f"customer.{contact_id}")
         resolver.db.reset_mock()
