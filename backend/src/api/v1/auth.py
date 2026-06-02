@@ -503,7 +503,7 @@ def reset_password(
 
 @router.post("/verify-email")
 @limiter.limit("5/minute")
-def verify_email(token: str, db: Session = Depends(get_db_session)):
+def verify_email(request: Request, token: str, db: Session = Depends(get_db_session)):
     user = db.query(User).filter(User.email_verify_token == token).first()
     if not user:
         raise HTTPException(status_code=400, detail="Invalid verification token.")
@@ -527,6 +527,7 @@ class TwoFactorTokenPayload(BaseModel):
 @router.post("/2fa/enable")
 @limiter.limit("3/minute")
 def enable_2fa(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
 ):
@@ -542,6 +543,7 @@ def enable_2fa(
 @router.post("/2fa/verify")
 @limiter.limit("5/minute")
 def verify_2fa(
+    request: Request,
     payload: TwoFactorTokenPayload,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
@@ -557,6 +559,7 @@ def verify_2fa(
 @router.post("/2fa/disable")
 @limiter.limit("3/minute")
 def disable_2fa(
+    request: Request,
     payload: TwoFactorTokenPayload,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
