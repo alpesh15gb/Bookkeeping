@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List
-import os, uuid
+import json, os, uuid
 from datetime import datetime, date, timezone
 
 from src.core.config import settings
@@ -753,3 +753,156 @@ def export_tenant_data(
     }
 
     return JSONResponse(content=backup)
+
+
+@router.post("/companies/{tenant_id}/import")
+def import_tenant_data(
+    tenant_id: uuid.UUID,
+    payload: dict,
+    db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Restore a previously exported JSON backup into the current tenant.
+    Skips records that already exist by ID. Inserts in dependency order.
+    """
+    from sqlalchemy import inspect as sa_inspect, insert
+    from sqlalchemy.types import DateTime, Date, Boolean, String, Text, Integer, Numeric
+    from decimal import Decimal as PyDecimal
+    from src.core.database import engine
+    from src.infrastructure.database.models import (
+        Account, Contact, Product, ExpenseCategory, BankingProfile,
+        TenantSetting, NumberingSeries,
+        Invoice, Bill, Expense, Payment,
+        BillPayment, CreditNote, DebitNote,
+        SalesReturn, PurchaseReturn, JournalEntry,
+        StockLedger, InventoryAdjustment,
+        DeliveryChallan,
+        PurchaseOrder, SalesOrder,
+        EWayBill
+    )
+
+    membership = db.query(TenantMembership).filter(
+        TenantMembership.user_id == current_user.id,
+        TenantMembership.tenant_id == tenant_id,
+    ).first()
+    if not membership:
+        raise HTTPException(status_code=403, detail="Access denied.")
+
+    if not isinstance(payload, dict) or "tenant_id" not in payload:
+        raise HTTPException(status_code=400, detail="Missing tenant_id in backup.")
+
+    inspector = sa_inspect(engine)
+
+    def _db_cols(table_name):
+        try:
+            return [c["name"] for c in inspector.get_columns(table_name)]
+        except Exception:
+            return []
+
+    def _coerce(val, col):
+        if val is None:
+            return None
+        if isinstance(col.type, DateTime):
+            return datetime.fromisoformat(val)
+        if isinstance(col.type, Date):
+            return date.fromisoformat(val)
+        if isinstance(col.type, Boolean):
+            return bool(val)
+        if isinstance(col.type, (Numeric,)) or hasattr(col.type, "scale"):
+            return PyDecimal(str(val))
+        if col.name == "id":
+            return uuid.UUID(str(val))
+        if col.name.endswith("_id") and val is not None:
+            try:
+                return uuid.UUID(str(val))
+            except Exception:
+                return val
+        return val
+
+    def _import_model(model, items, counts, label):
+        if not items:
+            return
+        table_name = model.__tablename__
+        cols = _db_cols(table_name)
+        if not cols:
+            return
+        mapper = sa_inspect(model)
+        col_map = {c.name: c for c in mapper.columns}
+        inserted = 0
+        skipped = 0
+        for raw in items:
+            if not isinstance(raw, dict):
+                continue
+            item_id = raw.get("id")
+            if not item_id:
+                continue
+            try:
+                item_uuid = uuid.UUID(str(item_id))
+            except Exception:
+                continue
+            exists = db.query(model).filter(
+                model.id == item_uuid,
+                model.tenant_id == tenant_id
+            ).first()
+            if exists:
+                skipped += 1
+                continue
+            clean = {}
+            for key, val in raw.items():
+                if key not in cols:
+                    continue
+                col = col_map.get(key)
+                if col:
+                    try:
+                        clean[key] = _coerce(val, col)
+                    except Exception:
+                        clean[key] = val
+                else:
+                    clean[key] = val
+            clean["tenant_id"] = tenant_id
+            clean["id"] = item_uuid
+            try:
+                db.execute(insert(model).values(**clean))
+                inserted += 1
+            except Exception as exc:
+                logger.warning(f"Import skip {label} {item_id}: {exc}")
+                skipped += 1
+        counts[label] = {"inserted": inserted, "skipped": skipped}
+        db.flush()
+
+    counts = {}
+    # Dependency order: base masters → transactions → lines → ledger
+    _import_model(Account, payload.get("accounts", []), counts, "accounts")
+    _import_model(Contact, payload.get("contacts", []), counts, "contacts")
+    _import_model(Product, payload.get("products", []), counts, "products")
+    _import_model(ExpenseCategory, payload.get("expense_categories", []), counts, "expense_categories")
+    _import_model(BankingProfile, payload.get("banking_profiles", []), counts, "banking_profiles")
+    _import_model(TenantSetting, payload.get("settings", []), counts, "settings")
+    _import_model(NumberingSeries, payload.get("numbering_series", []), counts, "numbering_series")
+
+    _import_model(Invoice, payload.get("invoices", []), counts, "invoices")
+    _import_model(Bill, payload.get("bills", []), counts, "bills")
+    _import_model(Expense, payload.get("expenses", []), counts, "expenses")
+    _import_model(Payment, payload.get("payments", []), counts, "payments")
+    _import_model(BillPayment, payload.get("bill_payments", []), counts, "bill_payments")
+    _import_model(CreditNote, payload.get("credit_notes", []), counts, "credit_notes")
+    _import_model(DebitNote, payload.get("debit_notes", []), counts, "debit_notes")
+    _import_model(SalesReturn, payload.get("sales_returns", []), counts, "sales_returns")
+    _import_model(PurchaseReturn, payload.get("purchase_returns", []), counts, "purchase_returns")
+    _import_model(JournalEntry, payload.get("journal_entries", []), counts, "journal_entries")
+    _import_model(StockLedger, payload.get("stock_ledger", []), counts, "stock_ledger")
+    _import_model(InventoryAdjustment, payload.get("inventory_adjustments", []), counts, "inventory_adjustments")
+    _import_model(DeliveryChallan, payload.get("delivery_challans", []), counts, "delivery_challans")
+    _import_model(PurchaseOrder, payload.get("purchase_orders", []), counts, "purchase_orders")
+    _import_model(SalesOrder, payload.get("sales_orders", []), counts, "sales_orders")
+    _import_model(EWayBill, payload.get("e_way_bills", []), counts, "e_way_bills")
+
+    db.commit()
+
+    return JSONResponse(
+        content={
+            "detail": "Import completed.",
+            "counts": counts,
+        }
+    )
