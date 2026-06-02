@@ -124,7 +124,8 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
                 sales_price=Decimal("10000.00"),
                 purchase_price=Decimal("8000.00"),
                 gst_rate=Decimal("18.00"),
-                is_active=True
+                is_active=True,
+                current_stock=Decimal("100.00")
             )
 
             db.add_all([bank_a, customer_a, vendor_a, product_a])
@@ -220,8 +221,8 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
             bank_line = next(line for line in entry.lines if line.direction == "DEBIT")
             customer_line = next(line for line in entry.lines if line.direction == "CREDIT")
             
-            # Asset account mapping: uuid5(NAMESPACE_DNS, "account.assets.bank")
-            asset_acc = uuid.uuid5(uuid.NAMESPACE_DNS, "account.assets.bank")
+            # Asset account mapping: uuid5(NAMESPACE_DNS, "account.assets.bank-{tenant_id}")
+            asset_acc = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.assets.bank-{self.tenant_a_id}")
             cust_acc = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.customer.{self.customer_a_id}-{self.tenant_a_id}")
             self.assertEqual(bank_line.account_id, asset_acc)
             self.assertEqual(customer_line.account_id, cust_acc)
@@ -337,7 +338,7 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
             self.assertEqual(debits, Decimal("11800.00"))
 
             vendor_acc = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.vendor.{self.vendor_a_id}-{self.tenant_a_id}")
-            asset_acc = uuid.uuid5(uuid.NAMESPACE_DNS, "account.assets.bank")
+            asset_acc = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.assets.bank-{self.tenant_a_id}")
 
             v_line = next(line for line in entry.lines if line.direction == "DEBIT")
             b_line = next(line for line in entry.lines if line.direction == "CREDIT")

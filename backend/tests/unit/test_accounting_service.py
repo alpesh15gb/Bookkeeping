@@ -356,8 +356,8 @@ class TestAccountResolver:
 
         assert result is not None
         assert isinstance(result, UUID)
-        # The deterministic ID should be uuid5 of "account.sales_revenue"
-        expected = uuid.uuid5(uuid.NAMESPACE_DNS, "account.sales_revenue")
+        # The deterministic ID should be uuid5 of "account.sales_revenue-{tenant_id}"
+        expected = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.sales_revenue-{resolver.tenant_id}")
         assert result == expected
         # Should have called db.add and db.flush
         resolver.db.add.assert_called_once()

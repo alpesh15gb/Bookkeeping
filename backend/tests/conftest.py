@@ -136,10 +136,47 @@ def db_session() -> Generator[Session, None, None]:
     _original_override = app.dependency_overrides.get(get_db_session)
     app.dependency_overrides[get_db_session] = _override
 
-    # Clean tables at start of each test to prevent cross-test data leakage
-    session.execute(text("DELETE FROM tenant_memberships"))
-    session.execute(text("DELETE FROM users"))
-    session.execute(text("DELETE FROM tenants"))
+    # Clean ALL tables at start of each test in dependency order
+    cleanup_tables = [
+        "bank_reconciliations",
+        "bank_transactions",
+        "bank_statements",
+        "stock_ledger",
+        "inventory_adjustments",
+        "delivery_challans",
+        "proforma_invoices",
+        "sales_orders",
+        "purchase_orders",
+        "bill_payments",
+        "bills",
+        "payments",
+        "journal_entries",
+        "invoices",
+        "contacts",
+        "products",
+        "tax_templates",
+        "payment_terms",
+        "accounts",
+        "banking_profiles",
+        "branches",
+        "expense_categories",
+        "numbering_series",
+        "tenant_settings",
+        "gst_returns",
+        "webhook_events",
+        "audit_logs",
+        "tenant_invitations",
+        "tenant_memberships",
+        "users",
+        "tenants",
+    ]
+
+    for table in cleanup_tables:
+        try:
+            session.execute(text(f"DELETE FROM {table}"))
+        except Exception:
+            pass
+
     session.commit()
 
     yield session

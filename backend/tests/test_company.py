@@ -4,6 +4,7 @@ import uuid
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from fastapi.testclient import TestClient
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 # Adjust path to import from src
@@ -53,6 +54,27 @@ class TestCompanyAndSettings(unittest.TestCase):
             "X-Tenant-ID": str(self.tenant_id),
             "Authorization": f"Bearer {self.access_token}"
         }
+
+    def tearDown(self):
+        """Clean up test data after each test"""
+        db = SessionLocal()
+        try:
+            tables_to_clean = [
+                "numbering_series",
+                "tenant_settings",
+                "branches",
+                "tenant_memberships",
+                "tenants",
+                "users"
+            ]
+            for table in tables_to_clean:
+                try:
+                    db.execute(text(f"DELETE FROM {table}"))
+                except Exception:
+                    pass
+            db.commit()
+        finally:
+            db.close()
 
     def test_company_creation_and_onboarding(self):
         # Create an additional company/tenant

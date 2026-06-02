@@ -36,7 +36,7 @@ jobs:
       - name: Run Backend Tests
         run: |
           cd backend
-          PYTHONPATH=. python -m pytest
+          PYTHONPATH=. python -m pytest -n0 --tb=short
 
   deploy:
     runs-on: ubuntu-latest

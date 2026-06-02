@@ -166,11 +166,6 @@ def create_expense(
         reference_number=payload.reference_number,
     )
     db.add(expense)
-    db.flush()
-
-    # Auto-post: create journal entry immediately
-    auto_post_expense(db, tenant_id, expense)
-
     db.commit()
     db.refresh(expense)
     return _expense_to_response(expense)
@@ -485,8 +480,6 @@ def clone_expense(
     )
 
     db.add(cloned)
-    db.flush()
-    auto_post_expense(db, tenant_id, cloned)
     db.commit()
     db.refresh(cloned)
     return _expense_to_response(cloned)

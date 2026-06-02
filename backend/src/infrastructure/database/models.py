@@ -147,7 +147,6 @@ class Product(Base):
         Index("ix_products_tenant_deleted", "tenant_id", "deleted_at"),
         CheckConstraint("sales_price >= 0", name="ck_products_sales_price"),
         CheckConstraint("purchase_price >= 0", name="ck_products_purchase_price"),
-        CheckConstraint("current_stock >= 0", name="ck_products_current_stock"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -577,9 +576,7 @@ class NumberingSeries(Base):
     next_number is incremented using SELECT FOR UPDATE to prevent race conditions.
     """
     __tablename__ = "numbering_series"
-    __table_args__ = (
-        UniqueConstraint("tenant_id", "document_type", name="uq_numbering_series_tenant_doctype"),
-    )
+    __table_args__ = tuple()
 
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

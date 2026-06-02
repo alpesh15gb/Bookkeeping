@@ -1002,7 +1002,7 @@ class AccountResolver:
         if definition is None:
             raise LedgerValidationError(f"Unknown standard account key: {key}")
 
-        account_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.{key}")
+        account_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.{key}-{self.tenant_id}")
         existing = self.db.query(Account).filter(
             Account.id == account_id,
             Account.tenant_id == self.tenant_id,
