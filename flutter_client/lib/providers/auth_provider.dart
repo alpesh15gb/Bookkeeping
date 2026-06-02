@@ -35,14 +35,12 @@ class AuthProvider extends ChangeNotifier {
         notifyListeners();
         return;
       }
-      // Try to fetch current user to verify session
       final response = await _client.get(
         Uri.parse('${ApiClient.baseUrl}/auth/me'),
       );
       if (response.statusCode == 200) {
         _currentUser = UserResponse.fromJson(jsonDecode(response.body));
         _isAuthenticated = true;
-        // Fetch memberships
         final memResponse = await _client.get(
           Uri.parse('${ApiClient.baseUrl}/auth/memberships'),
         );
@@ -50,7 +48,6 @@ class AuthProvider extends ChangeNotifier {
           final List data = jsonDecode(memResponse.body);
           _memberships = data.map((e) => TenantMembership.fromJson(e)).toList();
           _activeTenantId = ApiClient.tenantId;
-          // If no active tenant, default to first membership
           if (_activeTenantId == null && _memberships.isNotEmpty) {
             _activeTenantId = _memberships[0].tenantId;
             ApiClient.setTenantId(_activeTenantId);
@@ -58,9 +55,17 @@ class AuthProvider extends ChangeNotifier {
         }
       } else {
         await ApiClient.clearSession();
+        _currentUser = null;
+        _isAuthenticated = false;
+        _memberships = [];
+        _activeTenantId = null;
       }
     } catch (_) {
       await ApiClient.clearSession();
+      _currentUser = null;
+      _isAuthenticated = false;
+      _memberships = [];
+      _activeTenantId = null;
     } finally {
       _isLoading = false;
       notifyListeners();

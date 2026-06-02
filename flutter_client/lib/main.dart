@@ -80,10 +80,14 @@ class _MainAppShellState extends State<MainAppShell> {
     ApiClient.onSessionExpired = () {
       if (mounted) {
         context.read<AuthProvider>().logout();
-        _navigatorKey.currentState?.pushAndRemoveUntil(
-          MaterialPageRoute(builder: (context) => const LoginView()),
-          (route) => false,
-        );
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _navigatorKey.currentState?.pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const LoginView()),
+              (route) => false,
+            );
+          }
+        });
       }
     };
   }
