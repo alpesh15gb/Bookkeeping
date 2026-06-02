@@ -260,6 +260,9 @@ async def add_request_id(request: Request, call_next):
 from starlette.middleware.gzip import GZipMiddleware
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
+app.add_middleware(IdempotencyMiddleware)
+app.add_middleware(SlowAPIMiddleware)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
@@ -267,14 +270,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "X-Tenant-ID", "Accept"],
 )
-
-
-# ---------------------------------------------------------------------------
-# Idempotency Middleware
-# ---------------------------------------------------------------------------
-
-app.add_middleware(IdempotencyMiddleware)
-app.add_middleware(SlowAPIMiddleware)
 
 
 # ---------------------------------------------------------------------------
