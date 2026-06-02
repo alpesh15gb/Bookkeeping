@@ -1,7 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
+import 'package:flutter_client/providers/eway_bill_provider.dart';
 import 'package:flutter_client/models/contact.dart';
 
 class ContactFormView extends StatefulWidget {
@@ -108,6 +110,122 @@ class _ContactFormViewState extends State<ContactFormView> {
           SnackBar(content: Text(provider.errorMessage ?? 'Operation failed'), backgroundColor: AppColors.error),
         );
       }
+    }
+  }
+
+  Future<void> _verifyGstin() async {
+    final gstin = _gstinController.text.trim().toUpperCase();
+    if (gstin.length != 15) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid 15-character GSTIN first'), backgroundColor: AppColors.warning),
+      );
+      return;
+    }
+
+    final provider = context.read<EwayBillProvider>();
+    final captchaData = await provider.fetchGstCaptcha();
+    if (captchaData == null || !mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not fetch captcha from GST portal'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
+    final captchaImage = captchaData['image'] as String?;
+    final sessionId = captchaData['session_id'] as String?;
+    if (captchaImage == null || sessionId == null) return;
+
+    final captchaCtrl = TextEditingController();
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('GSTIN Verification'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('GSTIN: $gstin', style: AppTextStyles.body.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Image.memory(
+                base64Decode(captchaImage),
+                height: 60,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text('Could not load captcha image'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: captchaCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Enter Captcha',
+                prefixIcon: Icon(Icons.security_outlined, size: 18),
+              ),
+              textCapitalization: TextCapitalization.characters,
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final captcha = captchaCtrl.text.trim();
+              if (captcha.isEmpty) return;
+              Navigator.pop(ctx);
+              final verified = await provider.verifyGstin(gstin, captcha, sessionId);
+              if (verified != null && ctx.mounted) {
+                Navigator.pop(ctx, verified);
+              } else if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Verification failed. Check captcha and try again.'), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        if (result['legal_name'] != null && _nameController.text.isEmpty) {
+          _nameController.text = result['legal_name'];
+        }
+        if (result['state_code'] != null) {
+          _stateCodeController.text = result['state_code'].toString();
+        }
+        if (result['pan'] != null && _panController.text.isEmpty) {
+          _panController.text = result['pan'];
+        }
+        final addr = result['address'];
+        if (addr is Map) {
+          if (addr['street'] != null && _streetController.text.isEmpty) {
+            _streetController.text = addr['street'];
+          }
+          if (addr['city'] != null && _cityController.text.isEmpty) {
+            _cityController.text = addr['city'];
+          }
+          if (addr['state'] != null && _stateController.text.isEmpty) {
+            _stateController.text = addr['state'];
+          }
+          if (addr['pincode'] != null && _pincodeController.text.isEmpty) {
+            _pincodeController.text = addr['pincode'].toString();
+          }
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Verified: ${result['legal_name'] ?? gstin} (${result['status'] ?? 'Active'})'),
+          backgroundColor: AppColors.success,
+        ),
+      );
     }
   }
 
@@ -229,16 +347,24 @@ class _ContactFormViewState extends State<ContactFormView> {
                       Row(
                         children: [
                           Expanded(
+                            flex: 3,
                             child: TextFormField(
                               controller: _gstinController,
-                              decoration: const InputDecoration(
+                              textCapitalization: TextCapitalization.characters,
+                              decoration: InputDecoration(
                                 labelText: 'GSTIN',
-                                prefixIcon: Icon(Icons.pin_outlined, size: 18),
+                                prefixIcon: const Icon(Icons.pin_outlined, size: 18),
+                                suffixIcon: IconButton(
+                                  icon: const Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
+                                  onPressed: _verifyGstin,
+                                  tooltip: 'Verify GSTIN',
+                                ),
                               ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
+                            flex: 2,
                             child: TextFormField(
                               controller: _panController,
                               decoration: const InputDecoration(
@@ -249,6 +375,7 @@ class _ContactFormViewState extends State<ContactFormView> {
                           ),
                           const SizedBox(width: 12),
                           Expanded(
+                            flex: 2,
                             child: TextFormField(
                               controller: _stateCodeController,
                               decoration: const InputDecoration(labelText: 'State Code *'),

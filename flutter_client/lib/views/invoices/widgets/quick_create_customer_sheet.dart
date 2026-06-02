@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/models/contact.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
+import 'package:flutter_client/providers/eway_bill_provider.dart';
 
 // ── GSTIN → State code (first 2 digits) ─────────────────────────────────────
 const Map<String, String> _gstinStateCodeMap = {
@@ -147,9 +149,110 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
         return;
       }
     }
-    // Clear if too short or invalid
     if (_detectedStateName.isNotEmpty) {
       setState(() => _detectedStateName = '');
+    }
+  }
+
+  Future<void> _verifyGstin() async {
+    final gstin = _gstinCtrl.text.trim().toUpperCase();
+    if (gstin.length != 15) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Enter a valid 15-character GSTIN first'), backgroundColor: AppColors.warning),
+      );
+      return;
+    }
+
+    final provider = context.read<EwayBillProvider>();
+    final captchaData = await provider.fetchGstCaptcha();
+    if (captchaData == null || !mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not fetch captcha from GST portal'), backgroundColor: AppColors.error),
+      );
+      return;
+    }
+
+    final captchaImage = captchaData['image'] as String?;
+    final sessionId = captchaData['session_id'] as String?;
+    if (captchaImage == null || sessionId == null) return;
+
+    final captchaCtrl = TextEditingController();
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Verify GSTIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('GSTIN: $gstin', style: const TextStyle(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Image.memory(
+                base64Decode(captchaImage),
+                height: 60,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const Text('Could not load captcha'),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: captchaCtrl,
+              decoration: const InputDecoration(labelText: 'Enter Captcha'),
+              textCapitalization: TextCapitalization.characters,
+              autofocus: true,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              final captcha = captchaCtrl.text.trim();
+              if (captcha.isEmpty) return;
+              Navigator.pop(ctx);
+              final verified = await provider.verifyGstin(gstin, captcha, sessionId);
+              if (verified != null && ctx.mounted) {
+                Navigator.pop(ctx, verified);
+              } else if (ctx.mounted) {
+                ScaffoldMessenger.of(ctx).showSnackBar(
+                  const SnackBar(content: Text('Verification failed'), backgroundColor: AppColors.error),
+                );
+              }
+            },
+            child: const Text('Verify'),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null && mounted) {
+      setState(() {
+        if (result['legal_name'] != null && _nameCtrl.text.isEmpty) {
+          _nameCtrl.text = result['legal_name'];
+        }
+        if (result['state_code'] != null) {
+          final sc = result['state_code'].toString();
+          if (_gstinStateCodeMap.containsKey(sc)) {
+            _stateCode = sc;
+            _detectedStateName = _stateNames[sc] ?? '';
+          }
+        }
+        if (result['pan'] != null) {
+          // Auto-fill PAN from GSTIN verification
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Verified: ${result['legal_name'] ?? gstin}'),
+          backgroundColor: AppColors.success,
+        ),
+      );
     }
   }
 
@@ -326,7 +429,7 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
               ),
               const SizedBox(height: 12),
 
-              // GSTIN with auto state detection
+              // GSTIN with auto state detection and verify
               TextFormField(
                 controller: _gstinCtrl,
                 textCapitalization: TextCapitalization.characters,
@@ -335,30 +438,36 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
                   labelText: 'GSTIN (optional)',
                   prefixIcon: const Icon(Icons.receipt_long_outlined, size: 16),
                   counterText: '',
-                  suffixIcon: _detectedStateName.isNotEmpty
-                      ? Padding(
-                          padding: const EdgeInsets.only(right: 12),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.location_on_rounded,
-                                size: 13,
-                                color: Color(0xFF2E7D32),
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                _detectedStateName,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF2E7D32),
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                  suffixIcon: _gstinCtrl.text.trim().length == 15
+                      ? IconButton(
+                          icon: const Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
+                          onPressed: _verifyGstin,
+                          tooltip: 'Verify GSTIN',
                         )
-                      : null,
+                      : (_detectedStateName.isNotEmpty
+                          ? Padding(
+                              padding: const EdgeInsets.only(right: 12),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.location_on_rounded,
+                                    size: 13,
+                                    color: Color(0xFF2E7D32),
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    _detectedStateName,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFF2E7D32),
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : null),
                 ),
               ),
               const SizedBox(height: 12),
