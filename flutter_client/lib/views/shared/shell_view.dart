@@ -36,6 +36,7 @@ import 'package:flutter_client/views/banking/banking_profile_list_view.dart';
 import 'package:flutter_client/views/returns/returns_list_view.dart';
 import 'package:flutter_client/views/tools/backup_restore_view.dart';
 import 'package:flutter_client/views/tally/tally_import_view.dart';
+import 'package:flutter_client/views/shared/goto_dialog.dart';
 
 // ─── Offline Banner Widget ────────────────────────────────────
 
@@ -211,6 +212,43 @@ class _ShellViewState extends State<ShellView> {
 
   Widget get _currentView => _flatItems[_selectedIndex].view;
 
+  @override
+  void initState() {
+    super.initState();
+    HardwareKeyboard.instance.addHandler(_globalKeyHandler);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_globalKeyHandler);
+    super.dispose();
+  }
+
+  bool _globalKeyHandler(KeyEvent event) {
+    if (event is! KeyDownEvent) return false;
+    final isCtrlPressed = HardwareKeyboard.instance.isControlPressed ||
+        HardwareKeyboard.instance.isMetaPressed;
+    final isAltPressed = HardwareKeyboard.instance.isAltPressed;
+
+    if ((isCtrlPressed || isAltPressed) && event.logicalKey == LogicalKeyboardKey.keyG) {
+      _openGoTo();
+      return true;
+    }
+    return false;
+  }
+
+  void _openGoTo() {
+    GoToDialog.show(
+      context,
+      isInShell: true,
+      onSelectTab: (index) {
+        setState(() {
+          _selectedIndex = index;
+        });
+      },
+    );
+  }
+
   void _openSearch() {
     showSearch(context: context, delegate: GlobalSearchDelegate());
   }
@@ -226,7 +264,13 @@ class _ShellViewState extends State<ShellView> {
 
     final isCtrlPressed = HardwareKeyboard.instance.isControlPressed ||
         HardwareKeyboard.instance.isMetaPressed;
+    final isAltPressed = HardwareKeyboard.instance.isAltPressed;
     final isShiftPressed = HardwareKeyboard.instance.isShiftPressed;
+
+    if ((isCtrlPressed || isAltPressed) && event.logicalKey == LogicalKeyboardKey.keyG) {
+      _openGoTo();
+      return KeyEventResult.handled;
+    }
 
     if (isCtrlPressed && event.logicalKey == LogicalKeyboardKey.keyF) {
       _openSearch();
@@ -321,6 +365,7 @@ class _ShellViewState extends State<ShellView> {
                 _TopBar(
                   title: _flatItems[_selectedIndex].name,
                   onSearch: _openSearch,
+                  onGoTo: _openGoTo,
                 ),
                 if (!syncManager.isOnline || syncManager.pendingCount > 0)
                   _OfflineBanner(syncManager: syncManager),
@@ -353,6 +398,11 @@ class _ShellViewState extends State<ShellView> {
         ),
         title: Text(_flatItems[_selectedIndex].name, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.explore_outlined, size: 20),
+            onPressed: _openGoTo,
+            tooltip: 'Go To (Alt+G)',
+          ),
           IconButton(
             icon: const Icon(Icons.search_rounded, size: 20),
             onPressed: _openSearch,
@@ -871,8 +921,9 @@ class _Sidebar extends StatelessWidget {
 class _TopBar extends StatelessWidget {
   final String title;
   final VoidCallback? onSearch;
+  final VoidCallback? onGoTo;
 
-  const _TopBar({required this.title, this.onSearch});
+  const _TopBar({required this.title, this.onSearch, this.onGoTo});
 
   @override
   Widget build(BuildContext context) {
@@ -884,6 +935,23 @@ class _TopBar extends StatelessWidget {
         children: [
           Text(title, style: AppTextStyles.h3),
           const Spacer(),
+          if (onGoTo != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: TextButton.icon(
+                onPressed: onGoTo,
+                icon: const Icon(Icons.explore_outlined, size: 16),
+                label: const Text('Go To (Alt+G)'),
+                style: TextButton.styleFrom(
+                  foregroundColor: AppColors.brandNavy,
+                  backgroundColor: AppColors.borderLight,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(AppRadius.sm),
+                  ),
+                ),
+              ),
+            ),
           if (onSearch != null)
             IconButton(
               icon: const Icon(Icons.search_rounded, size: 20, color: AppColors.textSecondary),

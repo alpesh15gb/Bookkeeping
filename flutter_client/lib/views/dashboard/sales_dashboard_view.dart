@@ -1415,7 +1415,7 @@ class _RecentInvoiceRowState extends State<_RecentInvoiceRow> {
   @override
   Widget build(BuildContext context) {
     final inv = widget.invoice;
-    final String clientName = inv['contact']?['name'] ?? 'Guest Customer';
+    final String clientName = inv['contact_name'] ?? inv['contact']?['name'] ?? 'Guest Customer';
     final String initials = clientName.trim().split(' ').map((e) => e.isNotEmpty ? e[0] : '').take(2).join().toUpperCase();
     final double total = double.tryParse((inv['total'] ?? 0).toString()) ?? 0.0;
 
