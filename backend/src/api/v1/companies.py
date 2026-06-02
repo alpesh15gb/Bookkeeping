@@ -673,16 +673,27 @@ def export_tenant_data(
         return result
 
     from sqlalchemy import inspect as sa_inspect
+    from src.core.database import engine
 
-    def _db_has_column(model, col_name):
-        mapper = sa_inspect(model)
-        return col_name in [c.name for c in mapper.columns]
+    _inspected_tables: dict = {}
+
+    def _table_has_column(model, col_name):
+        """Check if the actual DB table has a column (not just the ORM model)."""
+        table_name = model.__tablename__
+        if table_name not in _inspected_tables:
+            inspector = sa_inspect(engine)
+            try:
+                cols = [c['name'] for c in inspector.get_columns(table_name)]
+            except Exception:
+                cols = []
+            _inspected_tables[table_name] = cols
+        return col_name in _inspected_tables[table_name]
 
     def load_and_serialize(model, tenant_filter=True):
         q = db.query(model)
-        if tenant_filter and _db_has_column(model, 'tenant_id'):
+        if tenant_filter and _table_has_column(model, 'tenant_id'):
             q = q.filter(model.tenant_id == tenant_id)
-        if _db_has_column(model, 'deleted_at'):
+        if _table_has_column(model, 'deleted_at'):
             q = q.filter(model.deleted_at == None)
         return serialize_rows(q.all())
 
