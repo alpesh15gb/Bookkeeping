@@ -887,7 +887,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         return;
       }
 
-      final uri = Uri.parse('${ApiClient.baseUrl}/bills/scan-image');
+      final uri = Uri.parse('${ApiClient.baseUrl}/bills/scan-and-create');
       final request = http.MultipartRequest('POST', uri);
 
       if (ApiClient.accessToken != null) {
@@ -927,16 +927,50 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   Future<void> _applyScannedData(Map<String, dynamic> data) async {
-    if (data['vendor_name'] != null) {
-      setState(() {
-        _scannedVendorName = data['vendor_name'] as String;
-      });
+    final ocr = data['ocr'] as Map<String, dynamic>? ?? data;
+    final billPayload = data['bill_payload'] as Map<String, dynamic>?;
+    final createdVendor = data['created_vendor'] as Map<String, dynamic>?;
+    final createdProducts = (data['created_products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final warnings = (data['warnings'] as List?)?.cast<String>() ?? [];
+
+    // ── Vendor ──────────────────────────────────────────────────────────
+    final vendorName = ocr['vendor_name']?.toString();
+    final vendorGstin = ocr['vendor_gstin']?.toString();
+    final vendorAddr = ocr['vendor_address']?.toString();
+
+    if (vendorName != null) {
+      setState(() => _scannedVendorName = vendorName);
     }
-    if (data['vendor_name'] != null || data['vendor_gstin'] != null) {
-      final gstin = data['vendor_gstin']?.toString().toUpperCase();
-      final name = data['vendor_name']?.toString().toLowerCase();
+
+    ContactModel? matched;
+    if (billPayload != null && billPayload['contact_id'] != null) {
+      final contactId = billPayload['contact_id'].toString();
+      // Try to find in already-loaded contacts
       final vendors = context.read<ContactProvider>().vendors;
-      ContactModel? matched;
+      for (final v in vendors) {
+        if (v.id == contactId) {
+          matched = v;
+          break;
+        }
+      }
+      // If auto-created and not in list, refresh contacts
+      if (matched == null && createdVendor != null) {
+        await context.read<ContactProvider>().fetchContacts();
+        final refreshed = context.read<ContactProvider>().vendors;
+        for (final v in refreshed) {
+          if (v.id == contactId) {
+            matched = v;
+            break;
+          }
+        }
+      }
+    }
+
+    // Fallback: GSTIN / name match in loaded contacts
+    if (matched == null && (vendorName != null || vendorGstin != null)) {
+      final gstin = vendorGstin?.toUpperCase();
+      final name = vendorName?.toLowerCase();
+      final vendors = context.read<ContactProvider>().vendors;
       if (gstin != null && gstin.isNotEmpty) {
         for (final v in vendors) {
           if (v.gstin?.toUpperCase() == gstin) {
@@ -954,76 +988,48 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           }
         }
       }
+    }
 
-      // Automatically register the vendor/supplier if not already present
-      if (matched == null) {
-        final scannedName = data['vendor_name']?.toString() ?? 'Scanned Vendor';
-        final scannedGstin = data['vendor_gstin']?.toString();
-        final scannedAddr = data['vendor_address']?.toString() ?? '';
-        
-        String stateCode = '27';
-        if (scannedGstin != null && scannedGstin.length >= 2) {
-          final prefix = scannedGstin.substring(0, 2);
-          if (RegExp(r'^[0-9]{2}$').hasMatch(prefix)) {
-            stateCode = prefix;
-          }
+    if (matched != null) {
+      setState(() {
+        _selectedContact = matched;
+        if (matched!.stateCode.length == 2) {
+          _posStateCode = matched!.stateCode;
         }
-        
-        final tempContact = ContactModel(
-          id: '',
-          name: scannedName,
-          contactType: 'VENDOR',
-          gstin: scannedGstin,
-          registrationType: (scannedGstin != null && scannedGstin.isNotEmpty) ? 'REGULAR' : 'UNREGISTERED',
-          billingAddress: {
-            'street': scannedAddr,
-            'city': '',
-            'state': '',
-            'pincode': '',
-          },
-          stateCode: stateCode,
-          isActive: true,
-        );
-
-        final contactProvider = context.read<ContactProvider>();
-        final createSuccess = await contactProvider.addContact(tempContact);
-        if (createSuccess && contactProvider.lastCreatedContact != null) {
-          matched = contactProvider.lastCreatedContact;
-        }
-      }
-
-      if (matched != null) {
-        final ContactModel m = matched;
-        setState(() {
-          _selectedContact = m;
-          if (m.stateCode.length == 2) {
-            _posStateCode = m.stateCode;
-          }
-        });
-      }
+      });
     }
 
-    if (data['bill_number'] != null) {
-      setState(() => _invoiceNoCtrl.text = data['bill_number'] as String);
-    }
-    if (data['bill_date'] != null) {
-      setState(() => _issueDateCtrl.text = data['bill_date'] as String);
-    }
-    if (data['due_date'] != null) {
-      setState(() => _dueDateCtrl.text = data['due_date'] as String);
+    // ── Bill header fields ─────────────────────────────────────────────
+    final billNumber = ocr['bill_number']?.toString() ?? billPayload?['bill_number']?.toString();
+    final billDate = ocr['bill_date']?.toString() ?? billPayload?['issue_date']?.toString();
+    final dueDate = ocr['due_date']?.toString() ?? billPayload?['due_date']?.toString();
+    final poNumber = ocr['po_number']?.toString() ?? billPayload?['reference_number']?.toString();
+
+    if (billNumber != null) setState(() => _invoiceNoCtrl.text = billNumber);
+    if (billDate != null) setState(() => _issueDateCtrl.text = billDate);
+    if (dueDate != null) setState(() => _dueDateCtrl.text = dueDate);
+    if (poNumber != null) {
+      // PO number is reference_number in the form
+      _poNumberCtrl.text = poNumber;
     }
 
-    final scannedLines = (data['line_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    if (scannedLines.isNotEmpty) {
+    // ── Line items (from bill_payload if available, else OCR) ─────────
+    final payloadLines = (billPayload?['line_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final scannedLines = (ocr['line_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    final linesToUse = payloadLines.isNotEmpty ? payloadLines : scannedLines;
+
+    if (linesToUse.isNotEmpty) {
       setState(() {
         _lines.removeWhere((l) => l.productId.isEmpty && l.rate == 0);
 
-        for (final sl in scannedLines) {
-          final qty = (sl['qty'] as num?)?.toDouble() ?? 1.0;
+        for (final sl in linesToUse) {
+          final productId = sl['product_id']?.toString() ?? '';
+          final productName = sl['product_name']?.toString() ?? sl['description']?.toString() ?? 'Item';
+          final hsn = sl['hsn_sac']?.toString() ?? sl['hsn']?.toString() ?? '';
+          final qty = (sl['quantity'] as num?)?.toDouble() ?? (sl['qty'] as num?)?.toDouble() ?? 1.0;
           final rate = (sl['rate'] as num?)?.toDouble() ?? 0.0;
           final gstRateRaw = (sl['gst_rate'] as num?)?.toDouble() ?? 18.0;
-          
-          // Clamp to supported dropdown rates: 0, 5, 12, 18
+
           double gstRate = 18.0;
           if (gstRateRaw <= 2.5) {
             gstRate = 0.0;
@@ -1036,50 +1042,128 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           }
 
           _lines.add(TransactionLineItem(
-            productId: '',
-            productName: sl['description']?.toString() ?? 'Item',
-            hsnSac: sl['hsn']?.toString() ?? '',
+            productId: productId,
+            productName: productName,
+            hsnSac: hsn,
             quantity: qty,
             rate: rate,
             gstRate: gstRate,
             discount: 0,
-            description: sl['description']?.toString() ?? '',
+            description: productName,
           ));
         }
       });
     }
 
-    final filledFields = <String>[];
-    if (data['bill_number'] != null) filledFields.add('Bill number');
-    if (data['bill_date'] != null) filledFields.add('Date');
-    if (data['due_date'] != null) filledFields.add('Due date');
-    if (scannedLines.isNotEmpty) filledFields.add('${scannedLines.length} line item(s)');
-    if (data['vendor_name'] != null) filledFields.add('Vendor: ${data['vendor_name']}');
-
-    final conf = ((data['overall_confidence'] as num?)?.toDouble() ?? 0.0) * 100;
-    final warnings = (data['warnings'] as List?)?.cast<String>() ?? [];
-
-    final msg = filledFields.isNotEmpty
-        ? 'Scanned (${conf.toStringAsFixed(0)}% confidence): ${filledFields.join(', ')}'
-        : 'Scan complete but no fields could be extracted. Please fill manually.';
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: filledFields.isNotEmpty ? AppColors.success : AppColors.warning,
-        duration: const Duration(seconds: 4),
-        action: warnings.isNotEmpty
-            ? SnackBarAction(
-                label: 'Details',
-                textColor: Colors.white,
-                onPressed: () => _showScanWarnings(warnings),
-              )
-            : null,
-      ),
-    );
+    // ── Show summary dialog with created entities ──────────────────────
+    _showScanSummaryDialog(ocr, createdVendor, createdProducts, warnings);
 
     _triggerPreview();
+  }
+
+  void _showScanSummaryDialog(
+    Map<String, dynamic> ocr,
+    Map<String, dynamic>? createdVendor,
+    List<Map<String, dynamic>> createdProducts,
+    List<String> warnings,
+  ) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final conf = ((ocr['overall_confidence'] as num?)?.toDouble() ?? 0.0) * 100;
+        final vendorName = ocr['vendor_name']?.toString();
+        final items = (ocr['line_items'] as List?)?.length ?? 0;
+
+        return AlertDialog(
+          title: Row(
+            children: [
+              const Icon(Icons.document_scanner, color: AppColors.success),
+              const SizedBox(width: 8),
+              const Text('Bill Scanned'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Confidence: ${conf.toStringAsFixed(0)}%', style: const TextStyle(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                if (vendorName != null) Text('Vendor: $vendorName', style: AppTextStyles.bodySmall),
+                if (items > 0) Text('Items found: $items', style: AppTextStyles.bodySmall),
+                if (createdVendor != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.successBg,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.person_add, size: 16, color: AppColors.success),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Created vendor: ${createdVendor['name']}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.success),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+                if (createdProducts.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  ...createdProducts.map((p) => Container(
+                    padding: const EdgeInsets.all(8),
+                    margin: const EdgeInsets.only(bottom: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.successBg,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.inventory_2_outlined, size: 16, color: AppColors.success),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Created product: ${p['name']}',
+                            style: const TextStyle(fontSize: 12, color: AppColors.success),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )),
+                ],
+                if (warnings.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  const Text('Warnings:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
+                  ...warnings.map((w) => Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(w, style: const TextStyle(fontSize: 11, color: AppColors.textMuted))),
+                      ],
+                    ),
+                  )),
+                ],
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Review & Edit'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showScanWarnings(List<String> warnings) {
