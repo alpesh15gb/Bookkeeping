@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
@@ -7,6 +8,9 @@ class LocalDatabase {
   static const int _version = 1;
 
   static Future<Database> get database async {
+    if (kIsWeb) {
+      throw UnsupportedError('Local database is not supported on web.');
+    }
     _db ??= await _init();
     return _db!;
   }
@@ -160,6 +164,7 @@ class LocalDatabase {
 
   static Future<void> upsert(String table, Map<String, dynamic> row,
       {String? conflictKey = 'id'}) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.insert(
       table,
@@ -169,6 +174,7 @@ class LocalDatabase {
   }
 
   static Future<void> upsertMany(String table, List<Map<String, dynamic>> rows) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.transaction((txn) async {
       for (final row in rows) {
@@ -189,6 +195,7 @@ class LocalDatabase {
     int? limit,
     int? offset,
   }) async {
+    if (kIsWeb) return [];
     final db = await database;
     return db.query(
       table,
@@ -202,16 +209,19 @@ class LocalDatabase {
 
   static Future<void> deleteWhere(String table,
       {String? where, List<Object?>? whereArgs}) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.delete(table, where: where, whereArgs: whereArgs);
   }
 
   static Future<void> clearTable(String table) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.delete(table);
   }
 
   static Future<void> deleteAll() async {
+    if (kIsWeb) return;
     final db = await database;
     final tables = [
       'cached_contacts',
@@ -238,6 +248,7 @@ class LocalDatabase {
     String? body,
     String? headers,
   }) async {
+    if (kIsWeb) return 0;
     final db = await database;
     return db.insert('pending_actions', {
       'action': action,
@@ -251,16 +262,19 @@ class LocalDatabase {
   }
 
   static Future<List<Map<String, dynamic>>> getPendingActions() async {
+    if (kIsWeb) return [];
     final db = await database;
     return db.query('pending_actions', orderBy: 'created_at ASC');
   }
 
   static Future<void> removePendingAction(int id) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.delete('pending_actions', where: 'id = ?', whereArgs: [id]);
   }
 
   static Future<void> incrementRetry(int id, String error) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.update(
       'pending_actions',
@@ -271,6 +285,7 @@ class LocalDatabase {
   }
 
   static Future<void> clearPendingActions() async {
+    if (kIsWeb) return;
     final db = await database;
     await db.delete('pending_actions');
   }
@@ -279,6 +294,7 @@ class LocalDatabase {
 
   static Future<void> updateSyncMetadata(String entityType,
       {required DateTime lastSync, int recordCount = 0}) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.insert(
       'sync_metadata',
@@ -292,6 +308,7 @@ class LocalDatabase {
   }
 
   static Future<Map<String, dynamic>?> getSyncMetadata(String entityType) async {
+    if (kIsWeb) return null;
     final db = await database;
     final rows = await db.query(
       'sync_metadata',
@@ -304,6 +321,7 @@ class LocalDatabase {
   // ─── Entity-specific cache helpers ────────────────────────────
 
   static Future<void> cacheContacts(String tenantId, List<dynamic> contacts) async {
+    if (kIsWeb) return;
     final rows = contacts.map((c) => {
       'id': c['id']?.toString() ?? '',
       'tenant_id': tenantId,
@@ -323,6 +341,7 @@ class LocalDatabase {
   }
 
   static Future<void> cacheProducts(String tenantId, List<dynamic> products) async {
+    if (kIsWeb) return;
     final rows = products.map((p) => {
       'id': p['id']?.toString() ?? '',
       'tenant_id': tenantId,
@@ -344,6 +363,7 @@ class LocalDatabase {
   }
 
   static Future<void> cacheInvoices(String tenantId, List<dynamic> invoices) async {
+    if (kIsWeb) return;
     final rows = invoices.map((inv) => {
       'id': inv['id']?.toString() ?? '',
       'tenant_id': tenantId,
@@ -365,6 +385,7 @@ class LocalDatabase {
 
   static Future<void> cacheDocumentDetail(String tenantId, String docType,
       String docId, Map<String, dynamic> data) async {
+    if (kIsWeb) return;
     final db = await database;
     await db.insert(
       'cached_document_details',
@@ -381,6 +402,7 @@ class LocalDatabase {
 
   static Future<Map<String, dynamic>?> getCachedDocumentDetail(
       String tenantId, String docType, String docId) async {
+    if (kIsWeb) return null;
     final db = await database;
     final rows = await db.query(
       'cached_document_details',

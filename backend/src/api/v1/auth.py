@@ -297,7 +297,11 @@ def refresh_token(
     )
 
 @router.post("/logout")
-def logout_user(request: Request, refresh_token_str: str, current_user: User = Depends(get_current_user)):
+def logout_user(
+    request: Request,
+    refresh_token_str: Optional[str] = Body(None),
+    current_user: User = Depends(get_current_user)
+):
     """Revokes a refresh token so it can no longer be used."""
     try:
         payload = decode_token(refresh_token_str, expected_type="refresh")

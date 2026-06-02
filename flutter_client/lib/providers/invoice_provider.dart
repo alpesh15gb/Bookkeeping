@@ -141,8 +141,13 @@ class InvoiceProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         await SyncManager.instance?.cacheDocumentDetail('/invoices/$id', data);
         return InvoiceModel.fromJson(data);
+      } else {
+        debugPrint('fetchInvoiceDetail server returned error: ${response.statusCode} - ${response.body}');
       }
-    } catch (_) {}
+    } catch (e, stack) {
+      debugPrint('fetchInvoiceDetail error: $e');
+      debugPrint('Stacktrace: $stack');
+    }
     if (!(SyncManager.instance?.isOnline ?? true)) {
       final cached = await LocalDatabase.getCachedDocumentDetail(
         ApiClient.tenantId ?? '', 'invoice', id,

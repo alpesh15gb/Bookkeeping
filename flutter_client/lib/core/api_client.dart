@@ -166,6 +166,7 @@ class ApiClient extends http.BaseClient {
         if (hadAccessToken && onSessionExpired != null) {
           onSessionExpired!();
         }
+        return response;
       }
     }
 
