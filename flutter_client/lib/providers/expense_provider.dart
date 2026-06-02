@@ -203,8 +203,9 @@ class ExpenseProvider extends ChangeNotifier {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/expenses/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        await SyncManager.instance?.cacheDocumentDetail('/expenses/$id', data);
-        return data;
+        final safeData = data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{});
+        await SyncManager.instance?.cacheDocumentDetail('/expenses/$id', safeData);
+        return safeData;
       }
     } catch (_) {}
     if (!(SyncManager.instance?.isOnline ?? true)) {
@@ -250,7 +251,8 @@ class ExpenseProvider extends ChangeNotifier {
         }),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -283,7 +285,10 @@ class ExpenseProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchBillPdfPayload(String id) async {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bills/$id/pdf-payload'));
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }

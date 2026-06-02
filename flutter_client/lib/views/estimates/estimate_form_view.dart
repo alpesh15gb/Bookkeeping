@@ -6,7 +6,7 @@ import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
 
 class EstimateFormView extends StatelessWidget {
-  final Map<String, dynamic>? editEstimate;
+  final dynamic editEstimate;
 
   const EstimateFormView({super.key, this.editEstimate});
 

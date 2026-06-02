@@ -23,8 +23,9 @@ class PaymentProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/payments/receipts'));
       if (response.statusCode == 200) {
-        final List items = jsonDecode(response.body);
-        _receipts = items.map((x) => PaymentModel.fromJson(x)).toList();
+        final data = jsonDecode(response.body);
+        final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
+        _receipts = items.whereType<Map<String, dynamic>>().map((x) => PaymentModel.fromJson(x)).toList();
       }
     } catch (_) {
       _errorMessage = 'Failed to load receipts';
@@ -41,8 +42,9 @@ class PaymentProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/payments/disbursements'));
       if (response.statusCode == 200) {
-        final List items = jsonDecode(response.body);
-        _disbursements = items.map((x) => BillPaymentModel.fromJson(x)).toList();
+        final data = jsonDecode(response.body);
+        final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
+        _disbursements = items.whereType<Map<String, dynamic>>().map((x) => BillPaymentModel.fromJson(x)).toList();
       }
     } catch (_) {
       _errorMessage = 'Failed to load disbursements';

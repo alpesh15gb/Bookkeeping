@@ -72,7 +72,8 @@ class AccountingProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     _isLoading = false;
@@ -91,7 +92,8 @@ class AccountingProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     _isLoading = false;
@@ -110,7 +112,8 @@ class AccountingProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     _isLoading = false;
@@ -129,7 +132,8 @@ class AccountingProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     _isLoading = false;
@@ -147,7 +151,8 @@ class AccountingProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/masters/accounts'),
       );
       if (response.statusCode == 200) {
-        _accountsList = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _accountsList = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed to load accounts';
       }
@@ -210,7 +215,8 @@ class AccountingProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/masters/accounts/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -257,7 +263,8 @@ class AccountingProvider extends ChangeNotifier {
         ),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -271,7 +278,8 @@ class AccountingProvider extends ChangeNotifier {
         ),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -285,7 +293,8 @@ class AccountingProvider extends ChangeNotifier {
         ),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -299,7 +308,8 @@ class AccountingProvider extends ChangeNotifier {
         ),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -318,7 +328,8 @@ class AccountingProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/reports/analytics/sales$query'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -337,7 +348,8 @@ class AccountingProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/reports/analytics/purchases$query'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -352,7 +364,8 @@ class AccountingProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/reports/outstanding/receivables$query'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -367,7 +380,8 @@ class AccountingProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/reports/outstanding/payables$query'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -388,7 +402,8 @@ class AccountingProvider extends ChangeNotifier {
         ),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -406,7 +421,8 @@ class AccountingProvider extends ChangeNotifier {
         ),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;

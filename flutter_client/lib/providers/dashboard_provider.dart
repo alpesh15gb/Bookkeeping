@@ -53,7 +53,7 @@ class DashboardProvider extends ChangeNotifier {
   double get totalTax {
     double total = 0;
     for (final key in ['cgst_total', 'sgst_total', 'igst_total', 'cess_total']) {
-      total += (_metrics[key] as num?)?.toDouble() ?? 0;
+      total += _safeDouble(_metrics[key]);
     }
     return total;
   }
@@ -86,13 +86,15 @@ class DashboardProvider extends ChangeNotifier {
         return;
       }
 
-      _salesSummary = jsonDecode(core[0].body) as Map<String, dynamic>;
+      final salesData = jsonDecode(core[0].body);
+      _salesSummary = salesData is Map<String, dynamic> ? salesData : Map<String, dynamic>.from(salesData is Map ? salesData : {});
       
       final expRaw = jsonDecode(core[1].body);
       if (expRaw is List) {
         _expenses = expRaw;
-      } else if (expRaw is Map<String, dynamic>) {
-        _expenses = (expRaw['items'] as List?) ?? [];
+      } else if (expRaw is Map) {
+        final expItems = expRaw['items'];
+        _expenses = expItems is List ? expItems : [];
       } else {
         _expenses = [];
       }
@@ -100,18 +102,21 @@ class DashboardProvider extends ChangeNotifier {
       final billsRaw = jsonDecode(core[2].body);
       if (billsRaw is List) {
         _bills = billsRaw;
-      } else if (billsRaw is Map<String, dynamic>) {
-        _bills = (billsRaw['items'] as List?) ?? [];
+      } else if (billsRaw is Map) {
+        final billItems = billsRaw['items'];
+        _bills = billItems is List ? billItems : [];
       } else {
         _bills = [];
       }
 
-      _metrics = jsonDecode(core[3].body) as Map<String, dynamic>;
+      final metricsData = jsonDecode(core[3].body);
+      _metrics = metricsData is Map<String, dynamic> ? metricsData : Map<String, dynamic>.from(metricsData is Map ? metricsData : {});
       final invRaw = jsonDecode(core[4].body);
       if (invRaw is List) {
         _recentInvoices = invRaw;
-      } else if (invRaw is Map<String, dynamic>) {
-        _recentInvoices = (invRaw['items'] as List?) ?? [];
+      } else if (invRaw is Map) {
+        final invItems = invRaw['items'];
+        _recentInvoices = invItems is List ? invItems : [];
       } else {
         _recentInvoices = [];
       }
@@ -131,15 +136,25 @@ class DashboardProvider extends ChangeNotifier {
             .catchError((_) => http.Response('{}', 500)),
       ]);
 
-      if (secondary[0].statusCode == 200) _revenueTrend = jsonDecode(secondary[0].body) as List? ?? [];
-      if (secondary[1].statusCode == 200) _expenseTrend = jsonDecode(secondary[1].body) as List? ?? [];
-      if (secondary[2].statusCode == 200) _cashBankBalances = jsonDecode(secondary[2].body) as List? ?? [];
+      if (secondary[0].statusCode == 200) {
+        final d = jsonDecode(secondary[0].body);
+        _revenueTrend = d is List ? d : [];
+      }
+      if (secondary[1].statusCode == 200) {
+        final d = jsonDecode(secondary[1].body);
+        _expenseTrend = d is List ? d : [];
+      }
+      if (secondary[2].statusCode == 200) {
+        final d = jsonDecode(secondary[2].body);
+        _cashBankBalances = d is List ? d : [];
+      }
 
       // Parse top debtors from receivables
       try {
         if (secondary[3].statusCode == 200) {
           final arData = jsonDecode(secondary[3].body);
-          final items = (arData['invoices'] as List?) ?? [];
+          final arInvoices = arData is Map ? arData['invoices'] : null;
+          final items = arInvoices is List ? arInvoices : [];
           final Map<String, double> debtorMap = {};
           for (final inv in items) {
             final name = inv['contact_name'] ?? 'Unknown';

@@ -6,7 +6,7 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class BankingProfileFormView extends StatefulWidget {
-  final Map<String, dynamic>? profile;
+  final dynamic profile;
 
   const BankingProfileFormView({super.key, this.profile});
 
@@ -30,7 +30,7 @@ class _BankingProfileFormViewState extends State<BankingProfileFormView> {
   @override
   void initState() {
     super.initState();
-    final p = widget.profile;
+    final p = widget.profile is Map<String, dynamic> ? widget.profile as Map<String, dynamic> : null;
     _bankNameCtrl = TextEditingController(text: p?['bank_name'] ?? '');
     _accountNumberCtrl = TextEditingController(text: p?['account_number'] ?? '');
     _ifscCtrl = TextEditingController(text: p?['ifsc_code'] ?? '');

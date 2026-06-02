@@ -76,7 +76,7 @@ class _InventoryAdjustmentDetailViewState extends State<InventoryAdjustmentDetai
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SectionHeader(title: 'ADJUSTMENTS'),
-                  ...((a['lines'] as List?) ?? []).map((l) => Padding(
+                  ...((a['lines'] is List ? a['lines'] as List : [])).map((l) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,

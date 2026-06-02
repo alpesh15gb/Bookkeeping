@@ -97,7 +97,7 @@ Future<ContactModel?> showQuickCreateCustomer(
   return showModalBottomSheet<ContactModel>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.transparent,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     builder: (_) => _QuickCreateCustomerSheet(
       initialName: initialName,
       contactType: contactType,

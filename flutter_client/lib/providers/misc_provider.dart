@@ -43,7 +43,8 @@ class MiscProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/audit-logs?page=$page&limit=$limit'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -54,7 +55,8 @@ class MiscProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/reminders'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        return data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       }
     } catch (_) {}
     return [];
@@ -97,7 +99,8 @@ class MiscProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
       final data = jsonDecode(response.body);
       _errorMessage = data['detail'] ?? 'Failed to import Vyapar data';

@@ -257,8 +257,8 @@ class _PartyStatementViewState extends State<PartyStatementView> {
   }
 
   Widget _buildStatementBody(bool isMobile) {
-    final ledger = _data!['ledger'] as List? ?? [];
-    final summary = _data!['summary'] as Map<String, dynamic>? ?? {};
+    final ledger = _data!['ledger'] is List ? _data!['ledger'] as List : [];
+    final summary = _data!['summary'] is Map ? Map<String, dynamic>.from(_data!['summary']) : <String, dynamic>{};
     final contactName = _data!['contact_name'] ?? '';
     final contactType = _data!['contact_type'] ?? '';
     final address = _data!['address'] ?? '';

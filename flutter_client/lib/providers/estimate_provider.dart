@@ -83,7 +83,8 @@ class EstimateProvider extends ChangeNotifier {
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -147,7 +148,8 @@ class EstimateProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -156,7 +158,10 @@ class EstimateProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchProformaInvoicePdfPayload(String id) async {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id/pdf-payload'));
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }

@@ -35,7 +35,10 @@ class BillProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : data;
-        final newBills = items.map((x) => BillModel.fromJson(x)).toList();
+        final newBills = items
+            .whereType<Map<String, dynamic>>()
+            .map((x) => BillModel.fromJson(x))
+            .toList();
         if (reset) {
           _bills = newBills;
         } else {

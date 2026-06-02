@@ -33,8 +33,9 @@ class ContactProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/masters/contacts'),
       );
       if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
-        _contacts = data.map((x) => ContactModel.fromJson(x)).toList();
+        final data = jsonDecode(response.body);
+        final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
+        _contacts = items.whereType<Map<String, dynamic>>().map((x) => ContactModel.fromJson(x)).toList();
         await SyncManager.instance?.cacheGetResponse('/masters/contacts', data);
       } else {
         _errorMessage = 'Failed to load contacts';
@@ -90,7 +91,13 @@ class ContactProvider extends ChangeNotifier {
         body: body,
       );
       if (response.statusCode == 201) {
-        _lastCreatedContact = ContactModel.fromJson(jsonDecode(response.body));
+        _lastCreatedContact = ContactModel.fromJson(
+          jsonDecode(response.body) is Map<String, dynamic>
+              ? jsonDecode(response.body)
+              : jsonDecode(response.body) is Map
+                  ? Map<String, dynamic>.from(jsonDecode(response.body))
+                  : <String, dynamic>{},
+        );
         await fetchContacts();
         return true;
       } else {

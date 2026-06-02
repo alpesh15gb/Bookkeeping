@@ -109,7 +109,7 @@ class _SettingsViewState extends State<SettingsView> {
     _stateCodeCtrl.text = settings['origin_state_code'] ?? '';
 
     final extraSettings =
-        settings['extra_settings'] as Map<String, dynamic>? ?? {};
+        settings['extra_settings'] is Map ? Map<String, dynamic>.from(settings['extra_settings']) : <String, dynamic>{};
     _selectedTemplate = extraSettings['pdf_template'] ?? 'professional';
     _addressCtrl.text = extraSettings['company_address'] ?? '';
     _phoneCtrl.text = extraSettings['company_phone'] ?? '';
@@ -402,7 +402,7 @@ class _SettingsViewState extends State<SettingsView> {
 
     final provider = context.read<SettingsProvider>();
     final extraSettings =
-        provider.settings['extra_settings'] as Map<String, dynamic>? ?? {};
+        provider.settings['extra_settings'] is Map ? Map<String, dynamic>.from(provider.settings['extra_settings']) : <String, dynamic>{};
 
     final settingsPayload = <String, dynamic>{
       'extra_settings': {
@@ -474,7 +474,7 @@ class _SettingsViewState extends State<SettingsView> {
     final gstEnabled = settings['gst_enabled'] == true;
     final stateCode = settings['origin_state_code'] ?? 'Not configured';
     final extraSettings =
-        settings['extra_settings'] as Map<String, dynamic>? ?? {};
+        settings['extra_settings'] is Map ? Map<String, dynamic>.from(settings['extra_settings']) : <String, dynamic>{};
     final pdfTemplate = extraSettings['pdf_template'] ?? 'professional';
 
     final companyAddress = extraSettings['company_address'] ?? 'Not configured';

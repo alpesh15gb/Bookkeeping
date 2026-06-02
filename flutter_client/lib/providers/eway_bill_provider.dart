@@ -22,7 +22,8 @@ class EwayBillProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/eway-bills'));
       if (response.statusCode == 200) {
-        _ewayBills = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _ewayBills = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed to load e-way bills';
       }
@@ -37,7 +38,8 @@ class EwayBillProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/eway-bills/$id'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -145,7 +147,8 @@ class EwayBillProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/gst/hsn/${Uri.encodeComponent(hsnCode)}'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -156,7 +159,8 @@ class EwayBillProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/gst/verify/captcha'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -169,7 +173,8 @@ class EwayBillProvider extends ChangeNotifier {
         body: jsonEncode({'gstin': gstin, 'captcha': captcha, 'session_id': sessionId}),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;

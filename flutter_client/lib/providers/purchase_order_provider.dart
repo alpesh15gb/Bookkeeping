@@ -107,7 +107,8 @@ class PurchaseOrderProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -118,7 +119,10 @@ class PurchaseOrderProvider extends ChangeNotifier {
       final response = await _client.get(
         Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id/pdf-payload'),
       );
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }
@@ -213,7 +217,8 @@ class PurchaseOrderProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/sales-orders/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -224,7 +229,10 @@ class PurchaseOrderProvider extends ChangeNotifier {
       final response = await _client.get(
         Uri.parse('${ApiClient.baseUrl}/sales-orders/$id/pdf-payload'),
       );
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }

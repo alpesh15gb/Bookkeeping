@@ -7,7 +7,7 @@ import 'package:flutter_client/models/product.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class InventoryAdjustmentFormView extends StatefulWidget {
-  final Map<String, dynamic>? adjustment;
+  final dynamic adjustment;
 
   const InventoryAdjustmentFormView({super.key, this.adjustment});
 
@@ -30,16 +30,19 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
     _dateCtrl = TextEditingController(text: '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}');
     _reasonCtrl = TextEditingController();
 
-    if (widget.adjustment != null) {
-      _dateCtrl.text = widget.adjustment!['adjustment_date'] ?? _dateCtrl.text;
-      _reasonCtrl.text = widget.adjustment!['reason'] ?? '';
-      for (final item in (widget.adjustment!['lines'] as List? ?? widget.adjustment!['line_items'] as List? ?? [])) {
-        _lines.add(_AdjLineItem(
-          productId: item['product_id'],
-          productName: item['product_name'] ?? '',
-          quantityChange: double.tryParse((item['quantity'] ?? item['quantity_change'] ?? 0).toString()) ?? 0,
-          unitCost: double.tryParse((item['unit_cost'] ?? 0).toString()) ?? 0,
-        ));
+    if (widget.adjustment != null && widget.adjustment is Map) {
+      final adj = widget.adjustment as Map<String, dynamic>;
+      _dateCtrl.text = adj['adjustment_date'] ?? _dateCtrl.text;
+      _reasonCtrl.text = adj['reason'] ?? '';
+      for (final item in (adj['lines'] is List ? adj['lines'] as List : (adj['line_items'] is List ? adj['line_items'] as List : []))) {
+        if (item is Map<String, dynamic>) {
+          _lines.add(_AdjLineItem(
+            productId: item['product_id'],
+            productName: item['product_name'] ?? '',
+            quantityChange: double.tryParse('${item['quantity'] ?? item['quantity_change'] ?? 0}') ?? 0,
+            unitCost: double.tryParse('${item['unit_cost'] ?? 0}') ?? 0,
+          ));
+        }
       }
     }
 

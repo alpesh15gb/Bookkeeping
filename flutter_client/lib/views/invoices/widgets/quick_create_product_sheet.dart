@@ -13,7 +13,7 @@ Future<ProductModel?> showQuickCreateProduct(
   return showModalBottomSheet<ProductModel>(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.transparent,
+    backgroundColor: Theme.of(context).colorScheme.surface,
     builder: (_) => _QuickCreateProductSheet(initialName: initialName),
   );
 }

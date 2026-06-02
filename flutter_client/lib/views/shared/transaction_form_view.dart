@@ -214,6 +214,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   Timer? _previewDebounce;
   bool _isPreviewLoading = false;
   String? _nextNumberPlaceholder;
+  double _amountPaid = 0;
 
   String? get _resolvedDocumentType {
     final key = widget.config.numberKey;
@@ -309,6 +310,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
 
     final entity = widget.editEntity;
     if (entity is InvoiceModel) {
+      _amountPaid = entity.amountPaid;
       _issueDateCtrl.text = entity.issueDate;
       _dueDateCtrl.text = entity.dueDate;
       _notesCtrl.text = entity.notes ?? '';
@@ -336,6 +338,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         );
       }
     } else if (entity is BillModel) {
+      _amountPaid = entity.amountPaid;
       _issueDateCtrl.text = entity.billDate;
       _dueDateCtrl.text = entity.dueDate;
       _invoiceNoCtrl.text = entity.billNumber;
@@ -360,6 +363,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         );
       }
     } else if (entity is Map<String, dynamic>) {
+      _amountPaid = double.tryParse('${entity['amount_paid'] ?? 0}') ?? 0;
       _selectedInvoiceId = entity['invoice_id']?.toString();
       _issueDateCtrl.text = entity['issue_date'] ?? _issueDateCtrl.text;
       _dueDateCtrl.text = entity['due_date'] ?? _dueDateCtrl.text;
@@ -376,7 +380,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           '';
 
       final list =
-          entity['lines'] as List? ?? entity['line_items'] as List? ?? [];
+          entity['lines'] is List ? entity['lines'] as List : (entity['line_items'] is List ? entity['line_items'] as List : []);
       for (final item in list) {
         _lines.add(
           TransactionLineItem(
@@ -814,7 +818,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     final selected = await showModalBottomSheet<ContactModel>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (_) => ContactSearchSheet(
         contacts: filtered,
         title: 'Select ${widget.config.contactLabel}',
@@ -837,7 +841,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     final selected = await showModalBottomSheet<ProductModel>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      backgroundColor: Theme.of(context).colorScheme.surface,
       builder: (_) => ProductSearchSheet(
         products: products,
         isPurchase: widget.config.isPurchase,
@@ -949,67 +953,104 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   Widget _buildDocInfoCard(bool isDesktop) {
-    final fields = [
-      Expanded(
-        child: TextFormField(
-          controller: _invoiceNoCtrl,
-          decoration: InputDecoration(
-            labelText: widget.config.numberLabel ?? 'Document Number',
-            prefixIcon: const Icon(Icons.tag, size: 16),
-            hintText: _nextNumberPlaceholder ?? 'Auto-generated',
-            floatingLabelBehavior: FloatingLabelBehavior.always,
-          ),
-        ),
-      ),
-      const SizedBox(width: 16),
-      Expanded(
-        child: _DateField(
-          ctrl: _issueDateCtrl,
-          label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
-          onTap: () => _pickDate(_issueDateCtrl),
-        ),
-      ),
-      const SizedBox(width: 16),
-      Expanded(
-        child: DropdownButtonFormField<String>(
-          value: _posStateCode,
-          decoration: const InputDecoration(
-            labelText: 'Place of Supply (State) *',
-            prefixIcon: Icon(Icons.map_outlined, size: 16),
-            floatingLabelBehavior: FloatingLabelBehavior.always,
-          ),
-          items: _gstStateNames.entries
-              .map(
-                (e) => DropdownMenuItem<String>(
-                  value: e.key,
-                  child: Text(e.value),
+    if (isDesktop) {
+      return AppCard(
+        padding: const EdgeInsets.all(20),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextFormField(
+                controller: _invoiceNoCtrl,
+                decoration: InputDecoration(
+                  labelText: widget.config.numberLabel ?? 'Document Number',
+                  prefixIcon: const Icon(Icons.tag, size: 16),
+                  hintText: _nextNumberPlaceholder ?? 'Auto-generated',
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
                 ),
-              )
-              .toList(),
-          onChanged: (val) {
-            if (val != null) {
-              setState(() => _posStateCode = val);
-              _triggerPreview();
-            }
-          },
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: _DateField(
+                ctrl: _issueDateCtrl,
+                label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
+                onTap: () => _pickDate(_issueDateCtrl),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: DropdownButtonFormField<String>(
+                initialValue: _posStateCode,
+                decoration: const InputDecoration(
+                  labelText: 'Place of Supply (State) *',
+                  prefixIcon: Icon(Icons.map_outlined, size: 16),
+                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                ),
+                items: _gstStateNames.entries
+                    .map(
+                      (e) => DropdownMenuItem<String>(
+                        value: e.key,
+                        child: Text(e.value),
+                      ),
+                    )
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() => _posStateCode = val);
+                    _triggerPreview();
+                  }
+                },
+              ),
+            ),
+          ],
         ),
-      ),
-    ];
+      );
+    }
 
     return AppCard(
       padding: const EdgeInsets.all(20),
-      child: isDesktop
-          ? Row(children: fields)
-          : Column(
-              children: fields
-                  .map(
-                    (e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: e,
-                    ),
-                  )
-                  .toList(),
+      child: Column(
+        children: [
+          TextFormField(
+            controller: _invoiceNoCtrl,
+            decoration: InputDecoration(
+              labelText: widget.config.numberLabel ?? 'Document Number',
+              prefixIcon: const Icon(Icons.tag, size: 16),
+              hintText: _nextNumberPlaceholder ?? 'Auto-generated',
+              floatingLabelBehavior: FloatingLabelBehavior.always,
             ),
+          ),
+          const SizedBox(height: 12),
+          _DateField(
+            ctrl: _issueDateCtrl,
+            label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
+            onTap: () => _pickDate(_issueDateCtrl),
+          ),
+          const SizedBox(height: 12),
+          DropdownButtonFormField<String>(
+            initialValue: _posStateCode,
+            decoration: const InputDecoration(
+              labelText: 'Place of Supply (State) *',
+              prefixIcon: Icon(Icons.map_outlined, size: 16),
+              floatingLabelBehavior: FloatingLabelBehavior.always,
+            ),
+            items: _gstStateNames.entries
+                .map(
+                  (e) => DropdownMenuItem<String>(
+                    value: e.key,
+                    child: Text(e.value),
+                  ),
+                )
+                .toList(),
+            onChanged: (val) {
+              if (val != null) {
+                setState(() => _posStateCode = val);
+                _triggerPreview();
+              }
+            },
+          ),
+        ],
+      ),
     );
   }
 
@@ -1414,7 +1455,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       SizedBox(
                         width: 80,
                         child: DropdownButtonFormField<String>(
-                          value: line.unit,
+                          initialValue: line.unit,
                           isDense: true,
                           decoration: const InputDecoration(
                             contentPadding: EdgeInsets.symmetric(
@@ -1477,7 +1518,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       SizedBox(
                         width: 90,
                         child: DropdownButtonFormField<String>(
-                          value: line.gstRate.toStringAsFixed(0),
+                          initialValue: line.gstRate.toStringAsFixed(0),
                           isDense: true,
                           decoration: const InputDecoration(
                             contentPadding: EdgeInsets.symmetric(
@@ -1654,6 +1695,28 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               ),
             ],
           ),
+          if (_amountPaid > 0) ...[
+            const SizedBox(height: 8),
+            _SummaryRow('Amount Paid', _amountPaid, color: AppColors.success),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Balance Due',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.error),
+                ),
+                Text(
+                  '₹${(_total - _amountPaid).clamp(0, double.infinity).toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 16,
+                    color: AppColors.error,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );

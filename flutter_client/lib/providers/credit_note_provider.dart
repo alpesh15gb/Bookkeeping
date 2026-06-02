@@ -59,7 +59,8 @@ class CreditNoteProvider extends ChangeNotifier {
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -98,7 +99,8 @@ class CreditNoteProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/credit-notes/$id'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -149,7 +151,8 @@ class CreditNoteProvider extends ChangeNotifier {
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -188,7 +191,8 @@ class CreditNoteProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/debit-notes/$id'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -197,7 +201,10 @@ class CreditNoteProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchInvoicePdfPayload(String id) async {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/$id/pdf-payload'));
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }

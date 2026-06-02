@@ -50,9 +50,9 @@ class _BalanceSheetViewState extends State<BalanceSheetView> {
   }
 
   Widget _buildBody() {
-    final assetsList = _data!['assets'] as List? ?? [];
-    final liabilitiesList = _data!['liabilities'] as List? ?? [];
-    final equityList = _data!['equity'] as List? ?? [];
+    final assetsList = _data!['assets'] is List ? _data!['assets'] as List : [];
+    final liabilitiesList = _data!['liabilities'] is List ? _data!['liabilities'] as List : [];
+    final equityList = _data!['equity'] is List ? _data!['equity'] as List : [];
 
     final totalAssets = double.tryParse((_data!['total_assets'] ?? 0).toString()) ?? 0.0;
     final totalLiab = double.tryParse((_data!['total_liabilities'] ?? 0).toString()) ?? 0.0;

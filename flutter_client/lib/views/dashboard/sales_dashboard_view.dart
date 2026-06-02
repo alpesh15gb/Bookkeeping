@@ -67,10 +67,10 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
 
     // Build trend sparkline arrays from real trend data
     final revSpark = dashboard.revenueTrend
-        .map((d) => double.tryParse((d['total'] ?? 0).toString()) ?? 0.0)
+        .map((d) => double.tryParse('${d is Map ? d['total'] ?? 0 : 0}') ?? 0.0)
         .toList();
     final expSpark = dashboard.expenseTrend
-        .map((d) => double.tryParse((d['total'] ?? 0).toString()) ?? 0.0)
+        .map((d) => double.tryParse('${d is Map ? d['total'] ?? 0 : 0}') ?? 0.0)
         .toList();
 
     if (revSpark.isEmpty) revSpark.addAll([0]);
@@ -297,12 +297,12 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  a['name'] ?? 'Account',
+                                  '${a is Map ? a['name'] ?? 'Account' : 'Account'}',
                                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                                 ),
                               ),
                               Text(
-                                '₹${_format((a['current_balance'] ?? 0).toDouble())}',
+                                '₹${_format(double.tryParse('${a is Map ? a['current_balance'] ?? 0 : 0}') ?? 0.0)}',
                                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace'),
                               ),
                             ],
@@ -333,14 +333,14 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  d['name'] ?? 'Customer',
+                                  '${d is Map ? d['name'] ?? 'Customer' : 'Customer'}',
                                   style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               Text(
-                                '₹${_format((d['outstanding'] ?? 0).toDouble())}',
+                                '₹${_format(double.tryParse('${d is Map ? d['outstanding'] ?? 0 : 0}') ?? 0.0)}',
                                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, fontFamily: 'monospace', color: AppColors.warning),
                               ),
                             ],
@@ -802,8 +802,8 @@ class _InteractiveSplineAreaChartState extends State<_InteractiveSplineAreaChart
   Widget build(BuildContext context) {
     final monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-    final revenue = widget.revenueTrend.map((d) => double.tryParse((d['total'] ?? 0).toString()) ?? 0.0).toList();
-    final expenses = widget.expenseTrend.map((d) => double.tryParse((d['total'] ?? 0).toString()) ?? 0.0).toList();
+    final revenue = widget.revenueTrend.map((d) => double.tryParse('${d is Map ? d['total'] ?? 0 : 0}') ?? 0.0).toList();
+    final expenses = widget.expenseTrend.map((d) => double.tryParse('${d is Map ? d['total'] ?? 0 : 0}') ?? 0.0).toList();
 
     if (revenue.isEmpty) revenue.addAll([0, 0]);
     if (expenses.isEmpty) expenses.addAll([0, 0]);
@@ -813,10 +813,10 @@ class _InteractiveSplineAreaChartState extends State<_InteractiveSplineAreaChart
     final List<String> labels = [];
     for (int i = 0; i < maxLength; i++) {
       int monthNum = 0;
-      if (i < widget.revenueTrend.length) {
-        monthNum = (double.tryParse((widget.revenueTrend[i]['month'] ?? 0).toString()) ?? 0).toInt();
-      } else if (i < widget.expenseTrend.length) {
-        monthNum = (double.tryParse((widget.expenseTrend[i]['month'] ?? 0).toString()) ?? 0).toInt();
+      if (i < widget.revenueTrend.length && widget.revenueTrend[i] is Map) {
+        monthNum = (double.tryParse('${widget.revenueTrend[i]['month'] ?? 0}') ?? 0).toInt();
+      } else if (i < widget.expenseTrend.length && widget.expenseTrend[i] is Map) {
+        monthNum = (double.tryParse('${widget.expenseTrend[i]['month'] ?? 0}') ?? 0).toInt();
       }
       labels.add(monthNum > 0 && monthNum <= 12 ? monthNames[monthNum - 1] : '?');
     }
@@ -1400,7 +1400,7 @@ class _BreakdownLegend extends StatelessWidget {
 // Recent Invoice Row Widget
 // ─────────────────────────────────────────────────────────────────────────────
 class _RecentInvoiceRow extends StatefulWidget {
-  final Map<String, dynamic> invoice;
+  final dynamic invoice;
   final VoidCallback onTap;
 
   const _RecentInvoiceRow({required this.invoice, required this.onTap});

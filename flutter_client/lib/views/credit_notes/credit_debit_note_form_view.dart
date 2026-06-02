@@ -7,7 +7,7 @@ import 'package:flutter_client/views/shared/transaction_form_view.dart';
 
 class CreditDebitNoteFormView extends StatelessWidget {
   final bool isCredit;
-  final Map<String, dynamic>? editNote;
+  final dynamic editNote;
 
   const CreditDebitNoteFormView({
     super.key,

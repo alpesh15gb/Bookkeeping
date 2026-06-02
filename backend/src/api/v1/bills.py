@@ -898,6 +898,7 @@ def print_bill(
         doc_type="BILL",
         tenant_id=tenant_id,
         db=db,
+        amount_paid=bill.amount_paid or Decimal("0.00"),
     )
 
     return StreamingResponse(

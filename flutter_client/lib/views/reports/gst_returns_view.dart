@@ -176,9 +176,9 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
 
   Widget _buildGstr1View() {
     if (_gstr1Data == null) return const Center(child: Text('No GSTR-1 data available'));
-    final b2b = _gstr1Data!['b2b'] as List? ?? [];
-    final b2cs = _gstr1Data!['b2cs'] as List? ?? [];
-    final hsn = _gstr1Data!['hsn_summary'] as List? ?? [];
+    final b2b = _gstr1Data!['b2b'] is List ? _gstr1Data!['b2b'] as List : [];
+    final b2cs = _gstr1Data!['b2cs'] is List ? _gstr1Data!['b2cs'] as List : [];
+    final hsn = _gstr1Data!['hsn_summary'] is List ? _gstr1Data!['hsn_summary'] as List : [];
 
     return ListView(
       padding: AppSpacing.pagePadding,

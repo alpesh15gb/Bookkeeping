@@ -182,6 +182,7 @@ class ReturnsDetailView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final title = isSalesReturn ? 'Sales Return' : 'Purchase Return';
+    final m = item is Map<String, dynamic> ? item as Map<String, dynamic> : <String, dynamic>{};
     return Scaffold(
       appBar: AppBar(title: Text('$title Detail')),
       body: ListView(
@@ -193,13 +194,13 @@ class ReturnsDetailView extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(item['return_number'] ?? 'N/A', style: AppTextStyles.h2),
+                  Text(m['return_number'] ?? 'N/A', style: AppTextStyles.h2),
                   const SizedBox(height: 8),
-                  InfoRow(label: 'Status', value: item['status'] ?? 'N/A'),
-                  InfoRow(label: 'Issue Date', value: item['issue_date'] ?? 'N/A'),
-                  InfoRow(label: 'Subtotal', value: '₹${item['subtotal']}'),
-                  InfoRow(label: 'Total', value: '₹${item['total']}'),
-                  if (item['notes'] != null) InfoRow(label: 'Notes', value: item['notes']),
+                  InfoRow(label: 'Status', value: '${m['status'] ?? 'N/A'}'),
+                  InfoRow(label: 'Issue Date', value: '${m['issue_date'] ?? 'N/A'}'),
+                  InfoRow(label: 'Subtotal', value: '₹${m['subtotal'] ?? 0}'),
+                  InfoRow(label: 'Total', value: '₹${m['total'] ?? 0}'),
+                  if (m['notes'] != null) InfoRow(label: 'Notes', value: '${m['notes']}'),
                 ],
               ),
             ),
@@ -207,11 +208,11 @@ class ReturnsDetailView extends StatelessWidget {
           const SizedBox(height: 16),
           Text('Line Items', style: AppTextStyles.h3),
           const SizedBox(height: 8),
-          ...((item['lines'] as List?) ?? []).map((l) => Card(
+          ...((m['lines'] is List ? m['lines'] as List : [])).whereType<Map<String, dynamic>>().map((l) => Card(
             child: ListTile(
-              title: Text(l['product_name'] ?? 'Product'),
-              subtitle: Text('Qty: ${l['quantity']} @ ₹${l['rate']}'),
-              trailing: Text('₹${l['total']}'),
+              title: Text('${l['product_name'] ?? 'Product'}'),
+              subtitle: Text('Qty: ${l['quantity'] ?? 0} @ ₹${l['rate'] ?? 0}'),
+              trailing: Text('₹${l['total'] ?? 0}'),
             ),
           )),
         ],

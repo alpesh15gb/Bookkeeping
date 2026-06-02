@@ -77,7 +77,7 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const SectionHeader(title: 'ITEMS DISPATCHED'),
-                  ...((c['lines'] as List?) ?? []).map((l) => Padding(
+                  ...((c['lines'] is List ? c['lines'] as List : [])).map((l) => Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -113,7 +113,7 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
               const SizedBox(height: 12),
               ActionButton(label: 'Convert to Invoice', tier: ActionTier.safe, onPressed: () {
                 // Navigate to invoice form with pre-filled data from challan
-                final lines = (c['lines'] as List?) ?? [];
+                final lines = (c['lines'] is List ? c['lines'] as List : []);
                 Navigator.push(
                   context,
                   MaterialPageRoute(

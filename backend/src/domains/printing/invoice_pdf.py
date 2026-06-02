@@ -30,6 +30,7 @@ def generate_invoice_pdf(
     doc_type: str = "INVOICE",
     tenant_id: Optional[uuid.UUID] = None,
     db = None,
+    amount_paid: Decimal = Decimal("0.00"),
 ) -> bytes:
     buffer = io.BytesIO()
     
@@ -99,6 +100,10 @@ def generate_invoice_pdf(
         
     styles = getSampleStyleSheet()
     elements = []
+
+    # Calculate balance due for payment summary
+    balance_due = total - (amount_paid or Decimal("0.00"))
+    has_payments = (amount_paid or Decimal("0.00")) > 0
 
     # 2. Design System Themes
     if template == "modern":
@@ -266,6 +271,9 @@ def generate_invoice_pdf(
             [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
             [Paragraph("Total:", bold_style), Paragraph(f"Rs. {total:.2f}", bold_right)],
         ]
+        if has_payments:
+            total_data.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
+            total_data.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
         t_total = Table(total_data, colWidths=[40*mm, 34*mm])
         t_total.setStyle(TableStyle([
             ('BOTTOMPADDING', (0,0), (-1,-1), 1),
@@ -372,6 +380,9 @@ def generate_invoice_pdf(
             [Paragraph("Round Off:", normal_style), Paragraph(f"Rs. {round_off:.2f}", right_style)],
             [Paragraph("<b>TOTAL:</b>", bold_style), Paragraph(f"<b>Rs. {total:.2f}</b>", bold_right)],
         ]
+        if has_payments:
+            totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
+            totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
         totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[
             ('PADDING', (0,0), (-1,-1), 2),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE')
@@ -446,6 +457,9 @@ def generate_invoice_pdf(
             [Paragraph("SGST:", normal_style), Paragraph(f"₹{sgst:.2f}", right_style)],
             [Paragraph("<b>Total:</b>", bold_style), Paragraph(f"<b>₹{total:.2f}</b>", bold_right)],
         ]
+        if has_payments:
+            totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"₹{amount_paid:.2f}", right_style)])
+            totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>₹{balance_due:.2f}</b>", bold_right)])
         totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
         elements.append(Table([["", totals_table]], colWidths=[111*mm, 75*mm], style=[('ALIGN', (1,0), (1,0), 'RIGHT')]))
         elements.append(Spacer(1, 8*mm))
@@ -509,6 +523,9 @@ def generate_invoice_pdf(
             [Paragraph("SGST:", normal_style), Paragraph(f"₹{sgst:.2f}", right_style)],
             [Paragraph("<b>Total:</b>", bold_style), Paragraph(f"<b>₹{total:.2f}</b>", bold_right)],
         ]
+        if has_payments:
+            totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"₹{amount_paid:.2f}", right_style)])
+            totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>₹{balance_due:.2f}</b>", bold_right)])
         totals_table = Table(totals_col, colWidths=[40*mm, 35*mm])
         elements.append(Table([["", totals_table]], colWidths=[111*mm, 75*mm], style=[('ALIGN', (1,0), (1,0), 'RIGHT')]))
         elements.append(Spacer(1, 6*mm))
@@ -581,6 +598,9 @@ def generate_invoice_pdf(
             [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
             [Paragraph("Total Amount:", bold_style), Paragraph(f"Rs. {total:.2f}", bold_right)],
         ]
+        if has_payments:
+            totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
+            totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
         totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[
             ('PADDING', (0,0), (-1,-1), 2),
         ])

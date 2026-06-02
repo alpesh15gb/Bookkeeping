@@ -132,7 +132,7 @@ class _AgingReportViewState extends State<AgingReportView> with SingleTickerProv
 
   Widget _buildAgingTable(Map<String, dynamic>? data, String partyLabel) {
     if (data == null) return const Center(child: Text('No data available'));
-    final items = data['lines'] as List? ?? [];
+    final items = data['lines'] is List ? data['lines'] as List : [];
     if (items.isEmpty) {
       return Center(
         child: Text('All $partyLabel accounts are fully settled.', style: AppTextStyles.bodySmall),
@@ -186,7 +186,7 @@ class _AgingReportViewState extends State<AgingReportView> with SingleTickerProv
                 rows: items.map((item) {
                   final contactName = item['contact_name'] ?? 'N/A';
                   final total = double.tryParse((item['total_outstanding'] ?? item['total'] ?? 0).toString()) ?? 0.0;
-                  final buckets = item['buckets'] as List? ?? [];
+                  final buckets = item['buckets'] is List ? item['buckets'] as List : [];
                   double b1 = 0, b2 = 0, b3 = 0, b4 = 0;
                   for (final bucket in buckets) {
                     final amount = double.tryParse((bucket['amount'] ?? 0).toString()) ?? 0.0;

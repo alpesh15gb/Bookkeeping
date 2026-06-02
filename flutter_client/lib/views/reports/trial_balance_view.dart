@@ -50,7 +50,7 @@ class _TrialBalanceViewState extends State<TrialBalanceView> {
   }
 
   Widget _buildBody() {
-    final lines = _data!['lines'] as List? ?? [];
+    final lines = _data!['lines'] is List ? _data!['lines'] as List : [];
     if (lines.isEmpty) {
       return const EmptyState(
         icon: Icons.summarize_outlined,

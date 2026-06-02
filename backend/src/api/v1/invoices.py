@@ -1553,7 +1553,8 @@ def get_invoice_pdf_payload(
             "cess_amount": str(invoice.cess_amount.quantize(Decimal("0.01"))),
             "round_off": str(invoice.round_off.quantize(Decimal("0.01"))),
             "total": str(invoice.total.quantize(Decimal("0.01"))),
-            "amount_paid": str(invoice.amount_paid.quantize(Decimal("0.01")))
+            "amount_paid": str(invoice.amount_paid.quantize(Decimal("0.01"))),
+            "balance_due": str((invoice.total - (invoice.amount_paid or Decimal("0"))).quantize(Decimal("0.01")))
         },
         "lines": [
             {
@@ -1650,6 +1651,7 @@ def print_invoice(
         doc_type="INVOICE",
         tenant_id=tenant_id,
         db=db,
+        amount_paid=invoice.amount_paid or Decimal("0.00"),
     )
 
     return StreamingResponse(

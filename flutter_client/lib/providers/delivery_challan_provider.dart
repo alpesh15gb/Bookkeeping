@@ -20,7 +20,8 @@ class DeliveryChallanProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/delivery-challans'));
       if (response.statusCode == 200) {
-        _challans = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _challans = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed to load delivery challans';
       }
@@ -35,7 +36,8 @@ class DeliveryChallanProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/delivery-challans/$id'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;

@@ -20,7 +20,8 @@ class BankingProfileProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/masters/banking-profiles'));
       if (response.statusCode == 200) {
-        _profiles = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _profiles = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed to load banking profiles';
       }
@@ -35,7 +36,8 @@ class BankingProfileProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/masters/banking-profiles/$id'));
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;

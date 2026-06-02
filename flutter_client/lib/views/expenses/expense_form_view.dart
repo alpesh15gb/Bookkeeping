@@ -7,7 +7,7 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class ExpenseFormView extends StatefulWidget {
-  final Map<String, dynamic>? editExpense;
+  final dynamic editExpense;
 
   const ExpenseFormView({super.key, this.editExpense});
 
@@ -38,8 +38,8 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
       text: '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}',
     );
 
-    if (widget.editExpense != null) {
-      final e = widget.editExpense!;
+    if (widget.editExpense != null && widget.editExpense is Map) {
+      final e = widget.editExpense as Map<String, dynamic>;
       _categoryId = e['expense_category_id']?.toString();
       _bankAccountId = e['bank_account_id']?.toString();
       _dateCtrl.text = e['expense_date'] ?? _dateCtrl.text;

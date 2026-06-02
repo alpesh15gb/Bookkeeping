@@ -22,7 +22,8 @@ class BankReconciliationProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/statements'));
       if (response.statusCode == 200) {
-        _statements = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _statements = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed to load statements (${response.statusCode})';
       }
@@ -36,7 +37,10 @@ class BankReconciliationProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchStatementDetail(String id) async {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/statements/$id'));
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }
@@ -67,7 +71,10 @@ class BankReconciliationProvider extends ChangeNotifier {
   Future<List<dynamic>> fetchStatementTransactions(String statementId) async {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/transactions'));
-      if (response.statusCode == 200) return jsonDecode(response.body) as List;
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is List ? data : (data is Map ? (data['items'] ?? []) : []);
+      }
     } catch (_) {}
     return [];
   }
@@ -115,7 +122,8 @@ class BankReconciliationProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/reconciliations'));
       if (response.statusCode == 200) {
-        _reconciliations = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _reconciliations = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed (${response.statusCode})';
       }
@@ -128,7 +136,10 @@ class BankReconciliationProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchReconciliationDetail(String id) async {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/reconciliations/$id'));
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }

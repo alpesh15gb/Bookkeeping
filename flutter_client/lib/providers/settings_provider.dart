@@ -43,10 +43,12 @@ class SettingsProvider extends ChangeNotifier {
       final companyRes = results[1];
 
       if (settingsRes.statusCode == 200) {
-        _settings = jsonDecode(settingsRes.body) as Map<String, dynamic>;
+        final sd = jsonDecode(settingsRes.body);
+        _settings = sd is Map<String, dynamic> ? sd : Map<String, dynamic>.from(sd is Map ? sd : {});
       }
       if (companyRes.statusCode == 200) {
-        _company = jsonDecode(companyRes.body) as Map<String, dynamic>;
+        final cd = jsonDecode(companyRes.body);
+        _company = cd is Map<String, dynamic> ? cd : Map<String, dynamic>.from(cd is Map ? cd : {});
       }
 
       await fetchNumberingSeries();
@@ -111,7 +113,8 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/settings/series'));
       if (response.statusCode == 200) {
-        _numberingSeries = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _numberingSeries = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
         notifyListeners();
       }
     } catch (_) {}
@@ -173,7 +176,8 @@ class SettingsProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/companies/$tenantId/branches'));
       if (response.statusCode == 200) {
-        _branches = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _branches = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
         notifyListeners();
       }
     } catch (_) {}

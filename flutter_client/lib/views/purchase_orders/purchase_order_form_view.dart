@@ -6,7 +6,7 @@ import 'package:flutter_client/providers/purchase_order_provider.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
 
 class PurchaseOrderFormView extends StatelessWidget {
-  final Map<String, dynamic>? editOrder;
+  final dynamic editOrder;
   final String orderType;
 
   const PurchaseOrderFormView({super.key, this.editOrder, this.orderType = 'purchase'});

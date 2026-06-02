@@ -6,7 +6,7 @@ import 'package:flutter_client/providers/delivery_challan_provider.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
 
 class DeliveryChallanFormView extends StatelessWidget {
-  final Map<String, dynamic>? challan;
+  final dynamic challan;
 
   const DeliveryChallanFormView({super.key, this.challan});
 

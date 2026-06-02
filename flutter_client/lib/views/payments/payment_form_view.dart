@@ -87,7 +87,7 @@ class _PaymentFormViewState extends State<PaymentFormView> {
         final body = jsonDecode(response.body);
         List<dynamic> items;
         if (body is Map && body['items'] != null) {
-          items = body['items'] as List;
+          items = body['items'] is List ? body['items'] as List : [];
         } else if (body is List) {
           items = body;
         } else {
@@ -101,7 +101,7 @@ class _PaymentFormViewState extends State<PaymentFormView> {
 
         if (!mounted) return;
         setState(() {
-          _openDocs = filtered.cast<Map<String, dynamic>>();
+          _openDocs = filtered.whereType<Map<String, dynamic>>().toList();
           for (final doc in _openDocs) {
             final id = doc['id'].toString();
             final total = double.tryParse((doc['total'] ?? 0).toString()) ?? 0;

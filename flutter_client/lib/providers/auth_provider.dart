@@ -39,14 +39,18 @@ class AuthProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/auth/me'),
       );
       if (response.statusCode == 200) {
-        _currentUser = UserResponse.fromJson(jsonDecode(response.body));
+        final respData = jsonDecode(response.body);
+        _currentUser = UserResponse.fromJson(
+          respData is Map<String, dynamic> ? respData : Map<String, dynamic>.from(respData is Map ? respData : {}),
+        );
         _isAuthenticated = true;
         final memResponse = await _client.get(
           Uri.parse('${ApiClient.baseUrl}/auth/memberships'),
         );
         if (memResponse.statusCode == 200) {
-          final List data = jsonDecode(memResponse.body);
-          _memberships = data.map((e) => TenantMembership.fromJson(e)).toList();
+          final memData = jsonDecode(memResponse.body);
+          final List memItems = memData is Map ? (memData['items'] ?? []) : (memData is List ? memData : []);
+          _memberships = memItems.whereType<Map<String, dynamic>>().map((e) => TenantMembership.fromJson(e)).toList();
           _activeTenantId = ApiClient.tenantId;
           if (_activeTenantId == null && _memberships.isNotEmpty) {
             _activeTenantId = _memberships[0].tenantId;
@@ -93,8 +97,9 @@ class AuthProvider extends ChangeNotifier {
           Uri.parse('${ApiClient.baseUrl}/auth/memberships'),
         );
         if (memResponse.statusCode == 200) {
-          final List data = jsonDecode(memResponse.body);
-          _memberships = data.map((e) => TenantMembership.fromJson(e)).toList();
+          final memData2 = jsonDecode(memResponse.body);
+          final List memItems2 = memData2 is Map ? (memData2['items'] ?? []) : (memData2 is List ? memData2 : []);
+          _memberships = memItems2.whereType<Map<String, dynamic>>().map((e) => TenantMembership.fromJson(e)).toList();
           if (_memberships.isNotEmpty) {
             _activeTenantId = _memberships[0].tenantId;
             ApiClient.setTenantId(_activeTenantId);
@@ -106,7 +111,10 @@ class AuthProvider extends ChangeNotifier {
           Uri.parse('${ApiClient.baseUrl}/auth/me'),
         );
         if (userResponse.statusCode == 200) {
-          _currentUser = UserResponse.fromJson(jsonDecode(userResponse.body));
+          final userData = jsonDecode(userResponse.body);
+          _currentUser = UserResponse.fromJson(
+            userData is Map<String, dynamic> ? userData : Map<String, dynamic>.from(userData is Map ? userData : {}),
+          );
           _isAuthenticated = true;
           _isLoading = false;
           notifyListeners();

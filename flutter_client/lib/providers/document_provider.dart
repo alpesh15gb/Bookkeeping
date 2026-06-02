@@ -62,7 +62,8 @@ class DocumentProvider extends ChangeNotifier {
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -155,7 +156,8 @@ class DocumentProvider extends ChangeNotifier {
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -209,7 +211,8 @@ class DocumentProvider extends ChangeNotifier {
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -424,7 +427,8 @@ class DocumentProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -436,7 +440,8 @@ class DocumentProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -448,7 +453,8 @@ class DocumentProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/sales-orders/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -460,7 +466,8 @@ class DocumentProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/expenses/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -606,7 +613,8 @@ class DocumentProvider extends ChangeNotifier {
         body: jsonEncode({'amount': amount, 'gst_rate': gstRate}),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -618,7 +626,8 @@ class DocumentProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/invoices/credit-notes/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -630,7 +639,8 @@ class DocumentProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/invoices/debit-notes/$id'),
       );
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
     } catch (_) {}
     return null;
@@ -688,7 +698,10 @@ class DocumentProvider extends ChangeNotifier {
       final response = await _client.get(
         Uri.parse('${ApiClient.baseUrl}/invoices/$id/pdf-payload'),
       );
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }
@@ -700,7 +713,10 @@ class DocumentProvider extends ChangeNotifier {
       final response = await _client.get(
         Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id/pdf-payload'),
       );
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }
@@ -710,7 +726,10 @@ class DocumentProvider extends ChangeNotifier {
       final response = await _client.get(
         Uri.parse('${ApiClient.baseUrl}/bills/$id/pdf-payload'),
       );
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }
@@ -720,7 +739,10 @@ class DocumentProvider extends ChangeNotifier {
       final response = await _client.get(
         Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id/pdf-payload'),
       );
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }
@@ -730,7 +752,10 @@ class DocumentProvider extends ChangeNotifier {
       final response = await _client.get(
         Uri.parse('${ApiClient.baseUrl}/sales-orders/$id/pdf-payload'),
       );
-      if (response.statusCode == 200) return jsonDecode(response.body);
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
     } catch (_) {}
     return null;
   }

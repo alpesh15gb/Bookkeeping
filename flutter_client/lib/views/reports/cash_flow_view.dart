@@ -179,7 +179,7 @@ class _FlowSection extends StatelessWidget {
       );
     }
 
-    final itemsList = (items is Map && items['items'] is List) ? items['items'] as List : [];
+    final itemsList = (items is Map && items['items'] is List ? List.from(items['items']) : []);
     final net = double.tryParse((items is Map ? items['net'] : null)?.toString() ?? '0') ?? 0;
 
     return Card(

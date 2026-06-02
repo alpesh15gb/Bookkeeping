@@ -42,9 +42,12 @@ class InvoiceProvider extends ChangeNotifier {
       
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices$queryString'));
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = jsonDecode(response.body);
-        final List items = data['items'] ?? [];
-        final newInvoices = items.map((x) => InvoiceModel.fromJson(x)).toList();
+        final data = jsonDecode(response.body);
+        final List items = data is Map ? (data['items'] ?? []) : data;
+        final newInvoices = items
+            .whereType<Map<String, dynamic>>()
+            .map((x) => InvoiceModel.fromJson(x))
+            .toList();
         if (reset) {
           _invoices = newInvoices;
         } else {

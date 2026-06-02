@@ -27,8 +27,9 @@ class ProductProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/masters/products'),
       );
       if (response.statusCode == 200) {
-        final List data = jsonDecode(response.body);
-        _products = data.map((x) => ProductModel.fromJson(x)).toList();
+        final data = jsonDecode(response.body);
+        final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
+        _products = items.whereType<Map<String, dynamic>>().map((x) => ProductModel.fromJson(x)).toList();
         await SyncManager.instance?.cacheGetResponse('/masters/products', data);
       } else {
         _errorMessage = 'Failed to load products';
@@ -83,7 +84,13 @@ class ProductProvider extends ChangeNotifier {
         body: body,
       );
       if (response.statusCode == 201) {
-        _lastCreatedProduct = ProductModel.fromJson(jsonDecode(response.body));
+        _lastCreatedProduct = ProductModel.fromJson(
+          jsonDecode(response.body) is Map<String, dynamic>
+              ? jsonDecode(response.body)
+              : jsonDecode(response.body) is Map
+                  ? Map<String, dynamic>.from(jsonDecode(response.body))
+                  : <String, dynamic>{},
+        );
         await fetchProducts();
         return true;
       } else {

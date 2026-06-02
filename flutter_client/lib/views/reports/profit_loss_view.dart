@@ -50,8 +50,8 @@ class _ProfitLossViewState extends State<ProfitLossView> {
   }
 
   Widget _buildBody() {
-    final revenueList = _data!['revenue_lines'] as List? ?? [];
-    final expenseList = _data!['expense_lines'] as List? ?? [];
+    final revenueList = _data!['revenue_lines'] is List ? _data!['revenue_lines'] as List : [];
+    final expenseList = _data!['expense_lines'] is List ? _data!['expense_lines'] as List : [];
 
     final totalRev = double.tryParse((_data!['total_revenue'] ?? 0).toString()) ?? 0.0;
     final totalExp = double.tryParse((_data!['total_expenses'] ?? 0).toString()) ?? 0.0;

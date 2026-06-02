@@ -37,7 +37,7 @@ class _AuditLogListViewState extends State<AuditLogListView> {
   Widget build(BuildContext context) {
     if (_isLoading) return const LoadingState(message: 'Loading audit logs...');
 
-    final items = (_data?['items'] as List?) ?? [];
+    final items = (_data != null && _data!['items'] is List ? _data!['items'] as List : []);
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,

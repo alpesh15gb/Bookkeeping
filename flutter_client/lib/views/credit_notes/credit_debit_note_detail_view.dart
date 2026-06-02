@@ -106,7 +106,7 @@ class _CreditDebitNoteDetailViewState extends State<CreditDebitNoteDetailView> {
     final isMobile = AdaptiveLayout.isMobile(context);
     final number = widget.isCredit ? _note!['credit_note_number'] : _note!['debit_note_number'];
     final status = _note!['status'] ?? 'DRAFT';
-    final lines = _note!['lines'] as List? ?? [];
+    final lines = _note!['lines'] is List ? _note!['lines'] as List : [];
 
     final subtotal = double.tryParse((_note!['subtotal'] ?? 0).toString()) ?? 0.0;
     final total = double.tryParse((_note!['total'] ?? 0).toString()) ?? 0.0;

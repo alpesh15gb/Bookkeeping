@@ -54,7 +54,7 @@ class _LedgerViewState extends State<LedgerView> {
       return const ErrorState(message: 'Ledger data unavailable');
     }
 
-    final entries = ledger['entries'] as List? ?? [];
+    final entries = ledger['entries'] is List ? ledger['entries'] as List : [];
     if (entries.isEmpty) {
       return const EmptyState(
         icon: Icons.book_outlined,

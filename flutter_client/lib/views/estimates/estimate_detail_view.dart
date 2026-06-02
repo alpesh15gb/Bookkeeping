@@ -140,7 +140,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const SectionHeader(title: 'ITEMS'),
-                            if (_estimate!['lines'] == null || (_estimate!['lines'] as List).isEmpty)
+                            if (_estimate!['lines'] == null || (_estimate!['lines'] is List ? (_estimate!['lines'] as List).isEmpty : true))
                               const Padding(
                                 padding: EdgeInsets.symmetric(vertical: 16),
                                 child: Text('No items', style: AppTextStyles.bodySmall),
@@ -149,7 +149,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                               ListView.separated(
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
-                                itemCount: (_estimate!['lines'] as List).length,
+                                itemCount: (_estimate!['lines'] is List ? (_estimate!['lines'] as List).length : 0),
                                 separatorBuilder: (context, _) => const Divider(),
                                 itemBuilder: (context, i) {
                                   final line = _estimate!['lines'][i];

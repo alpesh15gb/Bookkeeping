@@ -24,7 +24,8 @@ class SalesAnalyticsProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales/customer-wise'));
       if (response.statusCode == 200) {
-        _customerWise = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _customerWise = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed to load customer-wise sales';
       }
@@ -42,7 +43,8 @@ class SalesAnalyticsProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales/period-wise'));
       if (response.statusCode == 200) {
-        _periodWise = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _periodWise = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed to load period-wise sales';
       }
@@ -60,7 +62,8 @@ class SalesAnalyticsProvider extends ChangeNotifier {
     try {
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales/transactions'));
       if (response.statusCode == 200) {
-        _transactions = jsonDecode(response.body) as List;
+        final data = jsonDecode(response.body);
+        _transactions = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
       } else {
         _errorMessage = 'Failed to load sales transactions';
       }
@@ -91,9 +94,12 @@ class SalesAnalyticsProvider extends ChangeNotifier {
         }
       }
 
-      _customerWise = jsonDecode(results[0].body) as List;
-      _periodWise = jsonDecode(results[1].body) as List;
-      _transactions = jsonDecode(results[2].body) as List;
+      final cw = jsonDecode(results[0].body);
+      _customerWise = cw is List ? cw : (cw is Map ? (cw['items'] ?? []) : []);
+      final pw = jsonDecode(results[1].body);
+      _periodWise = pw is List ? pw : (pw is Map ? (pw['items'] ?? []) : []);
+      final tx = jsonDecode(results[2].body);
+      _transactions = tx is List ? tx : (tx is Map ? (tx['items'] ?? []) : []);
     } catch (_) {
       _errorMessage = 'An error occurred';
     }
