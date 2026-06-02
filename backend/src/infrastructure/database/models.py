@@ -649,6 +649,7 @@ class ExpenseCategory(Base):
     description = Column(Text)
     linked_account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"))
     is_active = Column(Boolean, nullable=False, default=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
 
