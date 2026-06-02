@@ -1,6 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
+import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
 import 'package:flutter_client/providers/product_provider.dart';
@@ -211,6 +215,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   String? _selectedInvoiceId;
   String _posStateCode = '27';
   bool _isSaving = false;
+  bool _isScanning = false;
   Timer? _previewDebounce;
   bool _isPreviewLoading = false;
   String? _nextNumberPlaceholder;
@@ -858,6 +863,199 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     if (selected != null && mounted) _setLineProduct(lineIndex, selected);
   }
 
+  Future<void> _scanBill() async {
+    setState(() => _isScanning = true);
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['jpg', 'jpeg', 'png', 'pdf', 'tiff', 'bmp'],
+        withData: true,
+        dialogTitle: 'Select Bill Image or PDF',
+      );
+
+      if (result == null || result.files.isEmpty || !mounted) {
+        setState(() => _isScanning = false);
+        return;
+      }
+
+      final picked = result.files.first;
+      final bytes = picked.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        _showSnack('Could not read file. Please try again.', error: true);
+        setState(() => _isScanning = false);
+        return;
+      }
+
+      final uri = Uri.parse('${ApiClient.baseUrl}/bills/scan-image');
+      final request = http.MultipartRequest('POST', uri);
+
+      if (ApiClient.accessToken != null) {
+        request.headers['Authorization'] = 'Bearer ${ApiClient.accessToken}';
+      }
+      if (ApiClient.tenantId != null) {
+        request.headers['X-Tenant-ID'] = ApiClient.tenantId!;
+      }
+
+      request.files.add(http.MultipartFile.fromBytes(
+        'file', bytes,
+        filename: picked.name,
+      ));
+      request.fields['confidence'] = '0.25';
+
+      final streamed = await request.send();
+      final response = await http.Response.fromStream(streamed);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        _applyScannedData(data);
+      } else {
+        String msg = 'Scan failed (${response.statusCode})';
+        try {
+          final b = jsonDecode(response.body);
+          if (b is Map) msg = b['detail']?.toString() ?? msg;
+        } catch (_) {}
+        _showSnack(msg, error: true);
+      }
+    } catch (e) {
+      if (mounted) _showSnack('Scan error: $e', error: true);
+    } finally {
+      if (mounted) setState(() => _isScanning = false);
+    }
+  }
+
+  void _applyScannedData(Map<String, dynamic> data) {
+    if (data['vendor_name'] != null || data['vendor_gstin'] != null) {
+      final gstin = data['vendor_gstin']?.toString().toUpperCase();
+      final name = data['vendor_name']?.toString().toLowerCase();
+      final vendors = context.read<ContactProvider>().vendors;
+      ContactModel? matched;
+      if (gstin != null && gstin.isNotEmpty) {
+        for (final v in vendors) {
+          if (v.gstin?.toUpperCase() == gstin) {
+            matched = v;
+            break;
+          }
+        }
+      }
+      if (matched == null && name != null && name.isNotEmpty) {
+        for (final v in vendors) {
+          final vName = v.name.toLowerCase();
+          if (vName.contains(name) || name.contains(vName)) {
+            matched = v;
+            break;
+          }
+        }
+      }
+      if (matched != null) {
+        final ContactModel m = matched;
+        setState(() {
+          _selectedContact = m;
+          if (m.stateCode.length == 2) {
+            _posStateCode = m.stateCode;
+          }
+        });
+      }
+    }
+
+    if (data['bill_number'] != null) {
+      setState(() => _invoiceNoCtrl.text = data['bill_number'] as String);
+    }
+    if (data['bill_date'] != null) {
+      setState(() => _issueDateCtrl.text = data['bill_date'] as String);
+    }
+    if (data['due_date'] != null) {
+      setState(() => _dueDateCtrl.text = data['due_date'] as String);
+    }
+
+    final scannedLines = (data['line_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (scannedLines.isNotEmpty) {
+      setState(() {
+        _lines.removeWhere((l) => l.productId.isEmpty && l.rate == 0);
+
+        for (final sl in scannedLines) {
+          final qty = (sl['qty'] as num?)?.toDouble() ?? 1.0;
+          final rate = (sl['rate'] as num?)?.toDouble() ?? 0.0;
+          final gstRate = (sl['gst_rate'] as num?)?.toDouble() ?? 18.0;
+          _lines.add(TransactionLineItem(
+            productId: '',
+            productName: sl['description']?.toString() ?? 'Item',
+            hsnSac: sl['hsn']?.toString() ?? '',
+            quantity: qty,
+            rate: rate,
+            gstRate: gstRate,
+            discount: 0,
+            description: sl['description']?.toString() ?? '',
+          ));
+        }
+      });
+    }
+
+    final filledFields = <String>[];
+    if (data['bill_number'] != null) filledFields.add('Bill number');
+    if (data['bill_date'] != null) filledFields.add('Date');
+    if (data['due_date'] != null) filledFields.add('Due date');
+    if (scannedLines.isNotEmpty) filledFields.add('${scannedLines.length} line item(s)');
+    if (data['vendor_name'] != null) filledFields.add('Vendor: ${data['vendor_name']}');
+
+    final conf = ((data['overall_confidence'] as num?)?.toDouble() ?? 0.0) * 100;
+    final warnings = (data['warnings'] as List?)?.cast<String>() ?? [];
+
+    final msg = filledFields.isNotEmpty
+        ? 'Scanned (${conf.toStringAsFixed(0)}% confidence): ${filledFields.join(', ')}'
+        : 'Scan complete but no fields could be extracted. Please fill manually.';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: filledFields.isNotEmpty ? AppColors.success : AppColors.warning,
+        duration: const Duration(seconds: 4),
+        action: warnings.isNotEmpty
+            ? SnackBarAction(
+                label: 'Details',
+                textColor: Colors.white,
+                onPressed: () => _showScanWarnings(warnings),
+              )
+            : null,
+      ),
+    );
+
+    _triggerPreview();
+  }
+
+  void _showScanWarnings(List<String> warnings) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Scan Notes'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: warnings
+              .map((w) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline, size: 14, color: AppColors.warning),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(w, style: AppTextStyles.bodySmall)),
+                      ],
+                    ),
+                  ))
+              .toList(),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = AdaptiveLayout.isDesktop(context);
@@ -893,6 +1091,21 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ),
+            ),
+          if (widget.config.allowScanning)
+            IconButton(
+              icon: _isScanning
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.brandNavy,
+                      ),
+                    )
+                  : const Icon(Icons.document_scanner_outlined, size: 20),
+              tooltip: 'Scan vendor bill',
+              onPressed: _isScanning || _isSaving ? null : _scanBill,
             ),
           const SizedBox(width: 8),
           Padding(

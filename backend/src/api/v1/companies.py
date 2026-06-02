@@ -677,9 +677,7 @@ def export_tenant_data(
 
     _inspected_tables: dict = {}
 
-    def _table_has_column(model, col_name):
-        """Check if the actual DB table has a column (not just the ORM model)."""
-        table_name = model.__tablename__
+    def _get_db_columns(table_name):
         if table_name not in _inspected_tables:
             inspector = sa_inspect(engine)
             try:
@@ -687,15 +685,43 @@ def export_tenant_data(
             except Exception:
                 cols = []
             _inspected_tables[table_name] = cols
-        return col_name in _inspected_tables[table_name]
+        return _inspected_tables[table_name]
 
     def load_and_serialize(model, tenant_filter=True):
-        q = db.query(model)
-        if tenant_filter and _table_has_column(model, 'tenant_id'):
+        table_name = model.__tablename__
+        db_cols = _get_db_columns(table_name)
+        if not db_cols:
+            return []
+
+        # Only select columns that exist in the actual DB table
+        mapper = sa_inspect(model)
+        valid_model_cols = [c for c in mapper.columns if c.name in db_cols]
+        if not valid_model_cols:
+            return []
+
+        q = db.query(*valid_model_cols).select_from(model)
+        if tenant_filter and 'tenant_id' in db_cols:
             q = q.filter(model.tenant_id == tenant_id)
-        if _table_has_column(model, 'deleted_at'):
+        if 'deleted_at' in db_cols:
             q = q.filter(model.deleted_at == None)
-        return serialize_rows(q.all())
+
+        rows = q.all()
+        result = []
+        col_names = [c.name for c in valid_model_cols]
+        for row in rows:
+            d = dict(zip(col_names, row))
+            for key in d:
+                val = d[key]
+                if val is None:
+                    d[key] = None
+                elif isinstance(val, (datetime, date)):
+                    d[key] = val.isoformat()
+                elif isinstance(val, uuid.UUID):
+                    d[key] = str(val)
+                elif hasattr(val, 'quantize'):
+                    d[key] = str(val)
+            result.append(d)
+        return result
 
     backup = {
         "exported_at": datetime.now(timezone.utc).isoformat(),
