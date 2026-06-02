@@ -39,10 +39,27 @@ from src.core.sentry import init_sentry
 # ---------------------------------------------------------------------------
 # Logging
 # ---------------------------------------------------------------------------
+import contextvars
+
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
+
+class RequestIdFilter(logging.Filter):
+    def filter(self, record):
+        if not hasattr(record, "request_id"):
+            record.request_id = request_id_var.get()
+        return True
+
 logging.basicConfig(
     level=logging.DEBUG if settings.DEBUG else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s [%(request_id)s]: %(message)s",
 )
+
+# Add filter to root logger and any active handlers
+root_logger = logging.getLogger()
+root_logger.addFilter(RequestIdFilter())
+for handler in root_logger.handlers:
+    handler.addFilter(RequestIdFilter())
+
 logger = logging.getLogger("bookkeeping")
 
 # ---------------------------------------------------------------------------
@@ -244,7 +261,11 @@ async def add_security_headers(request: Request, call_next):
 async def add_request_id(request: Request, call_next):
     request_id = str(uuid_mod.uuid4())[:8]
     request.state.request_id = request_id
-    response = await call_next(request)
+    token = request_id_var.set(request_id)
+    try:
+        response = await call_next(request)
+    finally:
+        request_id_var.reset(token)
     response.headers["X-Request-ID"] = request_id
     return response
 
