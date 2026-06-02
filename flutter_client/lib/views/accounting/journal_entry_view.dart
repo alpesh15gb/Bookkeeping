@@ -44,6 +44,18 @@ class _JournalEntryViewState extends State<JournalEntryView> {
     });
   }
 
+  final Set<int> _expandedIndices = {};
+
+  void _toggleExpand(int index) {
+    setState(() {
+      if (_expandedIndices.contains(index)) {
+        _expandedIndices.remove(index);
+      } else {
+        _expandedIndices.add(index);
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
@@ -63,7 +75,7 @@ class _JournalEntryViewState extends State<JournalEntryView> {
                   subtitle: 'Journal entries will appear here once recorded',
                   actionLabel: 'New Journal Entry',
                   onAction: _showForm,
-                )
+                  )
               : ListView.separated(
                   padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
                   itemCount: _journals.length,
@@ -71,8 +83,11 @@ class _JournalEntryViewState extends State<JournalEntryView> {
                   itemBuilder: (context, i) {
                     final journal = _journals[i];
                     final List lines = journal['lines'] ?? [];
-                    final amount = lines.isNotEmpty ? lines[0]['amount'] : 0.0;
+                    final isExpanded = _expandedIndices.contains(i);
+                    final displayLines = isExpanded ? lines : lines.take(2);
+                    
                     return AppCard(
+                      onTap: lines.length > 2 ? () => _toggleExpand(i) : null,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -102,7 +117,7 @@ class _JournalEntryViewState extends State<JournalEntryView> {
                           const Divider(),
                           const SizedBox(height: 6),
                           // Display brief posting preview lines
-                          ...lines.take(2).map((l) {
+                          ...displayLines.map((l) {
                             final dir = l['direction'] == 'DEBIT' ? 'Dr' : 'Cr';
                             return Padding(
                               padding: const EdgeInsets.symmetric(vertical: 2),
@@ -123,10 +138,25 @@ class _JournalEntryViewState extends State<JournalEntryView> {
                           }),
                           if (lines.length > 2)
                             Padding(
-                              padding: const EdgeInsets.only(top: 4),
-                              child: Text(
-                                '+ ${lines.length - 2} more lines',
-                                style: AppTextStyles.caption.copyWith(fontStyle: FontStyle.italic),
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isExpanded ? 'Show less' : '+ ${lines.length - 2} more lines',
+                                    style: AppTextStyles.caption.copyWith(
+                                      fontStyle: FontStyle.italic,
+                                      color: AppColors.brandNavy,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                    isExpanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                                    size: 14,
+                                    color: AppColors.brandNavy,
+                                  ),
+                                ],
                               ),
                             ),
                         ],
