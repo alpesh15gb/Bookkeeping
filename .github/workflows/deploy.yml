@@ -25,7 +25,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt pytest Faker freezegun mock anyio pytest-asyncio "httpx<0.27.0"
+          pip install -r backend/requirements.txt pytest pytest-xdist Faker freezegun mock anyio pytest-asyncio "httpx<0.27.0"
           pip show httpx
 
       - name: Create Dummy Env File
