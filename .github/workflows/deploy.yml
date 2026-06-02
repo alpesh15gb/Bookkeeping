@@ -17,6 +17,11 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr poppler-utils
+
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
@@ -25,7 +30,7 @@ jobs:
       - name: Run Backend Tests
         run: |
           cd backend
-          PYTHONPATH="src:." python -m pytest
+          PYTHONPATH=. python -m pytest
 
   deploy:
     runs-on: ubuntu-latest
