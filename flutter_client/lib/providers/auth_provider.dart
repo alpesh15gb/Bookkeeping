@@ -268,6 +268,14 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void clearLocalSession() {
+    _currentUser = null;
+    _isAuthenticated = false;
+    _memberships = [];
+    _activeTenantId = null;
+    notifyListeners();
+  }
+
   Future<void> switchTenant(String tenantId) async {
     if (tenantId == _activeTenantId) return;
     _activeTenantId = tenantId;
