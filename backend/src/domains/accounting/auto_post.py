@@ -35,7 +35,6 @@ def _check_no_existing_posting(db: Session, tenant_id: uuid.UUID, source_type: s
         JournalEntry.tenant_id == tenant_id,
         JournalEntry.source_type == source_type,
         JournalEntry.source_id == source_id,
-        JournalEntry.deleted_at == None,
     ).first()
     if existing:
         raise ValueError(f"Document {source_type}:{source_id} already has a journal entry. Duplicate posting blocked.")
