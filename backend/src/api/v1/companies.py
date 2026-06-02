@@ -853,7 +853,7 @@ def import_tenant_data(
                 if key not in cols:
                     continue
                 col = col_map.get(key)
-                if col:
+                if col is not None:
                     try:
                         clean[key] = _coerce(val, col)
                     except Exception:

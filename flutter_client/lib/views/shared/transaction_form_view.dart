@@ -216,6 +216,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   String _posStateCode = '27';
   bool _isSaving = false;
   bool _isScanning = false;
+  String? _scannedVendorName;
   Timer? _previewDebounce;
   bool _isPreviewLoading = false;
   String? _nextNumberPlaceholder;
@@ -909,7 +910,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
-        _applyScannedData(data);
+        await _applyScannedData(data);
       } else {
         String msg = 'Scan failed (${response.statusCode})';
         try {
@@ -925,7 +926,12 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     }
   }
 
-  void _applyScannedData(Map<String, dynamic> data) {
+  Future<void> _applyScannedData(Map<String, dynamic> data) async {
+    if (data['vendor_name'] != null) {
+      setState(() {
+        _scannedVendorName = data['vendor_name'] as String;
+      });
+    }
     if (data['vendor_name'] != null || data['vendor_gstin'] != null) {
       final gstin = data['vendor_gstin']?.toString().toUpperCase();
       final name = data['vendor_name']?.toString().toLowerCase();
@@ -948,6 +954,44 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           }
         }
       }
+
+      // Automatically register the vendor/supplier if not already present
+      if (matched == null) {
+        final scannedName = data['vendor_name']?.toString() ?? 'Scanned Vendor';
+        final scannedGstin = data['vendor_gstin']?.toString();
+        final scannedAddr = data['vendor_address']?.toString() ?? '';
+        
+        String stateCode = '27';
+        if (scannedGstin != null && scannedGstin.length >= 2) {
+          final prefix = scannedGstin.substring(0, 2);
+          if (RegExp(r'^[0-9]{2}$').hasMatch(prefix)) {
+            stateCode = prefix;
+          }
+        }
+        
+        final tempContact = ContactModel(
+          id: '',
+          name: scannedName,
+          contactType: 'VENDOR',
+          gstin: scannedGstin,
+          registrationType: (scannedGstin != null && scannedGstin.isNotEmpty) ? 'REGULAR' : 'UNREGISTERED',
+          billingAddress: {
+            'street': scannedAddr,
+            'city': '',
+            'state': '',
+            'pincode': '',
+          },
+          stateCode: stateCode,
+          isActive: true,
+        );
+
+        final contactProvider = context.read<ContactProvider>();
+        final createSuccess = await contactProvider.addContact(tempContact);
+        if (createSuccess && contactProvider.lastCreatedContact != null) {
+          matched = contactProvider.lastCreatedContact;
+        }
+      }
+
       if (matched != null) {
         final ContactModel m = matched;
         setState(() {
@@ -977,7 +1021,20 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         for (final sl in scannedLines) {
           final qty = (sl['qty'] as num?)?.toDouble() ?? 1.0;
           final rate = (sl['rate'] as num?)?.toDouble() ?? 0.0;
-          final gstRate = (sl['gst_rate'] as num?)?.toDouble() ?? 18.0;
+          final gstRateRaw = (sl['gst_rate'] as num?)?.toDouble() ?? 18.0;
+          
+          // Clamp to supported dropdown rates: 0, 5, 12, 18
+          double gstRate = 18.0;
+          if (gstRateRaw <= 2.5) {
+            gstRate = 0.0;
+          } else if (gstRateRaw <= 8.5) {
+            gstRate = 5.0;
+          } else if (gstRateRaw <= 15.0) {
+            gstRate = 12.0;
+          } else {
+            gstRate = 18.0;
+          }
+
           _lines.add(TransactionLineItem(
             productId: '',
             productName: sl['description']?.toString() ?? 'Item',
@@ -1006,6 +1063,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         ? 'Scanned (${conf.toStringAsFixed(0)}% confidence): ${filledFields.join(', ')}'
         : 'Scan complete but no fields could be extracted. Please fill manually.';
 
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -1313,8 +1371,10 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       child: Text(
                         _selectedContact != null
                             ? _selectedContact!.name
-                            : 'Select ${widget.config.contactLabel} *',
-                        style: _selectedContact != null
+                            : _scannedVendorName != null
+                                ? 'Select ${widget.config.contactLabel} * (Scanned: $_scannedVendorName)'
+                                : 'Select ${widget.config.contactLabel} *',
+                        style: (_selectedContact != null || _scannedVendorName != null)
                             ? AppTextStyles.bodyMedium
                             : AppTextStyles.body.copyWith(
                                 color: AppColors.textMuted,
@@ -1624,11 +1684,11 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              line.productId.isNotEmpty
+                              line.productName.isNotEmpty
                                   ? line.productName
                                   : 'Select product...',
                               style: TextStyle(
-                                color: line.productId.isNotEmpty
+                                color: line.productName.isNotEmpty
                                     ? Colors.black
                                     : AppColors.textMuted,
                               ),
@@ -2041,7 +2101,7 @@ class _LineItemCardState extends State<_LineItemCard> {
   bool _showDetails = false;
 
   TransactionLineItem get line => widget.line;
-  bool get _hasProduct => line.productId.isNotEmpty;
+  bool get _hasProduct => line.productName.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
