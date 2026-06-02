@@ -15,6 +15,8 @@ from src.infrastructure.database.models import (
     User, Tenant, TenantMembership, Contact, Product, Invoice, EWayBill, BankingProfile
 )
 
+from sqlalchemy import text
+
 class TestEWayBillFlow(unittest.TestCase):
     def setUp(self):
         # Reset test database tables
@@ -107,6 +109,7 @@ class TestEWayBillFlow(unittest.TestCase):
                 sales_price=Decimal("12000.00"),
                 purchase_price=Decimal("8000.00"),
                 gst_rate=Decimal("18.00"),
+                current_stock=Decimal("1000.00"),
                 is_active=True
             )
 
@@ -144,7 +147,7 @@ class TestEWayBillFlow(unittest.TestCase):
         }
 
     def test_eway_bill_lifecycle_and_validations(self):
-        # 1. Post a sales invoice with both goods and services (Draft)
+        # 1. Post a sales invoice with goods (auto-posted to POSTED by auto_post_invoice)
         inv_payload = {
             "contact_id": str(self.customer_id),
             "issue_date": str(date.today()),
@@ -164,21 +167,13 @@ class TestEWayBillFlow(unittest.TestCase):
         inv = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers_a).json()
         invoice_id = inv["id"]
 
-        # 2. Test that e-way bill generation fails on a draft invoice
+        # 2. Generate e-way bill successfully (invoice is auto-posted)
         ewb_payload = {
             "invoice_id": invoice_id,
             "trans_distance": 150,
             "vehicle_number": "MH12PQ1234",
             "transporter_id": "27AAACT1234A1Z1"
         }
-        res_e1 = self.client.post("/api/v1/eway-bills", json=ewb_payload, headers=self.headers_a)
-        self.assertEqual(res_e1.status_code, 400)
-        self.assertIn("Please finalize it first", res_e1.json()["detail"])
-
-        # 3. Finalize the invoice
-        self.client.post(f"/api/v1/invoices/{invoice_id}/finalize", headers=self.headers_a)
-
-        # 4. Generate e-way bill successfully
         res_e2 = self.client.post("/api/v1/eway-bills", json=ewb_payload, headers=self.headers_a)
         self.assertEqual(res_e2.status_code, 201)
         ewb_data = res_e2.json()
@@ -195,13 +190,13 @@ class TestEWayBillFlow(unittest.TestCase):
 
         ewb_id = ewb_data["id"]
 
-        # 5. List e-way bills and verify listing contains it
+        # 3. List e-way bills and verify listing contains it
         res_list = self.client.get("/api/v1/eway-bills", headers=self.headers_a)
         self.assertEqual(res_list.status_code, 200)
         self.assertEqual(len(res_list.json()), 1)
         self.assertEqual(res_list.json()[0]["id"], ewb_id)
 
-        # 6. Test vehicle update/transhipment details
+        # 4. Test vehicle update/transhipment details
         update_vehicle_payload = {
             "vehicle_number": "KA03MM9876",
             "vehicle_type": "REGULAR",
@@ -218,7 +213,7 @@ class TestEWayBillFlow(unittest.TestCase):
         self.assertEqual(updated_data["vehicle_history"][0]["vehicle_number"], "MH12PQ1234")
         self.assertEqual(updated_data["vehicle_history"][0]["reason_code"], "2")
 
-        # 7. Test cancelling e-way bill within 24h (Should succeed)
+        # 5. Test cancelling e-way bill within 24h (Should succeed)
         cancel_payload = {
             "cancel_reason": "1",  # Duplicate
             "cancel_remarks": "Double entry"
@@ -228,7 +223,7 @@ class TestEWayBillFlow(unittest.TestCase):
         cancelled_data = res_cancel.json()
         self.assertEqual(cancelled_data["status"], "CANCELLED")
 
-        # 8. Assert cancelling already cancelled e-way bill fails
+        # 6. Assert cancelling already cancelled e-way bill fails
         res_cancel_again = self.client.post(f"/api/v1/eway-bills/{ewb_id}/cancel", json=cancel_payload, headers=self.headers_a)
         self.assertEqual(res_cancel_again.status_code, 400)
         self.assertIn("already cancelled", res_cancel_again.json()["detail"])
@@ -253,7 +248,6 @@ class TestEWayBillFlow(unittest.TestCase):
         }
         inv = self.client.post("/api/v1/invoices", json=service_inv_payload, headers=self.headers_a).json()
         invoice_id = inv["id"]
-        self.client.post(f"/api/v1/invoices/{invoice_id}/finalize", headers=self.headers_a)
 
         # Attempting to generate e-way bill should fail
         ewb_payload = {
@@ -267,7 +261,7 @@ class TestEWayBillFlow(unittest.TestCase):
         self.assertIn("only applicable for movement of GOODS", res_ewb.json()["detail"])
 
     def test_24_hour_cancellation_constraint(self):
-        # 1. Post, finalize, and generate e-way bill
+        # 1. Post invoice (auto-posted)
         inv_payload = {
             "contact_id": str(self.customer_id),
             "issue_date": str(date.today()),
@@ -286,7 +280,6 @@ class TestEWayBillFlow(unittest.TestCase):
         }
         inv = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers_a).json()
         invoice_id = inv["id"]
-        self.client.post(f"/api/v1/invoices/{invoice_id}/finalize", headers=self.headers_a)
 
         ewb_payload = {
             "invoice_id": invoice_id,
@@ -315,7 +308,7 @@ class TestEWayBillFlow(unittest.TestCase):
         self.assertIn("Cancellation not allowed after 24 hours", res_cancel.json()["detail"])
 
     def test_consolidated_eway_bill(self):
-        # 1. Post and finalize invoice 1
+        # 1. Post invoice 1 (auto-posted)
         inv1_payload = {
             "contact_id": str(self.customer_id),
             "issue_date": str(date.today()),
@@ -334,9 +327,8 @@ class TestEWayBillFlow(unittest.TestCase):
         }
         inv1 = self.client.post("/api/v1/invoices", json=inv1_payload, headers=self.headers_a).json()
         invoice1_id = inv1["id"]
-        self.client.post(f"/api/v1/invoices/{invoice1_id}/finalize", headers=self.headers_a)
 
-        # 2. Post and finalize invoice 2
+        # 2. Post invoice 2 (auto-posted)
         inv2_payload = {
             "contact_id": str(self.customer_id),
             "issue_date": str(date.today()),
@@ -355,7 +347,6 @@ class TestEWayBillFlow(unittest.TestCase):
         }
         inv2 = self.client.post("/api/v1/invoices", json=inv2_payload, headers=self.headers_a).json()
         invoice2_id = inv2["id"]
-        self.client.post(f"/api/v1/invoices/{invoice2_id}/finalize", headers=self.headers_a)
 
         # 3. Generate two e-way bills
         ewb1 = self.client.post("/api/v1/eway-bills", json={
@@ -386,7 +377,7 @@ class TestEWayBillFlow(unittest.TestCase):
         self.assertEqual(len(con_data["eway_bills"]), 2)
 
     def test_tenant_boundary_isolation(self):
-        # 1. Post and finalize Tenant A B2B invoice
+        # 1. Post Tenant A B2B invoice (auto-posted)
         inv_payload = {
             "contact_id": str(self.customer_id),
             "issue_date": str(date.today()),
@@ -405,7 +396,6 @@ class TestEWayBillFlow(unittest.TestCase):
         }
         inv = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers_a).json()
         invoice_id = inv["id"]
-        self.client.post(f"/api/v1/invoices/{invoice_id}/finalize", headers=self.headers_a)
 
         # 2. Assert Tenant B cannot generate e-way bill for Tenant A's invoice
         res_e1 = self.client.post("/api/v1/eway-bills", json={

@@ -138,7 +138,7 @@ class TestInvoicingFlow(unittest.TestCase):
         self.assertEqual(res2.json()["invoice_number"], "INV/2026/0002")
 
     def test_invoice_cancellation_reversal(self):
-        # Create and finalize invoice
+        # Create invoice (auto-posted to POSTED by auto_post_invoice)
         payload = {
             "contact_id": str(self.customer_id),
             "issue_date": str(date.today()),
@@ -158,9 +158,8 @@ class TestInvoicingFlow(unittest.TestCase):
         inv = self.client.post("/api/v1/invoices", json=payload, headers=self.headers).json()
         inv_id = inv["id"]
 
-        # Finalize (status becomes SENT)
-        res_fin = self.client.post(f"/api/v1/invoices/{inv_id}/finalize", headers=self.headers)
-        self.assertEqual(res_fin.status_code, 200)
+        # Invoice is already POSTED via auto_post, verify
+        self.assertEqual(inv["status"], "POSTED")
 
         # Cancel (status becomes CANCELLED)
         res_can = self.client.post(f"/api/v1/invoices/{inv_id}/cancel", headers=self.headers)
@@ -191,7 +190,7 @@ class TestInvoicingFlow(unittest.TestCase):
             db.close()
 
     def test_credit_note_workflow(self):
-        # Create and finalize an invoice first
+        # Create invoice (auto-posted)
         inv_payload = {
             "contact_id": str(self.customer_id),
             "issue_date": str(date.today()),
@@ -209,7 +208,6 @@ class TestInvoicingFlow(unittest.TestCase):
             ]
         }
         inv = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers).json()
-        self.client.post(f"/api/v1/invoices/{inv['id']}/finalize", headers=self.headers)
 
         # Create draft Credit Note linked to the invoice
         cn_payload = {
@@ -258,7 +256,7 @@ class TestInvoicingFlow(unittest.TestCase):
             db.close()
 
     def test_debit_note_workflow(self):
-        # Create and finalize an invoice first
+        # Create invoice (auto-posted)
         inv_payload = {
             "contact_id": str(self.customer_id),
             "issue_date": str(date.today()),
@@ -276,7 +274,6 @@ class TestInvoicingFlow(unittest.TestCase):
             ]
         }
         inv = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers).json()
-        self.client.post(f"/api/v1/invoices/{inv['id']}/finalize", headers=self.headers)
 
         # Create draft Debit Note linked to the invoice
         dn_payload = {

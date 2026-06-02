@@ -26,6 +26,11 @@ def create_eway_bill(
     if payload.invoice_id:
         invoice = db.query(Invoice).filter(Invoice.id == payload.invoice_id).first()
         if invoice:
+            if invoice.status not in ("POSTED", "PARTIALLY_PAID", "SENT"):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Please finalize the invoice first before generating an e-Way Bill."
+                )
             has_goods = any(line.product and line.product.product_type == "GOODS" for line in invoice.lines)
             if not has_goods:
                 raise HTTPException(
