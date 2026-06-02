@@ -7,8 +7,9 @@ import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class BankingProfileFormView extends StatefulWidget {
   final dynamic profile;
+  final bool defaultPrimary;
 
-  const BankingProfileFormView({super.key, this.profile});
+  const BankingProfileFormView({super.key, this.profile, this.defaultPrimary = false});
 
   @override
   State<BankingProfileFormView> createState() => _BankingProfileFormViewState();
@@ -37,7 +38,7 @@ class _BankingProfileFormViewState extends State<BankingProfileFormView> {
     _holderNameCtrl = TextEditingController(text: p?['account_holder_name'] ?? '');
     _upiIdCtrl = TextEditingController(text: p?['upi_id'] ?? '');
     _branchCtrl = TextEditingController(text: p?['branch'] ?? '');
-    _isPrimary = p?['is_primary'] == true;
+    _isPrimary = p?['is_primary'] == true || (p == null && widget.defaultPrimary);
     _isActive = p?['is_active'] ?? true;
   }
 
@@ -68,8 +69,11 @@ class _BankingProfileFormViewState extends State<BankingProfileFormView> {
     };
 
     final provider = context.read<BankingProfileProvider>();
-    final success = widget.profile != null
-        ? await provider.updateBankingProfile(widget.profile!['id'], payload)
+    final profile = widget.profile is Map<String, dynamic>
+        ? widget.profile as Map<String, dynamic>
+        : null;
+    final success = profile != null
+        ? await provider.updateBankingProfile(profile['id'].toString(), payload)
         : await provider.createBankingProfile(payload);
 
     if (mounted) {

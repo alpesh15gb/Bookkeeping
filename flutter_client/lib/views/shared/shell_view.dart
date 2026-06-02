@@ -35,6 +35,7 @@ import 'package:flutter_client/views/sales_analytics/sales_analytics_view.dart';
 import 'package:flutter_client/views/banking/banking_profile_list_view.dart';
 import 'package:flutter_client/views/returns/returns_list_view.dart';
 import 'package:flutter_client/views/tools/backup_restore_view.dart';
+import 'package:flutter_client/views/tally/tally_import_view.dart';
 
 // ─── Offline Banner Widget ────────────────────────────────────
 
@@ -156,6 +157,7 @@ final List<_MenuItem> _flatItems = [
   _MenuItem(name: 'Reminders', icon: Icons.notifications_outlined, view: const ReminderListView()),
   _MenuItem(name: 'Returns', icon: Icons.assignment_return_rounded, view: const ReturnsListView()),
   _MenuItem(name: 'Vyapar Import', icon: Icons.file_upload_outlined, view: const VyaparImportView()),
+  _MenuItem(name: 'Tally Import/Export', icon: Icons.swap_horiz_rounded, view: const TallyImportView()),
   _MenuItem(name: 'Backup/Restore', icon: Icons.backup_rounded, view: const BackupRestoreView()),
   _MenuItem(name: 'Settings', icon: Icons.settings_rounded, view: const SettingsView()),
 ];
@@ -191,7 +193,7 @@ final List<_MenuEntry> _sidebarEntries = [
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Tools',
     icon: Icons.build_outlined,
-    childIndices: [21, 22, 25, 24, 26], // Audit Log, Reminders, Backup/Restore, Vyapar Import, Settings
+    childIndices: [21, 22, 26, 24, 25, 27], // Audit Log, Reminders, Backup/Restore, Vyapar Import, Tally Import, Settings
   )),
 ];
 

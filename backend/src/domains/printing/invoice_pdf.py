@@ -49,7 +49,7 @@ def generate_invoice_pdf(
     origin_state_code = None
 
     if db and tenant_id:
-        from src.infrastructure.database.models import Tenant, TenantSetting
+        from src.infrastructure.database.models import Tenant, TenantSetting, BankingProfile
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         if tenant:
             company_name = tenant.legal_name
@@ -64,11 +64,23 @@ def generate_invoice_pdf(
             company_phone = extra.get("company_phone")
             company_email = extra.get("company_email")
             company_website = extra.get("company_website")
-            bank_name = extra.get("bank_name")
-            bank_account_no = extra.get("bank_account_no")
-            bank_ifsc = extra.get("bank_ifsc")
-            bank_branch = extra.get("bank_branch")
             terms = extra.get("terms")
+
+        bank = db.query(BankingProfile).filter(
+            BankingProfile.tenant_id == tenant_id,
+            BankingProfile.is_primary == True,
+            BankingProfile.is_active == True,
+        ).first()
+        if not bank:
+            bank = db.query(BankingProfile).filter(
+                BankingProfile.tenant_id == tenant_id,
+                BankingProfile.is_active == True,
+            ).order_by(BankingProfile.created_at.asc()).first()
+        if bank:
+            bank_name = bank.bank_name
+            bank_account_no = bank.account_number
+            bank_ifsc = bank.ifsc_code
+            bank_branch = bank.branch_name
 
     # Clean fallbacks for rendering
     company_address = company_address or ""
@@ -800,4 +812,3 @@ def generate_party_statement_pdf(
 
     doc.build(elements)
     return buffer.getvalue()
-

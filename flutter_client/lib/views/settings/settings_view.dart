@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
+import 'package:flutter_client/providers/banking_profile_provider.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/core/sync_manager.dart';
+import 'package:flutter_client/views/banking/banking_profile_form_view.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/auth/change_password_view.dart';
@@ -28,10 +30,6 @@ class _SettingsViewState extends State<SettingsView> {
   final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _websiteCtrl = TextEditingController();
-  final _bankNameCtrl = TextEditingController();
-  final _bankAccCtrl = TextEditingController();
-  final _bankIfscCtrl = TextEditingController();
-  final _bankBranchCtrl = TextEditingController();
   final _termsCtrl = TextEditingController();
 
   @override
@@ -39,6 +37,7 @@ class _SettingsViewState extends State<SettingsView> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<SettingsProvider>().fetchAllSettings();
+      context.read<BankingProfileProvider>().fetchBankingProfiles();
     });
   }
 
@@ -53,10 +52,6 @@ class _SettingsViewState extends State<SettingsView> {
     _phoneCtrl.dispose();
     _emailCtrl.dispose();
     _websiteCtrl.dispose();
-    _bankNameCtrl.dispose();
-    _bankAccCtrl.dispose();
-    _bankIfscCtrl.dispose();
-    _bankBranchCtrl.dispose();
     _termsCtrl.dispose();
     super.dispose();
   }
@@ -115,11 +110,22 @@ class _SettingsViewState extends State<SettingsView> {
     _phoneCtrl.text = extraSettings['company_phone'] ?? '';
     _emailCtrl.text = extraSettings['company_email'] ?? '';
     _websiteCtrl.text = extraSettings['company_website'] ?? '';
-    _bankNameCtrl.text = extraSettings['bank_name'] ?? '';
-    _bankAccCtrl.text = extraSettings['bank_account_no'] ?? '';
-    _bankIfscCtrl.text = extraSettings['bank_ifsc'] ?? '';
-    _bankBranchCtrl.text = extraSettings['bank_branch'] ?? '';
     _termsCtrl.text = extraSettings['terms'] ?? '';
+  }
+
+  Future<void> _openBankProfileForm(Map<String, dynamic>? primaryBank) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BankingProfileFormView(
+          profile: primaryBank,
+          defaultPrimary: primaryBank == null,
+        ),
+      ),
+    );
+    if (mounted) {
+      await context.read<BankingProfileProvider>().fetchBankingProfiles();
+    }
   }
 
   void _showCompanyProfileDialog(
@@ -258,60 +264,6 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  void _showBankDetailsDialog(
-    Map<String, dynamic> company,
-    Map<String, dynamic> settings,
-  ) {
-    _populateControllers(company, settings);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Edit Bank Details'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _bankNameCtrl,
-                decoration: const InputDecoration(labelText: 'Bank Name'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _bankAccCtrl,
-                decoration: const InputDecoration(labelText: 'Account Number'),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _bankIfscCtrl,
-                decoration: const InputDecoration(labelText: 'IFSC Code'),
-                textCapitalization: TextCapitalization.characters,
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _bankBranchCtrl,
-                decoration: const InputDecoration(labelText: 'Branch Name'),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await _saveSettings();
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
   void _showPreferencesDialog(
     Map<String, dynamic> company,
     Map<String, dynamic> settings,
@@ -403,6 +355,10 @@ class _SettingsViewState extends State<SettingsView> {
     final provider = context.read<SettingsProvider>();
     final extraSettings =
         provider.settings['extra_settings'] is Map ? Map<String, dynamic>.from(provider.settings['extra_settings']) : <String, dynamic>{};
+    extraSettings.remove('bank_name');
+    extraSettings.remove('bank_account_no');
+    extraSettings.remove('bank_ifsc');
+    extraSettings.remove('bank_branch');
 
     final settingsPayload = <String, dynamic>{
       'extra_settings': {
@@ -412,10 +368,6 @@ class _SettingsViewState extends State<SettingsView> {
         'company_phone': _phoneCtrl.text,
         'company_email': _emailCtrl.text,
         'company_website': _websiteCtrl.text,
-        'bank_name': _bankNameCtrl.text,
-        'bank_account_no': _bankAccCtrl.text,
-        'bank_ifsc': _bankIfscCtrl.text,
-        'bank_branch': _bankBranchCtrl.text,
         'terms': _termsCtrl.text,
       },
     };
@@ -451,6 +403,7 @@ class _SettingsViewState extends State<SettingsView> {
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
     final settingsProvider = context.watch<SettingsProvider>();
+    final bankingProvider = context.watch<BankingProfileProvider>();
 
     if (settingsProvider.isLoading && settingsProvider.company.isEmpty) {
       return const LoadingState(message: 'Loading settings...');
@@ -481,10 +434,26 @@ class _SettingsViewState extends State<SettingsView> {
     final companyPhone = extraSettings['company_phone'] ?? 'Not configured';
     final companyEmail = extraSettings['company_email'] ?? 'Not configured';
     final companyWebsite = extraSettings['company_website'] ?? 'Not configured';
-    final bankName = extraSettings['bank_name'] ?? 'Not configured';
-    final bankAccountNo = extraSettings['bank_account_no'] ?? 'Not configured';
-    final bankIfsc = extraSettings['bank_ifsc'] ?? 'Not configured';
-    final bankBranch = extraSettings['bank_branch'] ?? 'Not configured';
+    final bankProfiles = bankingProvider.profiles.whereType<Map<String, dynamic>>().toList();
+    Map<String, dynamic>? primaryBank;
+    for (final p in bankProfiles) {
+      if (p['is_primary'] == true && p['is_active'] != false) {
+        primaryBank = p;
+        break;
+      }
+    }
+    if (primaryBank == null) {
+      for (final p in bankProfiles) {
+        if (p['is_active'] != false) {
+          primaryBank = p;
+          break;
+        }
+      }
+    }
+    final bankName = primaryBank?['bank_name']?.toString() ?? 'Not configured';
+    final bankAccountNo = primaryBank?['account_number']?.toString() ?? 'Not configured';
+    final bankIfsc = primaryBank?['ifsc_code']?.toString() ?? 'Not configured';
+    final bankBranch = primaryBank?['branch_name']?.toString() ?? 'Not configured';
     final terms = extraSettings['terms'] ?? 'No custom terms';
 
     return Scaffold(
@@ -593,9 +562,8 @@ class _SettingsViewState extends State<SettingsView> {
                         size: 18,
                         color: AppColors.brandNavy,
                       ),
-                      onPressed: () =>
-                          _showBankDetailsDialog(company, settings),
-                      tooltip: 'Edit Bank Details',
+                      onPressed: () => _openBankProfileForm(primaryBank),
+                      tooltip: primaryBank == null ? 'Add Bank Details' : 'Edit Bank Details',
                     ),
                   ],
                 ),
