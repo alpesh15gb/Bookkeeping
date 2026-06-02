@@ -18,7 +18,7 @@ from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import List, Optional
 
-from fastapi import Depends, FastAPI, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -295,32 +295,55 @@ app.add_middleware(
 
 
 # ---------------------------------------------------------------------------
-# Global Exception Handlers
+# Global Exception Handlers (with CORS headers so browsers can read errors)
 # ---------------------------------------------------------------------------
+
+def _add_cors_to_response(response: JSONResponse, request: Request):
+    """Attach CORS headers to error responses so the frontend can read them."""
+    origin = request.headers.get("origin")
+    if origin and (origin in settings.allowed_origins_list or "*" in settings.allowed_origins_list):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, PATCH, DELETE, OPTIONS"
+        response.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type, X-Tenant-ID, Accept"
+    return response
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    response = JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "code": f"HTTP_{exc.status_code}"},
+    )
+    return _add_cors_to_response(response, request)
+
 
 @app.exception_handler(LedgerValidationError)
 async def ledger_validation_handler(request: Request, exc: LedgerValidationError):
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={"detail": str(exc), "code": "LEDGER_VALIDATION_ERROR"},
     )
+    return _add_cors_to_response(response, request)
 
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError):
     logger.warning(f"DB IntegrityError on {request.url}: {exc.orig}")
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_409_CONFLICT,
         content={"detail": "A record with this data already exists.", "code": "DUPLICATE_RECORD"},
     )
+    return _add_cors_to_response(response, request)
 
 
 @app.exception_handler(NoResultFound)
 async def no_result_handler(request: Request, exc: NoResultFound):
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
         content={"detail": "The requested resource was not found.", "code": "NOT_FOUND"},
     )
+    return _add_cors_to_response(response, request)
 
 
 @app.exception_handler(Exception)
@@ -328,13 +351,14 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     import traceback
     tb = traceback.format_exc()
     logger.error(f"Unhandled exception on {request.method} {request.url}: {type(exc).__name__}: {exc}\n{tb}")
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "detail": "An unexpected error occurred. Please try again.",
             "code": "INTERNAL_SERVER_ERROR",
         },
     )
+    return _add_cors_to_response(response, request)
 
 
 # ---------------------------------------------------------------------------

@@ -62,6 +62,8 @@ class GoToDialog extends StatefulWidget {
   final ValueChanged<int>? onSelectTab;
   final bool isInShell;
 
+  static final List<String> _recentItemNames = [];
+
   const GoToDialog({
     super.key,
     this.onSelectTab,
@@ -381,20 +383,44 @@ class _GoToDialogState extends State<GoToDialog> {
 
   void _filterItems(String query) {
     setState(() {
+      final recents = <GoToItem>[];
+      for (final name in GoToDialog._recentItemNames) {
+        final matches = _allItems.where((item) => item.name == name);
+        if (matches.isNotEmpty) {
+          final match = matches.first;
+          recents.add(GoToItem(
+            name: match.name,
+            category: 'Show Opened / Recent',
+            icon: match.icon,
+            builder: match.builder,
+            shellTabIndex: match.shellTabIndex,
+          ));
+        }
+      }
+
       if (query.isEmpty) {
-        _filteredItems = List.from(_allItems);
+        _filteredItems = recents + List.from(_allItems);
       } else {
         final lowercaseQuery = query.toLowerCase();
-        _filteredItems = _allItems.where((item) {
+        final filteredRecents = recents.where((item) => item.name.toLowerCase().contains(lowercaseQuery)).toList();
+        final filteredAll = _allItems.where((item) {
           return item.name.toLowerCase().contains(lowercaseQuery) ||
               item.category.toLowerCase().contains(lowercaseQuery);
         }).toList();
+        _filteredItems = filteredRecents + filteredAll;
       }
       _selectedIndex = 0;
     });
   }
 
   void _navigateToGoToItem(GoToItem item) {
+    // Record in recents (Tally Prime "View opened reports" tracking)
+    GoToDialog._recentItemNames.remove(item.name);
+    GoToDialog._recentItemNames.insert(0, item.name);
+    if (GoToDialog._recentItemNames.length > 5) {
+      GoToDialog._recentItemNames.removeLast();
+    }
+
     Navigator.pop(context); // Close the GoTo dialog first
 
     if (widget.isInShell && item.shellTabIndex != null && widget.onSelectTab != null) {
