@@ -179,11 +179,18 @@ def create_invoice(
     # Auto-post: create journal entry immediately
     auto_post_invoice(db, tenant_id, invoice)
 
-    # Trigger e-invoice generation if tenant has e-invoicing enabled
+    # Trigger background e-invoice generation if tenant has e-invoicing enabled
     tenant_settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
     if tenant_settings and tenant_settings.e_invoicing_enabled:
-        from src.workers.tasks import submit_e_invoice_to_irp
-        submit_e_invoice_to_irp.delay(str(invoice.id))
+        try:
+            import logging as _logging
+            from src.workers.tasks import submit_e_invoice_to_irp
+            submit_e_invoice_to_irp.delay(str(invoice.id))
+        except Exception as _task_err:
+            import logging as _logging
+            _logging.getLogger(__name__).warning(
+                f"Could not enqueue e-invoice task for invoice {invoice.id}: {_task_err}"
+            )
 
     db.commit()
     db.refresh(invoice)

@@ -51,9 +51,12 @@ def submit_e_invoice_to_irp(self, invoice_id: str) -> Dict[str, Any]:
         from src.infrastructure.database.models import Invoice
         from src.domains.taxation.einvoice_service import EInvoiceService
 
+        # Convert string ID to UUID for SQLAlchemy UUID column compatibility
+        invoice_uuid = uuid.UUID(invoice_id) if isinstance(invoice_id, str) else invoice_id
+
         db = SessionLocal()
         try:
-            invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+            invoice = db.query(Invoice).filter(Invoice.id == invoice_uuid).first()
             if not invoice:
                 logger.error(f"Invoice {invoice_id} not found for e-invoice submission.")
                 return {"invoice_id": invoice_id, "status": "FAILED", "error": "Invoice not found"}
@@ -67,6 +70,9 @@ def submit_e_invoice_to_irp(self, invoice_id: str) -> Dict[str, Any]:
             db.close()
     except Exception as exc:
         logger.error(f"e-Invoice submission failed for {invoice_id}: {exc}")
+        # In eager/test mode, retrying causes infinite loops — skip retry
+        if self.request.is_eager:
+            raise
         raise self.retry(exc=exc)
 
 

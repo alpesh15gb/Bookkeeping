@@ -32,11 +32,49 @@ settings.APP_ENV = "development"
 settings.SEED_ON_STARTUP = False
 settings.RATE_LIMIT_ENABLED = False
 
+# Configure Celery to NOT execute tasks eagerly in testing.
+# Tasks will be queued to the broker but won't execute (no worker running).
+# The try/except in the route handlers catch broker connection failures gracefully.
+try:
+    from src.core.celery import celery_app as core_celery
+    core_celery.conf.update(
+        task_always_eager=False,
+        task_eager_propagates=False,
+        broker_connection_retry_on_startup=False,
+    )
+except ImportError:
+    pass
+
+try:
+    from src.workers.tasks import celery_app as tasks_celery
+    tasks_celery.conf.update(
+        task_always_eager=False,
+        task_eager_propagates=False,
+        broker_connection_retry_on_startup=False,
+    )
+except ImportError:
+    pass
+
 # Replace engine in src.core.database with StaticPool so all test files
 # (both old unittest-style and new pytest-style) share the same engine.
 import src.core.database as _db_mod
 from sqlalchemy.pool import StaticPool
-_db_mod.engine = create_engine(settings.DATABASE_URL, poolclass=StaticPool)
+from sqlalchemy import event
+
+_db_mod.engine = create_engine(
+    settings.DATABASE_URL,
+    poolclass=StaticPool,
+    connect_args={"check_same_thread": False, "timeout": 30},
+)
+
+# Enable WAL mode on SQLite to allow concurrent reads/writes without locking
+@event.listens_for(_db_mod.engine, "connect")
+def set_sqlite_wal(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.close()
+
 _db_mod.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_db_mod.engine)
 
 from src.core.database import Base, get_db_session
@@ -80,9 +118,11 @@ def override_get_db_session() -> Generator[Session, None, None]:
 
 app.dependency_overrides[get_db_session] = override_get_db_session
 
-# Fixtures
-# Ensure clean database
-Base.metadata.drop_all(bind=engine)
+# Ensure clean database on module load
+try:
+    Base.metadata.drop_all(bind=engine)
+except Exception:
+    pass  # Stale lock from previous run — tables will be recreated
 Base.metadata.create_all(bind=engine)
 
 

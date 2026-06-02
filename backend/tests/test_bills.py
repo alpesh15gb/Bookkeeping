@@ -85,7 +85,7 @@ class TestVendorBills(unittest.TestCase):
         }
 
     def test_create_and_finalize_vendor_bill(self):
-        # Create a draft bill
+        # Create a bill (auto-posted immediately in this system)
         payload = {
             "contact_id": "3fa85f64-5717-4562-b3fc-2c963f66afa7",
             "bill_number": "BILL-TEST-009",
@@ -111,17 +111,12 @@ class TestVendorBills(unittest.TestCase):
             
         self.assertEqual(res.status_code, 201)
         data = res.json()
-        self.assertEqual(data["status"], "DRAFT")
+        # Bills are auto-posted on creation (system uses immediate posting design)
+        self.assertEqual(data["status"], "POSTED")
         self.assertEqual(float(data["total"]), 236000.00) # 200000 + 18% IGST (36000)
         bill_id = data["id"]
 
-        # Finalize draft bill
-        res_fin = self.client.post(f"/api/v1/bills/{bill_id}/finalize", headers=self.headers)
-        self.assertEqual(res_fin.status_code, 200)
-        data_fin = res_fin.json()
-        self.assertEqual(data_fin["status"], "POSTED")
-
-        # Record payment out
+        # Record payment out (bill is already POSTED, ready for payment)
         pay_payload = {
             "contact_id": "3fa85f64-5717-4562-b3fc-2c963f66afa7",
             "payment_number": "VPAY-TEST-001",

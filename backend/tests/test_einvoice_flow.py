@@ -144,7 +144,7 @@ class TestEInvoiceFlow(unittest.TestCase):
         }
 
     def test_e_invoice_lifecycle_and_rules(self):
-        # 1. Post a B2B sales invoice (Draft)
+        # 1. Create a B2B sales invoice (auto-posted immediately in this system)
         inv_payload = {
             "contact_id": str(self.customer_b2b_id),
             "issue_date": str(date.today()),
@@ -163,21 +163,15 @@ class TestEInvoiceFlow(unittest.TestCase):
         }
         inv = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers_a).json()
         invoice_id = inv["id"]
+        # Invoice is auto-posted on creation (status = POSTED, ready for e-invoice)
+        self.assertEqual(inv["status"], "POSTED")
 
-        # 2. Assert generating e-invoice on draft invoice fails
-        res_e1 = self.client.post(f"/api/v1/invoices/{invoice_id}/e-invoice", headers=self.headers_a)
-        self.assertEqual(res_e1.status_code, 400)
-        self.assertIn("Please finalize it first", res_e1.json()["detail"])
-
-        # 3. Finalize the invoice
-        self.client.post(f"/api/v1/invoices/{invoice_id}/finalize", headers=self.headers_a)
-
-        # 4. Assert generating e-invoice fails if e-invoicing is disabled
+        # 2. Assert generating e-invoice fails if e-invoicing is disabled
         res_e2 = self.client.post(f"/api/v1/invoices/{invoice_id}/e-invoice", headers=self.headers_a)
         self.assertEqual(res_e2.status_code, 400)
         self.assertIn("e-Invoicing is not enabled", res_e2.json()["detail"])
 
-        # 5. Enable e-invoicing in Tenant A settings
+        # 3. Enable e-invoicing in Tenant A settings
         db = SessionLocal()
         try:
             setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == self.tenant_a_id).first()
@@ -189,7 +183,7 @@ class TestEInvoiceFlow(unittest.TestCase):
         finally:
             db.close()
 
-        # 6. Post and finalize a B2C sales invoice to test B2B-only constraint
+        # 4. Create a B2C sales invoice to test B2B-only constraint
         b2c_payload = {
             "contact_id": str(self.customer_b2c_id),
             "issue_date": str(date.today()),
@@ -208,7 +202,6 @@ class TestEInvoiceFlow(unittest.TestCase):
         }
         b2c_inv = self.client.post("/api/v1/invoices", json=b2c_payload, headers=self.headers_a).json()
         b2c_id = b2c_inv["id"]
-        self.client.post(f"/api/v1/invoices/{b2c_id}/finalize", headers=self.headers_a)
 
         res_e3 = self.client.post(f"/api/v1/invoices/{b2c_id}/e-invoice", headers=self.headers_a)
         self.assertEqual(res_e3.status_code, 400)
