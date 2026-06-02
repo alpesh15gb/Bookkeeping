@@ -177,6 +177,7 @@ def preview_proforma_invoice(
         )
 
         db_line = ProformaInvoiceLine(
+            id=uuid.UUID(int=0),
             product_id=line.product_id,
             quantity=line.quantity,
             rate=line.rate,
