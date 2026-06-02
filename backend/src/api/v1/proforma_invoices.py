@@ -14,7 +14,7 @@ from src.schemas.bill_schemas import (
 )
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
-from src.domains.company.services import resolve_origin_state_code
+from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
 from src.api.deps import get_tenant_context, enforce_permission
 
 router = APIRouter(prefix="/proforma-invoices", tags=["Proforma Invoices"])
@@ -102,10 +102,14 @@ def create_proforma_invoice(
 
     grand_total = pi_subtotal + pi_cgst + pi_sgst + pi_igst + pi_utgst + pi_cess
 
+    proforma_number = payload.proforma_number
+    if not proforma_number:
+        proforma_number = NumberingSeriesService.generate_next_number(db, tenant_id, "PROFORMA_INVOICE")
+
     pi = ProformaInvoice(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
-        proforma_number=payload.proforma_number,
+        proforma_number=proforma_number,
         issue_date=payload.issue_date,
         due_date=payload.due_date,
         status="DRAFT",

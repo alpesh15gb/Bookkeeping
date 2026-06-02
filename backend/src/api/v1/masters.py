@@ -53,6 +53,7 @@ def create_contact(
 @router.get("/contacts", response_model=List[ContactResponse])
 def list_contacts(
     contact_type: Optional[str] = None,
+    search: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db_session),
@@ -65,6 +66,13 @@ def list_contacts(
             q = q.filter(Contact.contact_type.in_([contact_type, "BOTH"]))
         else:
             q = q.filter(Contact.contact_type == contact_type)
+    if search:
+        q = q.filter(
+            Contact.name.ilike(f"%{search}%") |
+            Contact.email.ilike(f"%{search}%") |
+            Contact.phone.ilike(f"%{search}%") |
+            Contact.gstin.ilike(f"%{search}%")
+        )
     return q.offset(offset).limit(limit).all()
 
 @router.get("/contacts/{id}", response_model=ContactResponse)
@@ -188,6 +196,7 @@ def create_product(
 @router.get("/products", response_model=List[ProductResponse])
 def list_products(
     product_type: Optional[str] = None,
+    search: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db_session),
@@ -197,6 +206,12 @@ def list_products(
     q = db.query(Product).filter(Product.tenant_id == tenant_id, Product.deleted_at == None)
     if product_type:
         q = q.filter(Product.product_type == product_type)
+    if search:
+        q = q.filter(
+            Product.name.ilike(f"%{search}%") |
+            Product.sku.ilike(f"%{search}%") |
+            Product.hsn_sac.ilike(f"%{search}%")
+        )
     return q.offset(offset).limit(limit).all()
 
 @router.get("/products/{id}", response_model=ProductResponse)

@@ -13,7 +13,7 @@ from src.schemas.bill_schemas import (
 )
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
-from src.domains.company.services import resolve_origin_state_code
+from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
 from src.api.deps import get_tenant_context, enforce_permission
 
 router = APIRouter(prefix="/purchase-orders", tags=["Purchase Orders"])
@@ -102,10 +102,14 @@ def create_purchase_order(
 
     grand_total = po_subtotal + po_cgst + po_sgst + po_igst + po_utgst + po_cess
 
+    po_number = payload.po_number
+    if not po_number:
+        po_number = NumberingSeriesService.generate_next_number(db, tenant_id, "PURCHASE_ORDER")
+
     po = PurchaseOrder(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
-        po_number=payload.po_number,
+        po_number=po_number,
         order_date=payload.order_date,
         due_date=payload.due_date,
         status="DRAFT",

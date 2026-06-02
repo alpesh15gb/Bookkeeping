@@ -10,6 +10,7 @@ import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/global_search.dart';
 import 'package:flutter_client/views/dashboard/sales_dashboard_view.dart';
 import 'package:flutter_client/views/invoices/invoice_list_view.dart';
+import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 import 'package:flutter_client/views/products/product_list_view.dart';
 import 'package:flutter_client/views/contacts/contact_list_view.dart';
 import 'package:flutter_client/views/estimates/estimate_list_view.dart';
@@ -257,7 +258,10 @@ class _ShellViewState extends State<ShellView> {
 
     if (isCtrlPressed && isShiftPressed && event.logicalKey == LogicalKeyboardKey.keyN) {
       // Ctrl+Shift+N → New Invoice
-      Navigator.pushNamed(context, '/invoices/new');
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const InvoiceFormView()),
+      );
       return KeyEventResult.handled;
     }
 

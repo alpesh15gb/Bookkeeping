@@ -90,7 +90,7 @@ class _BreadcrumbLink extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isLast || item.onTap == null ? inactive : activeColor;
+    final color = isLast || item.onTap == null ? inactiveColor : activeColor;
     final fontWeight = isLast ? FontWeight.w600 : FontWeight.w400;
 
     if (item.onTap != null) {

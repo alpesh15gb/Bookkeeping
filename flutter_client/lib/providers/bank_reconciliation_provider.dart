@@ -93,11 +93,14 @@ class BankReconciliationProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> reconcileTransaction(String transactionId) async {
+  Future<bool> reconcileTransaction(String transactionId, Map<String, dynamic> payload) async {
     _isLoading = true; _errorMessage = null; notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/transactions/$transactionId/reconcile'));
-      if (response.statusCode == 200) { _isLoading = false; notifyListeners(); return true; }
+      final response = await _client.post(
+        Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/transactions/$transactionId/reconcile'),
+        body: jsonEncode(payload),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) { _isLoading = false; notifyListeners(); return true; }
       final data = jsonDecode(response.body);
       _errorMessage = data['detail'] ?? 'Reconcile failed';
     } catch (e) {

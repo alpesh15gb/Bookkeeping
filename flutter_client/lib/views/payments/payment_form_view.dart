@@ -80,8 +80,8 @@ class _PaymentFormViewState extends State<PaymentFormView> {
     });
     try {
       final url = _isReceipt
-          ? '${ApiClient.baseUrl}/invoices?contact_id=$contactId&status=SENT'
-          : '${ApiClient.baseUrl}/bills?contact_id=$contactId&status=POSTED';
+          ? '${ApiClient.baseUrl}/invoices?contact_id=$contactId&limit=100'
+          : '${ApiClient.baseUrl}/bills?contact_id=$contactId&limit=100';
       final response = await _client.get(Uri.parse(url));
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -96,22 +96,26 @@ class _PaymentFormViewState extends State<PaymentFormView> {
         // Filter to only open/partially-paid docs
         final filtered = items.where((d) {
           final status = (d['status'] ?? '').toString();
-          return status == 'SENT' || status == 'PARTIALLY_PAID' || status == 'POSTED';
+          return status == 'PARTIALLY_PAID' || status == 'POSTED';
         }).toList();
 
+        if (!mounted) return;
         setState(() {
           _openDocs = filtered.cast<Map<String, dynamic>>();
           for (final doc in _openDocs) {
             final id = doc['id'].toString();
             final total = double.tryParse((doc['total'] ?? 0).toString()) ?? 0;
-            final paid = double.tryParse((doc['amount_paid'] ?? 0).toString()) ?? 0;
+            final paid =
+                double.tryParse((doc['amount_paid'] ?? 0).toString()) ?? 0;
             final remaining = total - paid;
-            _allocCtrl[id] = TextEditingController(text: remaining.toStringAsFixed(2));
+            _allocCtrl[id] = TextEditingController(
+              text: remaining.toStringAsFixed(2),
+            );
           }
         });
       }
     } catch (_) {}
-    setState(() => _isLoadingDocs = false);
+    if (mounted) setState(() => _isLoadingDocs = false);
   }
 
   Future<void> _pickDate() async {
@@ -137,7 +141,9 @@ class _PaymentFormViewState extends State<PaymentFormView> {
 
     return Container(
       width: 520,
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.85,
+      ),
       padding: AppSpacing.cardPadding,
       child: Form(
         key: _formKey,
@@ -149,7 +155,9 @@ class _PaymentFormViewState extends State<PaymentFormView> {
             Row(
               children: [
                 Icon(
-                  _isReceipt ? Icons.payments_outlined : Icons.money_off_outlined,
+                  _isReceipt
+                      ? Icons.payments_outlined
+                      : Icons.money_off_outlined,
                   color: AppColors.brandNavy,
                   size: 22,
                 ),
@@ -176,10 +184,14 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                         labelText: _isReceipt ? 'Customer *' : 'Vendor *',
                         prefixIcon: const Icon(Icons.person_outlined, size: 18),
                       ),
-                      items: contacts.map((c) => DropdownMenuItem(
-                        value: c.id,
-                        child: Text(c.name),
-                      )).toList(),
+                      items: contacts
+                          .map(
+                            (c) => DropdownMenuItem(
+                              value: c.id,
+                              child: Text(c.name),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (v) {
                         setState(() => _selectedContactId = v);
                         if (v != null) _loadOpenDocs(v);
@@ -193,9 +205,14 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                       controller: _amountCtrl,
                       decoration: const InputDecoration(
                         labelText: 'Total Amount (₹) *',
-                        prefixIcon: Icon(Icons.currency_rupee_outlined, size: 18),
+                        prefixIcon: Icon(
+                          Icons.currency_rupee_outlined,
+                          size: 18,
+                        ),
                       ),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       validator: (v) {
                         if (v == null || v.isEmpty) return 'Enter amount';
                         if (double.tryParse(v) == null) return 'Invalid amount';
@@ -210,10 +227,16 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                       child: InputDecorator(
                         decoration: const InputDecoration(
                           labelText: 'Payment Date *',
-                          prefixIcon: Icon(Icons.calendar_today_outlined, size: 16),
+                          prefixIcon: Icon(
+                            Icons.calendar_today_outlined,
+                            size: 16,
+                          ),
                           suffixIcon: Icon(Icons.arrow_drop_down, size: 18),
                         ),
-                        child: Text(_formattedDate, style: const TextStyle(fontSize: 14)),
+                        child: Text(
+                          _formattedDate,
+                          style: const TextStyle(fontSize: 14),
+                        ),
                       ),
                     ),
                     const SizedBox(height: 14),
@@ -221,11 +244,17 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                     // Payment Mode
                     DropdownButtonFormField<String>(
                       value: _paymentMode,
-                      decoration: const InputDecoration(labelText: 'Payment Mode *'),
-                      items: _modes.map((m) => DropdownMenuItem(
-                        value: m,
-                        child: Text(_modeLabels[m] ?? m),
-                      )).toList(),
+                      decoration: const InputDecoration(
+                        labelText: 'Payment Mode *',
+                      ),
+                      items: _modes
+                          .map(
+                            (m) => DropdownMenuItem(
+                              value: m,
+                              child: Text(_modeLabels[m] ?? m),
+                            ),
+                          )
+                          .toList(),
                       onChanged: (v) => setState(() => _paymentMode = v!),
                     ),
                     const SizedBox(height: 14),
@@ -243,7 +272,9 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                     // Notes
                     TextFormField(
                       controller: _notesCtrl,
-                      decoration: const InputDecoration(labelText: 'Notes (optional)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Notes (optional)',
+                      ),
                       maxLines: 2,
                     ),
                     const SizedBox(height: 20),
@@ -253,13 +284,16 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                       Row(
                         children: [
                           Text(
-                            _isReceipt ? 'Allocate to Invoices' : 'Allocate to Bills',
+                            _isReceipt
+                                ? 'Allocate to Invoices'
+                                : 'Allocate to Bills',
                             style: AppTextStyles.labelSmall,
                           ),
                           const SizedBox(width: 8),
                           if (_isLoadingDocs)
                             const SizedBox(
-                              width: 14, height: 14,
+                              width: 14,
+                              height: 14,
                               child: CircularProgressIndicator(strokeWidth: 2),
                             ),
                         ],
@@ -274,17 +308,24 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                           ),
                           child: Text(
                             _isReceipt
-                                ? 'No outstanding invoices for this customer.\nPayment will be recorded as advance.'
-                                : 'No outstanding bills for this vendor.\nPayment will be recorded as advance.',
+                                ? 'No posted or partially-paid invoices for this customer.'
+                                : 'No posted or partially-paid bills for this vendor.',
                             style: AppTextStyles.caption,
                           ),
                         )
                       else
                         ..._openDocs.map((doc) {
                           final id = doc['id'].toString();
-                          final num = doc['invoice_number'] ?? doc['bill_number'] ?? id;
-                          final total = double.tryParse((doc['total'] ?? 0).toString()) ?? 0;
-                          final paid = double.tryParse((doc['amount_paid'] ?? 0).toString()) ?? 0;
+                          final num =
+                              doc['invoice_number'] ?? doc['bill_number'] ?? id;
+                          final total =
+                              double.tryParse((doc['total'] ?? 0).toString()) ??
+                              0;
+                          final paid =
+                              double.tryParse(
+                                (doc['amount_paid'] ?? 0).toString(),
+                              ) ??
+                              0;
                           final remaining = total - paid;
                           return Padding(
                             padding: const EdgeInsets.only(bottom: 8),
@@ -293,9 +334,13 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                                 Expanded(
                                   flex: 3,
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Text(num.toString(), style: AppTextStyles.bodyMedium),
+                                      Text(
+                                        num.toString(),
+                                        style: AppTextStyles.bodyMedium,
+                                      ),
                                       Text(
                                         'Outstanding: ₹${remaining.toStringAsFixed(2)}',
                                         style: AppTextStyles.caption,
@@ -308,10 +353,16 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                                   flex: 2,
                                   child: TextFormField(
                                     controller: _allocCtrl[id],
-                                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                          decimal: true,
+                                        ),
                                     decoration: const InputDecoration(
                                       isDense: true,
-                                      contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                      contentPadding: EdgeInsets.symmetric(
+                                        horizontal: 10,
+                                        vertical: 8,
+                                      ),
                                       prefixText: '₹',
                                       border: OutlineInputBorder(),
                                     ),
@@ -369,13 +420,34 @@ class _PaymentFormViewState extends State<PaymentFormView> {
       }
     }
 
-    // If no open docs or no allocations entered, require at least dummy allocation
-    // The backend requires at least one allocation for receipts
-    if (allocations.isEmpty && _openDocs.isNotEmpty) {
+    final paymentAmount = double.parse(_amountCtrl.text);
+    final allocatedTotal = allocations.fold<double>(
+      0,
+      (sum, a) => sum + (double.tryParse(a['amount'].toString()) ?? 0),
+    );
+
+    if (allocations.isEmpty) {
       setState(() => _isSubmitting = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter an allocation amount for at least one document.'),
+        SnackBar(
+          content: Text(
+            _isReceipt
+                ? 'Select at least one posted invoice allocation.'
+                : 'Select at least one posted bill allocation.',
+          ),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if ((allocatedTotal - paymentAmount).abs() > 0.01) {
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Allocated total (${allocatedTotal.toStringAsFixed(2)}) must equal payment amount (${paymentAmount.toStringAsFixed(2)}).',
+          ),
           backgroundColor: AppColors.error,
         ),
       );
@@ -384,11 +456,11 @@ class _PaymentFormViewState extends State<PaymentFormView> {
 
     final payload = <String, dynamic>{
       'contact_id': _selectedContactId,
-      'amount': double.parse(_amountCtrl.text),
+      'amount': paymentAmount,
       'payment_mode': _paymentMode,
       'payment_date': _formattedDate,
       if (_refCtrl.text.isNotEmpty) 'reference_number': _refCtrl.text,
-      if (_notesCtrl.text.isNotEmpty) 'notes': _notesCtrl.text,
+      if (_notesCtrl.text.isNotEmpty) 'description': _notesCtrl.text,
       if (allocations.isNotEmpty) 'allocations': allocations,
     };
 
@@ -403,7 +475,10 @@ class _PaymentFormViewState extends State<PaymentFormView> {
       widget.onSuccess();
     } else if (mounted && provider.errorMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppColors.error),
+        SnackBar(
+          content: Text(provider.errorMessage!),
+          backgroundColor: AppColors.error,
+        ),
       );
     }
   }

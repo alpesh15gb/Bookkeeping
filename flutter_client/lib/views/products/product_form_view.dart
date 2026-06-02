@@ -36,11 +36,21 @@ class _ProductFormViewState extends State<ProductFormView> {
     _skuController = TextEditingController(text: p?.sku ?? '');
     _hsnController = TextEditingController(text: p?.hsnSac ?? '');
     _uomController = TextEditingController(text: p?.uom ?? 'PCS');
-    _salesPriceController = TextEditingController(text: p?.salesPrice.toString() ?? '0.00');
-    _purchasePriceController = TextEditingController(text: p?.purchasePrice.toString() ?? '0.00');
-    _gstRateController = TextEditingController(text: p?.gstRate.toString() ?? '18.00');
-    _stockController = TextEditingController(text: p?.openingStock.toString() ?? '0.0');
-    _reorderController = TextEditingController(text: p?.reorderLevel.toString() ?? '0.0');
+    _salesPriceController = TextEditingController(
+      text: p?.salesPrice.toString() ?? '0.00',
+    );
+    _purchasePriceController = TextEditingController(
+      text: p?.purchasePrice.toString() ?? '0.00',
+    );
+    _gstRateController = TextEditingController(
+      text: p?.gstRate.toString() ?? '18.00',
+    );
+    _stockController = TextEditingController(
+      text: p?.openingStock.toString() ?? '0.0',
+    );
+    _reorderController = TextEditingController(
+      text: p?.reorderLevel.toString() ?? '0.0',
+    );
     _productType = p?.productType ?? 'GOODS';
   }
 
@@ -63,7 +73,9 @@ class _ProductFormViewState extends State<ProductFormView> {
       final product = ProductModel(
         id: widget.product?.id ?? '',
         name: _nameController.text.trim(),
-        sku: _skuController.text.trim().isEmpty ? null : _skuController.text.trim(),
+        sku: _skuController.text.trim().isEmpty
+            ? null
+            : _skuController.text.trim(),
         hsnSac: _hsnController.text.trim(),
         productType: _productType,
         uom: _uomController.text.trim(),
@@ -71,7 +83,9 @@ class _ProductFormViewState extends State<ProductFormView> {
         purchasePrice: double.parse(_purchasePriceController.text.trim()),
         gstRate: double.parse(_gstRateController.text.trim()),
         openingStock: double.parse(_stockController.text.trim()),
-        currentStock: widget.product?.currentStock ?? double.parse(_stockController.text.trim()),
+        currentStock:
+            widget.product?.currentStock ??
+            double.parse(_stockController.text.trim()),
         reorderLevel: double.parse(_reorderController.text.trim()),
         isActive: widget.product?.isActive ?? true,
       );
@@ -88,7 +102,10 @@ class _ProductFormViewState extends State<ProductFormView> {
         Navigator.pop(context);
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Operation failed'), backgroundColor: AppColors.error),
+          SnackBar(
+            content: Text(provider.errorMessage ?? 'Operation failed'),
+            backgroundColor: AppColors.error,
+          ),
         );
       }
     }
@@ -113,11 +130,17 @@ class _ProductFormViewState extends State<ProductFormView> {
                       color: AppColors.brandNavy,
                       borderRadius: BorderRadius.circular(9),
                     ),
-                    child: const Icon(Icons.inventory_2_rounded, size: 18, color: AppColors.goldAccent),
+                    child: const Icon(
+                      Icons.inventory_2_rounded,
+                      size: 18,
+                      color: AppColors.goldAccent,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Text(
-                    widget.product == null ? 'Add Product / Service' : 'Edit Product / Service',
+                    widget.product == null
+                        ? 'Add Product / Service'
+                        : 'Edit Product / Service',
                     style: AppTextStyles.h2,
                   ),
                 ],
@@ -147,7 +170,8 @@ class _ProductFormViewState extends State<ProductFormView> {
                                 label: 'Goods',
                                 value: 'GOODS',
                                 selected: _productType == 'GOODS',
-                                onTap: () => setState(() => _productType = 'GOODS'),
+                                onTap: () =>
+                                    setState(() => _productType = 'GOODS'),
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -156,7 +180,8 @@ class _ProductFormViewState extends State<ProductFormView> {
                                 label: 'Service',
                                 value: 'SERVICE',
                                 selected: _productType == 'SERVICE',
-                                onTap: () => setState(() => _productType = 'SERVICE'),
+                                onTap: () =>
+                                    setState(() => _productType = 'SERVICE'),
                               ),
                             ),
                           ],
@@ -167,8 +192,12 @@ class _ProductFormViewState extends State<ProductFormView> {
                       // Name
                       TextFormField(
                         controller: _nameController,
-                        decoration: const InputDecoration(labelText: 'Product / Service Name *'),
-                        validator: (v) => (v == null || v.isEmpty) ? 'Name is required' : null,
+                        decoration: const InputDecoration(
+                          labelText: 'Product / Service Name *',
+                        ),
+                        validator: (v) => (v == null || v.isEmpty)
+                            ? 'Name is required'
+                            : null,
                       ),
                       const SizedBox(height: 16),
 
@@ -178,15 +207,25 @@ class _ProductFormViewState extends State<ProductFormView> {
                           Expanded(
                             child: TextFormField(
                               controller: _skuController,
-                              decoration: const InputDecoration(labelText: 'SKU'),
+                              decoration: const InputDecoration(
+                                labelText: 'SKU',
+                              ),
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: TextFormField(
                               controller: _hsnController,
-                              decoration: const InputDecoration(labelText: 'HSN/SAC *'),
-                              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                              decoration: const InputDecoration(
+                                labelText: 'HSN/SAC *',
+                              ),
+                              validator: (v) {
+                                final value = v?.trim() ?? '';
+                                if (value.isEmpty) return 'Required';
+                                if (!RegExp(r'^[0-9]{6,8}$').hasMatch(value))
+                                  return 'Must be 6 to 8 digits';
+                                return null;
+                              },
                             ),
                           ),
                         ],
@@ -199,17 +238,26 @@ class _ProductFormViewState extends State<ProductFormView> {
                           Expanded(
                             child: TextFormField(
                               controller: _uomController,
-                              decoration: const InputDecoration(labelText: 'Unit (UOM) *', hintText: 'e.g. PCS, BOX'),
-                              validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
+                              decoration: const InputDecoration(
+                                labelText: 'Unit (UOM) *',
+                                hintText: 'e.g. PCS, BOX',
+                              ),
+                              validator: (v) =>
+                                  (v == null || v.isEmpty) ? 'Required' : null,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: TextFormField(
                               controller: _gstRateController,
-                              decoration: const InputDecoration(labelText: 'GST Rate (%) *'),
+                              decoration: const InputDecoration(
+                                labelText: 'GST Rate (%) *',
+                              ),
                               keyboardType: TextInputType.number,
-                              validator: (v) => (v == null || double.tryParse(v) == null) ? 'Invalid' : null,
+                              validator: (v) =>
+                                  (v == null || double.tryParse(v) == null)
+                                  ? 'Invalid'
+                                  : null,
                             ),
                           ),
                         ],
@@ -222,18 +270,30 @@ class _ProductFormViewState extends State<ProductFormView> {
                           Expanded(
                             child: TextFormField(
                               controller: _salesPriceController,
-                              decoration: const InputDecoration(labelText: 'Sales Price *', prefixText: '₹ '),
+                              decoration: const InputDecoration(
+                                labelText: 'Sales Price *',
+                                prefixText: '₹ ',
+                              ),
                               keyboardType: TextInputType.number,
-                              validator: (v) => (v == null || double.tryParse(v) == null) ? 'Invalid' : null,
+                              validator: (v) =>
+                                  (v == null || double.tryParse(v) == null)
+                                  ? 'Invalid'
+                                  : null,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: TextFormField(
                               controller: _purchasePriceController,
-                              decoration: const InputDecoration(labelText: 'Purchase Price *', prefixText: '₹ '),
+                              decoration: const InputDecoration(
+                                labelText: 'Purchase Price *',
+                                prefixText: '₹ ',
+                              ),
                               keyboardType: TextInputType.number,
-                              validator: (v) => (v == null || double.tryParse(v) == null) ? 'Invalid' : null,
+                              validator: (v) =>
+                                  (v == null || double.tryParse(v) == null)
+                                  ? 'Invalid'
+                                  : null,
                             ),
                           ),
                         ],
@@ -247,7 +307,9 @@ class _ProductFormViewState extends State<ProductFormView> {
                             Expanded(
                               child: TextFormField(
                                 controller: _stockController,
-                                decoration: const InputDecoration(labelText: 'Opening Stock'),
+                                decoration: const InputDecoration(
+                                  labelText: 'Opening Stock',
+                                ),
                                 keyboardType: TextInputType.number,
                               ),
                             ),
@@ -255,7 +317,9 @@ class _ProductFormViewState extends State<ProductFormView> {
                             Expanded(
                               child: TextFormField(
                                 controller: _reorderController,
-                                decoration: const InputDecoration(labelText: 'Reorder Level'),
+                                decoration: const InputDecoration(
+                                  labelText: 'Reorder Level',
+                                ),
                                 keyboardType: TextInputType.number,
                               ),
                             ),
@@ -280,7 +344,9 @@ class _ProductFormViewState extends State<ProductFormView> {
                   const SizedBox(width: 12),
                   ElevatedButton(
                     onPressed: _save,
-                    child: Text(widget.product == null ? 'Create' : 'Save Changes'),
+                    child: Text(
+                      widget.product == null ? 'Create' : 'Save Changes',
+                    ),
                   ),
                 ],
               ),
@@ -326,7 +392,9 @@ class _TypeOption extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              value == 'GOODS' ? Icons.inventory_2_rounded : Icons.build_rounded,
+              value == 'GOODS'
+                  ? Icons.inventory_2_rounded
+                  : Icons.build_rounded,
               size: 16,
               color: selected ? AppColors.brandNavy : AppColors.textMuted,
             ),
@@ -336,7 +404,9 @@ class _TypeOption extends StatelessWidget {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected ? AppColors.textPrimary : AppColors.textSecondary,
+                color: selected
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
               ),
             ),
           ],

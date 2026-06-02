@@ -1,6 +1,7 @@
 import uuid
 import base64
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
 from cryptography.fernet import Fernet
 from src.infrastructure.database.models import NumberingSeries, TenantSetting, Tenant
@@ -42,10 +43,18 @@ class NumberingSeriesService:
         ).with_for_update().first()
 
         if not series:
-            # Automatic fallback seeding to avoid raising blocking errors on default setup
-            series = NumberingSeriesService.seed_default_series(db, tenant_id, document_type)
-            # Re-fetch with lock
-            series = db.query(NumberingSeries).filter(NumberingSeries.id == series.id).with_for_update().first()
+            # Automatic fallback seeding — handle race where two requests seed simultaneously
+            try:
+                series = NumberingSeriesService.seed_default_series(db, tenant_id, document_type)
+                db.flush()
+            except IntegrityError:
+                db.rollback()
+                # Another request seeded first — re-fetch with lock
+                series = db.query(NumberingSeries).filter(
+                    NumberingSeries.tenant_id == tenant_id,
+                    NumberingSeries.document_type == document_type,
+                    NumberingSeries.is_active == True
+                ).with_for_update().first()
 
         current_num = series.next_number
         series.next_number += 1

@@ -13,7 +13,7 @@ from src.schemas.bill_schemas import (
 )
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
-from src.domains.company.services import resolve_origin_state_code
+from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
 from src.api.deps import get_tenant_context, enforce_permission
 
 router = APIRouter(prefix="/delivery-challans", tags=["Delivery Challans"])
@@ -101,10 +101,14 @@ def create_delivery_challan(
 
     grand_total = dc_subtotal + dc_cgst + dc_sgst + dc_igst + dc_utgst + dc_cess
 
+    challan_number = payload.challan_number
+    if not challan_number:
+        challan_number = NumberingSeriesService.generate_next_number(db, tenant_id, "DELIVERY_CHALLAN")
+
     dc = DeliveryChallan(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
-        challan_number=payload.challan_number,
+        challan_number=challan_number,
         challan_date=payload.challan_date,
         due_date=payload.due_date,
         status="DRAFT",
@@ -318,8 +322,8 @@ def cancel_delivery_challan(
     if not dc:
         raise HTTPException(status_code=404, detail="Delivery Challan not found.")
 
-    if dc.status in ("ISSUED", "CANCELLED"):
-        raise HTTPException(status_code=400, detail="Cannot cancel issued or already cancelled delivery challans.")
+    if dc.status == "CANCELLED":
+        raise HTTPException(status_code=400, detail="Delivery challan is already cancelled.")
 
     dc.status = "CANCELLED"
     db.commit()

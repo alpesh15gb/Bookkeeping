@@ -52,7 +52,7 @@ class EwayBillProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/eway-bills'),
         body: jsonEncode(payload),
       );
-      if (response.statusCode == 201) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         await fetchEwayBills();
         return true;
       }
@@ -71,7 +71,13 @@ class EwayBillProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/eway-bills/$id/cancel'));
+      final response = await _client.post(
+        Uri.parse('${ApiClient.baseUrl}/eway-bills/$id/cancel'),
+        body: jsonEncode({
+          'cancel_reason': '2',
+          'cancel_remarks': 'Cancelled from ApexBooks',
+        }),
+      );
       if (response.statusCode == 200) {
         await fetchEwayBills();
         return true;
@@ -119,7 +125,7 @@ class EwayBillProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/eway-bills/consolidated'),
         body: jsonEncode(payload),
       );
-      if (response.statusCode == 201) {
+      if (response.statusCode == 200 || response.statusCode == 201) {
         _isLoading = false;
         notifyListeners();
         return true;
@@ -156,11 +162,11 @@ class EwayBillProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<Map<String, dynamic>?> verifyGstin(String gstin, String captcha) async {
+  Future<Map<String, dynamic>?> verifyGstin(String gstin, String captcha, String sessionId) async {
     try {
       final response = await _client.post(
         Uri.parse('${ApiClient.baseUrl}/gst/verify'),
-        body: jsonEncode({'gstin': gstin, 'captcha': captcha}),
+        body: jsonEncode({'gstin': gstin, 'captcha': captcha, 'session_id': sessionId}),
       );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);

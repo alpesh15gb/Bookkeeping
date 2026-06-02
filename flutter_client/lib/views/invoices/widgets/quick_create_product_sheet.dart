@@ -23,7 +23,8 @@ class _QuickCreateProductSheet extends StatefulWidget {
   const _QuickCreateProductSheet({this.initialName});
 
   @override
-  State<_QuickCreateProductSheet> createState() => _QuickCreateProductSheetState();
+  State<_QuickCreateProductSheet> createState() =>
+      _QuickCreateProductSheetState();
 }
 
 class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
@@ -76,9 +77,15 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
     if (mounted) {
       setState(() => _isSaving = false);
       if (success) {
-        final created = provider.products
-            .where((p) => p.name.toLowerCase() == _nameCtrl.text.trim().toLowerCase())
-            .lastOrNull;
+        final created =
+            provider.lastCreatedProduct ??
+            provider.products
+                .where(
+                  (p) =>
+                      p.name.toLowerCase() ==
+                      _nameCtrl.text.trim().toLowerCase(),
+                )
+                .lastOrNull;
         if (mounted) Navigator.pop(context, created);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -94,7 +101,9 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+      padding: EdgeInsets.only(
+        bottom: MediaQuery.of(context).viewInsets.bottom,
+      ),
       child: Container(
         decoration: const BoxDecoration(
           color: Colors.white,
@@ -110,8 +119,12 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
               // Drag handle
               Center(
                 child: Container(
-                  width: 40, height: 4,
-                  decoration: BoxDecoration(color: AppColors.border, borderRadius: BorderRadius.circular(2)),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.border,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
@@ -121,13 +134,29 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: const Color(0xFFE8F5E9), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.add_box_rounded, color: Color(0xFF2E7D32), size: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.add_box_rounded,
+                      color: Color(0xFF2E7D32),
+                      size: 20,
+                    ),
                   ),
                   const SizedBox(width: 10),
-                  Expanded(child: Text('New Product / Service', style: AppTextStyles.h3)),
+                  Expanded(
+                    child: Text(
+                      'New Product / Service',
+                      style: AppTextStyles.h3,
+                    ),
+                  ),
                   IconButton(
-                    icon: const Icon(Icons.close, size: 20, color: AppColors.textMuted),
+                    icon: const Icon(
+                      Icons.close,
+                      size: 20,
+                      color: AppColors.textMuted,
+                    ),
                     onPressed: () => Navigator.pop(context),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -142,26 +171,37 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                   final isSelected = _productType == type;
                   return Expanded(
                     child: Padding(
-                      padding: EdgeInsets.only(right: type == 'GOODS' ? 6 : 0, left: type == 'SERVICE' ? 6 : 0),
+                      padding: EdgeInsets.only(
+                        right: type == 'GOODS' ? 6 : 0,
+                        left: type == 'SERVICE' ? 6 : 0,
+                      ),
                       child: GestureDetector(
                         onTap: () => setState(() => _productType = type),
                         child: AnimatedContainer(
                           duration: const Duration(milliseconds: 180),
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
-                            color: isSelected ? AppColors.brandNavy : AppColors.borderLight,
+                            color: isSelected
+                                ? AppColors.brandNavy
+                                : AppColors.borderLight,
                             borderRadius: BorderRadius.circular(AppRadius.md),
                             border: Border.all(
-                              color: isSelected ? AppColors.brandNavy : AppColors.border,
+                              color: isSelected
+                                  ? AppColors.brandNavy
+                                  : AppColors.border,
                             ),
                           ),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Icon(
-                                type == 'GOODS' ? Icons.inventory_2_rounded : Icons.miscellaneous_services_rounded,
+                                type == 'GOODS'
+                                    ? Icons.inventory_2_rounded
+                                    : Icons.miscellaneous_services_rounded,
                                 size: 14,
-                                color: isSelected ? Colors.white : AppColors.textSecondary,
+                                color: isSelected
+                                    ? Colors.white
+                                    : AppColors.textSecondary,
                               ),
                               const SizedBox(width: 6),
                               Text(
@@ -169,7 +209,9 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                                 style: TextStyle(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: isSelected ? Colors.white : AppColors.textSecondary,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : AppColors.textSecondary,
                                 ),
                               ),
                             ],
@@ -191,7 +233,8 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                   labelText: 'Name *',
                   prefixIcon: Icon(Icons.label_outline_rounded, size: 18),
                 ),
-                validator: (v) => (v == null || v.trim().isEmpty) ? 'Name is required' : null,
+                validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Name is required' : null,
               ),
               const SizedBox(height: 12),
 
@@ -203,12 +246,18 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                     flex: 3,
                     child: TextFormField(
                       controller: _priceCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       decoration: const InputDecoration(
                         labelText: 'Sales Price *',
-                        prefixIcon: Icon(Icons.currency_rupee_rounded, size: 16),
+                        prefixIcon: Icon(
+                          Icons.currency_rupee_rounded,
+                          size: 16,
+                        ),
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty) ? 'Required' : null,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -217,11 +266,17 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                     child: DropdownButtonFormField<double>(
                       value: _gstRate,
                       decoration: const InputDecoration(labelText: 'GST Rate'),
-                      items: _gstOptions.map((r) => DropdownMenuItem(
-                        value: r,
-                        child: Text('${r.toStringAsFixed(0)}%'),
-                      )).toList(),
-                      onChanged: (v) { if (v != null) setState(() => _gstRate = v); },
+                      items: _gstOptions
+                          .map(
+                            (r) => DropdownMenuItem(
+                              value: r,
+                              child: Text('${r.toStringAsFixed(0)}%'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _gstRate = v);
+                      },
                     ),
                   ),
                 ],
@@ -240,8 +295,8 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                   if (v == null || v.trim().isEmpty) {
                     return 'HSN/SAC is required';
                   }
-                  if (!RegExp(r'^[0-9]{4,8}$').hasMatch(v.trim())) {
-                    return 'Must be 4 to 8 digits';
+                  if (!RegExp(r'^[0-9]{6,8}$').hasMatch(v.trim())) {
+                    return 'Must be 6 to 8 digits';
                   }
                   return null;
                 },
@@ -257,20 +312,29 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                     backgroundColor: const Color(0xFF2E7D32),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: AppRadius.button,
+                    ),
                     elevation: 0,
                   ),
                   child: _isSaving
                       ? const SizedBox(
-                          width: 18, height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.add_rounded, size: 18),
                             SizedBox(width: 6),
-                            Text('Create & Add to Invoice', style: TextStyle(fontWeight: FontWeight.w600)),
+                            Text(
+                              'Create & Add to Invoice',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
                           ],
                         ),
                 ),

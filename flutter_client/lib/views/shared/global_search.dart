@@ -59,8 +59,10 @@ class GlobalSearchDelegate extends SearchDelegate<String> {
     final results = <Map<String, dynamic>>[];
 
     try {
+      final encodedQuery = Uri.encodeComponent(query);
+
       // Search contacts
-      final contacts = await client.get(Uri.parse('${ApiClient.baseUrl}/contacts?search=$query'));
+      final contacts = await client.get(Uri.parse('${ApiClient.baseUrl}/masters/contacts?search=$encodedQuery'));
       if (contacts.statusCode == 200) {
         for (final c in jsonDecode(contacts.body)) {
           results.add({'type': 'Contact', 'name': c['name'], 'id': c['id']});
@@ -68,7 +70,7 @@ class GlobalSearchDelegate extends SearchDelegate<String> {
       }
 
       // Search products
-      final products = await client.get(Uri.parse('${ApiClient.baseUrl}/products?search=$query'));
+      final products = await client.get(Uri.parse('${ApiClient.baseUrl}/masters/products?search=$encodedQuery'));
       if (products.statusCode == 200) {
         for (final p in jsonDecode(products.body)) {
           results.add({'type': 'Product', 'name': p['name'], 'id': p['id']});
@@ -76,7 +78,7 @@ class GlobalSearchDelegate extends SearchDelegate<String> {
       }
 
       // Search invoices
-      final invoices = await client.get(Uri.parse('${ApiClient.baseUrl}/invoices?search=$query'));
+      final invoices = await client.get(Uri.parse('${ApiClient.baseUrl}/invoices?search=$encodedQuery'));
       if (invoices.statusCode == 200) {
         final data = jsonDecode(invoices.body);
         for (final inv in (data['items'] ?? [])) {

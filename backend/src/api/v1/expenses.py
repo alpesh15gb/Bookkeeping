@@ -319,6 +319,8 @@ def post_expense(
 
     category = db.query(ExpenseCategory).filter(
         ExpenseCategory.id == expense.expense_category_id,
+        ExpenseCategory.tenant_id == tenant_id,
+        ExpenseCategory.deleted_at == None,
     ).first()
     if not category or not category.linked_account_id:
         raise HTTPException(status_code=400, detail="Expense category must have a linked account to post.")
@@ -388,6 +390,8 @@ def cancel_expense(
 
     category = db.query(ExpenseCategory).filter(
         ExpenseCategory.id == expense.expense_category_id,
+        ExpenseCategory.tenant_id == tenant_id,
+        ExpenseCategory.deleted_at == None,
     ).first()
     if not category or not category.linked_account_id:
         raise HTTPException(status_code=400, detail="Expense category must have a linked account to cancel.")

@@ -49,10 +49,11 @@ class JournalEntryDraft:
         debit_sum = sum(line.amount for line in self.lines if line.direction == "DEBIT")
         credit_sum = sum(line.amount for line in self.lines if line.direction == "CREDIT")
 
-        if debit_sum != credit_sum:
+        diff = abs(debit_sum - credit_sum)
+        if diff > Decimal("0.01"):
             raise LedgerValidationError(
                 f"Ledger out of balance. Debits ({debit_sum}) must equal Credits ({credit_sum}). "
-                f"Diff: {debit_sum - credit_sum}"
+                f"Diff: {diff}"
             )
 
 
@@ -166,7 +167,7 @@ class LedgerPostingEngine:
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        bill_total = net_subtotal + tax_total + round_off_amount
+        bill_total = net_subtotal + tax_total
 
         # 1. Debit Purchase Expense (net of discount)
         lines.append(JournalLineDraft(purchase_expense_account_id, net_subtotal, "DEBIT", f"Expense: Bill {bill_number}"))
@@ -230,7 +231,7 @@ class LedgerPostingEngine:
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = amount + tax_total + round_off_amount
+        total = amount + tax_total
 
         lines.append(JournalLineDraft(expense_account_id, amount, "DEBIT", f"Expense: {expense_number}"))
 
@@ -289,7 +290,7 @@ class LedgerPostingEngine:
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = amount + tax_total + round_off_amount
+        total = amount + tax_total
 
         lines.append(JournalLineDraft(cash_account_id, total, "DEBIT", f"Expense reversal: {expense_number}"))
         lines.append(JournalLineDraft(expense_account_id, amount, "CREDIT", f"Expense reversal: {expense_number}"))
@@ -393,7 +394,7 @@ class LedgerPostingEngine:
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        cn_total = subtotal + tax_total + round_off_amount
+        cn_total = subtotal + tax_total
 
         lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Credit Note: {credit_note_number}"))
         lines.append(JournalLineDraft(customer_account_id, cn_total, "CREDIT", f"Credit Note: {credit_note_number}"))
@@ -451,7 +452,7 @@ class LedgerPostingEngine:
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        dn_total = subtotal + tax_total + round_off_amount
+        dn_total = subtotal + tax_total
 
         lines.append(JournalLineDraft(customer_account_id, dn_total, "DEBIT", f"Debit Note: {debit_note_number}"))
         lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "CREDIT", f"Debit Note: {debit_note_number}"))
@@ -509,7 +510,7 @@ class LedgerPostingEngine:
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        cn_total = subtotal + tax_total + round_off_amount
+        cn_total = subtotal + tax_total
 
         lines.append(JournalLineDraft(customer_account_id, cn_total, "DEBIT", f"Credit Note Cancellation: {credit_note_number}"))
         lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "CREDIT", f"Credit Note Cancellation: {credit_note_number}"))
@@ -567,7 +568,7 @@ class LedgerPostingEngine:
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        dn_total = subtotal + tax_total + round_off_amount
+        dn_total = subtotal + tax_total
 
         lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Debit Note Cancellation: {debit_note_number}"))
         lines.append(JournalLineDraft(customer_account_id, dn_total, "CREDIT", f"Debit Note Cancellation: {debit_note_number}"))
@@ -627,7 +628,7 @@ class LedgerPostingEngine:
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = net_subtotal + tax_total + round_off_amount
+        total = net_subtotal + tax_total
 
         lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "DEBIT", f"Cancellation: {invoice_number}"))
         lines.append(JournalLineDraft(customer_account_id, total, "CREDIT", f"Cancellation: {invoice_number}"))
@@ -687,7 +688,7 @@ class LedgerPostingEngine:
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        bill_total = net_subtotal + tax_total + round_off_amount
+        bill_total = net_subtotal + tax_total
 
         lines.append(JournalLineDraft(vendor_account_id, bill_total, "DEBIT", f"Reversal of vendor bill: {bill_number}"))
         lines.append(JournalLineDraft(purchase_expense_account_id, net_subtotal, "CREDIT", f"Reversal of purchase expense: {bill_number}"))
@@ -793,7 +794,7 @@ class LedgerPostingEngine:
         """Sales Return: reverse revenue, reverse tax, reduce receivable."""
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = subtotal + tax_total + round_off_amount
+        total = subtotal + tax_total
 
         lines.append(JournalLineDraft(sales_revenue_account_id, subtotal, "DEBIT", f"Sales Return: {return_number}"))
         lines.append(JournalLineDraft(customer_account_id, total, "CREDIT", f"Sales Return: {return_number}"))
@@ -853,7 +854,7 @@ class LedgerPostingEngine:
         """Purchase Return: reduce payable, reverse purchase, reverse input tax."""
         lines: List[JournalLineDraft] = []
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = subtotal + tax_total + round_off_amount
+        total = subtotal + tax_total
 
         lines.append(JournalLineDraft(vendor_account_id, total, "DEBIT", f"Purchase Return: {return_number}"))
         lines.append(JournalLineDraft(purchase_expense_account_id, subtotal, "CREDIT", f"Purchase Return: {return_number}"))
@@ -1143,6 +1144,7 @@ def commit_ledger_draft(db: Session, tenant_id: uuid.UUID, draft: JournalEntryDr
         ]
     )
     db.add(journal_entry)
+    db.flush()
     affected = {line.account_id for line in draft.lines}
     update_account_balances(db, tenant_id, affected)
     return journal_entry

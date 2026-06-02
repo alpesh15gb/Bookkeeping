@@ -222,7 +222,7 @@ class _PartyStatementViewState extends State<PartyStatementView> {
 
   Widget _buildContactDropdown(List<ContactModel> contacts) {
     return DropdownButtonFormField<ContactModel>(
-      initialValue: _selectedContact,
+      value: _selectedContact,
       isDense: true,
       decoration: const InputDecoration(
         labelText: 'Select Party',

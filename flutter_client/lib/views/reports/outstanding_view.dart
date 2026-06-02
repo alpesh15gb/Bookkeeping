@@ -23,11 +23,13 @@ class _OutstandingReceivablesViewState extends State<OutstandingReceivablesView>
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    final now = DateTime.now();
+    final asOf = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final provider = context.read<AccountingProvider>();
-    final result = await provider.fetchOutstandingReceivables();
+    final result = await provider.fetchOutstandingReceivables(asOfDate: asOf);
     setState(() {
-      _items = result?['items'] ?? [];
-      _total = double.tryParse(result?['total']?.toString() ?? '0') ?? 0;
+      _items = result?['invoices'] ?? [];
+      _total = double.tryParse(result?['total_outstanding']?.toString() ?? '0') ?? 0;
       _loading = false;
     });
   }
@@ -98,7 +100,7 @@ class _TotalHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(16),
-      color: Theme.of(context).colorScheme.primary.withOpacity(0.05),
+      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.05),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -137,11 +139,13 @@ class _OutstandingPayablesViewState extends State<OutstandingPayablesView> {
 
   Future<void> _load() async {
     setState(() => _loading = true);
+    final now = DateTime.now();
+    final asOf = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
     final provider = context.read<AccountingProvider>();
-    final result = await provider.fetchOutstandingPayables();
+    final result = await provider.fetchOutstandingPayables(asOfDate: asOf);
     setState(() {
-      _items = result?['items'] ?? [];
-      _total = double.tryParse(result?['total']?.toString() ?? '0') ?? 0;
+      _items = result?['bills'] ?? [];
+      _total = double.tryParse(result?['total_outstanding']?.toString() ?? '0') ?? 0;
       _loading = false;
     });
   }

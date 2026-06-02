@@ -253,6 +253,13 @@ async def add_request_id(request: Request, call_next):
 # CORS
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# GZip Compression — reduces response payload by 50-80%
+# ---------------------------------------------------------------------------
+
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins_list,
@@ -307,7 +314,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
-            "detail": f"{type(exc).__name__}: {exc}",
+            "detail": "An unexpected error occurred. Please try again.",
             "code": "INTERNAL_SERVER_ERROR",
         },
     )
@@ -353,6 +360,7 @@ app.include_router(returns_router,       prefix="/api/v1")
 @app.get("/api/v1/contacts", response_model=List[ContactResponse], tags=["Master Data"])
 def alias_list_contacts(
     contact_type: Optional[str] = None,
+    search: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db_session),
@@ -365,12 +373,21 @@ def alias_list_contacts(
             q = q.filter(Contact.contact_type.in_([contact_type, "BOTH"]))
         else:
             q = q.filter(Contact.contact_type == contact_type)
+    if search:
+        term = f"%{search}%"
+        q = q.filter(
+            Contact.name.ilike(term) |
+            Contact.email.ilike(term) |
+            Contact.phone.ilike(term) |
+            Contact.gstin.ilike(term)
+        )
     return q.offset(offset).limit(limit).all()
 
 
 @app.get("/api/v1/products", response_model=List[ProductResponse], tags=["Master Data"])
 def alias_list_products(
     product_type: Optional[str] = None,
+    search: Optional[str] = None,
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db_session),
@@ -380,6 +397,13 @@ def alias_list_products(
     q = db.query(Product).filter(Product.tenant_id == tenant_id, Product.deleted_at == None)
     if product_type:
         q = q.filter(Product.product_type == product_type)
+    if search:
+        term = f"%{search}%"
+        q = q.filter(
+            Product.name.ilike(term) |
+            Product.sku.ilike(term) |
+            Product.hsn_sac.ilike(term)
+        )
     return q.offset(offset).limit(limit).all()
 
 

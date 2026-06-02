@@ -1152,7 +1152,11 @@ class _SplineChartPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _SplineChartPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _SplineChartPainter oldDelegate) =>
+      oldDelegate.revenue != revenue ||
+      oldDelegate.expenses != expenses ||
+      oldDelegate.labels != labels ||
+      oldDelegate.hoveredIndex != hoveredIndex;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1337,7 +1341,10 @@ class _DonutPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DonutPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _DonutPainter oldDelegate) =>
+      oldDelegate.revenue != revenue ||
+      oldDelegate.expenses != expenses ||
+      oldDelegate.netProfit != netProfit;
 }
 
 class _BreakdownLegend extends StatelessWidget {

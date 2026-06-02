@@ -9,10 +9,12 @@ class ProductProvider extends ChangeNotifier {
   List<ProductModel> _products = [];
   bool _isLoading = false;
   String? _errorMessage;
+  ProductModel? _lastCreatedProduct;
 
   List<ProductModel> get products => _products;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  ProductModel? get lastCreatedProduct => _lastCreatedProduct;
 
   final ApiClient _client = ApiClient();
 
@@ -21,7 +23,9 @@ class ProductProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/masters/products'));
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/masters/products'),
+      );
       if (response.statusCode == 200) {
         final List data = jsonDecode(response.body);
         _products = data.map((x) => ProductModel.fromJson(x)).toList();
@@ -41,9 +45,13 @@ class ProductProvider extends ChangeNotifier {
         );
         _products = cached.map((row) {
           final jsonStr = row['json'] as String?;
-          return ProductModel.fromJson(jsonStr != null ? jsonDecode(jsonStr) : row);
+          return ProductModel.fromJson(
+            jsonStr != null ? jsonDecode(jsonStr) : row,
+          );
         }).toList();
-        _errorMessage = _products.isNotEmpty ? null : 'No cached products available';
+        _errorMessage = _products.isNotEmpty
+            ? null
+            : 'No cached products available';
       } catch (_) {}
     }
     _isLoading = false;
@@ -74,16 +82,17 @@ class ProductProvider extends ChangeNotifier {
         Uri.parse('${ApiClient.baseUrl}/masters/products'),
         body: body,
       );
-      debugPrint('Add product response status: ${response.statusCode}');
-      debugPrint('Add product response body: ${response.body}');
       if (response.statusCode == 201) {
+        _lastCreatedProduct = ProductModel.fromJson(jsonDecode(response.body));
         await fetchProducts();
         return true;
       } else {
-        _errorMessage = ApiClient.parseError(response.body, fallback: 'Failed to add product');
+        _errorMessage = ApiClient.parseError(
+          response.body,
+          fallback: 'Failed to add product',
+        );
       }
-    } catch (e, stack) {
-      debugPrint('Exception in addProduct: $e\n$stack');
+    } catch (_) {
       _errorMessage = 'An error occurred';
     } finally {
       _isLoading = false;
@@ -151,7 +160,9 @@ class ProductProvider extends ChangeNotifier {
       }
     }
     try {
-      final response = await _client.delete(Uri.parse('${ApiClient.baseUrl}/masters/products/$id'));
+      final response = await _client.delete(
+        Uri.parse('${ApiClient.baseUrl}/masters/products/$id'),
+      );
       if (response.statusCode == 204) {
         await fetchProducts();
         return true;

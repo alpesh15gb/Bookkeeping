@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_client/core/api_client.dart';
+import 'package:http/http.dart' as http;
 
 class DashboardProvider extends ChangeNotifier {
   bool _isLoading = false;
@@ -65,12 +66,9 @@ class DashboardProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
-    debugPrint('🟡 [Dashboard] fetchDashboard() START');
-    debugPrint('🟡 [Dashboard] baseUrl = ${ApiClient.baseUrl}');
 
     try {
       // Core endpoints — these must succeed
-      debugPrint('🟡 [Dashboard] Fetching core endpoints...');
       final core = await Future.wait([
         _client.get(Uri.parse('${ApiClient.baseUrl}/sales/summary')),
         _client.get(Uri.parse('${ApiClient.baseUrl}/expenses')),
@@ -79,12 +77,9 @@ class DashboardProvider extends ChangeNotifier {
         _client.get(Uri.parse('${ApiClient.baseUrl}/invoices?limit=5')),
       ]);
 
-      debugPrint('🟡 [Dashboard] Core responses: ${core.map((r) => '${r.request?.url.path}: ${r.statusCode}').join(', ')}');
-
       final coreFail = core.any((r) => r.statusCode != 200);
       if (coreFail) {
         final bad = core.where((r) => r.statusCode != 200).map((r) => '${r.request?.url}: ${r.statusCode}').join(', ');
-        debugPrint('❌ [Dashboard] Core API error: $bad');
         _errorMessage = 'API error: $bad';
         _isLoading = false;
         notifyListeners();
@@ -121,36 +116,29 @@ class DashboardProvider extends ChangeNotifier {
         _recentInvoices = [];
       }
 
-      debugPrint('✅ [Dashboard] Data parsed: revenue=$revenue, expenses=$totalExpenses, invoices=${_recentInvoices.length}');
+      // Trend + supplementary endpoints — all parallel, fail silently
+      final now = DateTime.now();
+      final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
-      // Trend endpoints are non-critical — fail silently
-      try {
-        final trendRes = await _client.get(Uri.parse('${ApiClient.baseUrl}/dashboard/revenue-trend'));
-        if (trendRes.statusCode == 200) _revenueTrend = jsonDecode(trendRes.body) as List? ?? [];
-        debugPrint('🟡 [Dashboard] Revenue trend: ${trendRes.statusCode}, ${_revenueTrend.length} items');
-      } catch (e) { debugPrint('⚠️ [Dashboard] Revenue trend failed: $e'); }
+      final secondary = await Future.wait([
+        _client.get(Uri.parse('${ApiClient.baseUrl}/dashboard/revenue-trend'))
+            .catchError((_) => http.Response('[]', 500)),
+        _client.get(Uri.parse('${ApiClient.baseUrl}/dashboard/expense-trend'))
+            .catchError((_) => http.Response('[]', 500)),
+        _client.get(Uri.parse('${ApiClient.baseUrl}/accounting/cash-bank-balances'))
+            .catchError((_) => http.Response('[]', 500)),
+        _client.get(Uri.parse('${ApiClient.baseUrl}/reports/outstanding/receivables?as_of_date=$dateStr'))
+            .catchError((_) => http.Response('{}', 500)),
+      ]);
 
-      try {
-        final expenseTrendRes = await _client.get(Uri.parse('${ApiClient.baseUrl}/dashboard/expense-trend'));
-        if (expenseTrendRes.statusCode == 200) _expenseTrend = jsonDecode(expenseTrendRes.body) as List? ?? [];
-        debugPrint('🟡 [Dashboard] Expense trend: ${expenseTrendRes.statusCode}, ${_expenseTrend.length} items');
-      } catch (e) { debugPrint('⚠️ [Dashboard] Expense trend failed: $e'); }
+      if (secondary[0].statusCode == 200) _revenueTrend = jsonDecode(secondary[0].body) as List? ?? [];
+      if (secondary[1].statusCode == 200) _expenseTrend = jsonDecode(secondary[1].body) as List? ?? [];
+      if (secondary[2].statusCode == 200) _cashBankBalances = jsonDecode(secondary[2].body) as List? ?? [];
 
-      // Cash/Bank balances
+      // Parse top debtors from receivables
       try {
-        final cbRes = await _client.get(Uri.parse('${ApiClient.baseUrl}/accounting/cash-bank-balances'));
-        if (cbRes.statusCode == 200) {
-          _cashBankBalances = jsonDecode(cbRes.body) as List? ?? [];
-        }
-      } catch (e) { debugPrint('⚠️ [Dashboard] Cash/Bank balances failed: $e'); }
-
-      // Top debtors
-      try {
-        final now = DateTime.now();
-        final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-        final arRes = await _client.get(Uri.parse('${ApiClient.baseUrl}/reports/outstanding/receivables?as_of_date=$dateStr'));
-        if (arRes.statusCode == 200) {
-          final arData = jsonDecode(arRes.body);
+        if (secondary[3].statusCode == 200) {
+          final arData = jsonDecode(secondary[3].body);
           final items = (arData['invoices'] as List?) ?? [];
           final Map<String, double> debtorMap = {};
           for (final inv in items) {
@@ -161,15 +149,12 @@ class DashboardProvider extends ChangeNotifier {
           final sorted = debtorMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
           _topDebtors = sorted.take(5).map((e) => {'name': e.key, 'outstanding': e.value}).toList();
         }
-      } catch (e) { debugPrint('⚠️ [Dashboard] Top debtors failed: $e'); }
+      } catch (_) {}
 
       _isLoading = false;
-      debugPrint('✅ [Dashboard] fetchDashboard() COMPLETE');
       notifyListeners();
-    } catch (e, stack) {
-      debugPrint('❌ [Dashboard] Exception: $e');
-      debugPrint('❌ [Dashboard] Stack: $stack');
-      _errorMessage = 'Connection failed: $e';
+    } catch (e) {
+      _errorMessage = 'Connection failed. Please check your network.';
       _isLoading = false;
       notifyListeners();
     }

@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List
 import os, uuid
-from datetime import datetime, timezone
+from datetime import datetime, date, timezone
 
 from src.core.config import settings
 from src.core.database import get_db_session

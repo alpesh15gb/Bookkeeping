@@ -5,6 +5,7 @@ import 'package:flutter_client/providers/delivery_challan_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/delivery_challans/delivery_challan_form_view.dart';
+import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 
 class DeliveryChallanDetailView extends StatefulWidget {
   final String challanId;
@@ -113,18 +114,26 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
               ActionButton(label: 'Convert to Invoice', tier: ActionTier.safe, onPressed: () {
                 // Navigate to invoice form with pre-filled data from challan
                 final lines = (c['lines'] as List?) ?? [];
-                Navigator.pushNamed(context, '/invoices/new', arguments: {
-                  'contact_id': c['contact_id'],
-                  'contact_name': c['contact_name'] ?? c['customer_name'],
-                  'lines': lines.map((l) => {
-                    'product_id': l['product_id'],
-                    'product_name': l['product_name'],
-                    'quantity': l['quantity'],
-                    'rate': l['rate'] ?? 0,
-                    'hsn_sac': l['hsn_sac'] ?? '',
-                    'gst_rate': l['gst_rate'] ?? 0,
-                  }).toList(),
-                });
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => InvoiceFormView(initialData: {
+                      'contact_id': c['contact_id'],
+                      'contact_name': c['contact_name'] ?? c['customer_name'],
+                      'reference_number': c['challan_number'],
+                      'pos_state_code': c['pos_state_code'],
+                      'lines': lines.map((l) => {
+                        'product_id': l['product_id'],
+                        'product_name': l['product_name'],
+                        'quantity': l['quantity'],
+                        'rate': l['rate'] ?? 0,
+                        'discount': l['discount'] ?? 0,
+                        'hsn_sac': l['hsn_sac'] ?? '',
+                        'gst_rate': l['gst_rate'] ?? 0,
+                      }).toList(),
+                    }),
+                  ),
+                );
               }),
             ],
             const SizedBox(height: 32),

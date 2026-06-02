@@ -211,7 +211,7 @@ def cancel_payment_receipt(
         raise HTTPException(status_code=400, detail="Payment receipt is already cancelled.")
 
     for alloc in payment.allocations:
-        invoice = db.query(Invoice).filter(Invoice.id == alloc.invoice_id).with_for_update().first()
+        invoice = db.query(Invoice).filter(Invoice.id == alloc.invoice_id, Invoice.deleted_at == None).with_for_update().first()
         if invoice:
             invoice.amount_paid -= alloc.amount
             if invoice.amount_paid <= 0:
@@ -224,7 +224,7 @@ def cancel_payment_receipt(
     bank_or_cash_account_id = resolver.resolve(f"assets.{payment.payment_mode.lower()}")
     # Resolve customer from the first allocation's invoice
     if payment.allocations:
-        first_invoice = db.query(Invoice).filter(Invoice.id == payment.allocations[0].invoice_id).first()
+        first_invoice = db.query(Invoice).filter(Invoice.id == payment.allocations[0].invoice_id, Invoice.deleted_at == None).first()
         customer_account_id = resolver.resolve(f"customer.{first_invoice.contact_id}") if first_invoice else None
     else:
         customer_account_id = None
@@ -421,7 +421,7 @@ def cancel_vendor_payment(
         raise HTTPException(status_code=400, detail="Disbursement is already cancelled.")
 
     for alloc in payment.allocations:
-        bill = db.query(Bill).filter(Bill.id == alloc.bill_id).with_for_update().first()
+        bill = db.query(Bill).filter(Bill.id == alloc.bill_id, Bill.deleted_at == None).with_for_update().first()
         if bill:
             bill.amount_paid -= alloc.amount
             if bill.amount_paid <= 0:

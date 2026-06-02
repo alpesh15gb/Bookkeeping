@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
@@ -64,14 +63,53 @@ class _SettingsViewState extends State<SettingsView> {
 
   String _selectedTemplate = 'professional';
 
-  void _populateControllers(Map<String, dynamic> company, Map<String, dynamic> settings) {
+  String _getFriendlyDocTypeName(String docType) {
+    switch (docType) {
+      case 'INVOICE':
+        return 'Sales Invoice';
+      case 'BILL':
+        return 'Vendor Bill';
+      case 'PAYMENT':
+        return 'Customer Payment';
+      case 'JOURNAL':
+        return 'Journal Entry';
+      case 'RECEIPT':
+        return 'Receipt';
+      case 'DISBURSEMENT':
+        return 'Disbursement';
+      case 'CREDIT_NOTE':
+        return 'Credit Note';
+      case 'DEBIT_NOTE':
+        return 'Debit Note';
+      case 'PURCHASE_ORDER':
+        return 'Purchase Order';
+      case 'SALES_ORDER':
+        return 'Sales Order';
+      case 'DELIVERY_CHALLAN':
+        return 'Delivery Challan';
+      case 'PROFORMA_INVOICE':
+        return 'Estimate / Proforma Invoice';
+      case 'SALES_RETURN':
+        return 'Sales Return';
+      case 'PURCHASE_RETURN':
+        return 'Purchase Return';
+      default:
+        return docType;
+    }
+  }
+
+  void _populateControllers(
+    Map<String, dynamic> company,
+    Map<String, dynamic> settings,
+  ) {
     _legalNameCtrl.text = company['legal_name'] ?? '';
     _tradeNameCtrl.text = company['trade_name'] ?? '';
     _gstinCtrl.text = company['gstin'] ?? '';
     _panCtrl.text = company['pan'] ?? '';
     _stateCodeCtrl.text = settings['origin_state_code'] ?? '';
 
-    final extraSettings = settings['extra_settings'] as Map<String, dynamic>? ?? {};
+    final extraSettings =
+        settings['extra_settings'] as Map<String, dynamic>? ?? {};
     _selectedTemplate = extraSettings['pdf_template'] ?? 'professional';
     _addressCtrl.text = extraSettings['company_address'] ?? '';
     _phoneCtrl.text = extraSettings['company_phone'] ?? '';
@@ -84,7 +122,10 @@ class _SettingsViewState extends State<SettingsView> {
     _termsCtrl.text = extraSettings['terms'] ?? '';
   }
 
-  void _showCompanyProfileDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+  void _showCompanyProfileDialog(
+    Map<String, dynamic> company,
+    Map<String, dynamic> settings,
+  ) {
     _populateControllers(company, settings);
     showDialog(
       context: context,
@@ -158,7 +199,10 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  void _showTaxComplianceDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+  void _showTaxComplianceDialog(
+    Map<String, dynamic> company,
+    Map<String, dynamic> settings,
+  ) {
     _populateControllers(company, settings);
     showDialog(
       context: context,
@@ -214,7 +258,10 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  void _showBankDetailsDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+  void _showBankDetailsDialog(
+    Map<String, dynamic> company,
+    Map<String, dynamic> settings,
+  ) {
     _populateControllers(company, settings);
     showDialog(
       context: context,
@@ -265,7 +312,10 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  void _showPreferencesDialog(Map<String, dynamic> company, Map<String, dynamic> settings) {
+  void _showPreferencesDialog(
+    Map<String, dynamic> company,
+    Map<String, dynamic> settings,
+  ) {
     _populateControllers(company, settings);
     showDialog(
       context: context,
@@ -283,11 +333,26 @@ class _SettingsViewState extends State<SettingsView> {
                     prefixIcon: Icon(Icons.picture_as_pdf_outlined, size: 18),
                   ),
                   items: const [
-                    DropdownMenuItem(value: 'professional', child: Text('Professional (Navy)')),
-                    DropdownMenuItem(value: 'modern', child: Text('Modern (Indigo)')),
-                    DropdownMenuItem(value: 'minimal', child: Text('Minimal (Clean)')),
-                    DropdownMenuItem(value: 'elegant', child: Text('Elegant (Green)')),
-                    DropdownMenuItem(value: 'thermal', child: Text('Thermal / POS')),
+                    DropdownMenuItem(
+                      value: 'professional',
+                      child: Text('Professional (Navy)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'modern',
+                      child: Text('Modern (Indigo)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'minimal',
+                      child: Text('Minimal (Clean)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'elegant',
+                      child: Text('Elegant (Green)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'thermal',
+                      child: Text('Thermal / POS'),
+                    ),
                   ],
                   onChanged: (v) {
                     if (v != null) {
@@ -328,13 +393,16 @@ class _SettingsViewState extends State<SettingsView> {
   Future<void> _saveSettings() async {
     final companyPayload = {
       'legal_name': _legalNameCtrl.text,
-      'trade_name': _tradeNameCtrl.text.isNotEmpty ? _tradeNameCtrl.text : _legalNameCtrl.text,
+      'trade_name': _tradeNameCtrl.text.isNotEmpty
+          ? _tradeNameCtrl.text
+          : _legalNameCtrl.text,
       'gstin': _gstinCtrl.text.isNotEmpty ? _gstinCtrl.text : null,
       'pan': _panCtrl.text.isNotEmpty ? _panCtrl.text : null,
     };
 
     final provider = context.read<SettingsProvider>();
-    final extraSettings = provider.settings['extra_settings'] as Map<String, dynamic>? ?? {};
+    final extraSettings =
+        provider.settings['extra_settings'] as Map<String, dynamic>? ?? {};
 
     final settingsPayload = <String, dynamic>{
       'extra_settings': {
@@ -349,7 +417,7 @@ class _SettingsViewState extends State<SettingsView> {
         'bank_ifsc': _bankIfscCtrl.text,
         'bank_branch': _bankBranchCtrl.text,
         'terms': _termsCtrl.text,
-      }
+      },
     };
     if (_stateCodeCtrl.text.isNotEmpty) {
       settingsPayload['origin_state_code'] = _stateCodeCtrl.text;
@@ -369,12 +437,11 @@ class _SettingsViewState extends State<SettingsView> {
           ),
         );
       } else {
-        final err = context.read<SettingsProvider>().errorMessage ?? 'Failed to save settings';
+        final err =
+            context.read<SettingsProvider>().errorMessage ??
+            'Failed to save settings';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(err),
-            backgroundColor: AppColors.error,
-          ),
+          SnackBar(content: Text(err), backgroundColor: AppColors.error),
         );
       }
     }
@@ -388,7 +455,8 @@ class _SettingsViewState extends State<SettingsView> {
     if (settingsProvider.isLoading && settingsProvider.company.isEmpty) {
       return const LoadingState(message: 'Loading settings...');
     }
-    if (settingsProvider.errorMessage != null && settingsProvider.company.isEmpty) {
+    if (settingsProvider.errorMessage != null &&
+        settingsProvider.company.isEmpty) {
       return ErrorState(
         message: settingsProvider.errorMessage!,
         onRetry: () => context.read<SettingsProvider>().fetchAllSettings(),
@@ -405,7 +473,8 @@ class _SettingsViewState extends State<SettingsView> {
     final currency = settings['currency'] ?? 'INR';
     final gstEnabled = settings['gst_enabled'] == true;
     final stateCode = settings['origin_state_code'] ?? 'Not configured';
-    final extraSettings = settings['extra_settings'] as Map<String, dynamic>? ?? {};
+    final extraSettings =
+        settings['extra_settings'] as Map<String, dynamic>? ?? {};
     final pdfTemplate = extraSettings['pdf_template'] ?? 'professional';
 
     final companyAddress = extraSettings['company_address'] ?? 'Not configured';
@@ -421,7 +490,9 @@ class _SettingsViewState extends State<SettingsView> {
     return Scaffold(
       backgroundColor: AppColors.bgLight,
       body: ListView(
-        padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
+        padding: isMobile
+            ? AppSpacing.pagePaddingMobile
+            : AppSpacing.pagePadding,
         children: [
           // Company Section
           AppCard(
@@ -433,8 +504,13 @@ class _SettingsViewState extends State<SettingsView> {
                     Text('Company Profile', style: AppTextStyles.h3),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.brandNavy),
-                      onPressed: () => _showCompanyProfileDialog(company, settings),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 18,
+                        color: AppColors.brandNavy,
+                      ),
+                      onPressed: () =>
+                          _showCompanyProfileDialog(company, settings),
                       tooltip: 'Edit Company Profile',
                     ),
                   ],
@@ -442,8 +518,16 @@ class _SettingsViewState extends State<SettingsView> {
                 const SizedBox(height: 12),
                 _settingRow(Icons.business_outlined, 'Legal Name', legalName),
                 if (tradeName.isNotEmpty && tradeName != legalName)
-                  _settingRow(Icons.storefront_outlined, 'Trade Name', tradeName),
-                _settingRow(Icons.location_on_outlined, 'Address', companyAddress),
+                  _settingRow(
+                    Icons.storefront_outlined,
+                    'Trade Name',
+                    tradeName,
+                  ),
+                _settingRow(
+                  Icons.location_on_outlined,
+                  'Address',
+                  companyAddress,
+                ),
                 _settingRow(Icons.phone_outlined, 'Phone', companyPhone),
                 _settingRow(Icons.email_outlined, 'Email', companyEmail),
                 _settingRow(Icons.language_outlined, 'Website', companyWebsite),
@@ -462,8 +546,13 @@ class _SettingsViewState extends State<SettingsView> {
                     Text('Tax & Compliance', style: AppTextStyles.h3),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.brandNavy),
-                      onPressed: () => _showTaxComplianceDialog(company, settings),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 18,
+                        color: AppColors.brandNavy,
+                      ),
+                      onPressed: () =>
+                          _showTaxComplianceDialog(company, settings),
                       tooltip: 'Edit Tax & Compliance',
                     ),
                   ],
@@ -471,12 +560,18 @@ class _SettingsViewState extends State<SettingsView> {
                 const SizedBox(height: 12),
                 _settingRow(Icons.badge_outlined, 'GSTIN', gstin),
                 _settingRow(Icons.numbers_outlined, 'PAN', pan),
-                _settingRow(Icons.location_city_outlined, 'Origin State Code', stateCode),
+                _settingRow(
+                  Icons.location_city_outlined,
+                  'Origin State Code',
+                  stateCode,
+                ),
                 _settingRow(
                   Icons.fact_check_outlined,
                   'GST Enabled',
                   gstEnabled ? 'Yes' : 'No',
-                  valueColor: gstEnabled ? AppColors.success : AppColors.textMuted,
+                  valueColor: gstEnabled
+                      ? AppColors.success
+                      : AppColors.textMuted,
                 ),
               ],
             ),
@@ -493,15 +588,28 @@ class _SettingsViewState extends State<SettingsView> {
                     Text('Bank Details', style: AppTextStyles.h3),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.brandNavy),
-                      onPressed: () => _showBankDetailsDialog(company, settings),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 18,
+                        color: AppColors.brandNavy,
+                      ),
+                      onPressed: () =>
+                          _showBankDetailsDialog(company, settings),
                       tooltip: 'Edit Bank Details',
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                _settingRow(Icons.account_balance_outlined, 'Bank Name', bankName),
-                _settingRow(Icons.payment_outlined, 'Account Number', bankAccountNo),
+                _settingRow(
+                  Icons.account_balance_outlined,
+                  'Bank Name',
+                  bankName,
+                ),
+                _settingRow(
+                  Icons.payment_outlined,
+                  'Account Number',
+                  bankAccountNo,
+                ),
                 _settingRow(Icons.code_outlined, 'IFSC Code', bankIfsc),
                 _settingRow(Icons.store_outlined, 'Branch Name', bankBranch),
               ],
@@ -519,29 +627,48 @@ class _SettingsViewState extends State<SettingsView> {
                     Text('Preferences', style: AppTextStyles.h3),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.brandNavy),
-                      onPressed: () => _showPreferencesDialog(company, settings),
+                      icon: const Icon(
+                        Icons.edit_outlined,
+                        size: 18,
+                        color: AppColors.brandNavy,
+                      ),
+                      onPressed: () =>
+                          _showPreferencesDialog(company, settings),
                       tooltip: 'Edit Preferences',
                     ),
                   ],
                 ),
                 const SizedBox(height: 12),
-                _settingRow(Icons.monetization_on_outlined, 'Currency', currency),
+                _settingRow(
+                  Icons.monetization_on_outlined,
+                  'Currency',
+                  currency,
+                ),
                 _settingRow(
                   Icons.calendar_month_outlined,
                   'Financial Year',
-                  DateTime.now().month >= 4 ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}' : '${(DateTime.now().year - 1)}-${DateTime.now().year.toString().substring(2)}',
+                  DateTime.now().month >= 4
+                      ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}'
+                      : '${(DateTime.now().year - 1)}-${DateTime.now().year.toString().substring(2)}',
                 ),
                 _settingRow(
                   Icons.picture_as_pdf_outlined,
                   'PDF Template Style',
                   pdfTemplate.toString().toUpperCase(),
                 ),
-                _settingRow(Icons.description_outlined, 'Terms & Conditions', terms),
+                _settingRow(
+                  Icons.description_outlined,
+                  'Terms & Conditions',
+                  terms,
+                ),
                 Consumer<ThemeProvider>(
                   builder: (context, themeProvider, _) {
                     return ListTile(
-                      leading: Icon(themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode),
+                      leading: Icon(
+                        themeProvider.isDarkMode
+                            ? Icons.dark_mode
+                            : Icons.light_mode,
+                      ),
                       title: const Text('Dark Mode'),
                       trailing: Switch(
                         value: themeProvider.isDarkMode,
@@ -567,15 +694,27 @@ class _SettingsViewState extends State<SettingsView> {
                     Consumer<SyncManager>(
                       builder: (context, sync, _) {
                         if (!sync.isOnline) {
-                          return const Icon(Icons.cloud_off, color: AppColors.warning, size: 18);
+                          return const Icon(
+                            Icons.cloud_off,
+                            color: AppColors.warning,
+                            size: 18,
+                          );
                         }
                         if (sync.pendingCount > 0) {
                           return Badge(
                             label: Text('${sync.pendingCount}'),
-                            child: const Icon(Icons.sync, color: AppColors.info, size: 18),
+                            child: const Icon(
+                              Icons.sync,
+                              color: AppColors.info,
+                              size: 18,
+                            ),
                           );
                         }
-                        return const Icon(Icons.cloud_done, color: AppColors.success, size: 18);
+                        return const Icon(
+                          Icons.cloud_done,
+                          color: AppColors.success,
+                          size: 18,
+                        );
                       },
                     ),
                   ],
@@ -590,20 +729,27 @@ class _SettingsViewState extends State<SettingsView> {
                           Icons.wifi,
                           'Connection',
                           sync.isOnline ? 'Online' : 'Offline',
-                          valueColor: sync.isOnline ? AppColors.success : AppColors.error,
+                          valueColor: sync.isOnline
+                              ? AppColors.success
+                              : AppColors.error,
                         ),
                         _settingRow(
                           Icons.pending_actions,
                           'Pending Sync Items',
                           '${sync.pendingCount}',
-                          valueColor: sync.pendingCount > 0 ? AppColors.warning : AppColors.textMuted,
+                          valueColor: sync.pendingCount > 0
+                              ? AppColors.warning
+                              : AppColors.textMuted,
                         ),
                         if (sync.lastSyncMessage != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
                               sync.lastSyncMessage!,
-                              style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: AppColors.textMuted,
+                              ),
                             ),
                           ),
                         const SizedBox(height: 12),
@@ -611,17 +757,30 @@ class _SettingsViewState extends State<SettingsView> {
                           children: [
                             Expanded(
                               child: ElevatedButton.icon(
-                                onPressed: sync.isSyncing ? null : () => sync.fullSync(),
+                                onPressed: sync.isSyncing
+                                    ? null
+                                    : () => sync.fullSync(),
                                 icon: sync.isSyncing
-                                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                    ? const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                        ),
+                                      )
                                     : const Icon(Icons.sync, size: 18),
-                                label: Text(sync.isSyncing ? 'Syncing...' : 'Full Sync'),
+                                label: Text(
+                                  sync.isSyncing ? 'Syncing...' : 'Full Sync',
+                                ),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: OutlinedButton.icon(
-                                onPressed: sync.isSyncing || sync.pendingCount == 0 ? null : () => sync.syncPendingActions(),
+                                onPressed:
+                                    sync.isSyncing || sync.pendingCount == 0
+                                    ? null
+                                    : () => sync.syncPendingActions(),
                                 icon: const Icon(Icons.cloud_upload, size: 18),
                                 label: const Text('Upload Pending'),
                               ),
@@ -647,38 +806,56 @@ class _SettingsViewState extends State<SettingsView> {
                 if (settingsProvider.numberingSeries.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text('No numbering series configured', style: AppTextStyles.bodySmall),
+                    child: Text(
+                      'No numbering series configured',
+                      style: AppTextStyles.bodySmall,
+                    ),
                   ),
-                ...settingsProvider.numberingSeries.map((series) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.tag_outlined, size: 16, color: AppColors.textMuted),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          series['document_type'] ?? 'Unknown',
-                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+                ...settingsProvider.numberingSeries.map(
+                  (series) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.tag_outlined,
+                          size: 16,
+                          color: AppColors.textMuted,
                         ),
-                      ),
-                      Text(
-                        '${series['prefix'] ?? ''}${'0' * (series['padding_digits'] ?? 4)}${series['suffix'] ?? ''}',
-                        style: AppTextStyles.caption.copyWith(
-                          fontFamily: 'monospace',
-                          fontSize: 11,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            _getFriendlyDocTypeName(
+                              series['document_type'] ?? 'Unknown',
+                            ),
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        icon: const Icon(Icons.edit_outlined, size: 16, color: AppColors.brandNavy),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: () => _showEditSeriesDialog(series),
-                        tooltip: 'Edit numbering series',
-                      ),
-                    ],
+                        Text(
+                          '${series['prefix'] ?? ''}${'0' * (series['padding_digits'] ?? 4)}${series['suffix'] ?? ''}',
+                          style: AppTextStyles.caption.copyWith(
+                            fontFamily: 'monospace',
+                            fontSize: 11,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.edit_outlined,
+                            size: 16,
+                            color: AppColors.brandNavy,
+                          ),
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _showEditSeriesDialog(series),
+                          tooltip: 'Edit numbering series',
+                        ),
+                      ],
+                    ),
                   ),
-                )),
+                ),
               ],
             ),
           ),
@@ -694,27 +871,36 @@ class _SettingsViewState extends State<SettingsView> {
                 if (settingsProvider.branches.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Text('No branches configured', style: AppTextStyles.bodySmall),
+                    child: Text(
+                      'No branches configured',
+                      style: AppTextStyles.bodySmall,
+                    ),
                   ),
-                ...settingsProvider.branches.map((branch) => Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Icon(Icons.business_outlined, size: 16, color: AppColors.textMuted),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          branch['name'] ?? 'Unknown',
-                          style: const TextStyle(fontSize: 13),
+                ...settingsProvider.branches.map(
+                  (branch) => Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.business_outlined,
+                          size: 16,
+                          color: AppColors.textMuted,
                         ),
-                      ),
-                      Text(
-                        branch['gstin'] ?? branch['state_code'] ?? '',
-                        style: AppTextStyles.caption,
-                      ),
-                    ],
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            branch['name'] ?? 'Unknown',
+                            style: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                        Text(
+                          branch['gstin'] ?? branch['state_code'] ?? '',
+                          style: AppTextStyles.caption,
+                        ),
+                      ],
+                    ),
                   ),
-                )),
+                ),
               ],
             ),
           ),
@@ -730,7 +916,9 @@ class _SettingsViewState extends State<SettingsView> {
                       onPressed: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (_) => const ChangePasswordView()),
+                          MaterialPageRoute(
+                            builder: (_) => const ChangePasswordView(),
+                          ),
                         );
                       },
                       icon: const Icon(Icons.lock_outlined, size: 16),
@@ -753,8 +941,12 @@ class _SettingsViewState extends State<SettingsView> {
 
   void _showEditSeriesDialog(Map<String, dynamic> series) {
     final prefixCtrl = TextEditingController(text: series['prefix'] ?? '');
-    final nextNumberCtrl = TextEditingController(text: (series['next_number'] ?? 1).toString());
-    final paddingCtrl = TextEditingController(text: (series['padding_digits'] ?? 4).toString());
+    final nextNumberCtrl = TextEditingController(
+      text: (series['next_number'] ?? 1).toString(),
+    );
+    final paddingCtrl = TextEditingController(
+      text: (series['padding_digits'] ?? 4).toString(),
+    );
     final suffixCtrl = TextEditingController(text: series['suffix'] ?? '');
 
     showDialog(
@@ -767,7 +959,10 @@ class _SettingsViewState extends State<SettingsView> {
             children: [
               TextField(
                 controller: prefixCtrl,
-                decoration: const InputDecoration(labelText: 'Prefix', hintText: 'e.g. INV/2026/'),
+                decoration: const InputDecoration(
+                  labelText: 'Prefix',
+                  hintText: 'e.g. INV/2026/',
+                ),
               ),
               const SizedBox(height: 12),
               TextField(
@@ -778,13 +973,17 @@ class _SettingsViewState extends State<SettingsView> {
               const SizedBox(height: 12),
               TextField(
                 controller: paddingCtrl,
-                decoration: const InputDecoration(labelText: 'Padding Digits (e.g. 4 for 0001)'),
+                decoration: const InputDecoration(
+                  labelText: 'Padding Digits (e.g. 4 for 0001)',
+                ),
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: suffixCtrl,
-                decoration: const InputDecoration(labelText: 'Suffix (Optional)'),
+                decoration: const InputDecoration(
+                  labelText: 'Suffix (Optional)',
+                ),
               ),
             ],
           ),
@@ -799,41 +998,56 @@ class _SettingsViewState extends State<SettingsView> {
               final prefix = prefixCtrl.text;
               final nextVal = int.tryParse(nextNumberCtrl.text);
               final padVal = int.tryParse(paddingCtrl.text);
-              final suffix = suffixCtrl.text.isNotEmpty ? suffixCtrl.text : null;
+              final suffix = suffixCtrl.text.isNotEmpty
+                  ? suffixCtrl.text
+                  : null;
 
               if (nextVal == null || nextVal < 1) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Next Number must be 1 or greater'), backgroundColor: AppColors.error),
+                  const SnackBar(
+                    content: Text('Next Number must be 1 or greater'),
+                    backgroundColor: AppColors.error,
+                  ),
                 );
                 return;
               }
 
               if (padVal == null || padVal < 1 || padVal > 10) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Padding Digits must be between 1 and 10'), backgroundColor: AppColors.error),
+                  const SnackBar(
+                    content: Text('Padding Digits must be between 1 and 10'),
+                    backgroundColor: AppColors.error,
+                  ),
                 );
                 return;
               }
-              
-              final success = await context.read<SettingsProvider>().updateNumberingSeries(
-                series['id'],
-                {
-                  'prefix': prefix,
-                  'next_number': nextVal,
-                  'padding_digits': padVal,
-                  'suffix': suffix,
-                },
-              );
+
+              final success = await context
+                  .read<SettingsProvider>()
+                  .updateNumberingSeries(series['id'], {
+                    'prefix': prefix,
+                    'next_number': nextVal,
+                    'padding_digits': padVal,
+                    'suffix': suffix,
+                  });
               if (mounted) {
                 if (success) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Numbering series updated successfully'), backgroundColor: AppColors.success),
+                    const SnackBar(
+                      content: Text('Numbering series updated successfully'),
+                      backgroundColor: AppColors.success,
+                    ),
                   );
                 } else {
-                  final err = context.read<SettingsProvider>().errorMessage ?? 'Update failed';
+                  final err =
+                      context.read<SettingsProvider>().errorMessage ??
+                      'Update failed';
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(err), backgroundColor: AppColors.error),
+                    SnackBar(
+                      content: Text(err),
+                      backgroundColor: AppColors.error,
+                    ),
                   );
                 }
               }
@@ -845,16 +1059,19 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
-  Widget _settingRow(IconData icon, String label, String value, {Color? valueColor}) {
+  Widget _settingRow(
+    IconData icon,
+    String label,
+    String value, {
+    Color? valueColor,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 7),
       child: Row(
         children: [
           Icon(icon, size: 18, color: AppColors.textMuted),
           const SizedBox(width: 12),
-          Expanded(
-            child: Text(label, style: const TextStyle(fontSize: 14)),
-          ),
+          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
           Text(
             value,
             style: AppTextStyles.caption.copyWith(
@@ -906,14 +1123,8 @@ class _SettingsViewState extends State<SettingsView> {
       const SnackBar(content: Text('Requesting verification OTP...')),
     );
     try {
-      final response = await http.post(
+      final response = await ApiClient().post(
         Uri.parse('${ApiClient.baseUrl}/purge/request'),
-        headers: {
-          if (ApiClient.accessToken != null)
-            'Authorization': 'Bearer ${ApiClient.accessToken}',
-          if (ApiClient.tenantId != null)
-            'X-Tenant-ID': ApiClient.tenantId!,
-        },
       );
 
       if (response.statusCode == 200) {
@@ -944,7 +1155,9 @@ class _SettingsViewState extends State<SettingsView> {
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('A 6-digit OTP code has been sent to your registered email address.'),
+              const Text(
+                'A 6-digit OTP code has been sent to your registered email address.',
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: otpCtrl,
@@ -958,7 +1171,7 @@ class _SettingsViewState extends State<SettingsView> {
               if (verifying) ...[
                 const SizedBox(height: 12),
                 const CircularProgressIndicator(),
-              ]
+              ],
             ],
           ),
           actions: [
@@ -980,15 +1193,8 @@ class _SettingsViewState extends State<SettingsView> {
 
                       setDialogState(() => verifying = true);
                       try {
-                        final res = await http.post(
+                        final res = await ApiClient().post(
                           Uri.parse('${ApiClient.baseUrl}/purge/verify'),
-                          headers: {
-                            'Content-Type': 'application/json',
-                            if (ApiClient.accessToken != null)
-                              'Authorization': 'Bearer ${ApiClient.accessToken}',
-                            if (ApiClient.tenantId != null)
-                              'X-Tenant-ID': ApiClient.tenantId!,
-                          },
                           body: jsonEncode({'otp': otp}),
                         );
 
@@ -996,7 +1202,9 @@ class _SettingsViewState extends State<SettingsView> {
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Company data purged successfully.'),
+                              content: Text(
+                                'Company data purged successfully.',
+                              ),
                               backgroundColor: AppColors.success,
                             ),
                           );
@@ -1005,15 +1213,22 @@ class _SettingsViewState extends State<SettingsView> {
                           String msg = 'Purge verification failed';
                           try {
                             final body = jsonDecode(res.body);
-                            if (body is Map) msg = body['detail']?.toString() ?? msg;
+                            if (body is Map)
+                              msg = body['detail']?.toString() ?? msg;
                           } catch (_) {}
                           ScaffoldMessenger.of(ctx).showSnackBar(
-                            SnackBar(content: Text(msg), backgroundColor: AppColors.error),
+                            SnackBar(
+                              content: Text(msg),
+                              backgroundColor: AppColors.error,
+                            ),
                           );
                         }
                       } catch (e) {
                         ScaffoldMessenger.of(ctx).showSnackBar(
-                          SnackBar(content: Text('Error: $e'), backgroundColor: AppColors.error),
+                          SnackBar(
+                            content: Text('Error: $e'),
+                            backgroundColor: AppColors.error,
+                          ),
                         );
                       } finally {
                         setDialogState(() => verifying = false);

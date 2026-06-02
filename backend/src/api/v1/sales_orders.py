@@ -101,10 +101,14 @@ def create_sales_order(
 
     grand_total = so_subtotal + so_cgst + so_sgst + so_igst + so_utgst + so_cess
 
+    so_number = payload.so_number
+    if not so_number:
+        so_number = NumberingSeriesService.generate_next_number(db, tenant_id, "SALES_ORDER")
+
     so = SalesOrder(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
-        so_number=payload.so_number,
+        so_number=so_number,
         order_date=payload.order_date,
         due_date=payload.due_date,
         status="DRAFT",

@@ -577,6 +577,9 @@ class NumberingSeries(Base):
     next_number is incremented using SELECT FOR UPDATE to prevent race conditions.
     """
     __tablename__ = "numbering_series"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "document_type", name="uq_numbering_series_tenant_doctype"),
+    )
 
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)

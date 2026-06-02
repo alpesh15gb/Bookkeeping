@@ -93,6 +93,7 @@ class BillResponse(BillBase):
 
 class BillListResponse(SchemaBase):
     id: uuid.UUID
+    contact_id: uuid.UUID
     bill_number: str
     issue_date: date
     due_date: date
@@ -513,7 +514,14 @@ class BankStatementResponse(BankStatementBase):
 
 class BankStatementListResponse(SchemaBase):
     id: uuid.UUID
+    banking_profile_id: uuid.UUID
+    bank_name: Optional[str] = None
+    account_number: Optional[str] = None
     statement_date: date
+    starting_balance: Decimal = Decimal("0.0000")
+    ending_balance: Decimal = Decimal("0.0000")
+    closing_balance: Decimal = Decimal("0.0000")
+    currency: str = "INR"
     status: str
     created_at: datetime
 
@@ -522,8 +530,11 @@ class BankReconciliationBase(SchemaBase):
     amount: Decimal = Field(..., description="The reconciled amount")
     notes: Optional[str] = None
 
-class BankReconciliationCreate(BankReconciliationBase):
-    pass
+class BankReconciliationCreate(SchemaBase):
+    payment_id: Optional[uuid.UUID] = None
+    bill_payment_id: Optional[uuid.UUID] = None
+    amount: Decimal = Field(..., description="The reconciled amount")
+    notes: Optional[str] = None
 
 class BankReconciliationResponse(BankReconciliationBase):
     id: uuid.UUID

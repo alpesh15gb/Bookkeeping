@@ -1,12 +1,10 @@
 import 'dart:convert';
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 
 class BackupRestoreView extends StatefulWidget {
   const BackupRestoreView({super.key});
@@ -40,26 +38,18 @@ class _BackupRestoreViewState extends State<BackupRestoreView> {
         final timestamp = DateTime.now().millisecondsSinceEpoch;
         final fileName = 'apexbooks_backup_$timestamp.json';
 
-        // Save to downloads/documents directory
-        String? savePath;
-        try {
-          if (Platform.isAndroid || Platform.isIOS) {
-            final dir = await getApplicationDocumentsDirectory();
-            savePath = '${dir.path}/$fileName';
-          } else {
-            final dir = await getDownloadsDirectory();
-            savePath = '${dir?.path ?? '.'}/$fileName';
-          }
-        } catch (_) {
-          savePath = fileName;
-        }
-
-        final file = File(savePath);
-        await file.writeAsString(const JsonEncoder.withIndent('  ').convert(data));
+        final json = const JsonEncoder.withIndent('  ').convert(data);
+        final savePath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save ApexBooks Backup',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+          bytes: Uint8List.fromList(utf8.encode(json)),
+        );
 
         setState(() {
           _isExporting = false;
-          _successMessage = 'Backup saved to $savePath';
+          _successMessage = savePath == null ? 'Backup export cancelled' : 'Backup saved to $savePath';
         });
       } else {
         setState(() {
@@ -108,16 +98,10 @@ class _BackupRestoreViewState extends State<BackupRestoreView> {
 
     try {
       final bytes = picked.bytes;
-      final filePath = picked.path;
-      String content;
-
-      if (bytes != null) {
-        content = utf8.decode(bytes);
-      } else if (filePath != null) {
-        content = await File(filePath).readAsString();
-      } else {
+      if (bytes == null) {
         throw Exception('Could not read file');
       }
+      final content = utf8.decode(bytes);
 
       // Validate JSON structure
       final data = jsonDecode(content);

@@ -142,6 +142,7 @@ class InvoiceResponse(InvoiceBase):
 
 class InvoiceListResponse(SchemaBase):
     id: uuid.UUID
+    contact_id: uuid.UUID
     invoice_number: str
     issue_date: date
     due_date: date

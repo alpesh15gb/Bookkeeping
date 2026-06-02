@@ -11,7 +11,7 @@ from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillL
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.accounting.auto_post import auto_post_bill, cancel_bill, get_bill_display_status
-from src.domains.company.services import resolve_origin_state_code
+from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
 from src.api.deps import get_tenant_context, enforce_permission
 from src.core.rate_limiter import limiter
 from src.core.config import settings
@@ -122,10 +122,14 @@ def create_bill(
     tds_rate = payload.tds_rate or Decimal("0.00")
     tds_amount = (adjusted_subtotal * tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
 
+    bill_number = payload.bill_number
+    if not bill_number:
+        bill_number = NumberingSeriesService.generate_next_number(db, tenant_id, "BILL")
+
     bill = Bill(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
-        bill_number=payload.bill_number,
+        bill_number=bill_number,
         issue_date=payload.issue_date,
         due_date=payload.due_date,
         status="DRAFT",
@@ -280,6 +284,7 @@ def list_bills(
     limit: int = 50,
     search: Optional[str] = None,
     status: Optional[str] = None,
+    contact_id: Optional[uuid.UUID] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
@@ -305,6 +310,9 @@ def list_bills(
         else:
             q = q.filter(Bill.status == status.upper())
 
+    if contact_id:
+        q = q.filter(Bill.contact_id == contact_id)
+
     total = q.count()
     results = q.offset(offset).limit(limit).all()
 
@@ -312,6 +320,7 @@ def list_bills(
     for b, contact_name in results:
         items.append(BillListResponse(
             id=b.id,
+            contact_id=b.contact_id,
             bill_number=b.bill_number,
             issue_date=b.issue_date,
             due_date=b.due_date,

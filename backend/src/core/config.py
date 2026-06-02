@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------------
     # CORS
     # ----------------------------------------------------------------
-    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://apexbooks.in,https://api.apexbooks.in,tauri://localhost,tauri://com.apexbooks.desktop"
+    ALLOWED_ORIGINS: str = "http://localhost:5173,http://localhost:3000,https://apexbooks.in,https://api.apexbooks.in,https://app.apexbooks.in,tauri://localhost,tauri://com.apexbooks.desktop"
 
     # ----------------------------------------------------------------
     # Email (SMTP / SendGrid)

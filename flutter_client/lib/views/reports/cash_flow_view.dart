@@ -77,19 +77,19 @@ class _CashFlowViewState extends State<CashFlowView> {
                       const SizedBox(height: 16),
                       _FlowSection(
                         title: 'Operating Activities',
-                        items: _data!['operating'] ?? {},
+                        items: _data!['operating_activities'] ?? _data!['operating'] ?? {},
                         color: Colors.blue,
                       ),
                       const SizedBox(height: 16),
                       _FlowSection(
                         title: 'Investing Activities',
-                        items: _data!['investing'] ?? {},
+                        items: _data!['investing_activities'] ?? _data!['investing'] ?? {},
                         color: Colors.orange,
                       ),
                       const SizedBox(height: 16),
                       _FlowSection(
                         title: 'Financing Activities',
-                        items: _data!['financing'] ?? {},
+                        items: _data!['financing_activities'] ?? _data!['financing'] ?? {},
                         color: Colors.purple,
                       ),
                     ],
@@ -107,8 +107,8 @@ class _SummaryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final opening = double.tryParse(data['opening_balance']?.toString() ?? '0') ?? 0;
-    final closing = double.tryParse(data['closing_balance']?.toString() ?? '0') ?? 0;
+    final opening = double.tryParse(data['opening_cash_balance']?.toString() ?? data['opening_balance']?.toString() ?? '0') ?? 0;
+    final closing = double.tryParse(data['closing_cash_balance']?.toString() ?? data['closing_balance']?.toString() ?? '0') ?? 0;
     final netChange = closing - opening;
 
     return Card(
@@ -142,7 +142,7 @@ class _AmountColumn extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        Text(label, style: TextStyle(fontSize: 12, color: color.withOpacity(0.8))),
+        Text(label, style: TextStyle(fontSize: 12, color: color.withValues(alpha: 0.8))),
         const SizedBox(height: 4),
         Text(
           '₹${amount.toStringAsFixed(2)}',
@@ -155,25 +155,52 @@ class _AmountColumn extends StatelessWidget {
 
 class _FlowSection extends StatelessWidget {
   final String title;
-  final Map<String, dynamic> items;
+  final dynamic items;
   final Color color;
   const _FlowSection({required this.title, required this.items, required this.color});
 
   @override
   Widget build(BuildContext context) {
-    final inflows = double.tryParse(items['inflows']?.toString() ?? '0') ?? 0;
-    final outflows = double.tryParse(items['outflows']?.toString() ?? '0') ?? 0;
-    final net = inflows - outflows;
+    if (items is Map<String, dynamic>) {
+      final inflows = double.tryParse(items['inflows']?.toString() ?? '0') ?? 0;
+      final outflows = double.tryParse(items['outflows']?.toString() ?? '0') ?? 0;
+      final net = inflows - outflows;
+
+      return Card(
+        child: ExpansionTile(
+          title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+          leading: CircleAvatar(backgroundColor: color.withValues(alpha: 0.1), child: Icon(Icons.trending_up, color: color, size: 18)),
+          subtitle: Text('Net: ₹${net.toStringAsFixed(2)}', style: TextStyle(color: net >= 0 ? Colors.green : Colors.red)),
+          children: [
+            ListTile(title: const Text('Inflows'), trailing: Text('₹${inflows.toStringAsFixed(2)}', style: const TextStyle(color: Colors.green))),
+            ListTile(title: const Text('Outflows'), trailing: Text('₹${outflows.toStringAsFixed(2)}', style: const TextStyle(color: Colors.red))),
+          ],
+        ),
+      );
+    }
+
+    final itemsList = (items is Map && items['items'] is List) ? items['items'] as List : [];
+    final net = double.tryParse((items is Map ? items['net'] : null)?.toString() ?? '0') ?? 0;
 
     return Card(
       child: ExpansionTile(
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        leading: CircleAvatar(backgroundColor: color.withOpacity(0.1), child: Icon(Icons.trending_up, color: color, size: 18)),
+        leading: CircleAvatar(backgroundColor: color.withValues(alpha: 0.1), child: Icon(Icons.trending_up, color: color, size: 18)),
         subtitle: Text('Net: ₹${net.toStringAsFixed(2)}', style: TextStyle(color: net >= 0 ? Colors.green : Colors.red)),
-        children: [
-          ListTile(title: const Text('Inflows'), trailing: Text('₹${inflows.toStringAsFixed(2)}', style: const TextStyle(color: Colors.green))),
-          ListTile(title: const Text('Outflows'), trailing: Text('₹${outflows.toStringAsFixed(2)}', style: const TextStyle(color: Colors.red))),
-        ],
+        children: itemsList.map<Widget>((item) {
+          final label = item['label'] ?? '';
+          final amount = double.tryParse(item['amount']?.toString() ?? '0') ?? 0;
+          return ListTile(
+            title: Text(label),
+            trailing: Text(
+              '₹${amount.toStringAsFixed(2)}',
+              style: TextStyle(
+                color: amount >= 0 ? Colors.green : Colors.red,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }

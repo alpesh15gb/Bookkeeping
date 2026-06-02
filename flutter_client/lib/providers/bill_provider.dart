@@ -9,23 +9,42 @@ class BillProvider extends ChangeNotifier {
   List<BillModel> _bills = [];
   bool _isLoading = false;
   String? _errorMessage;
+  int _currentPage = 1;
+  int _totalPages = 1;
+  bool _hasMore = true;
+  static const int _pageSize = 50;
 
   List<BillModel> get bills => _bills;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  bool get hasMore => _hasMore;
 
   final ApiClient _client = ApiClient();
 
-  Future<void> fetchBills() async {
+  Future<void> fetchBills({bool reset = true}) async {
+    if (reset) {
+      _currentPage = 1;
+      _bills = [];
+      _hasMore = true;
+    }
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bills'));
+      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bills?page=$_currentPage&limit=$_pageSize'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : data;
-        _bills = items.map((x) => BillModel.fromJson(x)).toList();
+        final newBills = items.map((x) => BillModel.fromJson(x)).toList();
+        if (reset) {
+          _bills = newBills;
+        } else {
+          _bills.addAll(newBills);
+        }
+        if (data is Map) {
+          _totalPages = ((data['total'] ?? 0) / _pageSize).ceil();
+          _hasMore = _currentPage < _totalPages;
+        }
         await SyncManager.instance?.cacheGetResponse('/bills', items);
       } else {
         _errorMessage = 'Failed to load vendor bills';
@@ -49,6 +68,12 @@ class BillProvider extends ChangeNotifier {
     }
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> loadMoreBills() async {
+    if (!_hasMore || _isLoading) return;
+    _currentPage++;
+    await fetchBills(reset: false);
   }
 
   Future<BillModel?> fetchBillDetail(String id) async {

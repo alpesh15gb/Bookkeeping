@@ -41,8 +41,10 @@ class ThemeProvider extends ChangeNotifier {
       brightness: Brightness.light,
     ),
     appBarTheme: const AppBarTheme(
-      backgroundColor: Color(0xFF0B1B3D),
-      foregroundColor: Colors.white,
+      backgroundColor: Color(0xFFF8F9FC),
+      foregroundColor: Color(0xFF0B1B3D),
+      iconTheme: IconThemeData(color: Color(0xFF0B1B3D)),
+      actionsIconTheme: IconThemeData(color: Color(0xFF0B1B3D)),
       elevation: 0,
     ),
     cardTheme: CardThemeData(

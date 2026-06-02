@@ -19,7 +19,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/purchase-orders'));
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/purchase-orders'),
+      );
       if (response.statusCode == 200) {
         _items = jsonDecode(response.body);
         _isLoading = false;
@@ -52,7 +54,10 @@ class PurchaseOrderProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> updatePurchaseOrder(String id, Map<String, dynamic> payload) async {
+  Future<bool> updatePurchaseOrder(
+    String id,
+    Map<String, dynamic> payload,
+  ) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -77,7 +82,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
   }
 
   Future<bool> finalizePurchaseOrder(String id) async {
-    return _postAction('${ApiClient.baseUrl}/purchase-orders/$id/finalize');
+    return confirmPurchaseOrder(id);
   }
 
   Future<bool> cancelPurchaseOrder(String id) async {
@@ -98,7 +103,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchPurchaseOrderDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id'));
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id'),
+      );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -108,7 +115,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchPurchaseOrderPdfPayload(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id/pdf-payload'));
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id/pdf-payload'),
+      );
       if (response.statusCode == 200) return jsonDecode(response.body);
     } catch (_) {}
     return null;
@@ -119,7 +128,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales-orders'));
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/sales-orders'),
+      );
       if (response.statusCode == 200) {
         _items = jsonDecode(response.body);
         _isLoading = false;
@@ -177,15 +188,11 @@ class PurchaseOrderProvider extends ChangeNotifier {
   }
 
   Future<bool> finalizeSalesOrder(String id) async {
-    return _postAction('${ApiClient.baseUrl}/sales-orders/$id/finalize');
+    return confirmSalesOrder(id);
   }
 
   Future<bool> cancelSalesOrder(String id) async {
     return _cancel('${ApiClient.baseUrl}/sales-orders/$id/cancel');
-  }
-
-  Future<bool> convertSalesOrder(String id) async {
-    return _postAction('${ApiClient.baseUrl}/sales-orders/$id/convert');
   }
 
   Future<bool> confirmSalesOrder(String id) async {
@@ -202,7 +209,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchSalesOrderDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales-orders/$id'));
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/sales-orders/$id'),
+      );
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
       }
@@ -212,7 +221,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchSalesOrderPdfPayload(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales-orders/$id/pdf-payload'));
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/sales-orders/$id/pdf-payload'),
+      );
       if (response.statusCode == 200) return jsonDecode(response.body);
     } catch (_) {}
     return null;

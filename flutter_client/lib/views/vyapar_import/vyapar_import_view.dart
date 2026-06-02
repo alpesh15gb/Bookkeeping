@@ -64,28 +64,26 @@ class _VyaparImportViewState extends State<VyaparImportView> {
       final uri = Uri.parse('${ApiClient.baseUrl}/import/vyapar');
       final request = http.MultipartRequest('POST', uri);
 
-      if (ApiClient.accessToken != null) {
-        request.headers['Authorization'] = 'Bearer ${ApiClient.accessToken}';
-      }
-      if (ApiClient.tenantId != null) {
-        request.headers['X-Tenant-ID'] = ApiClient.tenantId!;
-      }
-
       // Use bytes if available (mobile/web), otherwise use path (desktop)
       if (fileBytes != null) {
-        request.files.add(http.MultipartFile.fromBytes(
-          'file',
-          fileBytes,
-          filename: picked.name,
-        ));
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'file',
+            fileBytes,
+            filename: picked.name,
+          ),
+        );
       } else {
         request.files.add(
-          await http.MultipartFile.fromPath('file', filePath!,
-              filename: picked.name),
+          await http.MultipartFile.fromPath(
+            'file',
+            filePath!,
+            filename: picked.name,
+          ),
         );
       }
 
-      final streamed = await request.send();
+      final streamed = await ApiClient().send(request);
       final response = await http.Response.fromStream(streamed);
 
       if (!mounted) return;
@@ -131,8 +129,8 @@ class _VyaparImportViewState extends State<VyaparImportView> {
       body: _isImporting
           ? _buildLoading()
           : _result != null
-              ? _buildResult()
-              : _buildPicker(),
+          ? _buildResult()
+          : _buildPicker(),
     );
   }
 
@@ -158,10 +156,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
-              'Importing from Vyapar…',
-              style: AppTextStyles.h3,
-            ),
+            const Text('Importing from Vyapar…', style: AppTextStyles.h3),
             const SizedBox(height: 6),
             Text(
               'Reading contacts, products, invoices and bills.\nThis may take a moment for large backups.',
@@ -171,7 +166,10 @@ class _VyaparImportViewState extends State<VyaparImportView> {
             if (_selectedFileName != null) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.bgSurface,
                   borderRadius: AppRadius.card,
@@ -180,13 +178,13 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.folder_zip_outlined,
-                        size: 16, color: AppColors.textMuted),
-                    const SizedBox(width: 8),
-                    Text(
-                      _selectedFileName!,
-                      style: AppTextStyles.caption,
+                    const Icon(
+                      Icons.folder_zip_outlined,
+                      size: 16,
+                      color: AppColors.textMuted,
                     ),
+                    const SizedBox(width: 8),
+                    Text(_selectedFileName!, style: AppTextStyles.caption),
                   ],
                 ),
               ),
@@ -200,7 +198,8 @@ class _VyaparImportViewState extends State<VyaparImportView> {
   Widget _buildResult() {
     final r = _result!;
     final errors = (r['errors'] as List?)?.cast<String>() ?? [];
-    final total = (r['contacts_imported'] ?? 0) +
+    final total =
+        (r['contacts_imported'] ?? 0) +
         (r['products_imported'] ?? 0) +
         (r['invoices_imported'] ?? 0) +
         (r['bills_imported'] ?? 0) +
@@ -218,8 +217,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
           decoration: BoxDecoration(
             color: AppColors.successBg,
             borderRadius: AppRadius.card,
-            border: Border.all(
-                color: AppColors.success.withValues(alpha: 0.3)),
+            border: Border.all(color: AppColors.success.withValues(alpha: 0.3)),
           ),
           child: Row(
             children: [
@@ -230,16 +228,18 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                   color: AppColors.success.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(22),
                 ),
-                child: const Icon(Icons.check_circle_outline,
-                    color: AppColors.success, size: 24),
+                child: const Icon(
+                  Icons.check_circle_outline,
+                  color: AppColors.success,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Import Successful',
-                        style: AppTextStyles.h3),
+                    const Text('Import Successful', style: AppTextStyles.h3),
                     Text(
                       '$total records imported from $_selectedFileName',
                       style: AppTextStyles.bodySmall,
@@ -260,42 +260,62 @@ class _VyaparImportViewState extends State<VyaparImportView> {
               const SectionHeader(title: 'IMPORT SUMMARY'),
               const SizedBox(height: 4),
               _summaryRow(
-                  Icons.people_outline, 'Contacts',
-                  r['contacts_imported'] ?? 0),
+                Icons.people_outline,
+                'Contacts',
+                r['contacts_imported'] ?? 0,
+              ),
               _summaryRow(
-                  Icons.inventory_2_outlined, 'Products',
-                  r['products_imported'] ?? 0),
+                Icons.inventory_2_outlined,
+                'Products',
+                r['products_imported'] ?? 0,
+              ),
               _summaryRow(
-                  Icons.receipt_outlined, 'Sales Invoices',
-                  r['invoices_imported'] ?? 0),
+                Icons.receipt_outlined,
+                'Sales Invoices',
+                r['invoices_imported'] ?? 0,
+              ),
               _summaryRow(
-                  Icons.shopping_bag_outlined, 'Purchase Bills',
-                  r['bills_imported'] ?? 0),
+                Icons.shopping_bag_outlined,
+                'Purchase Bills',
+                r['bills_imported'] ?? 0,
+              ),
               _summaryRow(
-                  Icons.description_outlined, 'Estimates',
-                  r['estimates_imported'] ?? 0),
+                Icons.description_outlined,
+                'Estimates',
+                r['estimates_imported'] ?? 0,
+              ),
               _summaryRow(
-                  Icons.account_balance_wallet_outlined, 'Expenses',
-                  r['expenses_imported'] ?? 0),
+                Icons.account_balance_wallet_outlined,
+                'Expenses',
+                r['expenses_imported'] ?? 0,
+              ),
               if (errors.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 const Divider(),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.warning_amber_outlined,
-                        size: 16, color: AppColors.warning),
+                    const Icon(
+                      Icons.warning_amber_outlined,
+                      size: 16,
+                      color: AppColors.warning,
+                    ),
                     const SizedBox(width: 6),
-                    Text('${errors.length} Warning(s)',
-                        style: AppTextStyles.label.copyWith(
-                            color: AppColors.warning)),
+                    Text(
+                      '${errors.length} Warning(s)',
+                      style: AppTextStyles.label.copyWith(
+                        color: AppColors.warning,
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                ...errors.map((e) => Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text('• $e', style: AppTextStyles.caption),
-                    )),
+                ...errors.map(
+                  (e) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Text('• $e', style: AppTextStyles.caption),
+                  ),
+                ),
               ],
             ],
           ),
@@ -318,11 +338,9 @@ class _VyaparImportViewState extends State<VyaparImportView> {
         children: [
           Icon(icon, size: 18, color: AppColors.textSecondary),
           const SizedBox(width: 10),
-          Expanded(
-              child: Text(label, style: AppTextStyles.body)),
+          Expanded(child: Text(label, style: AppTextStyles.body)),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
             decoration: BoxDecoration(
               color: count > 0
                   ? AppColors.brandNavy.withValues(alpha: 0.07)
@@ -332,9 +350,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
             child: Text(
               '$count',
               style: AppTextStyles.numeric.copyWith(
-                color: count > 0
-                    ? AppColors.brandNavy
-                    : AppColors.textMuted,
+                color: count > 0 ? AppColors.brandNavy : AppColors.textMuted,
                 fontSize: 13,
               ),
             ),
@@ -356,20 +372,21 @@ class _VyaparImportViewState extends State<VyaparImportView> {
             decoration: BoxDecoration(
               color: AppColors.errorBg,
               borderRadius: AppRadius.card,
-              border: Border.all(
-                  color: AppColors.error.withValues(alpha: 0.3)),
+              border: Border.all(color: AppColors.error.withValues(alpha: 0.3)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.error_outline,
-                    color: AppColors.error, size: 20),
+                const Icon(
+                  Icons.error_outline,
+                  color: AppColors.error,
+                  size: 20,
+                ),
                 const SizedBox(width: 12),
-                Expanded(
-                    child:
-                        Text(_error!, style: AppTextStyles.bodySmall)),
+                Expanded(child: Text(_error!, style: AppTextStyles.bodySmall)),
                 TextButton(
-                    onPressed: () => setState(() => _error = null),
-                    child: const Text('Dismiss')),
+                  onPressed: () => setState(() => _error = null),
+                  child: const Text('Dismiss'),
+                ),
               ],
             ),
           ),
@@ -412,20 +429,36 @@ class _VyaparImportViewState extends State<VyaparImportView> {
             children: [
               const SectionHeader(title: 'WHAT WILL BE IMPORTED'),
               const SizedBox(height: 4),
-              _infoRow(Icons.people_outline, 'Contacts',
-                  'Customers and vendors with GSTIN, address and phone'),
-              _infoRow(Icons.inventory_2_outlined, 'Products',
-                  'Items with HSN code, sale price, stock quantity'),
-              _infoRow(Icons.receipt_outlined, 'Sales Invoices',
-                  'All sale transactions with line items and GST breakdown'),
-              _infoRow(Icons.shopping_bag_outlined, 'Purchase Bills',
-                  'All purchase transactions with line items and GST'),
-              _infoRow(Icons.description_outlined, 'Estimates',
-                  'Quotations and estimates with line items and status tracking'),
               _infoRow(
-                  Icons.account_balance_wallet_outlined,
-                  'Expenses',
-                  'Business expenses with category mapping'),
+                Icons.people_outline,
+                'Contacts',
+                'Customers and vendors with GSTIN, address and phone',
+              ),
+              _infoRow(
+                Icons.inventory_2_outlined,
+                'Products',
+                'Items with HSN code, sale price, stock quantity',
+              ),
+              _infoRow(
+                Icons.receipt_outlined,
+                'Sales Invoices',
+                'All sale transactions with line items and GST breakdown',
+              ),
+              _infoRow(
+                Icons.shopping_bag_outlined,
+                'Purchase Bills',
+                'All purchase transactions with line items and GST',
+              ),
+              _infoRow(
+                Icons.description_outlined,
+                'Estimates',
+                'Quotations and estimates with line items and status tracking',
+              ),
+              _infoRow(
+                Icons.account_balance_wallet_outlined,
+                'Expenses',
+                'Business expenses with category mapping',
+              ),
             ],
           ),
         ),
@@ -462,10 +495,8 @@ class _VyaparImportViewState extends State<VyaparImportView> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title,
-                    style: AppTextStyles.bodyMedium),
-                Text(subtitle,
-                    style: AppTextStyles.caption),
+                Text(title, style: AppTextStyles.bodyMedium),
+                Text(subtitle, style: AppTextStyles.caption),
               ],
             ),
           ),

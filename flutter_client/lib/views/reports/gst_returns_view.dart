@@ -193,8 +193,8 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
                   children: b2b.map((item) {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(item['customer_name'] ?? 'Customer', style: AppTextStyles.bodyMedium),
-                      subtitle: Text('GSTIN: ${item['customer_gstin'] ?? "N/A"}', style: AppTextStyles.caption),
+                      title: Text(item['receiver_name'] ?? item['customer_name'] ?? 'Customer', style: AppTextStyles.bodyMedium),
+                      subtitle: Text('GSTIN: ${item['receiver_gstin'] ?? item['customer_gstin'] ?? "N/A"}', style: AppTextStyles.caption),
                       trailing: Text('₹${double.parse((item['taxable_value'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numeric),
                     );
                   }).toList(),
@@ -212,7 +212,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
                   children: b2cs.map((item) {
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text('Place of Supply: ${item['pos_state'] ?? "Local"}', style: AppTextStyles.bodyMedium),
+                      title: Text('GST Rate: ${item['gst_rate'] ?? item['pos_state'] ?? "Local"}', style: AppTextStyles.bodyMedium),
                       trailing: Text('₹${double.parse((item['taxable_value'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numeric),
                     );
                   }).toList(),
@@ -231,7 +231,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
                       title: Text('HSN: ${item['hsn_sac'] ?? "N/A"}', style: AppTextStyles.bodyMedium),
-                      subtitle: Text('Qty: ${item['quantity'] ?? 0}  —  Rate: ${item['gst_rate']}%', style: AppTextStyles.caption),
+                      subtitle: Text('Qty: ${item['total_qty'] ?? item['quantity'] ?? 0}', style: AppTextStyles.caption),
                       trailing: Text('₹${double.parse((item['taxable_value'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numeric),
                     );
                   }).toList(),
@@ -245,14 +245,15 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
     if (_gstr3bData == null) return const Center(child: Text('No GSTR-3B data available'));
 
     final outwardVal = double.tryParse((_gstr3bData!['outward_taxable_supplies']?['taxable_value'] ?? 0).toString()) ?? 0.0;
-    final outwardIqst = double.tryParse((_gstr3bData!['outward_taxable_supplies']?['igst_amount'] ?? 0).toString()) ?? 0.0;
-    final outwardCgst = double.tryParse((_gstr3bData!['outward_taxable_supplies']?['cgst_amount'] ?? 0).toString()) ?? 0.0;
-    final outwardSgst = double.tryParse((_gstr3bData!['outward_taxable_supplies']?['sgst_amount'] ?? 0).toString()) ?? 0.0;
+    final outwardIqst = double.tryParse((_gstr3bData!['outward_taxable_supplies']?['integrated_tax'] ?? _gstr3bData!['outward_taxable_supplies']?['igst_amount'] ?? 0).toString()) ?? 0.0;
+    final outwardCgst = double.tryParse((_gstr3bData!['outward_taxable_supplies']?['central_tax'] ?? _gstr3bData!['outward_taxable_supplies']?['cgst_amount'] ?? 0).toString()) ?? 0.0;
+    final outwardSgst = double.tryParse((_gstr3bData!['outward_taxable_supplies']?['state_ut_tax'] ?? _gstr3bData!['outward_taxable_supplies']?['sgst_amount'] ?? 0).toString()) ?? 0.0;
 
-    final itcVal = double.tryParse((_gstr3bData!['eligible_itc']?['taxable_value'] ?? 0).toString()) ?? 0.0;
-    final itcIgst = double.tryParse((_gstr3bData!['eligible_itc']?['igst_amount'] ?? 0).toString()) ?? 0.0;
-    final itcCgst = double.tryParse((_gstr3bData!['eligible_itc']?['cgst_amount'] ?? 0).toString()) ?? 0.0;
-    final itcSgst = double.tryParse((_gstr3bData!['eligible_itc']?['sgst_amount'] ?? 0).toString()) ?? 0.0;
+    final itcData = _gstr3bData!['inward_supplies_itc'] ?? _gstr3bData!['eligible_itc'];
+    final itcVal = double.tryParse((itcData?['taxable_value'] ?? 0).toString()) ?? 0.0;
+    final itcIgst = double.tryParse((itcData?['integrated_tax'] ?? itcData?['igst_amount'] ?? 0).toString()) ?? 0.0;
+    final itcCgst = double.tryParse((itcData?['central_tax'] ?? itcData?['cgst_amount'] ?? 0).toString()) ?? 0.0;
+    final itcSgst = double.tryParse((itcData?['state_ut_tax'] ?? itcData?['sgst_amount'] ?? 0).toString()) ?? 0.0;
 
     final netIgst = outwardIqst - itcIgst;
     final netCgst = outwardCgst - itcCgst;

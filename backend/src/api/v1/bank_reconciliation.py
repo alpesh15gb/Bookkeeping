@@ -67,7 +67,14 @@ def list_bank_statements(
     for stmt in results:
         response.append(BankStatementListResponse(
             id=stmt.id,
+            banking_profile_id=stmt.banking_profile_id,
+            bank_name=stmt.banking_profile.bank_name if stmt.banking_profile else None,
+            account_number=stmt.banking_profile.account_number if stmt.banking_profile else None,
             statement_date=stmt.statement_date,
+            starting_balance=stmt.starting_balance,
+            ending_balance=stmt.ending_balance,
+            closing_balance=stmt.ending_balance,
+            currency=stmt.currency,
             status=stmt.status,
             created_at=stmt.created_at
         ))
@@ -205,6 +212,7 @@ def reconcile_bank_transaction(
         raise HTTPException(status_code=400, detail="Transaction already reconciled.")
 
     reconciliation = BankReconciliation(
+        tenant_id=tenant_id,
         bank_transaction_id=transaction_id,
         payment_id=payload.payment_id,
         bill_payment_id=payload.bill_payment_id,
@@ -336,8 +344,8 @@ def auto_match_bank_transactions(
             if abs((txn.transaction_date - pmt.payment_date).days) <= 3:
                 score += 30
             # Reference similarity = up to 30 pts
-            if txn.reference and pmt.reference_number:
-                ratio = SequenceMatcher(None, txn.reference.lower(), pmt.reference_number.lower()).ratio()
+            if txn.reference_number and pmt.reference_number:
+                ratio = SequenceMatcher(None, txn.reference_number.lower(), pmt.reference_number.lower()).ratio()
                 score += int(ratio * 30)
 
             if score > best_score and score >= 60:
@@ -351,8 +359,8 @@ def auto_match_bank_transactions(
                 score += 40
             if abs((txn.transaction_date - bp.payment_date).days) <= 3:
                 score += 30
-            if txn.reference and bp.reference_number:
-                ratio = SequenceMatcher(None, txn.reference.lower(), bp.reference_number.lower()).ratio()
+            if txn.reference_number and bp.reference_number:
+                ratio = SequenceMatcher(None, txn.reference_number.lower(), bp.reference_number.lower()).ratio()
                 score += int(ratio * 30)
 
             if score > best_score and score >= 60:
@@ -362,6 +370,7 @@ def auto_match_bank_transactions(
         if best_match:
             match_type, matched_doc = best_match
             recon = BankReconciliation(
+                tenant_id=tenant_id,
                 bank_transaction_id=txn.id,
                 payment_id=matched_doc.id if match_type == "payment" else None,
                 bill_payment_id=matched_doc.id if match_type == "bill_payment" else None,

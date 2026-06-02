@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -5,28 +6,34 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiClient extends http.BaseClient {
   final http.Client _inner = http.Client();
-  
+  static const Duration _requestTimeout = Duration(seconds: 30);
+
   // Default API URL pointing to the running backend
   static String baseUrl = const String.fromEnvironment(
     'API_URL',
     defaultValue: 'https://api.apexbooks.in/api/v1',
   );
 
-  static String parseError(String responseBody, {String fallback = 'An error occurred'}) {
+  static String parseError(
+    String responseBody, {
+    String fallback = 'An error occurred',
+  }) {
     try {
       final data = jsonDecode(responseBody);
       final detail = data['detail'];
       if (detail == null) return fallback;
       if (detail is String) return detail;
       if (detail is List) {
-        final messages = detail.map((e) {
-          if (e is Map) {
-            final loc = e['loc'] is List ? (e['loc'] as List).last : '';
-            final msg = e['msg'] ?? '';
-            return loc.isNotEmpty ? '$loc: $msg' : '$msg';
-          }
-          return e.toString();
-        }).join(', ');
+        final messages = detail
+            .map((e) {
+              if (e is Map) {
+                final loc = e['loc'] is List ? (e['loc'] as List).last : '';
+                final msg = e['msg'] ?? '';
+                return loc.isNotEmpty ? '$loc: $msg' : '$msg';
+              }
+              return e.toString();
+            })
+            .join(', ');
         return messages.isNotEmpty ? messages : fallback;
       }
     } catch (_) {}
@@ -37,6 +44,7 @@ class ApiClient extends http.BaseClient {
   static String? _refreshToken;
   static String? _tenantId;
   static Function()? onSessionExpired;
+  static Completer<bool>? _refreshCompleter;
 
   static void setAccessToken(String? token) {
     _accessToken = token;
@@ -85,7 +93,10 @@ class ApiClient extends http.BaseClient {
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     // 1. Inject Headers
-    request.headers['Content-Type'] = 'application/json';
+    if (request is! http.MultipartRequest) {
+      request.headers['Content-Type'] = 'application/json';
+    }
+    request.headers['Accept-Encoding'] = 'gzip';
     if (_accessToken != null) {
       request.headers['Authorization'] = 'Bearer $_accessToken';
     }
@@ -93,44 +104,64 @@ class ApiClient extends http.BaseClient {
       request.headers['X-Tenant-ID'] = _tenantId!;
     }
 
-    // Debug print request details
-    debugPrint('🌐 HTTP [${request.method}] -> ${request.url}');
-    debugPrint('   Headers: ${request.headers}');
+    if (kDebugMode) {
+      debugPrint('HTTP [${request.method}] -> ${request.url}');
+    }
 
-    // 2. Send Request
-    final response = await _inner.send(request);
+    // 2. Send Request with timeout
+    http.StreamedResponse response;
+    try {
+      response = await _inner.send(request).timeout(_requestTimeout);
+    } catch (e) {
+      // Network failure — return synthetic error response
+      final fakeBody = jsonEncode({
+        'detail': 'Network error. Please check your connection and try again.',
+      });
+      final fakeBytes = utf8.encode(fakeBody);
+      return http.StreamedResponse(
+        Stream.fromIterable([fakeBytes]),
+        503,
+        contentLength: fakeBytes.length,
+        headers: {'content-type': 'application/json'},
+      );
+    }
 
-    // Debug print response details
-    debugPrint('🌐 HTTP [${response.statusCode}] <- ${request.url}');
+    if (kDebugMode) {
+      debugPrint('HTTP [${response.statusCode}] <- ${request.url}');
+    }
 
     // 3. Handle 401 Unauthorized (Excluding auth login/register/refresh/logout endpoints)
     final path = request.url.path;
-    final isAuthEndpoint = path.contains('/auth/login') ||
+    final isAuthEndpoint =
+        path.contains('/auth/login') ||
         path.contains('/auth/register') ||
         path.contains('/auth/refresh') ||
         path.contains('/auth/logout');
 
     if (response.statusCode == 401 && !isAuthEndpoint) {
-      // If we do not have any stored tokens, this is a guest request. Do not trigger session expired.
       if (_accessToken == null && _refreshToken == null) {
         return response;
       }
 
-      debugPrint('⚠️ HTTP 401 Unauthorized. Initiating token refresh flow...');
-      // Try to refresh token
-      final success = await _refreshTokenFlow();
-      if (success) {
-        debugPrint('🔑 Token refreshed successfully. Retrying request...');
-        // Recreate the request with new headers
+      bool refreshSucceeded;
+      // Mutex: if a refresh is already in progress, wait for it
+      if (_refreshCompleter != null && !_refreshCompleter!.isCompleted) {
+        refreshSucceeded = await _refreshCompleter!.future;
+      } else {
+        _refreshCompleter = Completer<bool>();
+        refreshSucceeded = await _refreshTokenFlow();
+        _refreshCompleter!.complete(refreshSucceeded);
+        _refreshCompleter = null;
+      }
+
+      if (refreshSucceeded) {
         final newRequest = _copyRequest(request);
         newRequest.headers['Authorization'] = 'Bearer $_accessToken';
         if (_tenantId != null) {
           newRequest.headers['X-Tenant-ID'] = _tenantId!;
         }
-        return await _inner.send(newRequest);
+        return await _inner.send(newRequest).timeout(_requestTimeout);
       } else {
-        debugPrint('❌ Token refresh failed. Session expired.');
-        // Log out user
         await clearSession();
         if (onSessionExpired != null) {
           onSessionExpired!();
@@ -144,11 +175,13 @@ class ApiClient extends http.BaseClient {
   Future<bool> _refreshTokenFlow() async {
     if (_refreshToken == null) return false;
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/auth/refresh'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refresh_token': _refreshToken}),
-      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/refresh'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'refresh_token': _refreshToken}),
+          )
+          .timeout(_requestTimeout);
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);

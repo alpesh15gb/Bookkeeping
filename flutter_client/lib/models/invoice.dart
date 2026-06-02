@@ -56,6 +56,7 @@ class InvoiceLineModel {
 class InvoiceModel {
   final String id;
   final String contactId;
+  final String? contactName;
   final String invoiceNumber;
   final String issueDate;
   final String dueDate;
@@ -84,6 +85,7 @@ class InvoiceModel {
   InvoiceModel({
     required this.id,
     required this.contactId,
+    this.contactName,
     required this.invoiceNumber,
     required this.issueDate,
     required this.dueDate,
@@ -117,6 +119,7 @@ class InvoiceModel {
     return InvoiceModel(
       id: json['id'] ?? '',
       contactId: json['contact_id'] ?? '',
+      contactName: json['contact_name'],
       invoiceNumber: json['invoice_number'] ?? '',
       issueDate: json['issue_date'] ?? '',
       dueDate: json['due_date'] ?? '',

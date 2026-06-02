@@ -132,7 +132,7 @@ class _AgingReportViewState extends State<AgingReportView> with SingleTickerProv
 
   Widget _buildAgingTable(Map<String, dynamic>? data, String partyLabel) {
     if (data == null) return const Center(child: Text('No data available'));
-    final items = data['items'] as List? ?? [];
+    final items = data['lines'] as List? ?? [];
     if (items.isEmpty) {
       return Center(
         child: Text('All $partyLabel accounts are fully settled.', style: AppTextStyles.bodySmall),
@@ -185,11 +185,22 @@ class _AgingReportViewState extends State<AgingReportView> with SingleTickerProv
                 ],
                 rows: items.map((item) {
                   final contactName = item['contact_name'] ?? 'N/A';
-                  final total = double.tryParse((item['total'] ?? 0).toString()) ?? 0.0;
-                  final b1 = double.tryParse((item['bucket_0_30'] ?? 0).toString()) ?? 0.0;
-                  final b2 = double.tryParse((item['bucket_31_60'] ?? 0).toString()) ?? 0.0;
-                  final b3 = double.tryParse((item['bucket_61_90'] ?? 0).toString()) ?? 0.0;
-                  final b4 = double.tryParse((item['bucket_91_plus'] ?? 0).toString()) ?? 0.0;
+                  final total = double.tryParse((item['total_outstanding'] ?? item['total'] ?? 0).toString()) ?? 0.0;
+                  final buckets = item['buckets'] as List? ?? [];
+                  double b1 = 0, b2 = 0, b3 = 0, b4 = 0;
+                  for (final bucket in buckets) {
+                    final amount = double.tryParse((bucket['amount'] ?? 0).toString()) ?? 0.0;
+                    final label = (bucket['label'] ?? '').toString().toLowerCase();
+                    if (label.contains('0-30') || label.contains('0–30')) {
+                      b1 = amount;
+                    } else if (label.contains('31-60') || label.contains('31–60')) {
+                      b2 = amount;
+                    } else if (label.contains('61-90') || label.contains('61–90')) {
+                      b3 = amount;
+                    } else {
+                      b4 += amount;
+                    }
+                  }
 
                   return DataRow(
                     cells: [

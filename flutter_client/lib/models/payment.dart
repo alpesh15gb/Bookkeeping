@@ -35,7 +35,7 @@ class PaymentModel {
       paymentMode: json['payment_mode'] ?? 'BANK_TRANSFER',
       referenceNumber: json['reference_number'],
       status: json['status'] ?? 'COMPLETED',
-      notes: json['notes'],
+      notes: json['description'] ?? json['notes'],
       invoiceId: json['invoice_id'],
       invoiceNumber: json['invoice_number'],
     );
@@ -51,7 +51,7 @@ class PaymentModel {
       'payment_mode': paymentMode,
       'reference_number': referenceNumber,
       'status': status,
-      'notes': notes,
+      'description': notes,
       'invoice_id': invoiceId,
       'invoice_number': invoiceNumber,
     };
@@ -94,7 +94,7 @@ class BillPaymentModel {
       paymentMode: json['payment_mode'] ?? 'BANK_TRANSFER',
       referenceNumber: json['reference_number'],
       status: json['status'] ?? 'COMPLETED',
-      notes: json['notes'],
+      notes: json['description'] ?? json['notes'],
     );
   }
 
@@ -109,7 +109,7 @@ class BillPaymentModel {
       'payment_mode': paymentMode,
       'reference_number': referenceNumber,
       'status': status,
-      'notes': notes,
+      'description': notes,
     };
   }
 }

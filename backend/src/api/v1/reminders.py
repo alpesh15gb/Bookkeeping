@@ -21,7 +21,7 @@ def list_reminders(
     return []
 
 
-@router.post("")
+@router.post("", status_code=status.HTTP_201_CREATED)
 def create_reminder(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),

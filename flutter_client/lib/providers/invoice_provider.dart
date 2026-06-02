@@ -9,32 +9,49 @@ class InvoiceProvider extends ChangeNotifier {
   List<InvoiceModel> _invoices = [];
   bool _isLoading = false;
   String? _errorMessage;
+  int _currentPage = 1;
+  int _totalPages = 1;
+  bool _hasMore = true;
+  static const int _pageSize = 50;
 
   List<InvoiceModel> get invoices => _invoices;
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
+  bool get hasMore => _hasMore;
 
   final ApiClient _client = ApiClient();
 
-  Future<void> fetchInvoices({String? search, String? status}) async {
+  Future<void> fetchInvoices({String? search, String? status, bool reset = true}) async {
+    if (reset) {
+      _currentPage = 1;
+      _invoices = [];
+      _hasMore = true;
+    }
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final queryParams = <String>[];
+      final queryParams = <String>['page=$_currentPage', 'limit=$_pageSize'];
       if (search != null && search.isNotEmpty) {
         queryParams.add('search=${Uri.encodeComponent(search)}');
       }
       if (status != null && status != 'ALL') {
         queryParams.add('status=$status');
       }
-      final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+      final queryString = '?${queryParams.join('&')}';
       
       final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices$queryString'));
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
         final List items = data['items'] ?? [];
-        _invoices = items.map((x) => InvoiceModel.fromJson(x)).toList();
+        final newInvoices = items.map((x) => InvoiceModel.fromJson(x)).toList();
+        if (reset) {
+          _invoices = newInvoices;
+        } else {
+          _invoices.addAll(newInvoices);
+        }
+        _totalPages = ((data['total'] ?? 0) / _pageSize).ceil();
+        _hasMore = _currentPage < _totalPages;
         await SyncManager.instance?.cacheGetResponse('/invoices', items);
       } else {
         _errorMessage = 'Failed to load invoices';
@@ -58,6 +75,12 @@ class InvoiceProvider extends ChangeNotifier {
     }
     _isLoading = false;
     notifyListeners();
+  }
+
+  Future<void> loadMoreInvoices({String? search, String? status}) async {
+    if (!_hasMore || _isLoading) return;
+    _currentPage++;
+    await fetchInvoices(search: search, status: status, reset: false);
   }
 
   Future<InvoiceModel?> previewInvoice(Map<String, dynamic> payload) async {

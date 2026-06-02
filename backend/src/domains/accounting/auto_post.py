@@ -28,6 +28,19 @@ from src.domains.accounting.services import (
 from src.common.audit_log import set_audit_context
 
 
+def _check_no_existing_posting(db: Session, tenant_id: uuid.UUID, source_type: str, source_id: uuid.UUID) -> None:
+    """Guard: prevent duplicate journal entries for the same document."""
+    from src.infrastructure.database.models import JournalEntry
+    existing = db.query(JournalEntry.id).filter(
+        JournalEntry.tenant_id == tenant_id,
+        JournalEntry.source_type == source_type,
+        JournalEntry.source_id == source_id,
+        JournalEntry.deleted_at == None,
+    ).first()
+    if existing:
+        raise ValueError(f"Document {source_type}:{source_id} already has a journal entry. Duplicate posting blocked.")
+
+
 # --- Status Mapping -------------------------------------------------------
 
 def get_display_status(invoice: Invoice) -> str:
@@ -118,6 +131,7 @@ def _resolve_tax_accounts(resolver: AccountResolver, mode: str = "output"):
 
 def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> JournalEntry:
     """Auto-post an invoice on creation. Creates journal entry and sets status to POSTED."""
+    _check_no_existing_posting(db, tenant_id, "INVOICE", invoice.id)
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
@@ -156,11 +170,11 @@ def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> Jo
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    document_type="INVOICE",
-                    document_id=invoice.id,
+                    reference_type="INVOICE",
+                    reference_id=invoice.id,
                     quantity=-line.quantity,
-                    balance_after=product.current_stock,
-                    notes=f"Invoice {invoice.invoice_number}",
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
                 ))
 
     invoice.status = "POSTED"
@@ -173,6 +187,7 @@ def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> Jo
 
 def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntry:
     """Auto-post a bill on creation. Creates journal entry and sets status to POSTED."""
+    _check_no_existing_posting(db, tenant_id, "BILL", bill.id)
     resolver = AccountResolver(db, tenant_id)
     vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
     purchase_expense_account_id = resolver.resolve("purchases")
@@ -211,11 +226,11 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    document_type="BILL",
-                    document_id=bill.id,
+                    reference_type="BILL",
+                    reference_id=bill.id,
                     quantity=line.quantity,
-                    balance_after=product.current_stock,
-                    notes=f"Bill {bill.bill_number}",
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
                 ))
 
     bill.status = "POSTED"
@@ -228,6 +243,7 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
 
 def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> JournalEntry:
     """Auto-post an expense on creation. Creates journal entry and sets status to POSTED."""
+    _check_no_existing_posting(db, tenant_id, "EXPENSE", expense.id)
     from src.infrastructure.database.models import ExpenseCategory
 
     # Category relationship may not be loaded after flush; query explicitly
@@ -276,8 +292,13 @@ def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> Jo
 
 def auto_post_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote) -> JournalEntry:
     """Auto-post a credit note on creation."""
+    _check_no_existing_posting(db, tenant_id, "CREDIT_NOTE", cn.id)
+    contact_id = cn.invoice.contact_id if cn.invoice else None
+    if not contact_id:
+        return cn
+
     resolver = AccountResolver(db, tenant_id)
-    customer_account_id = resolver.resolve(f"customer.{cn.contact_id}")
+    customer_account_id = resolver.resolve(f"customer.{contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
     tax = _resolve_tax_accounts(resolver, "output")
 
@@ -313,8 +334,13 @@ def auto_post_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote) -> 
 
 def auto_post_debit_note(db: Session, tenant_id: uuid.UUID, dn: DebitNote) -> JournalEntry:
     """Auto-post a debit note on creation."""
+    _check_no_existing_posting(db, tenant_id, "DEBIT_NOTE", dn.id)
+    contact_id = dn.invoice.contact_id if dn.invoice else None
+    if not contact_id:
+        return dn
+
     resolver = AccountResolver(db, tenant_id)
-    customer_account_id = resolver.resolve(f"customer.{dn.contact_id}")
+    customer_account_id = resolver.resolve(f"customer.{contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
     tax = _resolve_tax_accounts(resolver, "output")
 
@@ -389,6 +415,22 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
     )
     commit_ledger_draft(db, tenant_id, draft)
 
+    # Reverse stock ledger: increment stock for each product line (restoring stock)
+    for line in invoice.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    reference_type="INVOICE_CANCEL",
+                    reference_id=invoice.id,
+                    quantity=line.quantity,
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
+                ))
+
     invoice.status = "CANCELLED"
     invoice.amount_paid = Decimal("0")
     invoice.cancelled_at = datetime.now(timezone.utc)
@@ -439,6 +481,22 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
     )
     commit_ledger_draft(db, tenant_id, draft)
 
+    # Reverse stock ledger: decrement stock for each product line (reversing the purchase)
+    for line in bill.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) - line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    reference_type="BILL_CANCEL",
+                    reference_id=bill.id,
+                    quantity=-line.quantity,
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
+                ))
+
     bill.status = "CANCELLED"
     bill.amount_paid = Decimal("0")
     bill.cancelled_at = datetime.now(timezone.utc)
@@ -454,7 +512,12 @@ def cancel_expense(db: Session, tenant_id: uuid.UUID, expense: Expense, user_id:
         raise ValueError(f"Cannot cancel expense in status {expense.status}")
 
     resolver = AccountResolver(db, tenant_id)
-    expense_account_id = expense.category.linked_account_id if expense.category else resolver.resolve("expense.misc")
+    from src.infrastructure.database.models import ExpenseCategory
+    category = db.query(ExpenseCategory).filter(
+        ExpenseCategory.id == expense.expense_category_id,
+        ExpenseCategory.tenant_id == tenant_id,
+    ).first()
+    expense_account_id = category.linked_account_id if category else resolver.resolve("expense.misc")
     cash_account_id = resolver.resolve("assets.cash")
     tax = _resolve_tax_accounts(resolver, "input")
 
@@ -494,8 +557,12 @@ def cancel_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote, user_i
     if cn.status != "POSTED":
         raise ValueError(f"Cannot cancel credit note in status {cn.status}")
 
+    contact_id = cn.invoice.contact_id if cn.invoice else None
+    if not contact_id:
+        raise ValueError("Credit Note must be linked to an invoice for cancellation.")
+
     resolver = AccountResolver(db, tenant_id)
-    customer_account_id = resolver.resolve(f"customer.{cn.contact_id}")
+    customer_account_id = resolver.resolve(f"customer.{contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
     tax = _resolve_tax_accounts(resolver, "output")
 
@@ -535,8 +602,12 @@ def cancel_debit_note(db: Session, tenant_id: uuid.UUID, dn: DebitNote, user_id:
     if dn.status != "POSTED":
         raise ValueError(f"Cannot cancel debit note in status {dn.status}")
 
+    contact_id = dn.invoice.contact_id if dn.invoice else None
+    if not contact_id:
+        raise ValueError("Debit Note must be linked to an invoice for cancellation.")
+
     resolver = AccountResolver(db, tenant_id)
-    customer_account_id = resolver.resolve(f"customer.{dn.contact_id}")
+    customer_account_id = resolver.resolve(f"customer.{contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
     tax = _resolve_tax_accounts(resolver, "output")
 
@@ -623,6 +694,7 @@ def record_bill_payment(
 
 def auto_post_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn) -> JournalEntry:
     """Auto-post a sales return on creation. Stock comes IN."""
+    _check_no_existing_posting(db, tenant_id, "SALES_RETURN", sr.id)
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{sr.contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
@@ -660,11 +732,11 @@ def auto_post_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn) -
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    document_type="SALES_RETURN",
-                    document_id=sr.id,
+                    reference_type="SALES_RETURN",
+                    reference_id=sr.id,
                     quantity=line.quantity,
-                    balance_after=product.current_stock,
-                    notes=f"Sales Return {sr.return_number}",
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
                 ))
 
     sr.status = "POSTED"
@@ -676,6 +748,7 @@ def auto_post_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn) -
 
 def auto_post_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseReturn) -> JournalEntry:
     """Auto-post a purchase return on creation. Stock goes OUT."""
+    _check_no_existing_posting(db, tenant_id, "PURCHASE_RETURN", pr.id)
     resolver = AccountResolver(db, tenant_id)
     vendor_account_id = resolver.resolve(f"vendor.{pr.contact_id}")
     purchase_expense_account_id = resolver.resolve("purchases")
@@ -713,11 +786,11 @@ def auto_post_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseRet
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    document_type="PURCHASE_RETURN",
-                    document_id=pr.id,
+                    reference_type="PURCHASE_RETURN",
+                    reference_id=pr.id,
                     quantity=-line.quantity,
-                    balance_after=product.current_stock,
-                    notes=f"Purchase Return {pr.return_number}",
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
                 ))
 
     pr.status = "POSTED"
@@ -761,6 +834,22 @@ def cancel_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn, user
     )
     commit_ledger_draft(db, tenant_id, draft)
 
+    # Reverse stock: decrement stock (undoing the stock that came in from the sales return)
+    for line in sr.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) - line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    reference_type="SALES_RETURN_CANCEL",
+                    reference_id=sr.id,
+                    quantity=-line.quantity,
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
+                ))
+
     sr.status = "CANCELLED"
     sr.cancelled_at = datetime.now(timezone.utc)
     sr.cancelled_by = user_id
@@ -801,6 +890,22 @@ def cancel_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseReturn
         round_off_amount=pr.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
+
+    # Reverse stock: increment stock (undoing the stock that was removed from the purchase return)
+    for line in pr.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    reference_type="PURCHASE_RETURN_CANCEL",
+                    reference_id=pr.id,
+                    quantity=line.quantity,
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
+                ))
 
     pr.status = "CANCELLED"
     pr.cancelled_at = datetime.now(timezone.utc)

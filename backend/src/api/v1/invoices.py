@@ -195,6 +195,7 @@ def list_invoices(
     limit: int = 50,
     search: Optional[str] = None,
     status: Optional[str] = None,
+    contact_id: Optional[uuid.UUID] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
@@ -222,6 +223,9 @@ def list_invoices(
         else:
             q = q.filter(Invoice.status == status.upper())
 
+    if contact_id:
+        q = q.filter(Invoice.contact_id == contact_id)
+
     total = q.count()
     results = q.offset(offset).limit(limit).all()
 
@@ -229,6 +233,7 @@ def list_invoices(
     for inv, contact_name in results:
         items.append(InvoiceListResponse(
             id=inv.id,
+            contact_id=inv.contact_id,
             invoice_number=inv.invoice_number,
             issue_date=inv.issue_date,
             due_date=inv.due_date,
@@ -375,7 +380,7 @@ def create_credit_note(
 
     cn_number = payload.credit_note_number
     if not cn_number:
-        cn_number = f"CN-{uuid.uuid4().hex[:6].upper()}"
+        cn_number = NumberingSeriesService.generate_next_number(db, tenant_id, "CREDIT_NOTE")
 
     origin_state = resolve_origin_state_code(db, tenant_id)
     place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
@@ -768,7 +773,7 @@ def create_debit_note(
 
     dn_number = payload.debit_note_number
     if not dn_number:
-        dn_number = f"DN-{uuid.uuid4().hex[:6].upper()}"
+        dn_number = NumberingSeriesService.generate_next_number(db, tenant_id, "DEBIT_NOTE")
 
     origin_state = resolve_origin_state_code(db, tenant_id)
     place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
@@ -1097,7 +1102,10 @@ def get_invoice(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
-    invoice = db.query(Invoice).filter(
+    invoice = db.query(Invoice).options(
+        joinedload(Invoice.contact),
+        joinedload(Invoice.lines),
+    ).filter(
         Invoice.id == id,
         Invoice.tenant_id == tenant_id,
         Invoice.deleted_at == None

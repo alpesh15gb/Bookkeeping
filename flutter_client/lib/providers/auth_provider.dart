@@ -36,12 +36,16 @@ class AuthProvider extends ChangeNotifier {
         return;
       }
       // Try to fetch current user to verify session
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/auth/me'));
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/auth/me'),
+      );
       if (response.statusCode == 200) {
         _currentUser = UserResponse.fromJson(jsonDecode(response.body));
         _isAuthenticated = true;
         // Fetch memberships
-        final memResponse = await _client.get(Uri.parse('${ApiClient.baseUrl}/auth/memberships'));
+        final memResponse = await _client.get(
+          Uri.parse('${ApiClient.baseUrl}/auth/memberships'),
+        );
         if (memResponse.statusCode == 200) {
           final List data = jsonDecode(memResponse.body);
           _memberships = data.map((e) => TenantMembership.fromJson(e)).toList();
@@ -67,16 +71,12 @@ class AuthProvider extends ChangeNotifier {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
-    debugPrint('🟡 [Auth] Login started for $email');
-    debugPrint('🟡 [Auth] API URL: ${ApiClient.baseUrl}');
     try {
       final response = await http.post(
         Uri.parse('${ApiClient.baseUrl}/auth/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
       );
-      debugPrint('🟡 [Auth] Login response status: ${response.statusCode}');
-      debugPrint('🟡 [Auth] Login response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -84,8 +84,9 @@ class AuthProvider extends ChangeNotifier {
         await ApiClient.saveRefreshToken(data['refresh_token']);
 
         // Fetch memberships to select default tenant ID
-        final memResponse = await _client.get(Uri.parse('${ApiClient.baseUrl}/auth/memberships'));
-        debugPrint('🟡 [Auth] Memberships response status: ${memResponse.statusCode}');
+        final memResponse = await _client.get(
+          Uri.parse('${ApiClient.baseUrl}/auth/memberships'),
+        );
         if (memResponse.statusCode == 200) {
           final List data = jsonDecode(memResponse.body);
           _memberships = data.map((e) => TenantMembership.fromJson(e)).toList();
@@ -96,33 +97,33 @@ class AuthProvider extends ChangeNotifier {
         }
 
         // Fetch user info
-        final userResponse = await _client.get(Uri.parse('${ApiClient.baseUrl}/auth/me'));
-        debugPrint('🟡 [Auth] Me response status: ${userResponse.statusCode}');
+        final userResponse = await _client.get(
+          Uri.parse('${ApiClient.baseUrl}/auth/me'),
+        );
         if (userResponse.statusCode == 200) {
           _currentUser = UserResponse.fromJson(jsonDecode(userResponse.body));
           _isAuthenticated = true;
           _isLoading = false;
           notifyListeners();
-          debugPrint('✅ [Auth] Login successful');
           return true;
         }
       } else {
         try {
           final errorData = jsonDecode(response.body);
-          _errorMessage = errorData['detail'] ?? 'Login failed (HTTP ${response.statusCode})';
+          _errorMessage =
+              errorData['detail'] ??
+              'Login failed (HTTP ${response.statusCode})';
         } catch (_) {
           if (response.statusCode >= 500) {
-            _errorMessage = 'Server error (${response.statusCode}). Please try again later.';
+            _errorMessage =
+                'Server error (${response.statusCode}). Please try again later.';
           } else {
             _errorMessage = 'Login failed (HTTP ${response.statusCode})';
           }
         }
-        debugPrint('❌ [Auth] Login failed: $_errorMessage');
       }
-    } catch (e, stack) {
-      _errorMessage = 'Error: $e';
-      debugPrint('❌ [Auth] Login exception: $e');
-      debugPrint('❌ [Auth] Login stack: $stack');
+    } catch (e) {
+      _errorMessage = 'Connection error. Please check your network.';
     }
     _isLoading = false;
     notifyListeners();
@@ -170,7 +171,10 @@ class AuthProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> changePassword(String currentPassword, String newPassword) async {
+  Future<bool> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();

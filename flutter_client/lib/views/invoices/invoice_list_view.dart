@@ -1,4 +1,7 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
@@ -192,14 +195,25 @@ class _InvoiceListViewState extends State<InvoiceListView> {
   }
 
   void _exportGstr1() async {
-    final token = ApiClient.accessToken;
     final response = await ApiClient().get(
       Uri.parse('${ApiClient.baseUrl}/gst/gstr1/export'),
     );
     if (response.statusCode == 200 && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Export downloaded')),
+      final data = jsonDecode(response.body);
+      final json = const JsonEncoder.withIndent('  ').convert(data);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final savePath = await FilePicker.platform.saveFile(
+        dialogTitle: 'Save GSTR-1 Export',
+        fileName: 'gstr1_export_$timestamp.json',
+        type: FileType.custom,
+        allowedExtensions: ['json'],
+        bytes: Uint8List.fromList(utf8.encode(json)),
       );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(savePath == null ? 'Export cancelled' : 'GSTR-1 saved to $savePath')),
+        );
+      }
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Export failed'), backgroundColor: AppColors.error),
@@ -394,7 +408,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                                     children: [
                                                       Icon(Icons.person_outlined, size: 14, color: AppColors.textMuted),
                                                       const SizedBox(width: 6),
-                                                      Text(invoice.contact?.name ?? 'N/A', style: AppTextStyles.bodySmall),
+                                                       Text(invoice.contactName ?? invoice.contact?.name ?? 'N/A', style: AppTextStyles.bodySmall),
                                                       const SizedBox(width: 16),
                                                       Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textMuted),
                                                       const SizedBox(width: 6),
