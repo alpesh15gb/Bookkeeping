@@ -227,14 +227,9 @@ class TestInvoicingFlow(unittest.TestCase):
         res_post = self.client.post("/api/v1/invoices/credit-notes", json=cn_payload, headers=self.headers)
         self.assertEqual(res_post.status_code, 201)
         cn = res_post.json()
-        self.assertEqual(cn["status"], "DRAFT")
+        self.assertEqual(cn["status"], "POSTED")  # auto-posted on creation
         self.assertEqual(float(cn["total"]), 11800.00) # 10000 + 18% GST
         cn_id = cn["id"]
-
-        # Finalize Credit Note
-        res_fin = self.client.post(f"/api/v1/invoices/credit-notes/{cn_id}/finalize", headers=self.headers)
-        self.assertEqual(res_fin.status_code, 200)
-        self.assertEqual(res_fin.json()["status"], "POSTED")
 
         # Verify ledger journal entry posted
         db = SessionLocal()
@@ -275,7 +270,7 @@ class TestInvoicingFlow(unittest.TestCase):
         }
         inv = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers).json()
 
-        # Create draft Debit Note linked to the invoice
+        # Create Debit Note linked to the invoice (auto-posted on creation)
         dn_payload = {
             "invoice_id": inv["id"],
             "issue_date": str(date.today()),
@@ -293,12 +288,8 @@ class TestInvoicingFlow(unittest.TestCase):
         res_post = self.client.post("/api/v1/invoices/debit-notes", json=dn_payload, headers=self.headers)
         self.assertEqual(res_post.status_code, 201)
         dn = res_post.json()
+        self.assertEqual(dn["status"], "POSTED")  # auto-posted on creation
         dn_id = dn["id"]
-
-        # Finalize Debit Note
-        res_fin = self.client.post(f"/api/v1/invoices/debit-notes/{dn_id}/finalize", headers=self.headers)
-        self.assertEqual(res_fin.status_code, 200)
-        self.assertEqual(res_fin.json()["status"], "POSTED")
 
         # Verify ledger journal entry posted
         db = SessionLocal()
