@@ -79,7 +79,6 @@ class _MainAppShellState extends State<MainAppShell> {
     super.initState();
     ApiClient.onSessionExpired = () {
       if (mounted) {
-        context.read<AuthProvider>().clearLocalSession();
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) {
             _navigatorKey.currentState?.pushAndRemoveUntil(
