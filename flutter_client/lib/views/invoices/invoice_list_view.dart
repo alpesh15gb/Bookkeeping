@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
@@ -11,6 +12,7 @@ import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 import 'package:flutter_client/views/invoices/invoice_detail_view.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
+import 'package:flutter_client/utils/download_stub.dart' if (dart.library.html) 'package:flutter_client/utils/download_web.dart';
 
 class InvoiceListView extends StatefulWidget {
   const InvoiceListView({super.key});
@@ -202,17 +204,29 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       final data = jsonDecode(response.body);
       final json = const JsonEncoder.withIndent('  ').convert(data);
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final savePath = await FilePicker.platform.saveFile(
-        dialogTitle: 'Save GSTR-1 Export',
-        fileName: 'gstr1_export_$timestamp.json',
-        type: FileType.custom,
-        allowedExtensions: ['json'],
-        bytes: Uint8List.fromList(utf8.encode(json)),
-      );
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(savePath == null ? 'Export cancelled' : 'GSTR-1 saved to $savePath')),
+      final fileName = 'gstr1_export_$timestamp.json';
+      final bytes = utf8.encode(json);
+
+      if (kIsWeb) {
+        triggerWebDownload(fileName, bytes);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('GSTR-1 downloaded: $fileName')),
+          );
+        }
+      } else {
+        final savePath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save GSTR-1 Export',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+          bytes: Uint8List.fromList(bytes),
         );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(savePath == null ? 'Export cancelled' : 'GSTR-1 saved to $savePath')),
+          );
+        }
       }
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

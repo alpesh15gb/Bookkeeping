@@ -1,10 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/utils/download_stub.dart' if (dart.library.html) 'package:flutter_client/utils/download_web.dart';
 
 class BackupRestoreView extends StatefulWidget {
   const BackupRestoreView({super.key});
@@ -39,18 +41,28 @@ class _BackupRestoreViewState extends State<BackupRestoreView> {
         final fileName = 'apexbooks_backup_$timestamp.json';
 
         final json = const JsonEncoder.withIndent('  ').convert(data);
-        final savePath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Save ApexBooks Backup',
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-          bytes: Uint8List.fromList(utf8.encode(json)),
-        );
+        final bytes = utf8.encode(json);
 
-        setState(() {
-          _isExporting = false;
-          _successMessage = savePath == null ? 'Backup export cancelled' : 'Backup saved to $savePath';
-        });
+        if (kIsWeb) {
+          triggerWebDownload(fileName, bytes);
+          setState(() {
+            _isExporting = false;
+            _successMessage = 'Backup downloaded: $fileName';
+          });
+        } else {
+          final savePath = await FilePicker.platform.saveFile(
+            dialogTitle: 'Save ApexBooks Backup',
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: ['json'],
+            bytes: Uint8List.fromList(bytes),
+          );
+
+          setState(() {
+            _isExporting = false;
+            _successMessage = savePath == null ? 'Backup export cancelled' : 'Backup saved to $savePath';
+          });
+        }
       } else {
         setState(() {
           _isExporting = false;

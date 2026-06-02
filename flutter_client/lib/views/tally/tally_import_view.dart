@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_client/core/constants.dart';
@@ -7,6 +8,7 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/core/api_client.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_client/utils/download_stub.dart' if (dart.library.html) 'package:flutter_client/utils/download_web.dart';
 
 class TallyImportView extends StatefulWidget {
   const TallyImportView({super.key});
@@ -134,20 +136,28 @@ class _TallyImportViewState extends State<TallyImportView> {
         final timestamp = DateTime.now().millisecondsSinceEpoch;
         final fileName = 'tally_export_$timestamp.xml';
 
-        final savePath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Save Tally Export',
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['xml'],
-          bytes: response.bodyBytes,
-        );
+        if (kIsWeb) {
+          triggerWebDownload(fileName, response.bodyBytes);
+          setState(() {
+            _isExporting = false;
+            _successMessage = 'Tally export downloaded: $fileName';
+          });
+        } else {
+          final savePath = await FilePicker.platform.saveFile(
+            dialogTitle: 'Save Tally Export',
+            fileName: fileName,
+            type: FileType.custom,
+            allowedExtensions: ['xml'],
+            bytes: response.bodyBytes,
+          );
 
-        setState(() {
-          _isExporting = false;
-          _successMessage = savePath == null
-              ? 'Export cancelled'
-              : 'Export saved to $savePath';
-        });
+          setState(() {
+            _isExporting = false;
+            _successMessage = savePath == null
+                ? 'Export cancelled'
+                : 'Export saved to $savePath';
+          });
+        }
       } else {
         String errMsg = 'Export failed';
         try {
