@@ -430,9 +430,26 @@ def _pdf_to_image_bytes(pdf_bytes: bytes) -> bytes:
 # Main scanner class
 # ---------------------------------------------------------------------------
 
+# ── Invoiscope-inspired field-specific OCR configs ──────────────────────
+_OCR_CONFIGS = {
+    "gstin":    "--psm 7 -c tessedit_char_whitelist=0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    "amount":   "--psm 7 -c tessedit_char_whitelist=0123456789.,₹- ",
+    "date":     "--psm 7 -c tessedit_char_whitelist=0123456789-/.",
+    "number":   "--psm 7 -c tessedit_char_whitelist=0123456789",
+    "text":     "--psm 6 -l eng",
+    "line":     "--psm 7 -l eng",
+}
+
+
 class InvoiceScanner:
     """
     Stateless invoice scanner.  Instantiate once and call `scan()` many times.
+
+    Architecture inspired by Invoiscope:
+      1. Full-page OCR + structured data to find text regions
+      2. Classify regions by position + content pattern
+      3. Re-run Tesseract on each crop with field-specific whitelist config
+      4. Map refined text back to bill fields
     """
 
     def scan(self, file_bytes: bytes, filename: str = "", confidence_threshold: float = 0.3) -> dict:
@@ -460,28 +477,28 @@ class InvoiceScanner:
             logger.error(f"Image preprocessing failed: {e}")
             return self._empty_result([f"Image could not be processed: {e}"])
 
-        # ── 3. OCR with structured data ──────────────────────────────────
         pytesseract = _require_tesseract()
         Image = _require_pil()
         import numpy as np
+        cv2 = _require_cv2()
 
         pil_img = Image.fromarray(processed)
+        img_h, img_w = processed.shape[:2]
 
-        # Try multiple configs: PSM 6 (block) is best for structured docs
+        # ── 3. Full-page OCR for structure ───────────────────────────────
         raw_text = ""
         best_config = ""
         configs = [
             "--psm 6 --oem 3 -l eng preserve_interword_spaces=1",
             "--psm 3 --oem 3 -l eng preserve_interword_spaces=1",
             "--psm 4 --oem 3 -l eng preserve_interword_spaces=1",
-            "--psm 6 --oem 1 -l eng preserve_interword_spaces=1",  # LSTM only
+            "--psm 6 --oem 1 -l eng preserve_interword_spaces=1",
         ]
-        
+
         for config in configs:
             try:
                 text = pytesseract.image_to_string(pil_img, config=config)
                 stripped = text.strip()
-                # Prefer structured text (has newlines) over plain text
                 score = len(stripped) + (stripped.count('\n') * 20)
                 if score > len(raw_text.strip()) + (raw_text.count('\n') * 20):
                     raw_text = text
@@ -494,22 +511,26 @@ class InvoiceScanner:
 
         logger.debug(f"OCR text ({len(raw_text)} chars, config={best_config}):\n{raw_text[:500]}")
 
-        # Also get structured data for table detection
+        # ── 4. Structured data (word positions) ──────────────────────────
         structured_data = None
         try:
             structured_data = pytesseract.image_to_data(
-                pil_img, 
+                pil_img,
                 config="--psm 6 -l eng",
                 output_type=pytesseract.Output.DICT
             )
         except Exception as e:
             logger.debug(f"Structured OCR failed: {e}")
 
-        # ── 4. Extract fields ──────────────────────────────────────────────
-        lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
-        result = self._extract_fields(raw_text, lines, structured_data, warnings)
+        # ── 5. Invoiscope-style region detection & field-specific re-OCR ─
+        regions = self._detect_regions(processed, structured_data, raw_text, img_w, img_h)
+        refined = self._refine_regions_with_ocr(processed, regions, pytesseract, cv2)
 
-        # ── 5. Confidence scoring ──────────────────────────────────────────
+        # ── 6. Extract fields from refined regions ───────────────────────
+        lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+        result = self._extract_fields(raw_text, lines, structured_data, refined, warnings)
+
+        # ── 7. Confidence scoring ──────────────────────────────────────────
         scores = _compute_confidence(result)
         found = sum(1 for v in scores.values() if v > 0)
         overall = round(found / max(len(scores), 1), 2)
@@ -526,50 +547,260 @@ class InvoiceScanner:
         return result
 
     # ------------------------------------------------------------------
-    def _extract_fields(self, text: str, lines: list[str], structured_data: Optional[dict], warnings: list[str]) -> dict:
+    def _detect_regions(self, img: Any, structured_data: Optional[dict], raw_text: str, img_w: int, img_h: int) -> list[dict]:
+        """
+        Invoiscope-style region detection using Tesseract structured data.
+        Groups words into lines, then classifies each line into a field region
+        based on position + content heuristics.
+        Returns list of {"type": str, "x": int, "y": int, "w": int, "h": int, "text": str}
+        """
+        regions = []
+        if not structured_data:
+            # Fallback: split raw text into pseudo-regions by line position
+            lines = raw_text.splitlines()
+            for i, line in enumerate(lines):
+                line = line.strip()
+                if not line or len(line) < 2:
+                    continue
+                rtype = self._classify_text_region(line, i, len(lines))
+                regions.append({
+                    "type": rtype,
+                    "x": 0, "y": i * 30, "w": img_w, "h": 30,
+                    "text": line,
+                })
+            return regions
+
+        n = len(structured_data.get("text", []))
+        if n == 0:
+            return regions
+
+        # Group words by line_num
+        lines_dict: Dict[int, List[dict]] = {}
+        for i in range(n):
+            text = structured_data["text"][i].strip()
+            conf = int(structured_data["conf"][i])
+            if not text or conf < 20:
+                continue
+            line_num = structured_data["line_num"][i]
+            if line_num not in lines_dict:
+                lines_dict[line_num] = []
+            lines_dict[line_num].append({
+                "text": text,
+                "conf": conf,
+                "x": structured_data["left"][i],
+                "y": structured_data["top"][i],
+                "w": structured_data["width"][i],
+                "h": structured_data["height"][i],
+            })
+
+        # Build regions from lines
+        for line_num in sorted(lines_dict.keys()):
+            words = lines_dict[line_num]
+            words.sort(key=lambda w: w["x"])
+            line_text = " ".join(w["text"] for w in words)
+            if not line_text.strip():
+                continue
+
+            min_x = min(w["x"] for w in words)
+            max_x = max(w["x"] + w["w"] for w in words)
+            min_y = min(w["y"] for w in words)
+            max_y = max(w["y"] + w["h"] for w in words)
+
+            rtype = self._classify_text_region(line_text, line_num, max(lines_dict.keys()) if lines_dict else 1, img_h)
+            regions.append({
+                "type": rtype,
+                "x": max(0, min_x - 4),
+                "y": max(0, min_y - 4),
+                "w": min(img_w - min_x + 8, max_x - min_x + 8),
+                "h": min(img_h - min_y + 8, max_y - min_y + 8),
+                "text": line_text,
+            })
+
+        return regions
+
+    # ------------------------------------------------------------------
+    def _classify_text_region(self, text: str, line_num: int, total_lines: int, img_h: int = 0) -> str:
+        """Classify a text line into a region type based on content + position."""
+        lower = text.lower()
+
+        # Content-based classification (strongest signal)
+        if _RE_GSTIN.search(text):
+            return "gstin"
+        if re.search(r'\b(?:cgst|sgst|igst)\b', lower):
+            return "tax_label"
+        if re.search(r'\b(?:grand\s*total|total\s*amount|net\s*(?:amount|payable)|amount\s*payable|total\s*due|bill\s*amount|final\s*amount)\b', lower):
+            return "total_label"
+        if re.search(r'\b(?:subtotal|taxable\s*(?:amount|value)|value\s*before\s*tax)\b', lower):
+            return "subtotal_label"
+        if re.search(r'\b(?:invoice\s*(?:no|number|#)|bill\s*(?:no|number|#)|inv\s*(?:no|#))\b', lower):
+            return "invoice_label"
+        if re.search(r'\b(?:due\s*date|payment\s*due)\b', lower):
+            return "due_date_label"
+        if re.search(r'\b(?:po\s*(?:no|number|#)|purchase\s*order)\b', lower):
+            return "po_label"
+        if re.search(r'\b(?:description|item|particulars|goods|product|sr\.?\s*no|sl\.?\s*no)\b', lower):
+            return "table_header"
+        if re.search(r'\b(?:qty|quantity|rate|amount|hsn|tax)\b', lower):
+            return "table_header"
+        if re.search(r'\b(?:bank\s*details|ifsc|account\s*no|upi)\b', lower):
+            return "bank_info"
+
+        # Amount detection: contains ₹ or Rs + number
+        if re.search(r'(?:Rs\.?|INR|₹)?\s*[\d,]+(?:\.\d{2})?', text):
+            # Large amounts near bottom are likely totals
+            if img_h > 0 and line_num > total_lines * 0.7:
+                return "amount_bottom"
+            return "amount"
+
+        # Position-based fallback
+        if total_lines > 0:
+            ratio = line_num / total_lines
+            if ratio < 0.15:
+                return "header"  # vendor name area
+            elif ratio > 0.85:
+                return "footer"  # totals, signatures
+            elif 0.4 <= ratio <= 0.75:
+                return "table_body"
+
+        return "text"
+
+    # ------------------------------------------------------------------
+    def _refine_regions_with_ocr(self, img: Any, regions: list[dict], pytesseract, cv2) -> dict[str, list[str]]:
+        """
+        Crop each region and re-run Tesseract with field-specific config.
+        Returns dict mapping field type -> list of candidate texts.
+        """
+        refined: dict[str, list[str]] = {
+            "gstin": [], "amount": [], "amount_bottom": [],
+            "total_label": [], "subtotal_label": [], "tax_label": [],
+            "invoice_label": [], "due_date_label": [], "po_label": [],
+            "header": [], "table_body": [], "text": [], "footer": [],
+        }
+        h_img, w_img = img.shape[:2]
+
+        for region in regions:
+            rtype = region["type"]
+            x = region["x"]
+            y = region["y"]
+            w = region["w"]
+            h = region["h"]
+
+            if w < 10 or h < 10:
+                continue
+
+            # Clamp to image bounds
+            x = max(0, x)
+            y = max(0, y)
+            w = min(w, w_img - x)
+            h = min(h, h_img - y)
+
+            try:
+                crop = img[y:y+h, x:x+w]
+                if crop.size == 0:
+                    continue
+
+                # Pick config based on region type
+                config = _OCR_CONFIGS.get("text")
+                if rtype == "gstin":
+                    config = _OCR_CONFIGS["gstin"]
+                elif rtype in ("amount", "amount_bottom", "total_label", "subtotal_label", "tax_label"):
+                    config = _OCR_CONFIGS["amount"]
+                elif rtype in ("invoice_label", "due_date_label", "po_label"):
+                    config = _OCR_CONFIGS["line"]
+                elif rtype in ("table_header", "table_body"):
+                    config = _OCR_CONFIGS["text"]
+                elif rtype in ("header", "footer"):
+                    config = _OCR_CONFIGS["text"]
+
+                refined_text = pytesseract.image_to_string(crop, config=config).strip()
+                if refined_text:
+                    refined[rtype].append(refined_text)
+            except Exception as e:
+                logger.debug(f"Region OCR failed for {rtype}: {e}")
+
+        return refined
+
+    # ------------------------------------------------------------------
+    def _extract_fields(self, text: str, lines: list[str], structured_data: Optional[dict], refined: dict, warnings: list[str]) -> dict:
         """Run all extraction strategies and return structured dict."""
-        
+
+        # Build a single text from refined regions for targeted regex
+        refined_text = "\n".join(
+            t for lst in refined.values() for t in lst
+        )
+        combined_text = text + "\n" + refined_text
+
         gstin_line_idx = _find_gstin_line_idx(lines)
 
         # ── Vendor name ───────────────────────────────────────────────────
-        vendor_name = _extract_vendor_name(lines, gstin_line_idx)
+        # Prefer refined header regions, fallback to heuristic
+        vendor_name = None
+        if refined.get("header"):
+            for candidate in refined["header"]:
+                c = candidate.strip()
+                if len(c) > 3 and not _RE_VENDOR_SKIP.match(c):
+                    vendor_name = c
+                    break
+        if not vendor_name:
+            vendor_name = _extract_vendor_name(lines, gstin_line_idx)
 
         # ── GSTIN ─────────────────────────────────────────────────────────
-        gstins = _RE_GSTIN.findall(text)
-        vendor_gstin = gstins[0].upper() if gstins else None
+        # Prefer refined GSTIN regions, then combined text
+        vendor_gstin = None
+        for gst_text in refined.get("gstin", []):
+            m = _RE_GSTIN.search(gst_text)
+            if m:
+                vendor_gstin = m.group(1).upper()
+                break
+        if not vendor_gstin:
+            gstins = _RE_GSTIN.findall(combined_text)
+            vendor_gstin = gstins[0].upper() if gstins else None
 
         # ── Vendor address ──────────────────────────────────────────────
         vendor_address = self._extract_address(lines, gstin_line_idx)
 
         # ── Bill / Invoice number ───────────────────────────────────────
-        bill_number = self._extract_bill_number(text, lines)
+        bill_number = self._extract_bill_number(combined_text, lines, refined)
 
         # ── Dates ───────────────────────────────────────────────────────
-        all_dates = _extract_all_dates(text)
+        all_dates = _extract_all_dates(combined_text)
         bill_date = all_dates[0] if all_dates else None
 
         # Due date
         due_date = None
-        m = _RE_DUE.search(text)
-        if m:
-            due_date = _parse_date(m.group(1))
+        for dd_text in refined.get("due_date_label", []):
+            due_date = _parse_date(dd_text)
+            if due_date:
+                break
+        if not due_date:
+            m = _RE_DUE.search(combined_text)
+            if m:
+                due_date = _parse_date(m.group(1))
         if not due_date and len(all_dates) >= 2:
             due_date = all_dates[-1]
 
         # ── PO number ───────────────────────────────────────────────────
-        m = _RE_PO.search(text)
-        po_number = m.group(1).strip() if m else None
+        po_number = None
+        for po_text in refined.get("po_label", []):
+            m = _RE_PO.search(po_text)
+            if m:
+                po_number = m.group(1).strip()
+                break
+        if not po_number:
+            m = _RE_PO.search(combined_text)
+            po_number = m.group(1).strip() if m else None
 
         # ── Tax amounts ────────────────────────────────────────────────
-        total = self._extract_amount(_RE_TOTAL, text)
-        subtotal = self._extract_amount(_RE_SUBTOTAL, text)
-        cgst = self._extract_amount(_RE_CGST, text)
-        sgst = self._extract_amount(_RE_SGST, text)
-        igst = self._extract_amount(_RE_IGST, text)
+        # Prefer refined amount regions for higher accuracy
+        total = self._extract_refined_amount("total_label", refined) or self._extract_amount(_RE_TOTAL, combined_text)
+        subtotal = self._extract_refined_amount("subtotal_label", refined) or self._extract_amount(_RE_SUBTOTAL, combined_text)
+        cgst = self._extract_refined_amount("tax_label", refined, "cgst") or self._extract_amount(_RE_CGST, combined_text)
+        sgst = self._extract_refined_amount("tax_label", refined, "sgst") or self._extract_amount(_RE_SGST, combined_text)
+        igst = self._extract_refined_amount("tax_label", refined, "igst") or self._extract_amount(_RE_IGST, combined_text)
 
         # Fallback: if no total found, look for largest amount in text
         if total is None:
-            total = self._find_largest_amount(text)
+            total = self._find_largest_amount(combined_text)
 
         # Derive subtotal if missing
         if subtotal is None and total is not None:
@@ -578,7 +809,7 @@ class InvoiceScanner:
                 subtotal = round(total - tax_sum, 2)
 
         # ── Line items ────────────────────────────────────────────────────
-        line_items = self._extract_line_items(text, lines, structured_data, warnings)
+        line_items = self._extract_line_items(combined_text, lines, structured_data, refined, warnings)
 
         return {
             "vendor_name":    vendor_name,
@@ -597,35 +828,54 @@ class InvoiceScanner:
         }
 
     # ------------------------------------------------------------------
-    def _extract_bill_number(self, text: str, lines: list[str]) -> Optional[str]:
+    def _extract_refined_amount(self, rtype: str, refined: dict, keyword: str = "") -> Optional[float]:
+        """Extract amount from refined region texts."""
+        for text in refined.get(rtype, []):
+            if keyword and keyword.lower() not in text.lower():
+                continue
+            val = self._find_largest_amount(text)
+            if val is not None:
+                return val
+        return None
+
+    # ------------------------------------------------------------------
+    def _extract_bill_number(self, text: str, lines: list[str], refined: dict) -> Optional[str]:
         """Extract invoice/bill number with multiple strategies."""
-        # Primary regex
+        # Try refined invoice label regions first
+        for inv_text in refined.get("invoice_label", []):
+            m = _RE_INV_NUMBER.search(inv_text)
+            if m:
+                val = m.group(1).strip()
+                if len(val) >= 2:
+                    return val
+
+        # Primary regex on full text
         m = _RE_INV_NUMBER.search(text)
         if m:
             val = m.group(1).strip()
             if len(val) >= 2:
                 return val
-        
+
         # Fallback: look for pattern near "Invoice" keyword
         m = _RE_INV_NUMBER_FALLBACK.search(text)
         if m:
             val = m.group(1).strip()
-            if len(val) >= 2 and not val.lower() in ('date', 'no', 'number'):
+            if len(val) >= 2 and val.lower() not in ('date', 'no', 'number'):
                 return val
-        
+
         # Fallback 2: look for any alphanumeric pattern with numbers after invoice keyword
         for i, line in enumerate(lines):
             if re.search(r'\binvoice\b', line, re.I):
-                # Check next 3 lines
                 for j in range(i, min(i+3, len(lines))):
                     m = re.search(r'([A-Z]*\d+[A-Z0-9/\-_\.]+)', lines[j], re.I)
                     if m:
                         val = m.group(1).strip()
                         if len(val) >= 2:
                             return val
-        
+
         return None
 
+    
     # ------------------------------------------------------------------
     def _extract_amount(self, pattern: re.Pattern, text: str) -> Optional[float]:
         m = pattern.search(text)
@@ -675,32 +925,73 @@ class InvoiceScanner:
         return ", ".join(addr_parts[:4]) if addr_parts else None
 
     # ------------------------------------------------------------------
-    def _extract_line_items(self, text: str, lines: list[str], structured_data: Optional[dict], warnings: list[str]) -> list:
+    def _extract_line_items(self, text: str, lines: list[str], structured_data: Optional[dict], refined: dict, warnings: list[str]) -> list:
         """
         Parse line items from the invoice table using multiple strategies.
         """
         items = []
-        
-        # Strategy 1: Structured data (Tesseract image_to_data) for table detection
+
+        # Strategy 1: Refined table body regions (Invoiscope-style per-region OCR)
+        items = self._extract_line_items_from_refined(refined)
+        if items:
+            return items
+
+        # Strategy 2: Structured data (Tesseract image_to_data) for table detection
         if structured_data:
             items = self._extract_line_items_from_structured(structured_data, warnings)
             if items:
                 return items
-        
-        # Strategy 2: Regex-based line matching
+
+        # Strategy 3: Regex-based line matching
         items = self._extract_line_items_regex(text, lines, warnings)
         if items:
             return items
-        
-        # Strategy 3: Simple amount-only extraction for fallback
+
+        # Strategy 4: Simple amount-only extraction for fallback
         items = self._extract_line_items_fallback(text, lines)
-        
+
         if not items:
             warnings.append(
                 "Line items could not be automatically extracted — "
                 "please add them manually after reviewing the other fields."
             )
-        
+
+        return items
+
+    # ------------------------------------------------------------------
+    def _extract_line_items_from_refined(self, refined: dict) -> list:
+        """Extract line items from refined table_body regions."""
+        items = []
+        for line_text in refined.get("table_body", []):
+            # Try to parse qty, rate, amount from refined table lines
+            nums = re.findall(r'([\d,]+(?:\.\d+)?)', line_text)
+            if len(nums) >= 3:
+                try:
+                    values = [_clean_amount(n) for n in nums]
+                    values = [v for v in values if v is not None]
+                    if len(values) >= 3:
+                        desc_match = re.match(r'^(.+?)\s+\d', line_text)
+                        desc = desc_match.group(1).strip() if desc_match else "Item"
+                        if len(desc) > 2 and not _RE_VENDOR_SKIP.match(desc):
+                            qty = values[0]
+                            rate = values[1]
+                            amount = values[-1]
+                            if qty > 0 and amount > 0:
+                                gst_rate = 0.0
+                                gst_m = _RE_GST_RATE.search(desc)
+                                if gst_m:
+                                    gst_rate = float(gst_m.group(1))
+                                    desc = _RE_GST_RATE.sub('', desc).strip()
+                                items.append({
+                                    "description": desc,
+                                    "hsn": "",
+                                    "qty": qty,
+                                    "rate": rate if rate > 0 else amount / qty,
+                                    "gst_rate": gst_rate,
+                                    "amount": amount,
+                                })
+                except Exception:
+                    pass
         return items
 
     # ------------------------------------------------------------------
