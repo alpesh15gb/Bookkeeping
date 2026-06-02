@@ -31,13 +31,36 @@ def create_contact(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("contact:create"))
 ):
+    normalized_name = payload.name.strip().lower()
+    normalized_gstin = payload.gstin.strip().upper() if payload.gstin else None
+
+    existing = None
+    if normalized_gstin:
+        existing = db.query(Contact).filter(
+            Contact.tenant_id == tenant_id,
+            func.upper(Contact.gstin) == normalized_gstin,
+            Contact.deleted_at == None,
+        ).first()
+    if not existing:
+        existing = db.query(Contact).filter(
+            Contact.tenant_id == tenant_id,
+            func.lower(func.trim(Contact.name)) == normalized_name,
+            Contact.deleted_at == None,
+        ).first()
+    if existing:
+        if existing.contact_type != payload.contact_type:
+            existing.contact_type = "BOTH"
+            db.commit()
+            db.refresh(existing)
+        return existing
+
     contact = Contact(
         tenant_id=tenant_id,
         name=payload.name,
         email=payload.email,
         phone=payload.phone,
         contact_type=payload.contact_type,
-        gstin=payload.gstin,
+        gstin=normalized_gstin,
         pan=payload.pan,
         registration_type=payload.registration_type,
         billing_address=payload.billing_address.dict(),
@@ -352,6 +375,62 @@ def list_accounts(
         Account.tenant_id == tenant_id,
         Account.deleted_at == None
     ).order_by(Account.code.asc()).offset(offset).limit(limit).all()
+
+
+@router.post("/accounts/dedupe-contact-accounts")
+def dedupe_contact_accounts(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage"))
+):
+    """Merge duplicate auto-created AR/AP accounts for the same contact name."""
+    from src.infrastructure.database.models import JournalLine
+    from src.domains.accounting.services import update_account_balances
+
+    accounts = db.query(Account).filter(
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None,
+        (Account.code.like("AR-%") | Account.code.like("AP-%")),
+    ).order_by(Account.created_at.asc()).all()
+
+    grouped = {}
+    for account in accounts:
+        key = (account.account_type, account.name.strip().lower())
+        grouped.setdefault(key, []).append(account)
+
+    merged = 0
+    affected = set()
+    now = datetime.now(timezone.utc)
+
+    for group in grouped.values():
+        if len(group) < 2:
+            continue
+
+        group.sort(
+            key=lambda a: (
+                0 if abs(a.current_balance or 0) > 0 else 1,
+                a.created_at or now,
+            )
+        )
+        primary = group[0]
+        affected.add(primary.id)
+
+        for duplicate in group[1:]:
+            db.query(JournalLine).filter(
+                JournalLine.account_id == duplicate.id,
+            ).update({JournalLine.account_id: primary.id}, synchronize_session=False)
+
+            primary.opening_balance = (primary.opening_balance or 0) + (duplicate.opening_balance or 0)
+            duplicate.opening_balance = 0
+            duplicate.current_balance = 0
+            duplicate.is_active = False
+            duplicate.deleted_at = now
+            merged += 1
+
+    if affected:
+        update_account_balances(db, tenant_id, affected)
+    db.commit()
+    return {"merged_accounts": merged}
+
 
 @router.get("/accounts/{id}", response_model=AccountResponse)
 def get_account(

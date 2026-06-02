@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import List, Optional, Dict
 from datetime import datetime, date
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
@@ -207,27 +208,41 @@ def import_vyapar_backup(
                 vy_expense_cat_names[n["name_id"]] = name_str
                 continue
 
-            # Check if contact already exists (dedup by name + tenant)
-            existing = (
-                db.query(Contact)
-                .filter(
-                    Contact.tenant_id == tenant_id,
-                    Contact.name == name_str,
-                    Contact.deleted_at == None,  # noqa: E711
-                )
-                .first()
-            )
-            if existing:
-                contact_map[n["name_id"]] = str(existing.id)
-                continue
-
             # Determine contact type from name_type:
             # 1 = customer, 2 = vendor, 0 = both
             name_type = n["name_type"]
             contact_type = "CUSTOMER" if name_type == 1 else (
                 "VENDOR" if name_type == 2 else "BOTH"
             )
-            gstin = (n["name_gstin_number"] or "").strip() or None
+            gstin = (n["name_gstin_number"] or "").strip().upper() or None
+
+            # Check if contact already exists (dedup by GSTIN first, then normalized name)
+            existing = None
+            if gstin:
+                existing = (
+                    db.query(Contact)
+                    .filter(
+                        Contact.tenant_id == tenant_id,
+                        func.upper(Contact.gstin) == gstin,
+                        Contact.deleted_at == None,  # noqa: E711
+                    )
+                    .first()
+                )
+            if not existing:
+                existing = (
+                    db.query(Contact)
+                    .filter(
+                        Contact.tenant_id == tenant_id,
+                        func.lower(func.trim(Contact.name)) == name_str.lower(),
+                        Contact.deleted_at == None,  # noqa: E711
+                    )
+                    .first()
+                )
+            if existing:
+                if existing.contact_type != contact_type:
+                    existing.contact_type = "BOTH"
+                contact_map[n["name_id"]] = str(existing.id)
+                continue
             # Party state
             party_state = (n["name_state"] or "").strip()
             state_map2 = {

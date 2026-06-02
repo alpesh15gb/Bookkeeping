@@ -1028,6 +1028,7 @@ class AccountResolver:
     # ------------------------------------------------------------------
     def _resolve_contact_account(self, key: str) -> uuid.UUID:
         from src.infrastructure.database.models import Account, Contact
+        from sqlalchemy import func
 
         parts = key.split(".", 1)
         if len(parts) != 2:
@@ -1066,6 +1067,18 @@ class AccountResolver:
         ).first()
         if existing is not None:
             return existing.id
+
+        # Guard against historical duplicate contacts: if another contact with
+        # the same visible name already created the same AR/AP account, reuse it.
+        candidates = self.db.query(Account).filter(
+            Account.tenant_id == self.tenant_id,
+            Account.account_type == account_type,
+            func.lower(func.trim(Account.name)) == account_name.strip().lower(),
+            Account.deleted_at == None,
+        ).all()
+        if candidates:
+            non_zero = [a for a in candidates if a.current_balance and a.current_balance != 0]
+            return (non_zero[0] if non_zero else candidates[0]).id
 
         account = Account(
             id=account_id,

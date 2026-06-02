@@ -595,7 +595,14 @@ def verify_and_execute_purge(
         db.query(Product).filter(Product.tenant_id == tenant_id).delete(synchronize_session=False)
         db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id).delete(synchronize_session=False)
 
-        # Reset account balances
+        # Remove auto-created per-contact AR/AP accounts. Standard chart accounts
+        # remain and simply have their balances reset.
+        db.query(Account).filter(
+            Account.tenant_id == tenant_id,
+            (Account.code.like("AR-%") | Account.code.like("AP-%")),
+        ).delete(synchronize_session=False)
+
+        # Reset remaining account balances
         db.query(Account).filter(Account.tenant_id == tenant_id).update(
             {Account.current_balance: 0, Account.opening_balance: 0},
             synchronize_session=False
