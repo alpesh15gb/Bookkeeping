@@ -19,6 +19,7 @@ import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/search_sheets.dart';
 import 'package:flutter_client/views/invoices/widgets/quick_create_product_sheet.dart';
 import 'package:flutter_client/views/invoices/widgets/quick_create_customer_sheet.dart';
+import 'package:flutter_client/views/shared/scanned_bill_preview_dialog.dart';
 
 // ── GST STATE NAMES ─────────────────────────────────────────────────────────
 const Map<String, String> _gstStateNames = {
@@ -411,11 +412,15 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     if (widget.editEntity == null) return;
     final contacts = context.read<ContactProvider>().contacts;
     String? contactId;
-    if (widget.editEntity is InvoiceModel)
+    if (widget.editEntity is InvoiceModel) {
       contactId = widget.editEntity.contactId;
-    if (widget.editEntity is BillModel) contactId = widget.editEntity.contactId;
-    if (widget.editEntity is Map)
+    }
+    if (widget.editEntity is BillModel) {
+      contactId = widget.editEntity.contactId;
+    }
+    if (widget.editEntity is Map) {
       contactId = widget.editEntity['contact_id']?.toString();
+    }
 
     if (contactId != null) {
       final match = contacts.where((c) => c.id == contactId);
@@ -887,315 +892,95 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         return;
       }
 
-      final uri = Uri.parse('${ApiClient.baseUrl}/bills/scan-and-create');
-      final request = http.MultipartRequest('POST', uri);
-
+      // ── Step 1: Call scan-preview ───────────────────────────────────
+      final previewUri = Uri.parse('${ApiClient.baseUrl}/bills/scan-preview');
+      final previewRequest = http.MultipartRequest('POST', previewUri);
       if (ApiClient.accessToken != null) {
-        request.headers['Authorization'] = 'Bearer ${ApiClient.accessToken}';
+        previewRequest.headers['Authorization'] = 'Bearer ${ApiClient.accessToken}';
       }
       if (ApiClient.tenantId != null) {
-        request.headers['X-Tenant-ID'] = ApiClient.tenantId!;
+        previewRequest.headers['X-Tenant-ID'] = ApiClient.tenantId!;
       }
+      previewRequest.files.add(http.MultipartFile.fromBytes('file', bytes, filename: picked.name));
+      previewRequest.fields['confidence'] = '0.25';
 
-      request.files.add(http.MultipartFile.fromBytes(
-        'file', bytes,
-        filename: picked.name,
-      ));
-      request.fields['confidence'] = '0.25';
-
-      final streamed = await request.send();
-      final response = await http.Response.fromStream(streamed);
+      final previewStreamed = await previewRequest.send();
+      final previewResponse = await http.Response.fromStream(previewStreamed);
 
       if (!mounted) return;
 
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        await _applyScannedData(data);
-      } else {
-        String msg = 'Scan failed (${response.statusCode})';
+      if (previewResponse.statusCode != 200) {
+        String msg = 'Scan failed (${previewResponse.statusCode})';
         try {
-          final b = jsonDecode(response.body);
+          final b = jsonDecode(previewResponse.body);
           if (b is Map) msg = b['detail']?.toString() ?? msg;
         } catch (_) {}
         _showSnack(msg, error: true);
+        setState(() => _isScanning = false);
+        return;
+      }
+
+      final previewBody = jsonDecode(previewResponse.body);
+      final previewData = previewBody is Map<String, dynamic>
+          ? previewBody
+          : <String, dynamic>{};
+
+      // ── Step 2: Show editable preview dialog ────────────────────────
+      final created = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => ScannedBillPreviewDialog(
+          previewData: previewData,
+          onSave: (editedPayload) async {
+            // Capture providers before async gap
+            final contactProvider = context.read<ContactProvider>();
+            final productProvider = context.read<ProductProvider>();
+            // Step 3: Call scan-save
+            final saveUri = Uri.parse('${ApiClient.baseUrl}/bills/scan-save');
+            final saveResponse = await http.post(
+              saveUri,
+              headers: {
+                'Content-Type': 'application/json',
+                if (ApiClient.accessToken != null)
+                  'Authorization': 'Bearer ${ApiClient.accessToken}',
+                if (ApiClient.tenantId != null)
+                  'X-Tenant-ID': ApiClient.tenantId!,
+              },
+              body: jsonEncode(editedPayload),
+            );
+
+            if (saveResponse.statusCode == 201) {
+              final body = jsonDecode(saveResponse.body);
+              final billNumber = body['bill_number']?.toString();
+              if (mounted) {
+                _showSnack('Bill $billNumber created successfully');
+              }
+              // Refresh contacts / products in case new ones were created
+              await contactProvider.fetchContacts();
+              await productProvider.fetchProducts();
+              return true;
+            } else {
+              String msg = 'Failed to save bill (${saveResponse.statusCode})';
+              try {
+                final b = jsonDecode(saveResponse.body);
+                if (b is Map) msg = b['detail']?.toString() ?? msg;
+              } catch (_) {}
+              if (mounted) _showSnack(msg, error: true);
+              return false;
+            }
+          },
+        ),
+      );
+
+      if (created == true && mounted) {
+        // Pop the form back so the list refreshes
+        Navigator.pop(context, true);
       }
     } catch (e) {
       if (mounted) _showSnack('Scan error: $e', error: true);
     } finally {
       if (mounted) setState(() => _isScanning = false);
     }
-  }
-
-  Future<void> _applyScannedData(Map<String, dynamic> data) async {
-    final ocr = data['ocr'] as Map<String, dynamic>? ?? data;
-    final billPayload = data['bill_payload'] as Map<String, dynamic>?;
-    final createdVendor = data['created_vendor'] as Map<String, dynamic>?;
-    final createdProducts = (data['created_products'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final warnings = (data['warnings'] as List?)?.cast<String>() ?? [];
-
-    // ── Vendor ──────────────────────────────────────────────────────────
-    final vendorName = ocr['vendor_name']?.toString();
-    final vendorGstin = ocr['vendor_gstin']?.toString();
-    final vendorAddr = ocr['vendor_address']?.toString();
-
-    if (vendorName != null) {
-      setState(() => _scannedVendorName = vendorName);
-    }
-
-    ContactModel? matched;
-    if (billPayload != null && billPayload['contact_id'] != null) {
-      final contactId = billPayload['contact_id'].toString();
-      // Try to find in already-loaded contacts
-      final vendors = context.read<ContactProvider>().vendors;
-      for (final v in vendors) {
-        if (v.id == contactId) {
-          matched = v;
-          break;
-        }
-      }
-      // If auto-created and not in list, refresh contacts
-      if (matched == null && createdVendor != null) {
-        await context.read<ContactProvider>().fetchContacts();
-        final refreshed = context.read<ContactProvider>().vendors;
-        for (final v in refreshed) {
-          if (v.id == contactId) {
-            matched = v;
-            break;
-          }
-        }
-      }
-    }
-
-    // Fallback: GSTIN / name match in loaded contacts
-    if (matched == null && (vendorName != null || vendorGstin != null)) {
-      final gstin = vendorGstin?.toUpperCase();
-      final name = vendorName?.toLowerCase();
-      final vendors = context.read<ContactProvider>().vendors;
-      if (gstin != null && gstin.isNotEmpty) {
-        for (final v in vendors) {
-          if (v.gstin?.toUpperCase() == gstin) {
-            matched = v;
-            break;
-          }
-        }
-      }
-      if (matched == null && name != null && name.isNotEmpty) {
-        for (final v in vendors) {
-          final vName = v.name.toLowerCase();
-          if (vName.contains(name) || name.contains(vName)) {
-            matched = v;
-            break;
-          }
-        }
-      }
-    }
-
-    if (matched != null) {
-      setState(() {
-        _selectedContact = matched;
-        if (matched!.stateCode.length == 2) {
-          _posStateCode = matched!.stateCode;
-        }
-      });
-    }
-
-    // ── Bill header fields ─────────────────────────────────────────────
-    final billNumber = ocr['bill_number']?.toString() ?? billPayload?['bill_number']?.toString();
-    final billDate = ocr['bill_date']?.toString() ?? billPayload?['issue_date']?.toString();
-    final dueDate = ocr['due_date']?.toString() ?? billPayload?['due_date']?.toString();
-    final poNumber = ocr['po_number']?.toString() ?? billPayload?['reference_number']?.toString();
-
-    if (billNumber != null) setState(() => _invoiceNoCtrl.text = billNumber);
-    if (billDate != null) setState(() => _issueDateCtrl.text = billDate);
-    if (dueDate != null) setState(() => _dueDateCtrl.text = dueDate);
-    if (poNumber != null) {
-      // PO number is reference_number in the form
-      _poNumberCtrl.text = poNumber;
-    }
-
-    // ── Line items (from bill_payload if available, else OCR) ─────────
-    final payloadLines = (billPayload?['line_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final scannedLines = (ocr['line_items'] as List?)?.cast<Map<String, dynamic>>() ?? [];
-    final linesToUse = payloadLines.isNotEmpty ? payloadLines : scannedLines;
-
-    if (linesToUse.isNotEmpty) {
-      setState(() {
-        _lines.removeWhere((l) => l.productId.isEmpty && l.rate == 0);
-
-        for (final sl in linesToUse) {
-          final productId = sl['product_id']?.toString() ?? '';
-          final productName = sl['product_name']?.toString() ?? sl['description']?.toString() ?? 'Item';
-          final hsn = sl['hsn_sac']?.toString() ?? sl['hsn']?.toString() ?? '';
-          final qty = (sl['quantity'] as num?)?.toDouble() ?? (sl['qty'] as num?)?.toDouble() ?? 1.0;
-          final rate = (sl['rate'] as num?)?.toDouble() ?? 0.0;
-          final gstRateRaw = (sl['gst_rate'] as num?)?.toDouble() ?? 18.0;
-
-          double gstRate = 18.0;
-          if (gstRateRaw <= 2.5) {
-            gstRate = 0.0;
-          } else if (gstRateRaw <= 8.5) {
-            gstRate = 5.0;
-          } else if (gstRateRaw <= 15.0) {
-            gstRate = 12.0;
-          } else {
-            gstRate = 18.0;
-          }
-
-          _lines.add(TransactionLineItem(
-            productId: productId,
-            productName: productName,
-            hsnSac: hsn,
-            quantity: qty,
-            rate: rate,
-            gstRate: gstRate,
-            discount: 0,
-            description: productName,
-          ));
-        }
-      });
-    }
-
-    // ── Show summary dialog with created entities ──────────────────────
-    _showScanSummaryDialog(ocr, createdVendor, createdProducts, warnings);
-
-    _triggerPreview();
-  }
-
-  void _showScanSummaryDialog(
-    Map<String, dynamic> ocr,
-    Map<String, dynamic>? createdVendor,
-    List<Map<String, dynamic>> createdProducts,
-    List<String> warnings,
-  ) {
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final conf = ((ocr['overall_confidence'] as num?)?.toDouble() ?? 0.0) * 100;
-        final vendorName = ocr['vendor_name']?.toString();
-        final items = (ocr['line_items'] as List?)?.length ?? 0;
-
-        return AlertDialog(
-          title: Row(
-            children: [
-              const Icon(Icons.document_scanner, color: AppColors.success),
-              const SizedBox(width: 8),
-              const Text('Bill Scanned'),
-            ],
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Confidence: ${conf.toStringAsFixed(0)}%', style: const TextStyle(fontWeight: FontWeight.w600)),
-                const SizedBox(height: 8),
-                if (vendorName != null) Text('Vendor: $vendorName', style: AppTextStyles.bodySmall),
-                if (items > 0) Text('Items found: $items', style: AppTextStyles.bodySmall),
-                if (createdVendor != null) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: AppColors.successBg,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.person_add, size: 16, color: AppColors.success),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Created vendor: ${createdVendor['name']}',
-                            style: const TextStyle(fontSize: 12, color: AppColors.success),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-                if (createdProducts.isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  ...createdProducts.map((p) => Container(
-                    padding: const EdgeInsets.all(8),
-                    margin: const EdgeInsets.only(bottom: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.successBg,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.inventory_2_outlined, size: 16, color: AppColors.success),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'Created product: ${p['name']}',
-                            style: const TextStyle(fontSize: 12, color: AppColors.success),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
-                ],
-                if (warnings.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  const Text('Warnings:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12)),
-                  ...warnings.map((w) => Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
-                        const SizedBox(width: 6),
-                        Expanded(child: Text(w, style: const TextStyle(fontSize: 11, color: AppColors.textMuted))),
-                      ],
-                    ),
-                  )),
-                ],
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Review & Edit'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showScanWarnings(List<String> warnings) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Scan Notes'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: warnings
-              .map((w) => Padding(
-                    padding: const EdgeInsets.only(bottom: 6),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.info_outline, size: 14, color: AppColors.warning),
-                        const SizedBox(width: 6),
-                        Expanded(child: Text(w, style: AppTextStyles.bodySmall)),
-                      ],
-                    ),
-                  ))
-              .toList(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
