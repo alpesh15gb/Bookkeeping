@@ -25,7 +25,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r backend/requirements.txt pytest Faker freezegun mock anyio pytest-asyncio
+          pip install -r backend/requirements.txt pytest Faker freezegun mock anyio pytest-asyncio httpx
 
       - name: Run Backend Tests
         run: |
