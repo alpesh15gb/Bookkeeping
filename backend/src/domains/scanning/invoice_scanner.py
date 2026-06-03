@@ -228,6 +228,32 @@ def _clean_json_string(s: str) -> str:
     return "".join(result)
 
 
+def _robust_json_loads(s: str) -> dict:
+    import json
+    import re
+    import ast
+
+    try:
+        return json.loads(s)
+    except Exception as e:
+        orig_err = e
+
+    # Fallback to ast.literal_eval for python-like literals (single quotes, trailing commas)
+    # Map json boolean/null tokens to Python counterparts
+    s_py = re.sub(r'\btrue\b', 'True', s)
+    s_py = re.sub(r'\bfalse\b', 'False', s_py)
+    s_py = re.sub(r'\bnull\b', 'None', s_py)
+
+    try:
+        val = ast.literal_eval(s_py)
+        if isinstance(val, dict):
+            return val
+    except Exception:
+        pass
+
+    raise orig_err
+
+
 def _parse_date(text: str) -> Optional[str]:
     if not text:
         return None
@@ -1359,6 +1385,7 @@ class InvoiceScanner:
             "You are an expert bookkeeping and invoice scanning assistant.\n"
             "Analyze the uploaded invoice image and extract all relevant details.\n"
             "Respond ONLY with a valid JSON object. Do not include markdown code block formatting (like ```json), explanations, or other text.\n"
+            "IMPORTANT: Use double quotes for all keys and string values in the JSON. Never use single quotes (e.g. 'key') and do not include trailing commas, as they violate standard JSON syntax.\n"
             "The JSON must have the following schema:\n"
             "{\n"
             '  "vendor_name": "string or null (e.g. Mahaveer Computers)",\n'
@@ -1436,7 +1463,7 @@ class InvoiceScanner:
             content = content[first_brace:last_brace+1]
 
         cleaned_content = _clean_json_string(content)
-        parsed = json.loads(cleaned_content)
+        parsed = _robust_json_loads(cleaned_content)
 
         # Validate types and set defaults
         result = {

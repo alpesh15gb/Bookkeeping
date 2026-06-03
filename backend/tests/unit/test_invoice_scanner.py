@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import patch, MagicMock
-from src.domains.scanning.invoice_scanner import InvoiceScanner, _clean_json_string
+from src.domains.scanning.invoice_scanner import InvoiceScanner, _clean_json_string, _robust_json_loads
 from src.core.config import settings
 
 def test_clean_json_string():
@@ -14,20 +14,36 @@ def test_clean_json_string():
     assert 'C:\\\\Windows\\\\System32' in cleaned
     assert '\\\\u12z4' in cleaned
 
+def test_robust_json_loads():
+    # 1. Single quotes on keys, standard json boolean
+    raw1 = '{"vendor_name": "Test", "active": true, \'items\': [1, 2,]}'
+    parsed1 = _robust_json_loads(raw1)
+    assert parsed1 == {"vendor_name": "Test", "active": True, "items": [1, 2]}
+
+    # 2. All single quotes
+    raw2 = "{'vendor_name': 'Test', 'active': true}"
+    parsed2 = _robust_json_loads(raw2)
+    assert parsed2 == {"vendor_name": "Test", "active": True}
+
+    # 3. Trailing commas in nested structures
+    raw3 = '{"line_items": [{"name": "A",}, {"name": "B",},],}'
+    parsed3 = _robust_json_loads(raw3)
+    assert parsed3 == {"line_items": [{"name": "A"}, {"name": "B"}]}
+
 @patch("requests.post")
 def test_scan_with_nvidia_nim_success(mock_post):
     # Mock settings
     with patch.object(settings, "NVIDIA_NIM_API_KEY", "mock_key"), \
          patch.object(settings, "NVIDIA_NIM_MODEL", "mock_model"):
         
-        # Mock API response with some invalid JSON escape sequences
+        # Mock API response with some invalid JSON escape sequences, single quotes, and trailing commas
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = {
             "choices": [
                 {
                     "message": {
-                        "content": '{"vendor_name": "Test Vendor", "vendor_address": "Street \\\\ road", "line_items": [{"product_name": "Item 1", "quantity": 2, "rate": 50}]}'
+                        "content": "{'vendor_name': 'Test Vendor', 'vendor_address': 'Street \\\\ road', 'line_items': [{'product_name': 'Item 1', 'quantity': 2, 'rate': 50,},],}"
                     }
                 }
             ]
