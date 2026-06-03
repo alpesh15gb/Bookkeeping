@@ -393,6 +393,7 @@ class InvoiceScanner:
 
         # ── 4. Parse OCR results into words with positions ─────────────
         words = self._parse_ocr_result(result)
+        logger.info(f"Parsed {len(words)} words from OCR results")
 
         if not words:
             return self._empty_result(["No text detected in image."])
@@ -400,9 +401,11 @@ class InvoiceScanner:
         # ── 5. Layout analysis ─────────────────────────────────────────
         img_h = processed.shape[0]
         lines_dict = self._group_words_into_lines(words)
+        logger.info(f"Grouped into {len(lines_dict)} lines")
 
         # ── 6. Extract fields ──────────────────────────────────────────
         result_data = self._extract_fields(words, lines_dict, img_h, warnings)
+        logger.info(f"Extracted {len(result_data.get('line_items', []))} line items: {result_data.get('line_items')}")
 
         # ── 7. Confidence scoring ─────────────────────────────────────
         scores = _compute_confidence(result_data)
