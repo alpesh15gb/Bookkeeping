@@ -220,6 +220,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   String _posStateCode = '27';
   bool _isSaving = false;
   bool _isScanning = false;
+  bool _isGstInclusive = false;
   String? _scannedVendorName;
   Timer? _previewDebounce;
   bool _isPreviewLoading = false;
@@ -549,9 +550,19 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         final lineGross = l.quantity * l.rate;
         final lineDisc = lineGross * (l.discount / 100);
         final lineNet = lineGross - lineDisc;
-        sub += lineGross;
-        disc += lineDisc;
-        gst += lineNet * (l.gstRate / 100);
+        if (_isGstInclusive) {
+          final double rateExcl = l.rate / (1 + l.gstRate / 100);
+          final double grossExcl = l.quantity * rateExcl;
+          final double discExcl = grossExcl * (l.discount / 100);
+          final double netExcl = grossExcl - discExcl;
+          sub += grossExcl;
+          disc += discExcl;
+          gst += lineNet - netExcl;
+        } else {
+          sub += lineGross;
+          disc += lineDisc;
+          gst += lineNet * (l.gstRate / 100);
+        }
       }
       setState(() {
         _subtotal = sub;
@@ -629,9 +640,19 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             final lineGross = l.quantity * l.rate;
             final lineDisc = lineGross * (l.discount / 100);
             final lineNet = lineGross - lineDisc;
-            sub += lineGross;
-            disc += lineDisc;
-            gst += lineNet * (l.gstRate / 100);
+            if (_isGstInclusive) {
+              final double rateExcl = l.rate / (1 + l.gstRate / 100);
+              final double grossExcl = l.quantity * rateExcl;
+              final double discExcl = grossExcl * (l.discount / 100);
+              final double netExcl = grossExcl - discExcl;
+              sub += grossExcl;
+              disc += discExcl;
+              gst += lineNet - netExcl;
+            } else {
+              sub += lineGross;
+              disc += lineDisc;
+              gst += lineNet * (l.gstRate / 100);
+            }
           }
           setState(() {
             _subtotal = sub;
@@ -667,8 +688,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             (l) => {
               'product_id': l.productId,
               'quantity': l.quantity,
-              'rate': l.rate,
-              'discount': (l.quantity * l.rate * l.discount / 100)
+              'rate': _isGstInclusive ? (l.rate / (1 + l.gstRate / 100)) : l.rate,
+              'discount': (l.quantity * (_isGstInclusive ? (l.rate / (1 + l.gstRate / 100)) : l.rate) * l.discount / 100)
                   .toStringAsFixed(4),
               'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac)
                   ? l.hsnSac
@@ -1200,54 +1221,88 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   Widget _buildDocInfoCard(bool isDesktop) {
+    final headerRow = Row(
+      children: [
+        const Icon(Icons.description_outlined, size: 18, color: AppColors.brandNavy),
+        const SizedBox(width: 8),
+        Text('DOCUMENT DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
+        const Spacer(),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Checkbox(
+              value: _isGstInclusive,
+              activeColor: AppColors.brandNavy,
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() {
+                    _isGstInclusive = val;
+                  });
+                  _triggerPreview();
+                }
+              },
+            ),
+            const Text('GST Inclusive', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      ],
+    );
+
     if (isDesktop) {
       return AppCard(
         padding: const EdgeInsets.all(20),
-        child: Row(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(
-              child: TextFormField(
-                controller: _invoiceNoCtrl,
-                decoration: InputDecoration(
-                  labelText: widget.config.numberLabel ?? 'Document Number',
-                  prefixIcon: const Icon(Icons.tag, size: 16),
-                  hintText: _nextNumberPlaceholder ?? 'Auto-generated',
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
+            headerRow,
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: _invoiceNoCtrl,
+                    decoration: InputDecoration(
+                      labelText: widget.config.numberLabel ?? 'Document Number',
+                      prefixIcon: const Icon(Icons.tag, size: 16),
+                      hintText: _nextNumberPlaceholder ?? 'Auto-generated',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: _DateField(
-                ctrl: _issueDateCtrl,
-                label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
-                onTap: () => _pickDate(_issueDateCtrl),
-              ),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: DropdownButtonFormField<String>(
-                initialValue: _posStateCode,
-                decoration: const InputDecoration(
-                  labelText: 'Place of Supply (State) *',
-                  prefixIcon: Icon(Icons.map_outlined, size: 16),
-                  floatingLabelBehavior: FloatingLabelBehavior.always,
+                const SizedBox(width: 16),
+                Expanded(
+                  child: _DateField(
+                    ctrl: _issueDateCtrl,
+                    label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
+                    onTap: () => _pickDate(_issueDateCtrl),
+                  ),
                 ),
-                items: _gstStateNames.entries
-                    .map(
-                      (e) => DropdownMenuItem<String>(
-                        value: e.key,
-                        child: Text(e.value),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() => _posStateCode = val);
-                    _triggerPreview();
-                  }
-                },
-              ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: DropdownButtonFormField<String>(
+                    initialValue: _posStateCode,
+                    decoration: const InputDecoration(
+                      labelText: 'Place of Supply (State) *',
+                      prefixIcon: Icon(Icons.map_outlined, size: 16),
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                    ),
+                    items: _gstStateNames.entries
+                        .map(
+                          (e) => DropdownMenuItem<String>(
+                            value: e.key,
+                            child: Text(e.value),
+                          ),
+                        )
+                        .toList(),
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _posStateCode = val);
+                        _triggerPreview();
+                      }
+                    },
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1257,7 +1312,10 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     return AppCard(
       padding: const EdgeInsets.all(20),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          headerRow,
+          const SizedBox(height: 16),
           TextFormField(
             controller: _invoiceNoCtrl,
             decoration: InputDecoration(
@@ -1625,10 +1683,13 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _lines.length,
               itemBuilder: (context, index) {
-                final line = _lines[index];
-                final taxableValue =
-                    line.quantity * line.rate * (1 - line.discount / 100);
-                final gstAmount = taxableValue * (line.gstRate / 100);
+                final double lineGross = line.quantity * line.rate * (1 - line.discount / 100);
+                final double taxableValue = _isGstInclusive
+                    ? (lineGross / (1 + line.gstRate / 100))
+                    : lineGross;
+                final double gstAmount = _isGstInclusive
+                    ? (lineGross - taxableValue)
+                    : (taxableValue * (line.gstRate / 100));
                 return Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 16,

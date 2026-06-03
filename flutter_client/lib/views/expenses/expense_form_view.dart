@@ -25,6 +25,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
   final TextEditingController _descCtrl = TextEditingController();
   final TextEditingController _amountCtrl = TextEditingController();
   double _gstRate = 0.0;
+  bool _isGstInclusive = false;
 
   bool _isSaving = false;
   Map<String, dynamic>? _previewData;
@@ -78,7 +79,8 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
       setState(() => _previewData = null);
       return;
     }
-    final preview = await context.read<DocumentProvider>().previewExpense(amt, _gstRate);
+    final baseAmt = _isGstInclusive ? (amt / (1 + _gstRate / 100)) : amt;
+    final preview = await context.read<DocumentProvider>().previewExpense(baseAmt, _gstRate);
     if (mounted) {
       setState(() => _previewData = preview);
     }
@@ -144,13 +146,16 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
 
     setState(() => _isSaving = true);
 
+    final amt = double.parse(_amountCtrl.text);
+    final baseAmt = _isGstInclusive ? (amt / (1 + _gstRate / 100)) : amt;
+
     final payload = {
       'expense_category_id': _categoryId,
       'bank_account_id': _bankAccountId,
       'expense_date': _dateCtrl.text,
       'vendor_name': _vendorCtrl.text.trim().isEmpty ? null : _vendorCtrl.text.trim(),
       'description': _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
-      'amount': double.parse(_amountCtrl.text),
+      'amount': baseAmt,
       'gst_rate': _gstRate,
     };
 
@@ -323,6 +328,28 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                         _triggerPreview();
                       }
                     },
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      Checkbox(
+                        value: _isGstInclusive,
+                        activeColor: AppColors.brandNavy,
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _isGstInclusive = val;
+                            });
+                            _triggerPreview();
+                          }
+                        },
+                      ),
+                      const Text(
+                        'GST Inclusive',
+                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ],
                   ),
                 ],
               ),

@@ -34,13 +34,19 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
 
   late List<Map<String, dynamic>> _lineItems;
   bool _isSaving = false;
+  bool _isGstInclusive = false;
 
   double get _subtotal {
     double s = 0;
     for (final l in _lineItems) {
       final qty = (l['quantity'] as num?)?.toDouble() ?? 1.0;
       final rate = (l['rate'] as num?)?.toDouble() ?? 0.0;
-      s += qty * rate;
+      final gstRate = (l['gst_rate'] as num?)?.toDouble() ?? 0.0;
+      if (_isGstInclusive) {
+        s += (qty * rate) / (1 + gstRate / 100);
+      } else {
+        s += qty * rate;
+      }
     }
     return s;
   }
@@ -51,12 +57,17 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
       final qty = (l['quantity'] as num?)?.toDouble() ?? 1.0;
       final rate = (l['rate'] as num?)?.toDouble() ?? 0.0;
       final gstRate = (l['gst_rate'] as num?)?.toDouble() ?? 0.0;
-      t += qty * rate * (gstRate / 100);
+      if (_isGstInclusive) {
+        final amt = qty * rate;
+        t += amt - (amt / (1 + gstRate / 100));
+      } else {
+        t += qty * rate * (gstRate / 100);
+      }
     }
     return t;
   }
 
-  double get _total => _subtotal + _totalTax;
+  double get _total => _isGstInclusive ? _subtotal + _totalTax : _subtotal + _totalTax;
 
   @override
   void initState() {
@@ -145,7 +156,11 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
     final qty = (_lineItems[index]['quantity'] as num?)?.toDouble() ?? 1.0;
     final rate = (_lineItems[index]['rate'] as num?)?.toDouble() ?? 0.0;
     final gst = (_lineItems[index]['gst_rate'] as num?)?.toDouble() ?? 0.0;
-    _lineItems[index]['amount'] = qty * rate * (1 + gst / 100);
+    if (_isGstInclusive) {
+      _lineItems[index]['amount'] = qty * rate;
+    } else {
+      _lineItems[index]['amount'] = qty * rate * (1 + gst / 100);
+    }
   }
 
   Future<void> _pickDate(TextEditingController ctrl) async {
@@ -178,6 +193,20 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
 
     setState(() => _isSaving = true);
 
+    final List<Map<String, dynamic>> processedLines = _lineItems.map((l) {
+      final copy = Map<String, dynamic>.from(l);
+      final rate = (copy['rate'] as num?)?.toDouble() ?? 0.0;
+      final gst = (copy['gst_rate'] as num?)?.toDouble() ?? 0.0;
+      if (_isGstInclusive) {
+        copy['rate'] = rate / (1 + gst / 100);
+      }
+      copy.remove('_nameCtrl');
+      copy.remove('_hsnCtrl');
+      copy.remove('_qtyCtrl');
+      copy.remove('_rateCtrl');
+      return copy;
+    }).toList();
+
     final editedPayload = {
       'vendor': {
         'contact_id': widget.previewData['vendor']?['contact_id'],
@@ -198,7 +227,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
             : '',
         'notes': _notesCtrl.text.trim(),
       },
-      'line_items': _lineItems,
+      'line_items': processedLines,
     };
 
     final ok = await widget.onSave(editedPayload);
@@ -499,6 +528,27 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
               const Icon(Icons.receipt_outlined, size: 18, color: AppColors.brandNavy),
               const SizedBox(width: 8),
               Text('BILL DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
+              const Spacer(),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Checkbox(
+                    value: _isGstInclusive,
+                    activeColor: AppColors.brandNavy,
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() {
+                          _isGstInclusive = val;
+                          for (int i = 0; i < _lineItems.length; i++) {
+                            _updateLineAmount(i);
+                          }
+                        });
+                      }
+                    },
+                  ),
+                  const Text('GST Inclusive', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 12),
@@ -591,7 +641,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
                 final qty = (line['quantity'] as num?)?.toDouble() ?? 1.0;
                 final rate = (line['rate'] as num?)?.toDouble() ?? 0.0;
                 final gstRate = (line['gst_rate'] as num?)?.toDouble() ?? 0.0;
-                final amount = qty * rate * (1 + gstRate / 100);
+                final amount = _isGstInclusive ? (qty * rate) : (qty * rate * (1 + gstRate / 100));
 
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

@@ -1385,12 +1385,16 @@ class InvoiceScanner:
             "You are an expert bookkeeping and invoice scanning assistant.\n"
             "Analyze the uploaded invoice image and extract all relevant details.\n"
             "Respond ONLY with a valid JSON object. Do not include markdown code block formatting (like ```json), explanations, or other text.\n"
-            "IMPORTANT: Use double quotes for all keys and string values in the JSON. Never use single quotes (e.g. 'key') and do not include trailing commas, as they violate standard JSON syntax.\n"
+            "IMPORTANT:\n"
+            "1. Use double quotes for all keys and string values in the JSON. Never use single quotes and do not include trailing commas.\n"
+            "2. vendor_address: This MUST be the physical address of the vendor/seller/supplier who issued the invoice. Do NOT extract the buyer's/client's/our company's address (often found under 'Bill To', 'Ship To', 'Client', or 'Customer'). Only extract the address of the company billing us.\n"
+            "3. bill_number: This is the invoice number, bill number, or document number. Look for labels like 'Invoice No', 'Bill No', 'Invoice Number', 'Inv No', 'Doc No', etc. Do not leave this null if there is any invoice number on the document.\n"
+            "\n"
             "The JSON must have the following schema:\n"
             "{\n"
             '  "vendor_name": "string or null (e.g. Mahaveer Computers)",\n'
             '  "vendor_gstin": "string or null (15-character GSTIN, e.g. 36BFAPM4787A1ZJ)",\n'
-            '  "vendor_address": "string or null",\n'
+            '  "vendor_address": "string or null (the vendor/seller\'s physical address)",\n'
             '  "bill_number": "string or null (e.g. MC2025-26/7164)",\n'
             '  "bill_date": "string or null (format YYYY-MM-DD)",\n'
             '  "due_date": "string or null (format YYYY-MM-DD)",\n'
