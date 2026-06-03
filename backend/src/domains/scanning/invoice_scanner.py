@@ -278,12 +278,18 @@ class InvoiceScanner:
 
     def __init__(self):
         PaddleOCR = _require_paddleocr()
-        self._ocr = PaddleOCR(
-            use_angle_cls=True,
-            lang='en',
-            show_log=False,
-            use_gpu=False,
-        )
+        try:
+            self._ocr = PaddleOCR(
+                use_angle_cls=True,
+                lang='en',
+                show_log=False,
+                use_gpu=False,
+            )
+        except TypeError:
+            self._ocr = PaddleOCR(
+                use_angle_cls=True,
+                lang='en',
+            )
 
     def scan(self, file_bytes: bytes, filename: str = "", confidence_threshold: float = 0.3) -> dict:
         warnings: list[str] = []
