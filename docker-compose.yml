@@ -74,7 +74,7 @@ services:
   worker:
     build: ./backend
     container_name: bookkeeping_worker
-    command: celery -A src.workers.tasks.celery_app worker --loglevel=info
+    command: sh -c "FLAGS_enable_pir_in_executor=0 FLAGS_enable_pir_api=0 FLAGS_pir_apply_inplace_pass=0 exec celery -A src.workers.tasks.celery_app worker --loglevel=info --concurrency=2"
     restart: always
     environment:
       - APP_ENV=production
@@ -87,6 +87,12 @@ services:
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - EMAIL_FROM=${EMAIL_FROM:-noreply@apexbooks.in}
+      - OCR_ENGINE=paddleocr
+      - FLAGS_enable_pir_in_executor=0
+      - FLAGS_enable_pir_api=0
+      - FLAGS_pir_apply_inplace_pass=0
+    volumes:
+      - paddle_models:/root/.paddlex
     depends_on:
       db:
         condition: service_healthy
