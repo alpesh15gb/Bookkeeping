@@ -1063,6 +1063,11 @@ class InvoiceScanner:
                     table_end = ln
                     break
 
+        logger.info(f'Table region: lines {table_start} -> {table_end} of {max(lines_dict.keys())}')
+        for _ln2 in sorted(lines_dict.keys()):
+            _txt2 = ' '.join(w['text'] for w in lines_dict[_ln2])
+            logger.info(f'  OCR L{_ln2}: {repr(_txt2[:80])}')
+
         # Extract rows between table_start and table_end
         for ln in range(table_start, table_end + 1):
             if ln not in lines_dict:
@@ -1079,30 +1084,35 @@ class InvoiceScanner:
             if _RE_TABLE_FOOTER.search(line_text):
                 continue
 
-            # Separate text words from numeric words
+            # PaddleOCR 3.x returns FULL TEXT LINES as single entries
+            # (e.g. 'Steel Pipe 5mm 100 kg 85.00 8500.00'), not individual words.
+            # Tokenise each entry first, then classify tokens individually.
             desc_words = []
             numbers = []
-            hsn = ""
+            hsn = ''
 
             for w in line_words:
-                wtext = w["text"].strip()
+                wtext = w['text'].strip()
                 if not wtext:
                     continue
+                for token in wtext.split():
+                    tok = token.strip('.,;:')
+                    if not tok:
+                        continue
+                    cleaned = tok.replace(',', '').replace('\u20b9', '').replace('Rs.', '').replace('Rs', '').strip()
+                    if re.match(r'^\d+(?:\.\d{1,3})?$', cleaned) and cleaned:
+                        val = _clean_amount(cleaned)
+                        if val is not None:
+                            numbers.append(val)
+                    elif re.match(r'^\d{4,8}$', tok) and not hsn and len(numbers) == 0:
+                        hsn = tok
+                    else:
+                        desc_words.append(tok)
 
-                # Check if it's a pure number
-                cleaned = wtext.replace(',', '').replace('₹', '').replace('Rs', '').strip()
-                if re.match(r'^\d+(?:\.\d+)?$', cleaned):
-                    val = _clean_amount(cleaned)
-                    if val is not None:
-                        numbers.append(val)
-                elif re.match(r'^\d{4,8}$', wtext) and not hsn:
-                    hsn = wtext
-                else:
-                    desc_words.append(wtext)
-
-            # Need at least a description and 1 number (amount)
-            desc = " ".join(desc_words).strip()
+            desc = ' '.join(desc_words).strip()
+            logger.info(f'  Line {ln}: desc={repr(desc[:50])} nums={numbers} hsn={hsn!r}')
             if not desc or len(numbers) < 1:
+                logger.info(f'    -> SKIP (no desc or no numbers)')
                 continue
 
             # Skip obvious non-item lines
