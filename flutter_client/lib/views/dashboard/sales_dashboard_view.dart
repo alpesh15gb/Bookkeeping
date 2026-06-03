@@ -8,8 +8,10 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 import 'package:flutter_client/views/expenses/expense_form_view.dart';
-import 'package:flutter_client/views/contacts/contact_form_view.dart';
 import 'package:flutter_client/views/payments/payment_form_view.dart';
+import 'package:flutter_client/views/contacts/contact_form_view.dart';
+import 'package:flutter_client/utils/haptic_helper.dart';
+import 'package:flutter_client/views/shared/skeleton_loading.dart';
 
 class SalesDashboardView extends StatefulWidget {
   const SalesDashboardView({super.key});
@@ -45,7 +47,10 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
     final dashboard = context.watch<DashboardProvider>();
 
     if (dashboard.isLoading) {
-      return const LoadingState(message: 'Loading dashboard...');
+      return const Scaffold(
+        backgroundColor: AppColors.bgLight,
+        body: DashboardSkeleton(),
+      );
     }
     if (dashboard.errorMessage != null) {
       return ErrorState(
@@ -87,57 +92,63 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
     if (!hasData) {
       return Scaffold(
         backgroundColor: AppColors.bgLight,
-        body: ListView(
-          padding: padding,
-          children: [
-            Text('Dashboard', style: AppTextStyles.h1),
-            const SizedBox(height: 4),
-            Text('Your financial overview at a glance', style: AppTextStyles.bodySmall),
-            const SizedBox(height: 32),
-            EmptyState(
-              icon: Icons.dashboard_rounded,
-              title: 'Welcome to Apex Books',
-              subtitle: 'Create your first invoice, record an expense, or add a party to get started',
-            ),
-            const SizedBox(height: 32),
-            Text('Quick Actions', style: AppTextStyles.h3),
-            const SizedBox(height: 12),
-            GridView.count(
-              crossAxisCount: isMobile ? 1 : 4,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              childAspectRatio: isMobile ? 3.8 : 2.5,
-              children: [
-                _QuickActionCard(
-                  label: 'New Invoice',
-                  icon: Icons.description_rounded,
-                  gradient: const [Color(0xFF0E9384), Color(0xFF0A7569)],
-                  onTap: () => _nav(context, const InvoiceFormView(), dashboard),
-                ),
-                _QuickActionCard(
-                  label: 'Add Party',
-                  icon: Icons.person_add_rounded,
-                  gradient: const [Color(0xFF6366F1), Color(0xFF4F46E5)],
-                  onTap: () => _navDialog(context, const ContactFormView(), dashboard),
-                ),
-                _QuickActionCard(
-                  label: 'Record Payment',
-                  icon: Icons.payments_rounded,
-                  gradient: const [Color(0xFF067647), Color(0xFF045835)],
-                  onTap: () => _navPayment(context, dashboard),
-                ),
-                _QuickActionCard(
-                  label: 'New Expense',
-                  icon: Icons.money_off_rounded,
-                  gradient: const [Color(0xFFEF6820), Color(0xFFCF4E0E)],
-                  onTap: () => _nav(context, const ExpenseFormView(), dashboard),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-          ],
+        body: RefreshIndicator(
+          onRefresh: () async {
+            await dashboard.fetchDashboard();
+            HapticHelper.medium();
+          },
+          child: ListView(
+            padding: padding,
+            children: [
+              Text('Dashboard', style: AppTextStyles.h1),
+              const SizedBox(height: 4),
+              Text('Your financial overview at a glance', style: AppTextStyles.bodySmall),
+              const SizedBox(height: 32),
+              EmptyState(
+                icon: Icons.dashboard_rounded,
+                title: 'Welcome to Apex Books',
+                subtitle: 'Create your first invoice, record an expense, or add a party to get started',
+              ),
+              const SizedBox(height: 32),
+              Text('Quick Actions', style: AppTextStyles.h3),
+              const SizedBox(height: 12),
+              GridView.count(
+                crossAxisCount: isMobile ? 1 : 4,
+                crossAxisSpacing: 12,
+                mainAxisSpacing: 12,
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                childAspectRatio: isMobile ? 3.8 : 2.5,
+                children: [
+                  _QuickActionCard(
+                    label: 'New Invoice',
+                    icon: Icons.description_rounded,
+                    gradient: const [Color(0xFF0E9384), Color(0xFF0A7569)],
+                    onTap: () => _nav(context, const InvoiceFormView(), dashboard),
+                  ),
+                  _QuickActionCard(
+                    label: 'Add Party',
+                    icon: Icons.person_add_rounded,
+                    gradient: const [Color(0xFF6366F1), Color(0xFF4F46E5)],
+                    onTap: () => _navDialog(context, const ContactFormView(), dashboard),
+                  ),
+                  _QuickActionCard(
+                    label: 'Record Payment',
+                    icon: Icons.payments_rounded,
+                    gradient: const [Color(0xFF067647), Color(0xFF045835)],
+                    onTap: () => _navPayment(context, dashboard),
+                  ),
+                  _QuickActionCard(
+                    label: 'New Expense',
+                    icon: Icons.money_off_rounded,
+                    gradient: const [Color(0xFFEF6820), Color(0xFFCF4E0E)],
+                    onTap: () => _nav(context, const ExpenseFormView(), dashboard),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+            ],
+          ),
         ),
       );
     }
@@ -148,7 +159,10 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
     return Scaffold(
       backgroundColor: AppColors.bgLight,
       body: RefreshIndicator(
-        onRefresh: () async => dashboard.fetchDashboard(),
+        onRefresh: () async {
+          await dashboard.fetchDashboard();
+          HapticHelper.medium();
+        },
         child: ListView(
           padding: padding,
           children: [
