@@ -737,9 +737,10 @@ def import_vyapar_backup(
 
                 summary.invoices_imported += 1
 
-            # ── PURCHASE BILLS / ESTIMATES (type=27) ────────────────────────
+            # ── ESTIMATES / QUOTATIONS (type=27) ────────────────────────
+            # ALL type=27 in Vyapar are customer-facing quotations/estimates
             elif txn_type == 27 and contact_id_str:
-                is_estimate = (txn.get("txn_sub_type") == 1)
+                is_estimate = True
                 doc_number = _gen_inv_number(ref_number, "EST" if is_estimate else "BILL")
 
                 if is_estimate:
