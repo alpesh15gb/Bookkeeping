@@ -603,42 +603,6 @@ class InvoiceScanner:
 
         return words
 
-            # If ocr_res is available (list of dicts), use it directly
-            if ocr_res and isinstance(ocr_res, list):
-                for item in ocr_res:
-                    if isinstance(item, dict):
-                        text = item.get("text", "") or item.get("rec_text", "")
-                        conf = float(item.get("score", 0) or item.get("rec_score", 0))
-                        bbox = item.get("dt_polys", []) or item.get("bbox", [])
-                    elif isinstance(item, (list, tuple)) and len(item) >= 2:
-                        # (text, score) or (bbox, (text, score))
-                        if isinstance(item[0], str):
-                            text, conf = item[0], float(item[1])
-                            bbox = item[2] if len(item) > 2 else []
-                        elif isinstance(item[1], (list, tuple)):
-                            bbox = item[0]
-                            text, conf = item[1][0], float(item[1][1])
-                        else:
-                            continue
-                    else:
-                        continue
-
-                    if not str(text).strip() or conf < 0.3:
-                        continue
-                    words.append(self._make_word(str(text).strip(), conf, bbox, np))
-
-            # Fall back to rec_text + dt_polys
-            elif rec_texts:
-                for i, text in enumerate(rec_texts):
-                    conf = float(rec_scores[i]) if i < len(rec_scores) else 0.0
-                    if not str(text).strip() or conf < 0.3:
-                        continue
-
-                    bbox = dt_polys[i] if i < len(dt_polys) else []
-                    words.append(self._make_word(str(text).strip(), conf, bbox, np))
-
-        return words
-
     @staticmethod
     def _make_word(text: str, conf: float, bbox, np) -> dict:
         """Build a word dict from text, confidence, and bounding box."""
