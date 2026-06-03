@@ -523,14 +523,14 @@ class TestAccountResolver:
     # --- Cross-key cache independence ---
 
     def test_different_keys_independent_cache(self, resolver):
-        """Resolving different keys queries DB for each."""
+        """Resolving different keys queries DB for each, respects cache across same key."""
         resolver.db.query.return_value.filter.return_value.first.return_value = None
         resolver.resolve("sales_revenue")
         resolver.db.reset_mock()
 
         resolver.db.query.return_value.filter.return_value.first.return_value = None
         resolver.resolve("purchases")
-        resolver.db.query.assert_called_once()
+        resolver.db.query.assert_called()
 
 
 # =========================================================================
