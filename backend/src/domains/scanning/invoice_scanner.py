@@ -506,6 +506,10 @@ class InvoiceScanner:
                 extracted = False
 
                 # ── Strategy 1: .json() method (PaddleOCR 3.x / PaddleX) ───────
+                # NOTE: rec_texts/rec_scores survive JSON fine (strings/floats).
+                # dt_polys are numpy arrays and do NOT survive JSON serialization —
+                # they come back as empty lists. We ALWAYS fetch bboxes directly
+                # from the object attributes after getting texts from json().
                 if hasattr(page, 'json') and callable(page.json):
                     try:
                         data = page.json()
@@ -516,11 +520,33 @@ class InvoiceScanner:
                             inner = data.get('res', data)
                             rec_texts  = inner.get('rec_texts',  inner.get('rec_text',  []))
                             rec_scores = inner.get('rec_scores', inner.get('rec_score', []))
-                            dt_polys   = inner.get('dt_polys',  [])
-                            logger.info(f"  via .json(): {len(rec_texts)} texts, {len(dt_polys)} polys")
-                            extracted = True
+                            # dt_polys from JSON are empty (numpy not serializable).
+                            # Always fetch bbox data directly from object attributes.
+                            extracted = bool(rec_texts)
                     except Exception as e:
                         logger.warning(f"page.json() failed: {e}")
+
+                # Always try to get bboxes directly from object (numpy arrays intact)
+                # Try dt_polys first, then rec_polys, then rec_boxes (rect format)
+                if not dt_polys:
+                    for bbox_attr in ('dt_polys', 'rec_polys', 'rec_boxes'):
+                        raw = getattr(page, bbox_attr, None)
+                        if raw is not None and hasattr(raw, '__len__') and len(raw) > 0:
+                            dt_polys = raw
+                            logger.info(f"  Got bboxes from .{bbox_attr}: {len(dt_polys)} entries")
+                            break
+                    if not dt_polys and hasattr(page, '__getitem__'):
+                        for bbox_key in ('dt_polys', 'rec_polys', 'rec_boxes'):
+                            try:
+                                raw = page[bbox_key]
+                                if raw is not None and hasattr(raw, '__len__') and len(raw) > 0:
+                                    dt_polys = raw
+                                    logger.info(f"  Got bboxes from ['{bbox_key}']: {len(dt_polys)} entries")
+                                    break
+                            except (KeyError, TypeError):
+                                pass
+
+                logger.info(f"  rec_texts={len(rec_texts)}, dt_polys={len(dt_polys)}, extracted={extracted}")
 
                 # ── Strategy 2: plain dict ───────────────────────────────────────
                 if not extracted and isinstance(page, dict):
@@ -643,28 +669,50 @@ class InvoiceScanner:
 
     @staticmethod
     def _make_word(text: str, conf: float, bbox, np) -> dict:
-        """Build a word dict from text, confidence, and bounding box."""
+        """Build a word dict from text, confidence, and bounding box.
+
+        Handles numpy dt_polys (shape [N,2] polygon) and rec_boxes (flat [x1,y1,x2,y2]).
+        """
         x1, y1, x2, y2 = 0, 0, 0, 0
 
-        if bbox is not None and (isinstance(bbox, np.ndarray) or isinstance(bbox, list)):
+        if bbox is not None:
             try:
                 if isinstance(bbox, np.ndarray):
-                    pts = bbox.tolist() if bbox.ndim == 2 else bbox.flatten().tolist()
-                else:
-                    pts = []
-                    for p in bbox:
-                        if isinstance(p, (list, tuple)) and len(p) >= 2:
-                            pts.extend([p[0], p[1]])
-                        elif isinstance(p, (int, float)):
-                            pts.append(p)
-
-                if len(pts) >= 4:
-                    coords = [(pts[j], pts[j+1]) for j in range(0, min(len(pts), 8), 2)]
-                    if coords:
-                        x1 = int(min(p[0] for p in coords))
-                        y1 = int(min(p[1] for p in coords))
-                        x2 = int(max(p[0] for p in coords))
-                        y2 = int(max(p[1] for p in coords))
+                    flat = bbox.flatten().tolist()
+                    if len(flat) == 4:
+                        # rec_boxes: [x1, y1, x2, y2]
+                        x1, y1, x2, y2 = int(flat[0]), int(flat[1]), int(flat[2]), int(flat[3])
+                    elif len(flat) >= 6:
+                        # dt_polys polygon: x0,y0,x1,y1,...
+                        xs = [flat[k] for k in range(0, len(flat), 2)]
+                        ys = [flat[k] for k in range(1, len(flat), 2)]
+                        x1, y1 = int(min(xs)), int(min(ys))
+                        x2, y2 = int(max(xs)), int(max(ys))
+                elif isinstance(bbox, (list, tuple)) and len(bbox) >= 2:
+                    # Check if it is a flat numeric list [x1,y1,x2,y2]
+                    if all(isinstance(v, (int, float)) for v in bbox) and len(bbox) == 4:
+                        x1, y1, x2, y2 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+                    elif all(isinstance(v, (int, float)) for v in bbox) and len(bbox) >= 6:
+                        nums = [float(v) for v in bbox]
+                        xs = [nums[k] for k in range(0, len(nums), 2)]
+                        ys = [nums[k] for k in range(1, len(nums), 2)]
+                        x1, y1 = int(min(xs)), int(min(ys))
+                        x2, y2 = int(max(xs)), int(max(ys))
+                    else:
+                        # List of [x,y] points or mixed
+                        pts_x, pts_y = [], []
+                        for p in bbox:
+                            if isinstance(p, np.ndarray):
+                                f = p.flatten().tolist()
+                                if len(f) >= 2:
+                                    pts_x.append(f[0]); pts_y.append(f[1])
+                            elif isinstance(p, (list, tuple)) and len(p) >= 2:
+                                pts_x.append(float(p[0])); pts_y.append(float(p[1]))
+                            elif isinstance(p, (int, float)):
+                                pts_x.append(float(p))
+                        if pts_x and pts_y:
+                            x1, y1 = int(min(pts_x)), int(min(pts_y))
+                            x2, y2 = int(max(pts_x)), int(max(pts_y))
             except Exception:
                 pass
 
