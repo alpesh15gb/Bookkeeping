@@ -118,6 +118,10 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified.")
 
+    # Add columns needed for Vyapar import
+    from src.core.database import ensure_vyapar_import_columns
+    ensure_vyapar_import_columns()
+
     # Seed demo data only when explicitly requested via env flag
     if settings.SEED_ON_STARTUP and not settings.is_production:
         _seed_demo_data()

@@ -128,6 +128,8 @@ class Contact(Base):
     shipping_address = Column(JSON)
     state_code = Column(String(2), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
+    opening_balance = Column(Numeric(15, 4), nullable=False, default=0)
+    custom_fields = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -162,6 +164,7 @@ class Product(Base):
     opening_stock = Column(Numeric(12, 2), nullable=False, default=0)
     current_stock = Column(Numeric(12, 2), nullable=False, default=0)
     reorder_level = Column(Numeric(12, 2), nullable=False, default=0)
+    party_item_rates = Column(JSON, nullable=False, default=dict)
     is_active = Column(Boolean, nullable=False, default=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
@@ -226,6 +229,7 @@ class Invoice(Base):
     notes = Column(Text)                       # internal / customer-facing notes
     terms_and_conditions = Column(Text)          # printed on invoice
     reference_number = Column(String(50))        # PO ref, order number
+    vyapar_custom_fields = Column(JSON, nullable=False, default=dict)  # UDF from Vyapar
     sales_person_id = Column(UUID(as_uuid=True)) # who made the sale
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
@@ -373,6 +377,7 @@ class Bill(Base):
     notes = Column(Text)
     terms_and_conditions = Column(Text)
     reference_number = Column(String(50))
+    vyapar_custom_fields = Column(JSON, nullable=False, default=dict)
     tds_rate = Column(Numeric(5, 2), nullable=False, default=0)    # TDS %
     tds_amount = Column(Numeric(15, 4), nullable=False, default=0)  # TDS deducted
     cancelled_at = Column(DateTime(timezone=True))

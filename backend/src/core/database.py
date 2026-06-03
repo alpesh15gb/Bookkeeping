@@ -75,3 +75,28 @@ def get_db_session():
         yield db
     finally:
         db.close()
+
+
+def ensure_vyapar_import_columns():
+    """Add columns needed for Vyapar import if they don't exist yet."""
+    from sqlalchemy import inspect, text as sql_text
+    inspector = inspect(engine)
+    dialect = engine.dialect.name
+
+    migrations = [
+        ("contacts", "opening_balance", "ALTER TABLE contacts ADD COLUMN opening_balance NUMERIC(15,4) NOT NULL DEFAULT 0"),
+        ("contacts", "custom_fields", "ALTER TABLE contacts ADD COLUMN custom_fields JSONB NOT NULL DEFAULT '{}'"),
+        ("products", "party_item_rates", "ALTER TABLE products ADD COLUMN party_item_rates JSONB NOT NULL DEFAULT '{}'"),
+        ("invoices", "vyapar_custom_fields", "ALTER TABLE invoices ADD COLUMN vyapar_custom_fields JSONB NOT NULL DEFAULT '{}'"),
+        ("bills", "vyapar_custom_fields", "ALTER TABLE bills ADD COLUMN vyapar_custom_fields JSONB NOT NULL DEFAULT '{}'"),
+    ]
+
+    for table, column, sql in migrations:
+        try:
+            cols = [c["name"] for c in inspector.get_columns(table)]
+            if column not in cols:
+                with engine.begin() as conn:
+                    conn.execute(sql_text(sql))
+                logger.info(f"Added column {table}.{column}")
+        except Exception as e:
+            logger.warning(f"Could not add {table}.{column}: {e}")

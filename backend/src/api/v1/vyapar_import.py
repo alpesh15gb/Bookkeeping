@@ -13,7 +13,9 @@ from src.core.database import get_db_session
 from src.infrastructure.database.models import (
     Contact, Product, Invoice, InvoiceLine, Bill, BillLine,
     Expense, ExpenseCategory, Account, Tenant,
-    ProformaInvoice, ProformaInvoiceLine
+    ProformaInvoice, ProformaInvoiceLine,
+    Payment, PaymentAllocation, BillPaymentAllocation,
+    StockLedger, EWayBill,
 )
 from src.api.deps import enforce_permission
 from src.domains.company.services import NumberingSeriesService
@@ -28,6 +30,14 @@ class ImportSummary(BaseModel):
     bills_imported: int = 0
     estimates_imported: int = 0
     expenses_imported: int = 0
+    payments_imported: int = 0
+    stock_entries_imported: int = 0
+    linked_transactions_imported: int = 0
+    custom_fields_imported: int = 0
+    party_addresses_imported: int = 0
+    party_item_rates_imported: int = 0
+    e_invoice_data_imported: int = 0
+    opening_balances_set: int = 0
     errors: List[str] = []
 
 
@@ -278,6 +288,108 @@ def import_vyapar_backup(
             contact_map[n["name_id"]] = str(contact.id)
             summary.contacts_imported += 1
 
+        # ── 6b. Set opening balances from kb_names.amount ─────────────────
+        for n in vy_names:
+            name_id = n["name_id"]
+            if name_id not in contact_map:
+                continue
+            balance = float(n["amount"] or 0)
+            if balance == 0:
+                continue
+            try:
+                contact_uuid = uuid.UUID(contact_map[name_id])
+                c = db.query(Contact).filter(Contact.id == contact_uuid).first()
+                if c:
+                    c.opening_balance = Decimal(str(round(balance, 2)))
+                    summary.opening_balances_set += 1
+            except Exception as e:
+                summary.errors.append(f"Opening balance for name#{name_id}: {e}")
+
+        # ── 6c. Import party addresses from kb_address ────────────────────
+        try:
+            vy_addresses = vconn.execute("SELECT * FROM kb_address").fetchall()
+            for addr in vy_addresses:
+                name_id = addr["name_id"]
+                if name_id not in contact_map:
+                    continue
+                contact_uuid = uuid.UUID(contact_map[name_id])
+                c = db.query(Contact).filter(Contact.id == contact_uuid).first()
+                if not c:
+                    continue
+                addr_parts = []
+                for field in ["address_line_1", "address_line_2", "city"]:
+                    val = (addr[field] or "").strip() if field in addr.keys() else ""
+                    if val:
+                        addr_parts.append(val)
+                address_str = ", ".join(addr_parts)
+                if not address_str:
+                    continue
+                # Update billing address if we have better data
+                existing_addr = c.billing_address or {}
+                if address_str and (not existing_addr.get("street") or existing_addr["street"] == ""):
+                    c.billing_address = {
+                        "street": address_str,
+                        "city": (addr["city"] or "").strip() if "city" in addr.keys() else "",
+                        "state": (addr["state_name"] or "").strip() if "state_name" in addr.keys() else "",
+                        "pincode": (addr["pincode"] or "").strip() if "pincode" in addr.keys() else "",
+                    }
+                    summary.party_addresses_imported += 1
+        except Exception as e:
+            summary.errors.append(f"Party address import: {e}")
+
+        # ── 6d. Import custom fields from kb_custom_fields + kb_udf_* ─────
+        udf_values_by_ref: Dict[int, dict] = {}
+        try:
+            vy_custom_fields = vconn.execute("SELECT * FROM kb_custom_fields").fetchall()
+            vy_udf_fields = vconn.execute("SELECT * FROM kb_udf_fields").fetchall()
+            vy_udf_values = vconn.execute("SELECT * FROM kb_udf_values").fetchall()
+
+            # Build UDF field definitions
+            udf_field_defs = {}
+            for udf in vy_udf_fields:
+                udf_field_defs[udf["udf_field_id"]] = {
+                    "name": udf["udf_field_name"],
+                    "type": udf["udf_field_type"],
+                    "txn_type": udf["udf_txn_type"],
+                }
+
+            # Build UDF values by reference
+            udf_values_by_ref: Dict[int, dict] = {}
+            for uv in vy_udf_values:
+                ref_id = uv["udf_ref_id"]
+                field_id = uv["udf_value_field_id"]
+                if field_id in udf_field_defs:
+                    field_name = udf_field_defs[field_id]["name"]
+                    udf_values_by_ref.setdefault(ref_id, {})[field_name] = uv["udf_value"]
+
+            # Store custom field definitions on tenant settings
+            if vy_custom_fields or vy_udf_fields:
+                from src.infrastructure.database.models import TenantSetting
+                ts = db.query(TenantSetting).filter(
+                    TenantSetting.tenant_id == tenant_id
+                ).first()
+                if ts:
+                    existing_extra = ts.extra_settings or {}
+                    if not isinstance(existing_extra, dict):
+                        existing_extra = {}
+                    existing_extra["vyapar_custom_field_defs"] = [
+                        {"id": cf["custom_field_id"], "name": cf["custom_field_display_name"],
+                         "type": cf["custom_field_type"], "visibility": cf["custom_field_visibility"]}
+                        for cf in vy_custom_fields
+                    ]
+                    existing_extra["vyapar_udf_defs"] = [
+                        {"id": u["udf_field_id"], "name": u["udf_field_name"],
+                         "type": u["udf_field_type"], "txn_type": u["udf_txn_type"]}
+                        for u in vy_udf_fields
+                    ]
+                    ts.extra_settings = existing_extra
+                    summary.custom_fields_imported = len(vy_custom_fields) + len(vy_udf_fields)
+
+            # Attach UDF values to their respective transactions
+            # (will be applied when processing transactions below)
+        except Exception as e:
+            summary.errors.append(f"Custom field import: {e}")
+
         # ── 7. Import products ────────────────────────────────────────────────
         vy_items = vconn.execute("SELECT * FROM kb_items").fetchall()
         item_map: Dict[int, str] = {}  # vyapar item_id -> our product.id str
@@ -332,6 +444,44 @@ def import_vyapar_backup(
             db.flush()
             item_map[i["item_id"]] = str(product.id)
             summary.products_imported += 1
+
+        # ── 7b. Import party-item rates from kb_party_item_rate ─────────────
+        try:
+            vy_pir = vconn.execute("SELECT * FROM kb_party_item_rate").fetchall()
+            pir_by_product: Dict[str, dict] = {}  # product_id_str -> {party_name: rate}
+            for pir in vy_pir:
+                item_id = pir["party_item_rate_item_id"]
+                party_id = pir["party_item_rate_party_id"]
+                sale_price = pir["party_item_rate_sale_price"]
+                purchase_price = pir["party_item_rate_purchase_price"]
+                if item_id not in item_map:
+                    continue
+                prod_id_str = item_map[item_id]
+                # Get party name
+                party_row = None
+                for n in vy_names:
+                    if n["name_id"] == party_id:
+                        party_row = n
+                        break
+                party_name = (party_row["full_name"] or "Unknown") if party_row else "Unknown"
+                if prod_id_str not in pir_by_product:
+                    pir_by_product[prod_id_str] = {}
+                pir_by_product[prod_id_str][party_name] = {
+                    "sale_price": float(sale_price) if sale_price else None,
+                    "purchase_price": float(purchase_price) if purchase_price else None,
+                }
+            # Update products with party rates
+            for prod_id_str, rates in pir_by_product.items():
+                try:
+                    prod_uuid = uuid.UUID(prod_id_str)
+                    p = db.query(Product).filter(Product.id == prod_uuid).first()
+                    if p:
+                        p.party_item_rates = rates
+                        summary.party_item_rates_imported += 1
+                except Exception:
+                    pass
+        except Exception as e:
+            summary.errors.append(f"Party-item rate import: {e}")
 
         # ── 8. Import expense categories ──────────────────────────────────────
         expense_cat_map: Dict[str, str] = {}  # lowercase name -> cat id
@@ -394,6 +544,11 @@ def import_vyapar_backup(
         _inv_counter = 0
         _bill_counter = 0
         _est_counter = 0
+
+        # Maps: vyapar txn_id -> our entity UUID string (for payments, linked txns)
+        inv_map: Dict[int, str] = {}   # txn_id -> invoice.id str
+        bill_map: Dict[int, str] = {}  # txn_id -> bill.id str
+        est_map: Dict[int, str] = {}   # txn_id -> proforma_invoice.id str
 
         def _parse_date(val) -> date:
             if not val:
@@ -574,6 +729,7 @@ def import_vyapar_backup(
                 )
                 db.add(inv)
                 db.flush()
+                inv_map[txn_id] = str(inv.id)
 
                 for line in inv_lines_data:
                     line.invoice_id = inv.id
@@ -765,6 +921,7 @@ def import_vyapar_backup(
                     )
                     db.add(est)
                     db.flush()
+                    est_map[txn_id] = str(est.id)
 
                     for line in lines_data:
                         line.proforma_invoice_id = est.id
@@ -803,6 +960,7 @@ def import_vyapar_backup(
                     )
                     db.add(bill)
                     db.flush()
+                    bill_map[txn_id] = str(bill.id)
 
                     for line in lines_data:
                         line.bill_id = bill.id
@@ -860,6 +1018,203 @@ def import_vyapar_backup(
 
             # Other transaction types (payments, credit notes etc.) are
             # informational and don't map directly — skip silently.
+
+        # ── 11. Import payments from txn_payment_mapping ──────────────────────
+        try:
+            vy_payments = vconn.execute(
+                """
+                SELECT pm.*, pt.paymentType_type, pt.paymentType_name,
+                       pt.paymentType_bankName, pt.paymentType_accountNumber
+                FROM txn_payment_mapping pm
+                LEFT JOIN kb_paymentTypes pt ON pm.payment_id = pt.paymentType_id
+                """
+            ).fetchall()
+
+            # Group payments by transaction
+            payments_by_txn: Dict[int, list] = {}
+            for pm in vy_payments:
+                txn_id = pm["txn_id"]
+                payments_by_txn.setdefault(txn_id, []).append(pm)
+
+            # Process payments for sale invoices (type=1)
+            for pm_list in payments_by_txn.values():
+                for pm in pm_list:
+                    txn_id = pm["txn_id"]
+                    amount = float(pm["amount"] or 0)
+                    if amount <= 0:
+                        continue
+
+                    # Find the corresponding invoice or bill
+                    inv_uuid = inv_map.get(txn_id)
+                    bill_uuid = bill_map.get(txn_id)
+
+                    if not inv_uuid and not bill_uuid:
+                        continue
+
+                    # Map payment mode
+                    vy_mode = (pm["paymentType_type"] or "CASH").upper()
+                    mode_map = {"CASH": "CASH", "CHEQUE": "BANK", "BANK": "BANK", "UPI": "UPI"}
+                    payment_mode = mode_map.get(vy_mode, "OTHER")
+
+                    payment = Payment(
+                        tenant_id=tenant_id,
+                        contact_id=uuid.UUID(contact_map.get(
+                            next((t["txn_name_id"] for t in vy_txns if t["txn_id"] == txn_id), 0), ""
+                        )) if any(t["txn_name_id"] for t in vy_txns if t["txn_id"] == txn_id) else None,
+                        payment_number=f"VYP-PAY-{txn_id}",
+                        payment_date=_parse_date(pm.get("payment_date") or date.today().isoformat()),
+                        payment_mode=payment_mode,
+                        amount=Decimal(str(round(amount, 2))),
+                        reference_number=pm.get("payment_reference") or "",
+                        description=f"Imported from Vyapar ({pm['paymentType_name'] or ''})",
+                        status="ACTIVE",
+                    )
+                    db.add(payment)
+                    db.flush()
+
+                    # Allocate to invoice or bill
+                    if inv_uuid:
+                        alloc = PaymentAllocation(
+                            payment_id=payment.id,
+                            invoice_id=uuid.UUID(inv_uuid),
+                            amount=Decimal(str(round(amount, 2))),
+                        )
+                        db.add(alloc)
+                    elif bill_uuid:
+                        alloc = BillPaymentAllocation(
+                            bill_payment_id=payment.id,
+                            bill_id=uuid.UUID(bill_uuid),
+                            amount=Decimal(str(round(amount, 2))),
+                        )
+                        db.add(alloc)
+
+                    summary.payments_imported += 1
+
+        except Exception as e:
+            summary.errors.append(f"Payment import: {e}")
+
+        # ── 12. Import stock from kb_item_stock_tracking + kb_item_adjustments ─
+        try:
+            vy_stock = vconn.execute("SELECT * FROM kb_item_stock_tracking").fetchall()
+            for st in vy_stock:
+                item_id = st["ist_item_id"]
+                if item_id not in item_map:
+                    continue
+                prod_uuid = uuid.UUID(item_map[item_id])
+                qty = float(st["ist_current_quantity"] or 0)
+                opening_qty = float(st["ist_opening_quantity"] or 0)
+                if qty == 0 and opening_qty == 0:
+                    continue
+
+                # Create stock ledger entry for opening stock
+                if opening_qty > 0:
+                    sl = StockLedger(
+                        tenant_id=tenant_id,
+                        product_id=prod_uuid,
+                        quantity=Decimal(str(opening_qty)),
+                        balance_quantity=Decimal(str(opening_qty)),
+                        reference_type="ADJUSTMENT",
+                        reference_id=None,
+                        rate=Decimal("0"),
+                    )
+                    db.add(sl)
+                    summary.stock_entries_imported += 1
+
+            # Import stock adjustments
+            vy_adj = vconn.execute("SELECT * FROM kb_item_adjustments").fetchall()
+            for adj in vy_adj:
+                item_id = adj["item_adj_item_id"]
+                if item_id not in item_map:
+                    continue
+                prod_uuid = uuid.UUID(item_map[item_id])
+                qty = float(adj["item_adj_quantity"] or 0)
+                if qty == 0:
+                    continue
+                sl = StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=prod_uuid,
+                    quantity=Decimal(str(qty)),
+                    balance_quantity=Decimal(str(qty)),
+                    reference_type="ADJUSTMENT",
+                    reference_id=None,
+                    rate=Decimal(str(float(adj["item_adj_atprice"] or 0))),
+                )
+                db.add(sl)
+                summary.stock_entries_imported += 1
+
+        except Exception as e:
+            summary.errors.append(f"Stock import: {e}")
+
+        # ── 13. Import linked transactions (quotation → invoice) ──────────────
+        try:
+            vy_links = vconn.execute("SELECT * FROM kb_linked_transactions").fetchall()
+            for link in vy_links:
+                src_id = link["txn_source_id"]
+                dst_id = link["txn_destination_id"]
+                # Map source quotation to proforma invoice, destination to invoice
+                # We stored proforma IDs during import, need to map back
+                # For now, set converted_to_invoice_id on proforma invoices
+                if src_id in est_map and dst_id in inv_map:
+                    try:
+                        est_uuid = uuid.UUID(est_map[src_id])
+                        inv_uuid = uuid.UUID(inv_map[dst_id])
+                        est = db.query(ProformaInvoice).filter(ProformaInvoice.id == est_uuid).first()
+                        if est:
+                            est.converted_to_invoice_id = inv_uuid
+                            est.status = "CONVERTED"
+                            summary.linked_transactions_imported += 1
+                    except Exception:
+                        pass
+        except Exception as e:
+            summary.errors.append(f"Linked transaction import: {e}")
+
+        # ── 14. Import e-invoice/e-way bill data ──────────────────────────────
+        try:
+            for txn in vy_txns:
+                irn = (txn.get("txn_irn_number") or "").strip()
+                eway = (txn.get("txn_eway_bill_number") or "").strip()
+                if not irn and not eway:
+                    continue
+
+                txn_id = txn["txn_id"]
+                # Attach to invoice if it exists
+                if txn_id in inv_map:
+                    inv_uuid = uuid.UUID(inv_map[txn_id])
+                    inv = db.query(Invoice).filter(Invoice.id == inv_uuid).first()
+                    if inv:
+                        if irn:
+                            inv.irn = irn
+                            inv.e_invoice_status = "GENERATED"
+                        if eway:
+                            # Create EWayBill record
+                            ew = EWayBill(
+                                tenant_id=tenant_id,
+                                invoice_id=inv_uuid,
+                                eway_bill_number=eway,
+                                status="GENERATED",
+                                supply_type="OUTWARD",
+                            )
+                            db.add(ew)
+                        summary.e_invoice_data_imported += 1
+        except Exception as e:
+            summary.errors.append(f"E-invoice/e-way bill import: {e}")
+
+        # ── 15. Apply UDF values to transactions ──────────────────────────────
+        try:
+            if udf_values_by_ref:
+                for txn_id, udf_data in udf_values_by_ref.items():
+                    if txn_id in inv_map:
+                        inv_uuid = uuid.UUID(inv_map[txn_id])
+                        inv = db.query(Invoice).filter(Invoice.id == inv_uuid).first()
+                        if inv:
+                            inv.vyapar_custom_fields = udf_data
+                    elif txn_id in bill_map:
+                        bill_uuid = uuid.UUID(bill_map[txn_id])
+                        bill = db.query(Bill).filter(Bill.id == bill_uuid).first()
+                        if bill:
+                            bill.vyapar_custom_fields = udf_data
+        except Exception as e:
+            summary.errors.append(f"UDF value import: {e}")
 
         db.commit()
 
