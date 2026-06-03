@@ -23,6 +23,14 @@ from typing import Optional, List, Dict, Any, Tuple
 
 logger = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Disable PaddlePaddle PIR before any paddle import (CPU crash workaround)
+# ---------------------------------------------------------------------------
+import os as _os
+_os.environ.setdefault("FLAGS_enable_pir_in_executor", "0")
+_os.environ.setdefault("FLAGS_enable_pir_api", "0")
+_os.environ.setdefault("FLAGS_pir_apply_inplace_pass", "0")
+
 
 # ---------------------------------------------------------------------------
 # Lazy imports — PaddleOCR is heavy; raise clear error only on actual use
@@ -284,6 +292,15 @@ class InvoiceScanner:
                 lang='en',
                 device='cpu',
                 enable_mkldnn=False,
+            )
+        except TypeError:
+            # Fallback for PaddleOCR 2.x
+            self._ocr_version = 2
+            self._ocr = PaddleOCR(
+                use_angle_cls=True,
+                lang='en',
+                show_log=False,
+                use_gpu=False,
             )
         except TypeError:
             # Fallback for PaddleOCR 2.x

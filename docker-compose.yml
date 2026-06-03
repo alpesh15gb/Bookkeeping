@@ -57,6 +57,8 @@ services:
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID:-}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY:-}
       - S3_BUCKET=${S3_BUCKET:-bookkeeping-documents}
+      - FLAGS_enable_pir_in_executor=0
+      - FLAGS_enable_pir_api=0
     volumes:
       - paddle_models:/root/.paddlex
     depends_on:
