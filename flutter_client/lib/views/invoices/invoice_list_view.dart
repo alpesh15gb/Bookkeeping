@@ -639,7 +639,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
           _showRecordPaymentDialog(invoice);
           return false;
         } else if (direction == DismissDirection.endToStart) {
-          if (_swipeProgress > 0.75) {
+          if (_swipeProgress > 0.90) {
             final confirm = await AppConfirmDialog.show(
               context,
               title: 'Delete Invoice?',
