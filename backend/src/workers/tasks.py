@@ -38,6 +38,10 @@ celery_app.conf.update(
             "task": "tasks.cleanup_expired_invitations",
             "schedule": crontab(hour=3, minute=0),  # daily at 3 AM IST
         },
+        "send-daily-business-summary": {
+            "task": "tasks.send_daily_business_summary",
+            "schedule": crontab(hour=21, minute=0),  # daily at 9 PM IST
+        },
     },
 )
 
@@ -341,3 +345,212 @@ def cleanup_expired_invitations():
             db.close()
     except Exception as e:
         logger.error(f"Cleanup invitations task failed: {e}")
+
+
+@celery_app.task(name="tasks.send_daily_business_summary")
+def send_daily_business_summary():
+    """Computes and emails daily business summaries to company owners at 9 PM night."""
+    logger.info("Generating daily business summaries...")
+    try:
+        from sqlalchemy import func
+        from src.core.database import SessionLocal
+        from src.infrastructure.database.models import Tenant, TenantMembership, User, Invoice, Payment, Bill
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        db = SessionLocal()
+        try:
+            today = date.today()
+            tenants = db.query(Tenant).filter(Tenant.is_active == True).all()
+            for tenant in tenants:
+                owner = db.query(User).join(TenantMembership).filter(
+                    TenantMembership.tenant_id == tenant.id,
+                    TenantMembership.role == "owner"
+                ).first()
+                if not owner or not owner.email:
+                    continue
+
+                # Sales today
+                sales_today = db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(
+                    Invoice.tenant_id == tenant.id,
+                    Invoice.issue_date == today,
+                    Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+                    Invoice.deleted_at == None
+                ).scalar()
+
+                # Receipts today
+                receipts_today = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+                    Payment.tenant_id == tenant.id,
+                    Payment.payment_date == today,
+                    Payment.status == "ACTIVE",
+                    Payment.deleted_at == None
+                ).scalar()
+
+                # Expenses today
+                expenses_today = db.query(func.coalesce(func.sum(Bill.total), 0)).filter(
+                    Bill.tenant_id == tenant.id,
+                    Bill.issue_date == today,
+                    Bill.status.notin_(["DRAFT", "CANCELLED"]),
+                    Bill.deleted_at == None
+                ).scalar()
+
+                body = f"""
+                <p>Hi {owner.full_name},</p>
+                <p>Here is tonight's daily business summary for <strong>{tenant.legal_name}</strong> ({today.strftime('%d-%b-%Y')}):</p>
+                <ul>
+                    <li><strong>Total Sales Invoiced:</strong> ₹{sales_today:,.2f}</li>
+                    <li><strong>Total Payments Received:</strong> ₹{receipts_today:,.2f}</li>
+                    <li><strong>Total Expenses / Bills:</strong> ₹{expenses_today:,.2f}</li>
+                </ul>
+                <p>Log in to ApexBooks to view detailed reports.</p>
+                <p>Regards,<br>ApexBooks Automated Summary</p>
+                """
+                msg = MIMEMultipart()
+                msg["From"] = settings.EMAIL_FROM
+                msg["To"] = owner.email
+                msg["Subject"] = f"Daily Business Summary — {tenant.legal_name}"
+                msg.attach(MIMEText(body, "html"))
+                try:
+                    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
+                        if settings.SMTP_USER and settings.SMTP_PASSWORD:
+                            server.starttls()
+                            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+                        server.send_message(msg)
+                    logger.info(f"Daily summary sent to {owner.email}")
+                except Exception as e:
+                    logger.error(f"Failed to send daily summary to {owner.email}: {e}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Daily summary task failed: {e}")
+
+
+# ---------------------------------------------------------------------------
+# OCR / Bill Scanning (async via Celery)
+# ---------------------------------------------------------------------------
+
+@celery_app.task(name="tasks.run_ocr_scan", time_limit=120, soft_time_limit=110)
+def run_ocr_scan(job_id: str, file_bytes_b64: str, filename: str, confidence: float) -> dict:
+    """Run OCR in a Celery worker — completely async, never blocks the API server.
+    
+    Stores result in Redis for the API to poll.
+    """
+    import base64
+    import json
+    import redis as redis_lib
+
+    r = redis_lib.from_url(settings.REDIS_URL)
+
+    try:
+        # Update status: processing
+        r.hset(f"scan:{job_id}", mapping={"status": "processing", "progress": "OCR started"})
+        r.expire(f"scan:{job_id}", 600)  # 10 min TTL
+
+        file_bytes = base64.b64decode(file_bytes_b64)
+
+        # Choose OCR engine
+        engine = settings.OCR_ENGINE.lower()
+
+        if engine == "google_vision" and settings.GOOGLE_VISION_API_KEY:
+            ocr_result = _run_google_vision(file_bytes, filename, confidence)
+        else:
+            # PaddleOCR (self-hosted)
+            os.environ["FLAGS_enable_pir_in_executor"] = "0"
+            os.environ["FLAGS_enable_pir_api"] = "0"
+            os.environ["FLAGS_pir_apply_inplace_pass"] = "0"
+
+            from src.domains.scanning.invoice_scanner import InvoiceScanner
+            scanner = InvoiceScanner()
+            ocr_result = scanner.scan(
+                file_bytes=file_bytes,
+                filename=filename,
+                confidence_threshold=confidence,
+            )
+
+        # Store result
+        r.hset(f"scan:{job_id}", mapping={
+            "status": "done",
+            "result": json.dumps(ocr_result, default=str),
+        })
+        r.expire(f"scan:{job_id}", 600)
+
+        return {"job_id": job_id, "status": "done"}
+
+    except Exception as e:
+        logger.error(f"OCR task failed for job {job_id}: {e}")
+        r.hset(f"scan:{job_id}", mapping={
+            "status": "failed",
+            "error": str(e),
+        })
+        r.expire(f"scan:{job_id}", 600)
+        return {"job_id": job_id, "status": "failed", "error": str(e)}
+
+
+def _run_google_vision(file_bytes: bytes, filename: str, confidence: float) -> dict:
+    """Use Google Cloud Vision API for fast (1-3s) OCR."""
+    import requests
+
+    url = f"https://vision.googleapis.com/v1/images:annotate?key={settings.GOOGLE_VISION_API_KEY}"
+    img_b64 = base64.b64encode(file_bytes).decode("utf-8")
+
+    payload = {
+        "requests": [{
+            "image": {"content": img_b64},
+            "features": [
+                {"type": "TEXT_DETECTION", "maxResults": 100},
+            ],
+        }]
+    }
+
+    resp = requests.post(url, json=payload, timeout=30)
+    resp.raise_for_status()
+    data = resp.json()
+
+    annotations = data.get("responses", [{}])[0].get("textAnnotations", [])
+    if not annotations:
+        return {
+            "vendor_name": None, "vendor_gstin": None, "vendor_address": None,
+            "bill_number": None, "bill_date": None, "due_date": None,
+            "po_number": None, "line_items": [],
+            "subtotal": None, "cgst": None, "sgst": None, "igst": None,
+            "total": None,
+            "confidence_scores": {}, "overall_confidence": 0.0,
+            "warnings": ["Google Vision detected no text."],
+        }
+
+    # Build word list from Google Vision output
+    words = []
+    for ann in annotations[1:]:  # skip first (full text)
+        text = ann.get("description", "").strip()
+        if not text:
+            continue
+        verts = ann.get("boundingPoly", {}).get("vertices", [])
+        if len(verts) >= 2:
+            xs = [v.get("x", 0) for v in verts]
+            ys = [v.get("y", 0) for v in verts]
+            x1, y1, x2, y2 = min(xs), min(ys), max(xs), max(ys)
+        else:
+            x1, y1, x2, y2 = 0, 0, 0, 0
+        words.append({
+            "text": text,
+            "conf": 0.95,
+            "x": x1, "y": y1,
+            "w": x2 - x1, "h": y2 - y1,
+            "cx": (x1 + x2) // 2,
+            "cy": (y1 + y2) // 2,
+        })
+
+    # Use same extraction pipeline as PaddleOCR
+    from src.domains.scanning.invoice_scanner import InvoiceScanner
+    scanner = InvoiceScanner.__new__(InvoiceScanner)
+    scanner._ocr_version = 0  # Google Vision
+
+    img_h = max(w["y"] + w["h"] for w in words) if words else 1000
+    lines_dict = scanner._group_words_into_lines(words)
+    result_data = scanner._extract_fields(words, lines_dict, img_h, [])
+    result_data["confidence_scores"] = {"_engine": "google_vision"}
+    result_data["overall_confidence"] = 0.95
+
+    return result_data
+

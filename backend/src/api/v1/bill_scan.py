@@ -17,6 +17,8 @@ POST /api/v1/bills/scan-save
 """
 import logging
 import asyncio
+import base64
+import uuid as _uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -152,9 +154,9 @@ def _clean_hsn(hsn: Optional[str]) -> str:
 
 @router.post(
     "/scan-preview",
-    summary="Scan a bill and return editable preview data (no DB writes)",
+    summary="Submit a bill for async OCR scanning (returns job_id for polling)",
     response_class=JSONResponse,
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def scan_preview(
     file: UploadFile = File(..., description="JPEG / PNG / PDF of the vendor invoice"),
@@ -163,46 +165,106 @@ async def scan_preview(
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
 ):
     """
-    Scan a vendor invoice and return an **editable preview**.
+    Submit a vendor invoice for async OCR processing.
 
-    The backend looks up existing vendors/products but **does NOT create anything**.
-    The frontend shows the user all extracted fields and lets them edit before
-    calling `POST /bills/scan-save`.
+    Returns a job_id. Poll GET /bills/scan-status/{job_id} for results.
     """
     file_bytes = await _read_and_validate_file(file)
 
-    try:
-        ocr = await _run_ocr_async(file_bytes, file.filename or "", confidence)
-    except asyncio.TimeoutError:
-        raise HTTPException(status_code=504, detail="Scan timed out. The image may be too large or complex. Try a smaller image.")
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
-    except Exception as e:
-        logger.exception(f"Scan error: {e}")
-        raise HTTPException(status_code=500, detail="Scan failed. Please try again.")
+    # Submit to Celery worker (non-blocking)
+    job_id = str(_uuid.uuid4())
+    file_bytes_b64 = base64.b64encode(file_bytes).decode("utf-8")
 
+    try:
+        from src.workers.tasks import run_ocr_scan
+        run_ocr_scan.delay(job_id, file_bytes_b64, file.filename or "", confidence)
+    except Exception as e:
+        # Fallback: run synchronously if Celery is down
+        logger.warning(f"Celery unavailable, running OCR synchronously: {e}")
+        try:
+            ocr = await _run_ocr_async(file_bytes, file.filename or "", confidence)
+            return _build_preview_response(ocr, db, tenant_id)
+        except asyncio.TimeoutError:
+            raise HTTPException(status_code=504, detail="Scan timed out.")
+        except Exception as e2:
+            logger.exception(f"Scan error: {e2}")
+            raise HTTPException(status_code=500, detail="Scan failed.")
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "job_id": job_id,
+            "status": "pending",
+            "message": "OCR processing started. Poll /bills/scan-status/{job_id} for results.",
+            "poll_url": f"/api/v1/bills/scan-status/{job_id}",
+        },
+    )
+
+
+@router.get(
+    "/scan-status/{job_id}",
+    summary="Poll OCR scan result",
+    response_class=JSONResponse,
+)
+async def scan_status(
+    job_id: str,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+):
+    """Poll for OCR scan results. Returns status + preview data when done."""
+    import redis as redis_lib
+    from src.core.config import settings
+
+    r = redis_lib.from_url(settings.REDIS_URL)
+    data = r.hgetall(f"scan:{job_id}")
+
+    if not data:
+        raise HTTPException(status_code=404, detail="Job not found or expired.")
+
+    scan_status = data.get(b"status", b"unknown").decode()
+    scan_result = data.get(b"result", b"null").decode()
+    scan_error = data.get(b"error", b"").decode()
+    progress = data.get(b"progress", b"").decode()
+
+    if scan_status == "done":
+        import json
+        ocr = json.loads(scan_result)
+        return _build_preview_response(ocr, db, tenant_id)
+    elif scan_status == "failed":
+        raise HTTPException(status_code=500, detail=f"Scan failed: {scan_error}")
+    else:
+        return JSONResponse(
+            status_code=202,
+            content={
+                "job_id": job_id,
+                "status": scan_status,
+                "progress": progress,
+            },
+        )
+
+
+def _build_preview_response(ocr: dict, db: Session, tenant_id: uuid.UUID) -> dict:
+    """Build the editable preview response from OCR results."""
     vendor_name = ocr.get("vendor_name")
     vendor_gstin = ocr.get("vendor_gstin")
     vendor_address = ocr.get("vendor_address")
 
-    # Lookup existing vendor
     existing_vendor = _lookup_vendor(db, tenant_id, vendor_name, vendor_gstin)
 
-    # Build editable line items with product lookups
     preview_lines: List[Dict[str, Any]] = []
     for line in ocr.get("line_items", []):
-        desc = line.get("description", "").strip()
+        desc = line.get("product_name", "").strip()
         if not desc:
             continue
 
-        hsn = _clean_hsn(line.get("hsn"))
-        existing_product = _lookup_product(db, tenant_id, desc, line.get("hsn"))
+        hsn = _clean_hsn(line.get("hsn_sac"))
+        existing_product = _lookup_product(db, tenant_id, desc, line.get("hsn_sac"))
 
         preview_lines.append({
             "product_id": str(existing_product.id) if existing_product else None,
             "product_name": desc,
             "hsn_sac": hsn,
-            "quantity": line.get("qty", 1),
+            "quantity": line.get("quantity", 1),
             "rate": line.get("rate", 0.0),
             "gst_rate": line.get("gst_rate", 0.0),
             "discount": 0.0,
@@ -215,31 +277,24 @@ async def scan_preview(
 
     return {
         "vendor": {
-            "contact_id": str(existing_vendor.id) if existing_vendor else None,
-            "name": vendor_name or "",
-            "gstin": vendor_gstin or "",
-            "address": vendor_address or "",
-            "state_code": vendor_gstin[:2] if vendor_gstin else "",
+            "id": str(existing_vendor.id) if existing_vendor else None,
+            "name": existing_vendor.name if existing_vendor else vendor_name,
+            "gstin": existing_vendor.gstin if existing_vendor else vendor_gstin,
+            "address": existing_vendor.address_line1 if existing_vendor else vendor_address,
             "exists": existing_vendor is not None,
         },
-        "bill": {
-            "bill_number": ocr.get("bill_number") or "",
-            "issue_date": bill_date,
-            "due_date": due_date,
-            "po_number": ocr.get("po_number") or "",
-            "reference_number": ocr.get("po_number") or "",
-            "pos_state_code": vendor_gstin[:2] if vendor_gstin else "",
-            "notes": f"Scanned bill — vendor: {vendor_name or 'Unknown'}",
-        },
-        "amounts": {
-            "subtotal": ocr.get("subtotal"),
-            "cgst": ocr.get("cgst"),
-            "sgst": ocr.get("sgst"),
-            "igst": ocr.get("igst"),
-            "total": ocr.get("total"),
-        },
+        "bill_number": ocr.get("bill_number"),
+        "bill_date": bill_date,
+        "due_date": due_date,
+        "po_number": ocr.get("po_number"),
         "line_items": preview_lines,
-        "ocr_confidence": ocr.get("overall_confidence", 0.0),
+        "subtotal": ocr.get("subtotal"),
+        "cgst": ocr.get("cgst"),
+        "sgst": ocr.get("sgst"),
+        "igst": ocr.get("igst"),
+        "total": ocr.get("total"),
+        "confidence": ocr.get("overall_confidence", 0.0),
+        "confidence_scores": ocr.get("confidence_scores", {}),
         "warnings": ocr.get("warnings", []),
     }
 

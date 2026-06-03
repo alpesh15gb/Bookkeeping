@@ -20,6 +20,9 @@ import 'package:flutter_client/views/shared/search_sheets.dart';
 import 'package:flutter_client/views/invoices/widgets/quick_create_product_sheet.dart';
 import 'package:flutter_client/views/invoices/widgets/quick_create_customer_sheet.dart';
 import 'package:flutter_client/views/shared/scanned_bill_preview_dialog.dart';
+import 'package:flutter_client/utils/haptic_helper.dart';
+import 'package:flutter_client/views/invoices/invoice_detail_view.dart';
+import 'package:flutter_client/core/print_share_helper.dart';
 
 // ── GST STATE NAMES ─────────────────────────────────────────────────────────
 const Map<String, String> _gstStateNames = {
@@ -791,13 +794,73 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     if (mounted) {
       setState(() => _isSaving = false);
       if (success) {
-        _showSnack(widget.config.successMessage);
+        HapticHelper.success();
+        final docType = _resolvedDocumentType;
+        if (docType == 'INVOICE') {
+          final invoiceProvider = context.read<InvoiceProvider>();
+          final latestInvoice = invoiceProvider.invoices.firstOrNull;
+          final docNum = _invoiceNoCtrl.text.isNotEmpty 
+              ? _invoiceNoCtrl.text 
+              : (latestInvoice?.invoiceNumber ?? 'INV-Auto');
+          final docId = latestInvoice?.id;
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              duration: const Duration(seconds: 8),
+              backgroundColor: AppColors.success,
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Invoice $docNum saved',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                  ),
+                  if (docId != null) ...[
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => InvoiceDetailView(invoiceId: docId)),
+                        );
+                      },
+                      child: const Text('VIEW', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                    TextButton(
+                      style: TextButton.styleFrom(foregroundColor: Colors.white, visualDensity: VisualDensity.compact),
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        PrintShareHelper.showShareSheet(
+                          context,
+                          docLabel: 'Invoice',
+                          docNumber: docNum,
+                          docType: 'invoices',
+                          docId: docId,
+                        );
+                      },
+                      child: const Text('PRINT', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                    ),
+                  ]
+                ],
+              ),
+            ),
+          );
+        } else {
+          _showSnack(widget.config.successMessage);
+        }
         Navigator.pop(context, true);
+      } else {
+        HapticHelper.error();
       }
     }
   }
 
   void _showSnack(String msg, {bool error = false}) {
+    if (error) HapticHelper.error();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(msg),
@@ -892,7 +955,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         return;
       }
 
-      // ── Step 1: Call scan-preview ───────────────────────────────────
+      // ── Step 1: Submit for async OCR ──────────────────────────────
       final previewUri = Uri.parse('${ApiClient.baseUrl}/bills/scan-preview');
       final previewRequest = http.MultipartRequest('POST', previewUri);
       if (ApiClient.accessToken != null) {
@@ -909,7 +972,56 @@ class _TransactionFormViewState extends State<TransactionFormView> {
 
       if (!mounted) return;
 
-      if (previewResponse.statusCode != 200) {
+      Map<String, dynamic> previewData = {};
+
+      // 202 = async job submitted, 200 = synchronous fallback
+      if (previewResponse.statusCode == 202) {
+        // Async path: poll for results
+        final submitBody = jsonDecode(previewResponse.body);
+        final jobId = submitBody['job_id']?.toString();
+        if (jobId == null) {
+          _showSnack('Scan job failed to start.', error: true);
+          setState(() => _isScanning = false);
+          return;
+        }
+
+        // Poll every 2 seconds, max 60 seconds
+        for (var i = 0; i < 30; i++) {
+          await Future.delayed(const Duration(seconds: 2));
+          if (!mounted) return;
+
+          final statusUri = Uri.parse('${ApiClient.baseUrl}/bills/scan-status/$jobId');
+          final statusResp = await http.get(statusUri, headers: {
+            if (ApiClient.accessToken != null)
+              'Authorization': 'Bearer ${ApiClient.accessToken}',
+            if (ApiClient.tenantId != null)
+              'X-Tenant-ID': ApiClient.tenantId!,
+          });
+
+          if (statusResp.statusCode == 200) {
+            previewData = jsonDecode(statusResp.body) as Map<String, dynamic>;
+            break;
+          } else if (statusResp.statusCode == 500) {
+            final errBody = jsonDecode(statusResp.body);
+            _showSnack(errBody['detail']?.toString() ?? 'Scan failed', error: true);
+            setState(() => _isScanning = false);
+            return;
+          }
+          // 202 = still processing, continue polling
+        }
+
+        if (previewData.isEmpty) {
+          _showSnack('Scan timed out after 60 seconds.', error: true);
+          setState(() => _isScanning = false);
+          return;
+        }
+      } else if (previewResponse.statusCode == 200) {
+        // Synchronous fallback (Celery down)
+        final previewBody = jsonDecode(previewResponse.body);
+        previewData = previewBody is Map<String, dynamic>
+            ? previewBody
+            : <String, dynamic>{};
+      } else {
         String msg = 'Scan failed (${previewResponse.statusCode})';
         try {
           final b = jsonDecode(previewResponse.body);
@@ -919,11 +1031,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         setState(() => _isScanning = false);
         return;
       }
-
-      final previewBody = jsonDecode(previewResponse.body);
-      final previewData = previewBody is Map<String, dynamic>
-          ? previewBody
-          : <String, dynamic>{};
 
       // ── Step 2: Show editable preview dialog ────────────────────────
       final created = await showDialog<bool>(

@@ -86,6 +86,12 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
 
     # ----------------------------------------------------------------
+    # OCR (Bill Scanning)
+    # ----------------------------------------------------------------
+    OCR_ENGINE: str = "paddleocr"  # "google_vision" or "paddleocr"
+    GOOGLE_VISION_API_KEY: str = ""
+
+    # ----------------------------------------------------------------
     # Rate Limiting
     # ----------------------------------------------------------------
     RATE_LIMIT_ENABLED: bool = True                # Disable for tests
