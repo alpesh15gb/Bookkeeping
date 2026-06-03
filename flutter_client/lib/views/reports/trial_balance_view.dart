@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/accounting_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
@@ -34,12 +36,50 @@ class _TrialBalanceViewState extends State<TrialBalanceView> {
     }
   }
 
+  Future<void> _downloadPdf() async {
+    final token = ApiClient.accessToken ?? '';
+    final tenantId = ApiClient.tenantId ?? '';
+    final url = Uri.parse(
+      '${ApiClient.baseUrl}/reports/trial-balance/pdf'
+      '?token=$token&tenant_id=$tenantId',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _downloadExcel() async {
+    final token = ApiClient.accessToken ?? '';
+    final tenantId = ApiClient.tenantId ?? '';
+    final url = Uri.parse(
+      '${ApiClient.baseUrl}/reports/trial-balance/excel'
+      '?token=$token&tenant_id=$tenantId',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bgLight,
       appBar: AppBar(
         title: const Text('Trial Balance'),
+        actions: [
+          if (_data != null) ...[
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+              tooltip: 'Download PDF',
+              onPressed: _downloadPdf,
+            ),
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined, size: 20),
+              tooltip: 'Download Excel',
+              onPressed: _downloadExcel,
+            ),
+          ],
+        ],
       ),
       body: _isLoading
           ? const LoadingState(message: 'Generating Trial Balance...')

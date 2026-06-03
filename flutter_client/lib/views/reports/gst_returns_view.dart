@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/accounting_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
@@ -20,6 +22,39 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
   Map<String, dynamic>? _gstr1Data;
   Map<String, dynamic>? _gstr3bData;
   String? _error;
+
+  Future<void> _downloadPdf() async {
+    final token = ApiClient.accessToken ?? '';
+    final tenantId = ApiClient.tenantId ?? '';
+    final isGstr1 = _tabController.index == 0;
+    final path = isGstr1 ? '/gst/gstr1/pdf' : '/gst/gstr3b/pdf';
+    final url = Uri.parse(
+      '${ApiClient.baseUrl}$path'
+      '?start_date=${_startCtrl.text}'
+      '&end_date=${_endCtrl.text}'
+      '&token=$token&tenant_id=$tenantId',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _downloadExcel() async {
+    final token = ApiClient.accessToken ?? '';
+    final tenantId = ApiClient.tenantId ?? '';
+    final isGstr1 = _tabController.index == 0;
+    final path = isGstr1 ? '/gst/gstr1/export' : '/gst/gstr3b/export';
+    final url = Uri.parse(
+      '${ApiClient.baseUrl}$path'
+      '?start_date=${_startCtrl.text}'
+      '&end_date=${_endCtrl.text}'
+      '&token=$token&tenant_id=$tenantId',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
 
   @override
   void initState() {
@@ -108,6 +143,20 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
       backgroundColor: AppColors.bgLight,
       appBar: AppBar(
         title: const Text('GST Returns'),
+        actions: [
+          if (_gstr1Data != null || _gstr3bData != null) ...[
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+              tooltip: 'Download PDF',
+              onPressed: _downloadPdf,
+            ),
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined, size: 20),
+              tooltip: 'Download Excel',
+              onPressed: _downloadExcel,
+            ),
+          ],
+        ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(96),
           child: Column(

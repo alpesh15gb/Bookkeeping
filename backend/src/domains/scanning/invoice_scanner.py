@@ -18,8 +18,14 @@ from __future__ import annotations
 import io
 import logging
 import re
+import warnings
 from datetime import date
 from typing import Optional, List, Dict, Any, Tuple
+
+# Suppress PaddleOCR model/lang warnings, Pydantic model_ protected namespace warnings, and requests/urllib3 version warnings
+warnings.filterwarnings("ignore", category=UserWarning, message=".*lang and ocr_version will be ignored.*")
+warnings.filterwarnings("ignore", category=UserWarning, message=".*Field.*has conflict with protected namespace.*")
+warnings.filterwarnings("ignore", message=".*urllib3.*doesn't match a supported version.*")
 
 logger = logging.getLogger(__name__)
 
@@ -769,19 +775,19 @@ class InvoiceScanner:
                 subtotal = round(total - tax_sum, 2)
 
         return {
-            "vendor_name":    vendor_name,
-            "vendor_gstin":   vendor_gstin,
-            "vendor_address": vendor_address,
-            "bill_number":    bill_number,
-            "bill_date":      bill_date,
-            "due_date":       due_date,
-            "po_number":      po_number,
+            "vendor_name":    None,
+            "vendor_gstin":   None,
+            "vendor_address": None,
+            "bill_number":    None,
+            "bill_date":      None,
+            "due_date":       None,
+            "po_number":      None,
             "line_items":     line_items,
-            "subtotal":       subtotal,
-            "cgst":           cgst,
-            "sgst":           sgst,
-            "igst":           igst,
-            "total":          total,
+            "subtotal":       None,
+            "cgst":           None,
+            "sgst":           None,
+            "igst":           None,
+            "total":          None,
         }
 
     # ------------------------------------------------------------------
@@ -1014,9 +1020,9 @@ class InvoiceScanner:
                 else:
                     desc_words.append(wtext)
 
-            # Need at least a description and 2 numbers (qty + amount)
+            # Need at least a description and 1 number (amount)
             desc = " ".join(desc_words).strip()
-            if not desc or len(numbers) < 2:
+            if not desc or len(numbers) < 1:
                 continue
 
             # Skip obvious non-item lines
@@ -1025,12 +1031,16 @@ class InvoiceScanner:
             if len(desc) < 2:
                 continue
 
-            # Parse numbers: typically [qty, rate, amount] or [qty, amount]
+            # Parse numbers: typically [amount], [qty, amount], or [qty, rate, amount]
             qty = 1.0
             rate = 0.0
             amount = 0.0
 
-            if len(numbers) == 2:
+            if len(numbers) == 1:
+                amount = numbers[0]
+                rate = amount
+                qty = 1.0
+            elif len(numbers) == 2:
                 # [qty, amount] or [rate, amount]
                 if numbers[0] < 1000 and numbers[0] == int(numbers[0]):
                     qty = numbers[0]

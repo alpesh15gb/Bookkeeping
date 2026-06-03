@@ -872,3 +872,54 @@ def export_gstr3b(
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
+
+@router.get("/gstr1/pdf")
+def export_gstr1_pdf(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    from src.domains.printing.invoice_pdf import generate_gstr1_pdf
+    report = get_gstr1_report(start_date=start_date, end_date=end_date, db=db, tenant_id=tenant_id)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    pdf_bytes = generate_gstr1_pdf(
+        data=report,
+        company_name=company_name,
+        start=start_date.strftime("%d-%b-%Y") if start_date else "ALL",
+        end=end_date.strftime("%d-%b-%Y") if end_date else "ALL"
+    )
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=GSTR1_Export_{start_date or 'ALL'}_to_{end_date or 'ALL'}.pdf"}
+    )
+
+
+@router.get("/gstr3b/pdf")
+def export_gstr3b_pdf(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from src.domains.printing.invoice_pdf import generate_gstr3b_pdf
+    report = GSTR3BService.get(db, tenant_id, start_date, end_date)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    pdf_bytes = generate_gstr3b_pdf(
+        data=report,
+        company_name=company_name,
+        start=start_date.strftime("%d-%b-%Y"),
+        end=end_date.strftime("%d-%b-%Y")
+    )
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=GSTR3B_Export_{start_date}_to_{end_date}.pdf"}
+    )
+
+

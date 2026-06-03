@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/accounting_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 
@@ -34,6 +36,36 @@ class _OutstandingReceivablesViewState extends State<OutstandingReceivablesView>
     });
   }
 
+  Future<void> _downloadPdf() async {
+    final token = ApiClient.accessToken ?? '';
+    final tenantId = ApiClient.tenantId ?? '';
+    final now = DateTime.now();
+    final asOf = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final url = Uri.parse(
+      '${ApiClient.baseUrl}/reports/outstanding/receivables/pdf'
+      '?as_of_date=$asOf'
+      '&token=$token&tenant_id=$tenantId',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _downloadExcel() async {
+    final token = ApiClient.accessToken ?? '';
+    final tenantId = ApiClient.tenantId ?? '';
+    final now = DateTime.now();
+    final asOf = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final url = Uri.parse(
+      '${ApiClient.baseUrl}/reports/outstanding/receivables/excel'
+      '?as_of_date=$asOf'
+      '&token=$token&tenant_id=$tenantId',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -41,6 +73,18 @@ class _OutstandingReceivablesViewState extends State<OutstandingReceivablesView>
         title: const Text('Outstanding Receivables'),
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          if (!_loading && _items.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+              tooltip: 'Download PDF',
+              onPressed: _downloadPdf,
+            ),
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined, size: 20),
+              tooltip: 'Download Excel',
+              onPressed: _downloadExcel,
+            ),
+          ],
         ],
       ),
       body: _loading
@@ -150,6 +194,36 @@ class _OutstandingPayablesViewState extends State<OutstandingPayablesView> {
     });
   }
 
+  Future<void> _downloadPdf() async {
+    final token = ApiClient.accessToken ?? '';
+    final tenantId = ApiClient.tenantId ?? '';
+    final now = DateTime.now();
+    final asOf = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final url = Uri.parse(
+      '${ApiClient.baseUrl}/reports/outstanding/payables/pdf'
+      '?as_of_date=$asOf'
+      '&token=$token&tenant_id=$tenantId',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  Future<void> _downloadExcel() async {
+    final token = ApiClient.accessToken ?? '';
+    final tenantId = ApiClient.tenantId ?? '';
+    final now = DateTime.now();
+    final asOf = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    final url = Uri.parse(
+      '${ApiClient.baseUrl}/reports/outstanding/payables/excel'
+      '?as_of_date=$asOf'
+      '&token=$token&tenant_id=$tenantId',
+    );
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -157,6 +231,18 @@ class _OutstandingPayablesViewState extends State<OutstandingPayablesView> {
         title: const Text('Outstanding Payables'),
         actions: [
           IconButton(onPressed: _load, icon: const Icon(Icons.refresh)),
+          if (!_loading && _items.isNotEmpty) ...[
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
+              tooltip: 'Download PDF',
+              onPressed: _downloadPdf,
+            ),
+            IconButton(
+              icon: const Icon(Icons.table_chart_outlined, size: 20),
+              tooltip: 'Download Excel',
+              onPressed: _downloadExcel,
+            ),
+          ],
         ],
       ),
       body: _loading

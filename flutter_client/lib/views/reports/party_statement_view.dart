@@ -10,7 +10,8 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class PartyStatementView extends StatefulWidget {
-  const PartyStatementView({super.key});
+  final ContactModel? initialContact;
+  const PartyStatementView({super.key, this.initialContact});
 
   @override
   State<PartyStatementView> createState() => _PartyStatementViewState();
@@ -28,6 +29,7 @@ class _PartyStatementViewState extends State<PartyStatementView> {
   @override
   void initState() {
     super.initState();
+    _selectedContact = widget.initialContact;
     final now = DateTime.now();
     final startOfMonth = DateTime(now.year, now.month, 1);
     _startCtrl = TextEditingController(text: _fmt(startOfMonth));
@@ -35,6 +37,9 @@ class _PartyStatementViewState extends State<PartyStatementView> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ContactProvider>().fetchContacts();
+      if (_selectedContact != null) {
+        _fetchStatement();
+      }
     });
   }
 

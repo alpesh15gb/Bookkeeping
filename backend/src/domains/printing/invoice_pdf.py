@@ -810,5 +810,560 @@ def generate_party_statement_pdf(
     ])
     elements.append(summary_table)
 
+    summary_data.append([Paragraph("<b>Closing Outstanding</b>", bold_style), Paragraph(f"<b>{summary.closing_outstanding:,.2f}</b>", right_bold_style)])
+
+    summary_table = Table(summary_data, colWidths=[80*mm, 40*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.0, primary_color),
+        ('LINEBELOW', (0,1), (-1,-1), 0.5, border_color),
+        ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ])
+    elements.append(summary_table)
+
     doc.build(elements)
     return buffer.getvalue()
+
+
+def generate_balance_sheet_pdf(data, company_name: str, cutoff: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    table_header_bg = colors.HexColor('#E2E8F0')
+    border_color = colors.HexColor('#94A3B8')
+
+    title_style = ParagraphStyle('BSTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('BSSubtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('BSBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, leading=11, textColor=text_color)
+    normal_style = ParagraphStyle('BSNormal', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=11, textColor=text_color)
+    right_style = ParagraphStyle('BSRight', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('BSRightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph(f"Balance Sheet as on {cutoff}", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    # Equation
+    elements.append(Table([[Paragraph("<b>Assets = Liabilities + Equity</b>", ParagraphStyle('BSEq', parent=bold_style, alignment=TA_CENTER))]], colWidths=[186*mm], style=[
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F1F5F9')),
+        ('PADDING', (0,0), (-1,-1), 6),
+        ('BOX', (0,0), (-1,-1), 1, border_color)
+    ]))
+    elements.append(Spacer(1, 4*mm))
+
+    sections = [
+        ("ASSETS", data.get("assets", {}).get("items", []) or data.get("assets", []), float(data.get("total_assets", 0))),
+        ("LIABILITIES", data.get("liabilities", {}).get("items", []) or data.get("liabilities", []), float(data.get("total_liabilities", 0))),
+        ("EQUITY", data.get("equity", {}).get("items", []) or data.get("equity", []), float(data.get("total_equity", 0)))
+    ]
+
+    for title, items, total in sections:
+        table_data = [[Paragraph(f"<b>{title}</b>", bold_style), ""]]
+        for item in items:
+            name = item.get("account_name") or item.account_name
+            code = item.get("account_code") or item.account_code
+            bal = float(item.get("balance") or item.balance)
+            table_data.append([
+                Paragraph(f"{name} ({code})" if code and code != "--" else name, normal_style),
+                Paragraph(f"₹{bal:,.2f}", right_style)
+            ])
+        table_data.append([Paragraph(f"<b>Total {title.title()}</b>", bold_style), Paragraph(f"<b>₹{total:,.2f}</b>", right_bold_style)])
+
+        t = Table(table_data, colWidths=[130*mm, 56*mm], style=[
+            ('LINEBELOW', (0,0), (-1,0), 1.0, primary_color),
+            ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+            ('LINEABOVE', (0,-1), (-1,-1), 1.0, primary_color),
+            ('PADDING', (0,0), (-1,-1), 4),
+        ])
+        elements.append(t)
+        elements.append(Spacer(1, 4*mm))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_profit_loss_pdf(data, company_name: str, start: str, end: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    border_color = colors.HexColor('#94A3B8')
+
+    title_style = ParagraphStyle('PLTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('PLSubtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('PLBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, leading=11, textColor=text_color)
+    normal_style = ParagraphStyle('PLNormal', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=11, textColor=text_color)
+    right_style = ParagraphStyle('PLRight', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('PLRightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph(f"Profit & Loss Statement ({start} to {end})", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    # Revenue
+    rev_data = [[Paragraph("<b>REVENUE</b>", bold_style), ""]]
+    rev_items = data.get("revenue_lines") or []
+    for item in rev_items:
+        name = item.get("account_name") or item.account_name
+        amt = float(item.get("amount") or item.amount)
+        rev_data.append([Paragraph(name, normal_style), Paragraph(f"₹{amt:,.2f}", right_style)])
+    rev_total = float(data.get("total_revenue", 0))
+    rev_data.append([Paragraph("<b>Total Revenue</b>", bold_style), Paragraph(f"<b>₹{rev_total:,.2f}</b>", right_bold_style)])
+
+    elements.append(Table(rev_data, colWidths=[130*mm, 56*mm], style=[
+        ('LINEBELOW', (0,0), (-1,0), 1.0, primary_color),
+        ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+        ('LINEABOVE', (0,-1), (-1,-1), 1.0, primary_color),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+    elements.append(Spacer(1, 6*mm))
+
+    # Expenses
+    exp_data = [[Paragraph("<b>EXPENSES</b>", bold_style), ""]]
+    exp_items = data.get("expense_lines") or []
+    for item in exp_items:
+        name = item.get("account_name") or item.account_name
+        amt = float(item.get("amount") or item.amount)
+        exp_data.append([Paragraph(name, normal_style), Paragraph(f"₹{amt:,.2f}", right_style)])
+    exp_total = float(data.get("total_expenses", 0))
+    exp_data.append([Paragraph("<b>Total Expenses</b>", bold_style), Paragraph(f"<b>₹{exp_total:,.2f}</b>", right_bold_style)])
+
+    elements.append(Table(exp_data, colWidths=[130*mm, 56*mm], style=[
+        ('LINEBELOW', (0,0), (-1,0), 1.0, primary_color),
+        ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+        ('LINEABOVE', (0,-1), (-1,-1), 1.0, primary_color),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+    elements.append(Spacer(1, 6*mm))
+
+    # Net Profit
+    net_profit = float(data.get("net_profit", 0))
+    elements.append(Table([[Paragraph("<b>NET PROFIT / (LOSS)</b>", bold_style), Paragraph(f"<b>₹{net_profit:,.2f}</b>", right_bold_style)]], colWidths=[130*mm, 56*mm], style=[
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#ECFDF5') if net_profit >= 0 else colors.HexColor('#FEF2F2')),
+        ('PADDING', (0,0), (-1,-1), 8),
+        ('BOX', (0,0), (-1,-1), 1, primary_color)
+    ]))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_trial_balance_pdf(data, company_name: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    border_color = colors.HexColor('#94A3B8')
+    table_header_bg = colors.HexColor('#E2E8F0')
+
+    title_style = ParagraphStyle('TBTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('TBSubtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('TBBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, leading=11, textColor=text_color)
+    normal_style = ParagraphStyle('TBNormal', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=11, textColor=text_color)
+    right_style = ParagraphStyle('TBRight', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('TBRightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph("Trial Balance", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    tb_headers = [
+        Paragraph("<b>Account Code</b>", bold_style),
+        Paragraph("<b>Account Name</b>", bold_style),
+        Paragraph("<b>Opening (₹)</b>", right_bold_style),
+        Paragraph("<b>Debits (₹)</b>", right_bold_style),
+        Paragraph("<b>Credits (₹)</b>", right_bold_style),
+        Paragraph("<b>Closing (₹)</b>", right_bold_style)
+    ]
+    tb_data = [tb_headers]
+    for line in data.get("lines", []):
+        code = line.get("account_code") or line.account_code or ""
+        name = line.get("account_name") or line.account_name or ""
+        op = float(line.get("opening_balance") or line.opening_balance or 0)
+        deb = float(line.get("total_debits") or line.total_debits or 0)
+        cred = float(line.get("total_credits") or line.total_credits or 0)
+        cl = float(line.get("closing_balance") or line.closing_balance or 0)
+        
+        tb_data.append([
+            Paragraph(code, normal_style),
+            Paragraph(name, normal_style),
+            Paragraph(f"{op:,.2f}", right_style),
+            Paragraph(f"{deb:,.2f}", right_style),
+            Paragraph(f"{cred:,.2f}", right_style),
+            Paragraph(f"{cl:,.2f}", right_style)
+        ])
+
+    tb_data.append([
+        "", Paragraph("<b>Total</b>", bold_style),
+        Paragraph(f"<b>{float(data.get('total_opening_debits', 0)):,.2f} Dr</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.get('total_debits', 0)):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.get('total_credits', 0)):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.get('total_closing_debits', 0)):,.2f} Dr</b>", right_bold_style)
+    ])
+
+    elements.append(Table(tb_data, colWidths=[25*mm, 45*mm, 28*mm, 28*mm, 28*mm, 32*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.2, primary_color),
+        ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+        ('LINEABOVE', (0,-1), (-1,-1), 1.2, primary_color),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_cash_flow_pdf(data, company_name: str, start: str, end: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    border_color = colors.HexColor('#94A3B8')
+
+    title_style = ParagraphStyle('CFTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('CFSubtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('CFBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, leading=11, textColor=text_color)
+    normal_style = ParagraphStyle('CFNormal', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=11, textColor=text_color)
+    right_style = ParagraphStyle('CFRight', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('CFRightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph(f"Cash Flow Statement ({start} to {end})", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    sections = ["operating_activities", "investing_activities", "financing_activities"]
+    for s_key in sections:
+        s_data = data.get(s_key, {})
+        section_name = s_data.get("section") or s_key.replace("_", " ").title()
+        table_data = [[Paragraph(f"<b>{section_name}</b>", bold_style), ""]]
+        
+        for item in s_data.get("items", []):
+            label = item.get("label") or item.label
+            amount = float(item.get("amount") or item.amount)
+            table_data.append([Paragraph(label, normal_style), Paragraph(f"₹{amount:,.2f}", right_style)])
+            
+        net = float(s_data.get("net", 0))
+        table_data.append([Paragraph(f"<b>Net Cash from {section_name}</b>", bold_style), Paragraph(f"<b>₹{net:,.2f}</b>", right_bold_style)])
+        
+        elements.append(Table(table_data, colWidths=[130*mm, 56*mm], style=[
+            ('LINEBELOW', (0,0), (-1,0), 1.0, primary_color),
+            ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+            ('LINEABOVE', (0,-1), (-1,-1), 1.0, primary_color),
+            ('PADDING', (0,0), (-1,-1), 4),
+        ]))
+        elements.append(Spacer(1, 4*mm))
+
+    # Final reconciliation
+    reconcil = [
+        [Paragraph("Net Change in Cash", bold_style), Paragraph(f"₹{float(data.get('net_change_in_cash', 0)):,.2f}", right_bold_style)],
+        [Paragraph("Opening Cash Balance", normal_style), Paragraph(f"₹{float(data.get('opening_cash_balance', 0)):,.2f}", right_style)],
+        [Paragraph("<b>Closing Cash Balance</b>", bold_style), Paragraph(f"<b>₹{float(data.get('closing_cash_balance', 0)):,.2f}</b>", right_bold_style)],
+    ]
+    elements.append(Table(reconcil, colWidths=[130*mm, 56*mm], style=[
+        ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#F8FAFC')),
+        ('BOX', (0,0), (-1,-1), 1, border_color),
+        ('LINEBELOW', (0,-1), (-1,-1), 1.5, primary_color),
+        ('PADDING', (0,0), (-1,-1), 6),
+    ]))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_aging_pdf(data, company_name: str, as_of: str, report_type: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    border_color = colors.HexColor('#94A3B8')
+    table_header_bg = colors.HexColor('#E2E8F0')
+
+    title_style = ParagraphStyle('AGTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('AGSubtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('AGBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=text_color)
+    normal_style = ParagraphStyle('AGNormal', parent=styles['Normal'], fontName='Helvetica', fontSize=8, leading=10, textColor=text_color)
+    right_style = ParagraphStyle('AGRight', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('AGRightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph(f"{report_type.title()} Aging Report as of {as_of}", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    tb_headers = [
+        Paragraph("<b>Contact Name</b>", bold_style),
+        Paragraph("<b>0-30 Days (₹)</b>", right_bold_style),
+        Paragraph("<b>31-60 Days (₹)</b>", right_bold_style),
+        Paragraph("<b>61-90 Days (₹)</b>", right_bold_style),
+        Paragraph("<b>91+ Days (₹)</b>", right_bold_style),
+        Paragraph("<b>Total (₹)</b>", right_bold_style)
+    ]
+    tb_data = [tb_headers]
+    for line in data.get("lines", []):
+        name = line.get("contact_name") or line.contact_name
+        buckets = line.get("buckets") or line.buckets
+        b_vals = [float(b.get("amount") if isinstance(b, dict) else b.amount) for b in buckets]
+        total = float(line.get("total_outstanding") or line.total_outstanding)
+        
+        tb_data.append([
+            Paragraph(name, normal_style),
+            Paragraph(f"{b_vals[0]:,.2f}" if b_vals[0] > 0 else "-", right_style),
+            Paragraph(f"{b_vals[1]:,.2f}" if b_vals[1] > 0 else "-", right_style),
+            Paragraph(f"{b_vals[2]:,.2f}" if b_vals[2] > 0 else "-", right_style),
+            Paragraph(f"{b_vals[3]:,.2f}" if b_vals[3] > 0 else "-", right_style),
+            Paragraph(f"{total:,.2f}", right_bold_style)
+        ])
+
+    b_totals = [float(b.get("amount") if isinstance(b, dict) else b.amount) for b in data.get("bucket_totals", [])]
+    grand_total = float(data.get("total_outstanding", 0))
+    tb_data.append([
+        Paragraph("<b>Total</b>", bold_style),
+        Paragraph(f"<b>{b_totals[0]:,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{b_totals[1]:,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{b_totals[2]:,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{b_totals[3]:,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{grand_total:,.2f}</b>", right_bold_style)
+    ])
+
+    elements.append(Table(tb_data, colWidths=[56*mm, 26*mm, 26*mm, 26*mm, 26*mm, 26*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.2, primary_color),
+        ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+        ('LINEABOVE', (0,-1), (-1,-1), 1.2, primary_color),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_outstanding_pdf(data, company_name: str, as_of: str, report_type: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    border_color = colors.HexColor('#94A3B8')
+    table_header_bg = colors.HexColor('#E2E8F0')
+
+    title_style = ParagraphStyle('OSTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('OSSubtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('OSBold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=text_color)
+    normal_style = ParagraphStyle('OSNormal', parent=styles['Normal'], fontName='Helvetica', fontSize=8, leading=10, textColor=text_color)
+    right_style = ParagraphStyle('OSRight', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('OSRightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph(f"Outstanding {report_type.title()} as of {as_of}", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    tb_headers = [
+        Paragraph("<b>Ref No.</b>", bold_style),
+        Paragraph("<b>Contact Name</b>", bold_style),
+        Paragraph("<b>Date</b>", bold_style),
+        Paragraph("<b>Due Date</b>", bold_style),
+        Paragraph("<b>Total (₹)</b>", right_bold_style),
+        Paragraph("<b>Paid (₹)</b>", right_bold_style),
+        Paragraph("<b>Outstanding (₹)</b>", right_bold_style)
+    ]
+    tb_data = [tb_headers]
+    items = data.get("invoices") or data.get("bills") or []
+    for item in items:
+        num = item.get("invoice_number") or item.get("bill_number") or item.invoice_number or item.bill_number
+        name = item.get("contact_name") or item.contact_name
+        dt = item.get("issue_date") or item.issue_date
+        due = item.get("due_date") or item.due_date
+        tot = float(item.get("total") or item.total)
+        paid = float(item.get("amount_paid") or item.amount_paid)
+        out = float(item.get("outstanding") or item.outstanding)
+        
+        tb_data.append([
+            Paragraph(num, normal_style),
+            Paragraph(name, normal_style),
+            Paragraph(dt.strftime("%d-%b-%Y") if hasattr(dt, "strftime") else str(dt), normal_style),
+            Paragraph(due.strftime("%d-%b-%Y") if hasattr(due, "strftime") else str(due), normal_style),
+            Paragraph(f"{tot:,.2f}", right_style),
+            Paragraph(f"{paid:,.2f}", right_style),
+            Paragraph(f"{out:,.2f}", right_bold_style)
+        ])
+
+    grand_total = float(data.get("total_outstanding", 0))
+    tb_data.append([
+        Paragraph("<b>Total Outstanding</b>", bold_style), "", "", "", "", "",
+        Paragraph(f"<b>{grand_total:,.2f}</b>", right_bold_style)
+    ])
+
+    elements.append(Table(tb_data, colWidths=[24*mm, 46*mm, 22*mm, 22*mm, 24*mm, 24*mm, 24*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.2, primary_color),
+        ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+        ('LINEABOVE', (0,-1), (-1,-1), 1.2, primary_color),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_gstr1_pdf(data, company_name: str, start: str, end: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    border_color = colors.HexColor('#94A3B8')
+    table_header_bg = colors.HexColor('#E2E8F0')
+
+    title_style = ParagraphStyle('G1Title', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('G1Subtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('G1Bold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=text_color)
+    normal_style = ParagraphStyle('G1Normal', parent=styles['Normal'], fontName='Helvetica', fontSize=8, leading=10, textColor=text_color)
+    right_style = ParagraphStyle('G1Right', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('G1RightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph(f"GSTR-1 Outward Supplies Summary ({start} to {end})", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    # We will print outward supplies total taxable value, cgst, sgst, igst and cess
+    summary_table = [
+        [Paragraph("<b>Particulars</b>", bold_style), Paragraph("<b>Taxable Value (₹)</b>", right_bold_style), Paragraph("<b>CGST (₹)</b>", right_bold_style), Paragraph("<b>SGST (₹)</b>", right_bold_style), Paragraph("<b>IGST (₹)</b>", right_bold_style), Paragraph("<b>Cess (₹)</b>", right_bold_style)]
+    ]
+    # Add B2B registered
+    b2b_taxable = sum(float(x.taxable_value) for x in data.b2b)
+    b2b_cgst = sum(float(x.cgst) for x in data.b2b)
+    b2b_sgst = sum(float(x.sgst) for x in data.b2b)
+    b2b_igst = sum(float(x.igst) for x in data.b2b)
+    b2b_cess = sum(float(x.cess) for x in data.b2b)
+
+    summary_table.append([
+        Paragraph("B2B Registered Taxable Supplies", normal_style),
+        Paragraph(f"{b2b_taxable:,.2f}", right_style),
+        Paragraph(f"{b2b_cgst:,.2f}", right_style),
+        Paragraph(f"{b2b_sgst:,.2f}", right_style),
+        Paragraph(f"{b2b_igst:,.2f}", right_style),
+        Paragraph(f"{b2b_cess:,.2f}", right_style)
+    ])
+
+    # Add B2CS small
+    b2cs_taxable = sum(float(x.taxable_value) for x in data.b2cs)
+    b2cs_cgst = sum(float(x.cgst) for x in data.b2cs)
+    b2cs_sgst = sum(float(x.sgst) for x in data.b2cs)
+    b2cs_igst = sum(float(x.igst) for x in data.b2cs)
+    b2cs_cess = sum(float(x.cess) for x in data.b2cs)
+
+    summary_table.append([
+        Paragraph("B2CS Consumer Supplies", normal_style),
+        Paragraph(f"{b2cs_taxable:,.2f}", right_style),
+        Paragraph(f"{b2cs_cgst:,.2f}", right_style),
+        Paragraph(f"{b2cs_sgst:,.2f}", right_style),
+        Paragraph(f"{b2cs_igst:,.2f}", right_style),
+        Paragraph(f"{b2cs_cess:,.2f}", right_style)
+    ])
+
+    # Grand Totals
+    summary_table.append([
+        Paragraph("<b>Total</b>", bold_style),
+        Paragraph(f"<b>{float(data.total_taxable_value):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.total_cgst):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.total_sgst):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.total_igst):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.total_cess):,.2f}</b>", right_bold_style)
+    ])
+
+    elements.append(Table(summary_table, colWidths=[56*mm, 26*mm, 26*mm, 26*mm, 26*mm, 26*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.2, primary_color),
+        ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+        ('LINEABOVE', (0,-1), (-1,-1), 1.2, primary_color),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
+
+def generate_gstr3b_pdf(data, company_name: str, start: str, end: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    border_color = colors.HexColor('#94A3B8')
+    table_header_bg = colors.HexColor('#E2E8F0')
+
+    title_style = ParagraphStyle('G3Title', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('G3Subtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('G3Bold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=text_color)
+    normal_style = ParagraphStyle('G3Normal', parent=styles['Normal'], fontName='Helvetica', fontSize=8, leading=10, textColor=text_color)
+    right_style = ParagraphStyle('G3Right', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('G3RightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph(f"GSTR-3B Monthly Consolidated Summary ({start} to {end})", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    # Outward Supplies Outward Section
+    outward = data.outward_taxable_supplies
+    itc = data.inward_supplies_itc
+
+    summary_table = [
+        [Paragraph("<b>Nature of Supplies</b>", bold_style), Paragraph("<b>Taxable Value (₹)</b>", right_bold_style), Paragraph("<b>CGST (₹)</b>", right_bold_style), Paragraph("<b>SGST (₹)</b>", right_bold_style), Paragraph("<b>IGST (₹)</b>", right_bold_style), Paragraph("<b>Cess (₹)</b>", right_bold_style)]
+    ]
+    summary_table.append([
+        Paragraph("3.1 Outward Taxable Supplies", normal_style),
+        Paragraph(f"{float(outward.taxable_value):,.2f}", right_style),
+        Paragraph(f"{float(outward.central_tax):,.2f}", right_style),
+        Paragraph(f"{float(outward.state_ut_tax):,.2f}", right_style),
+        Paragraph(f"{float(outward.integrated_tax):,.2f}", right_style),
+        Paragraph(f"{float(outward.cess):,.2f}", right_style)
+    ])
+    summary_table.append([
+        Paragraph("4. Eligible Input Tax Credit (ITC)", normal_style),
+        "-",
+        Paragraph(f"{float(itc.central_tax):,.2f}", right_style),
+        Paragraph(f"{float(itc.state_ut_tax):,.2f}", right_style),
+        Paragraph(f"{float(itc.integrated_tax):,.2f}", right_style),
+        Paragraph(f"{float(itc.cess):,.2f}", right_style)
+    ])
+    summary_table.append([
+        Paragraph("<b>Net Tax Payable</b>", bold_style),
+        "-",
+        Paragraph(f"<b>{float(data.net_tax_payable_cgst):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.net_tax_payable_sgst):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.net_tax_payable_igst):,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{float(data.net_tax_payable_cess):,.2f}</b>", right_bold_style)
+    ])
+
+    elements.append(Table(summary_table, colWidths=[56*mm, 26*mm, 26*mm, 26*mm, 26*mm, 26*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.2, primary_color),
+        ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+        ('LINEABOVE', (0,-1), (-1,-1), 1.2, primary_color),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    doc.build(elements)
+    return buffer.getvalue()
+

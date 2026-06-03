@@ -21,6 +21,7 @@ celery_app.conf.update(
     enable_utc=True,
     task_acks_late=True,
     task_reject_on_worker_lost=True,
+    broker_connection_retry_on_startup=True,
     beat_schedule={
         "send-overdue-invoice-reminders": {
             "task": "tasks.send_overdue_invoice_reminders",

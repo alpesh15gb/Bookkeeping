@@ -457,3 +457,622 @@ def get_party_statement_excel(
         headers={"Content-Disposition": f"attachment; filename=PartyStatement_{statement.contact_name.replace(' ', '_')}.xlsx"}
     )
 
+
+# --- Balance Sheet Exports ---
+@router.get("/balance-sheet/excel")
+def balance_sheet_excel(
+    as_of_date: date = Query(..., description="Report date, e.g. 2025-03-31"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    data = BalanceSheetService.get(db, tenant_id, as_of_date)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Balance Sheet"
+    ws.views.sheetView[0].showGridLines = True
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Calibri", size=11, bold=True)
+    normal_font = Font(name="Calibri", size=11)
+    header_fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+    thin_side = Side(border_style="thin", color="D1D5DB")
+    thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+    ws["A1"] = "Balance Sheet"
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="0F1B3D")
+    ws["A2"] = f"Company: {company_name} | As on: {as_of_date.strftime('%d-%b-%Y')}"
+    ws["A2"].font = bold_font
+
+    sections = [
+        ("Assets", data.assets.items, data.assets.total),
+        ("Liabilities", data.liabilities.items, data.liabilities.total),
+        ("Equity", data.equity.items, data.equity.total)
+    ]
+
+    current_row = 4
+    for sec_name, items, total in sections:
+        cell = ws.cell(row=current_row, column=1, value=sec_name.upper())
+        cell.font = header_font
+        cell.fill = header_fill
+        ws.cell(row=current_row, column=2, value="").fill = header_fill
+        current_row += 1
+
+        for item in items:
+            ws.cell(row=current_row, column=1, value=f"{item.account_name} ({item.account_code})").font = normal_font
+            val_cell = ws.cell(row=current_row, column=2, value=float(item.balance))
+            val_cell.font = normal_font
+            val_cell.number_format = "#,##0.00"
+            current_row += 1
+
+        tot_lbl = ws.cell(row=current_row, column=1, value=f"Total {sec_name}")
+        tot_lbl.font = bold_font
+        tot_val = ws.cell(row=current_row, column=2, value=float(total))
+        tot_val.font = bold_font
+        tot_val.number_format = "#,##0.00"
+        current_row += 2
+
+    # Column widths
+    ws.column_dimensions["A"].width = 45
+    ws.column_dimensions["B"].width = 20
+
+    excel_buffer = BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    return StreamingResponse(
+        excel_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=BalanceSheet_{as_of_date}.xlsx"}
+    )
+
+
+@router.get("/balance-sheet/pdf")
+def balance_sheet_pdf(
+    as_of_date: date = Query(..., description="Report date, e.g. 2025-03-31"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.domains.printing.invoice_pdf import generate_balance_sheet_pdf
+    from fastapi.responses import StreamingResponse
+    data = BalanceSheetService.get(db, tenant_id, as_of_date)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    pdf_bytes = generate_balance_sheet_pdf(
+        data=data.model_dump(),
+        company_name=company_name,
+        cutoff=as_of_date.strftime("%d-%b-%Y")
+    )
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=BalanceSheet_{as_of_date}.pdf"}
+    )
+
+
+# --- Profit & Loss Exports ---
+@router.get("/profit-loss/excel")
+def profit_loss_excel(
+    start_date: date = Query(..., description="Start date"),
+    end_date: date = Query(..., description="End date"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from src.api.v1.accounting import get_profit_loss_report
+    data = get_profit_loss_report(start_date, end_date, db, tenant_id)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Profit & Loss"
+    ws.views.sheetView[0].showGridLines = True
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Calibri", size=11, bold=True)
+    normal_font = Font(name="Calibri", size=11)
+    header_fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+
+    ws["A1"] = "Profit & Loss Statement"
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="0F1B3D")
+    ws["A2"] = f"Company: {company_name} | Period: {start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}"
+    ws["A2"].font = bold_font
+
+    # Revenue
+    ws.cell(row=4, column=1, value="REVENUE").font = header_font
+    ws.cell(row=4, column=1).fill = header_fill
+    ws.cell(row=4, column=2).fill = header_fill
+    current_row = 5
+    for item in data.revenue_lines:
+        ws.cell(row=current_row, column=1, value=item.account_name).font = normal_font
+        val = ws.cell(row=current_row, column=2, value=float(item.amount))
+        val.font = normal_font
+        val.number_format = "#,##0.00"
+        current_row += 1
+    
+    ws.cell(row=current_row, column=1, value="Total Revenue").font = bold_font
+    ws.cell(row=current_row, column=2, value=float(data.total_revenue)).font = bold_font
+    ws.cell(row=current_row, column=2).number_format = "#,##0.00"
+    current_row += 2
+
+    # Expenses
+    ws.cell(row=current_row, column=1, value="EXPENSES").font = header_font
+    ws.cell(row=current_row, column=1).fill = header_fill
+    ws.cell(row=current_row, column=2).fill = header_fill
+    current_row += 1
+    for item in data.expense_lines:
+        ws.cell(row=current_row, column=1, value=item.account_name).font = normal_font
+        val = ws.cell(row=current_row, column=2, value=float(item.amount))
+        val.font = normal_font
+        val.number_format = "#,##0.00"
+        current_row += 1
+    
+    ws.cell(row=current_row, column=1, value="Total Expenses").font = bold_font
+    ws.cell(row=current_row, column=2, value=float(data.total_expenses)).font = bold_font
+    ws.cell(row=current_row, column=2).number_format = "#,##0.00"
+    current_row += 2
+
+    # Net Profit
+    ws.cell(row=current_row, column=1, value="NET PROFIT / (LOSS)").font = bold_font
+    ws.cell(row=current_row, column=2, value=float(data.net_profit)).font = bold_font
+    ws.cell(row=current_row, column=2).number_format = "#,##0.00"
+
+    ws.column_dimensions["A"].width = 45
+    ws.column_dimensions["B"].width = 20
+
+    excel_buffer = BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    return StreamingResponse(
+        excel_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=ProfitLoss_{start_date}_to_{end_date}.xlsx"}
+    )
+
+
+@router.get("/profit-loss/pdf")
+def profit_loss_pdf(
+    start_date: date = Query(..., description="Start date"),
+    end_date: date = Query(..., description="End date"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.domains.printing.invoice_pdf import generate_profit_loss_pdf
+    from src.api.v1.accounting import get_profit_loss_report
+    data = get_profit_loss_report(start_date, end_date, db, tenant_id)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    pdf_bytes = generate_profit_loss_pdf(
+        data=data.model_dump(),
+        company_name=company_name,
+        start=start_date.strftime("%d-%b-%Y"),
+        end=end_date.strftime("%d-%b-%Y")
+    )
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=ProfitLoss_{start_date}_to_{end_date}.pdf"}
+    )
+
+
+# --- Trial Balance Exports ---
+@router.get("/trial-balance/excel")
+def trial_balance_excel(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from src.api.v1.accounting import get_trial_balance
+    data = get_trial_balance(db, tenant_id)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Trial Balance"
+    ws.views.sheetView[0].showGridLines = True
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Calibri", size=11, bold=True)
+    normal_font = Font(name="Calibri", size=11)
+    header_fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+
+    ws["A1"] = "Trial Balance"
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="0F1B3D")
+    ws["A2"] = f"Company: {company_name} | As on: {date.today().strftime('%d-%b-%Y')}"
+    ws["A2"].font = bold_font
+
+    headers = ["Account Code", "Account Name", "Opening Balance (₹)", "Total Debits (₹)", "Total Credits (₹)", "Closing Balance (₹)"]
+    for col_idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=4, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="right" if col_idx > 2 else "left")
+
+    current_row = 5
+    for line in data.lines:
+        ws.cell(row=current_row, column=1, value=line.account_code).font = normal_font
+        ws.cell(row=current_row, column=2, value=line.account_name).font = normal_font
+        for col_idx, val in enumerate([line.opening_balance, line.total_debits, line.total_credits, line.closing_balance], start=3):
+            cell = ws.cell(row=current_row, column=col_idx, value=float(val))
+            cell.font = normal_font
+            cell.number_format = "#,##0.00"
+        current_row += 1
+
+    ws.cell(row=current_row, column=2, value="Total").font = bold_font
+    ws.cell(row=current_row, column=3, value=float(data.total_opening_debits)).font = bold_font
+    ws.cell(row=current_row, column=3).number_format = "#,##0.00"
+    ws.cell(row=current_row, column=4, value=float(data.total_debits)).font = bold_font
+    ws.cell(row=current_row, column=4).number_format = "#,##0.00"
+    ws.cell(row=current_row, column=5, value=float(data.total_credits)).font = bold_font
+    ws.cell(row=current_row, column=5).number_format = "#,##0.00"
+    ws.cell(row=current_row, column=6, value=float(data.total_closing_debits)).font = bold_font
+    ws.cell(row=current_row, column=6).number_format = "#,##0.00"
+
+    ws.column_dimensions["A"].width = 15
+    ws.column_dimensions["B"].width = 30
+    for c in ["C", "D", "E", "F"]:
+        ws.column_dimensions[c].width = 20
+
+    excel_buffer = BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    return StreamingResponse(
+        excel_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=TrialBalance_{date.today()}.xlsx"}
+    )
+
+
+@router.get("/trial-balance/pdf")
+def trial_balance_pdf(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.domains.printing.invoice_pdf import generate_trial_balance_pdf
+    from src.api.v1.accounting import get_trial_balance
+    data = get_trial_balance(db, tenant_id)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    pdf_bytes = generate_trial_balance_pdf(
+        data=data.model_dump(),
+        company_name=company_name
+    )
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=TrialBalance_{date.today()}.pdf"}
+    )
+
+
+# --- Cash Flow Exports ---
+@router.get("/cash-flow/excel")
+def cash_flow_excel(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    data = CashFlowService.get(db, tenant_id, start_date, end_date)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Cash Flow"
+    ws.views.sheetView[0].showGridLines = True
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Calibri", size=11, bold=True)
+    normal_font = Font(name="Calibri", size=11)
+    header_fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+
+    ws["A1"] = "Cash Flow Statement (Indirect Method)"
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="0F1B3D")
+    ws["A2"] = f"Company: {company_name} | Period: {start_date.strftime('%d-%b-%Y')} to {end_date.strftime('%d-%b-%Y')}"
+    ws["A2"].font = bold_font
+
+    sections = [
+        ("Operating Activities", data.operating_activities.items, data.operating_activities.net),
+        ("Investing Activities", data.investing_activities.items, data.investing_activities.net),
+        ("Financing Activities", data.financing_activities.items, data.financing_activities.net)
+    ]
+
+    current_row = 4
+    for sec_name, items, net in sections:
+        cell = ws.cell(row=current_row, column=1, value=sec_name.upper())
+        cell.font = header_font
+        cell.fill = header_fill
+        ws.cell(row=current_row, column=2, value="").fill = header_fill
+        current_row += 1
+
+        for item in items:
+            ws.cell(row=current_row, column=1, value=item.label).font = normal_font
+            val = ws.cell(row=current_row, column=2, value=float(item.amount))
+            val.font = normal_font
+            val.number_format = "#,##0.00"
+            current_row += 1
+
+        ws.cell(row=current_row, column=1, value=f"Net Cash from {sec_name}").font = bold_font
+        val = ws.cell(row=current_row, column=2, value=float(net))
+        val.font = bold_font
+        val.number_format = "#,##0.00"
+        current_row += 2
+
+    # Reconciliation
+    ws.cell(row=current_row, column=1, value="Net Change in Cash").font = bold_font
+    ws.cell(row=current_row, column=2, value=float(data.net_change_in_cash)).font = bold_font
+    ws.cell(row=current_row, column=2).number_format = "#,##0.00"
+    current_row += 1
+
+    ws.cell(row=current_row, column=1, value="Opening Cash Balance").font = normal_font
+    ws.cell(row=current_row, column=2, value=float(data.opening_cash_balance)).font = normal_font
+    ws.cell(row=current_row, column=2).number_format = "#,##0.00"
+    current_row += 1
+
+    ws.cell(row=current_row, column=1, value="Closing Cash Balance").font = bold_font
+    ws.cell(row=current_row, column=2, value=float(data.closing_cash_balance)).font = bold_font
+    ws.cell(row=current_row, column=2).number_format = "#,##0.00"
+
+    ws.column_dimensions["A"].width = 45
+    ws.column_dimensions["B"].width = 20
+
+    excel_buffer = BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    return StreamingResponse(
+        excel_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=CashFlow_{start_date}_to_{end_date}.xlsx"}
+    )
+
+
+@router.get("/cash-flow/pdf")
+def cash_flow_pdf(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.domains.printing.invoice_pdf import generate_cash_flow_pdf
+    data = CashFlowService.get(db, tenant_id, start_date, end_date)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    pdf_bytes = generate_cash_flow_pdf(
+        data=data.model_dump(),
+        company_name=company_name,
+        start=start_date.strftime("%d-%b-%Y"),
+        end=end_date.strftime("%d-%b-%Y")
+    )
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=CashFlow_{start_date}_to_{end_date}.pdf"}
+    )
+
+
+# --- Aging Report Exports ---
+@router.get("/aging/{report_type}/excel")
+def aging_excel(
+    report_type: str,  # "receivables" or "payables"
+    as_of_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    if report_type == "receivables":
+        data = AgingService.get_receivables(db, tenant_id, as_of_date)
+    else:
+        data = AgingService.get_payables(db, tenant_id, as_of_date)
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Aging Report"
+    ws.views.sheetView[0].showGridLines = True
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Calibri", size=11, bold=True)
+    normal_font = Font(name="Calibri", size=11)
+    header_fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+
+    ws["A1"] = f"{report_type.title()} Aging Report"
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="0F1B3D")
+    ws["A2"] = f"Company: {company_name} | As on: {as_of_date.strftime('%d-%b-%Y')}"
+    ws["A2"].font = bold_font
+
+    headers = ["Contact Name", "0-30 Days (₹)", "31-60 Days (₹)", "61-90 Days (₹)", "91+ Days (₹)", "Total Outstanding (₹)"]
+    for col_idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=4, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="right" if col_idx > 1 else "left")
+
+    current_row = 5
+    for line in data.lines:
+        ws.cell(row=current_row, column=1, value=line.contact_name).font = normal_font
+        for b_idx, bucket in enumerate(line.buckets, start=2):
+            cell = ws.cell(row=current_row, column=b_idx, value=float(bucket.amount))
+            cell.font = normal_font
+            cell.number_format = "#,##0.00"
+        
+        tot = ws.cell(row=current_row, column=6, value=float(line.total_outstanding))
+        tot.font = bold_font
+        tot.number_format = "#,##0.00"
+        current_row += 1
+
+    # Totals Row
+    ws.cell(row=current_row, column=1, value="Total").font = bold_font
+    for b_idx, bucket in enumerate(data.bucket_totals, start=2):
+        cell = ws.cell(row=current_row, column=b_idx, value=float(bucket.amount))
+        cell.font = bold_font
+        cell.number_format = "#,##0.00"
+    
+    tot_cell = ws.cell(row=current_row, column=6, value=float(data.total_outstanding))
+    tot_cell.font = bold_font
+    tot_cell.number_format = "#,##0.00"
+
+    ws.column_dimensions["A"].width = 30
+    for c in ["B", "C", "D", "E", "F"]:
+        ws.column_dimensions[c].width = 18
+
+    excel_buffer = BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    return StreamingResponse(
+        excel_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=Aging_{report_type}_{as_of_date}.xlsx"}
+    )
+
+
+@router.get("/aging/{report_type}/pdf")
+def aging_pdf(
+    report_type: str,
+    as_of_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.domains.printing.invoice_pdf import generate_aging_pdf
+    if report_type == "receivables":
+        data = AgingService.get_receivables(db, tenant_id, as_of_date)
+    else:
+        data = AgingService.get_payables(db, tenant_id, as_of_date)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    pdf_bytes = generate_aging_pdf(
+        data=data.model_dump(),
+        company_name=company_name,
+        as_of=as_of_date.strftime("%d-%b-%Y"),
+        report_type=report_type
+    )
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Aging_{report_type}_{as_of_date}.pdf"}
+    )
+
+
+# --- Outstanding Document Exports ---
+@router.get("/outstanding/{report_type}/excel")
+def outstanding_excel(
+    report_type: str,  # "receivables" or "payables"
+    as_of_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    if report_type == "receivables":
+        data = OutstandingService.get_ar(db, tenant_id, as_of_date)
+        items = data.invoices
+        col_no_hdr = "Invoice Number"
+    else:
+        data = OutstandingService.get_ap(db, tenant_id, as_of_date)
+        items = data.bills
+        col_no_hdr = "Bill Number"
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Outstanding"
+    ws.views.sheetView[0].showGridLines = True
+
+    header_font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+    bold_font = Font(name="Calibri", size=11, bold=True)
+    normal_font = Font(name="Calibri", size=11)
+    header_fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+
+    ws["A1"] = f"Outstanding {report_type.title()}"
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="0F1B3D")
+    ws["A2"] = f"Company: {company_name} | As on: {as_of_date.strftime('%d-%b-%Y')}"
+    ws["A2"].font = bold_font
+
+    headers = [col_no_hdr, "Contact Name", "Issue Date", "Due Date", "Total (₹)", "Paid (₹)", "Outstanding (₹)"]
+    for col_idx, h in enumerate(headers, start=1):
+        cell = ws.cell(row=4, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = Alignment(horizontal="right" if col_idx >= 5 else "left")
+
+    current_row = 5
+    for item in items:
+        num = item.invoice_number if report_type == "receivables" else item.bill_number
+        ws.cell(row=current_row, column=1, value=num).font = normal_font
+        ws.cell(row=current_row, column=2, value=item.contact_name).font = normal_font
+        ws.cell(row=current_row, column=3, value=item.issue_date.strftime("%d-%b-%Y")).font = normal_font
+        ws.cell(row=current_row, column=4, value=item.due_date.strftime("%d-%b-%Y")).font = normal_font
+        
+        for c_idx, val in enumerate([item.total, item.amount_paid, item.outstanding], start=5):
+            cell = ws.cell(row=current_row, column=c_idx, value=float(val))
+            cell.font = normal_font
+            cell.number_format = "#,##0.00"
+        current_row += 1
+
+    # Totals Row
+    ws.cell(row=current_row, column=1, value="Total").font = bold_font
+    tot_val = ws.cell(row=current_row, column=7, value=float(data.total_outstanding))
+    tot_val.font = bold_font
+    tot_val.number_format = "#,##0.00"
+
+    ws.column_dimensions["A"].width = 18
+    ws.column_dimensions["B"].width = 30
+    for c in ["C", "D", "E", "F", "G"]:
+        ws.column_dimensions[c].width = 16
+
+    excel_buffer = BytesIO()
+    wb.save(excel_buffer)
+    excel_buffer.seek(0)
+    return StreamingResponse(
+        excel_buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=Outstanding_{report_type}_{as_of_date}.xlsx"}
+    )
+
+
+@router.get("/outstanding/{report_type}/pdf")
+def outstanding_pdf(
+    report_type: str,
+    as_of_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.domains.printing.invoice_pdf import generate_outstanding_pdf
+    if report_type == "receivables":
+        data = OutstandingService.get_ar(db, tenant_id, as_of_date)
+    else:
+        data = OutstandingService.get_ap(db, tenant_id, as_of_date)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    pdf_bytes = generate_outstanding_pdf(
+        data=data.model_dump(),
+        company_name=company_name,
+        as_of=as_of_date.strftime("%d-%b-%Y"),
+        report_type=report_type
+    )
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=Outstanding_{report_type}_{as_of_date}.pdf"}
+    )
+
+
