@@ -1683,6 +1683,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: _lines.length,
               itemBuilder: (context, index) {
+                final line = _lines[index];
                 final double lineGross = line.quantity * line.rate * (1 - line.discount / 100);
                 final double taxableValue = _isGstInclusive
                     ? (lineGross / (1 + line.gstRate / 100))
