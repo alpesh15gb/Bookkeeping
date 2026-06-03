@@ -1015,6 +1015,7 @@ class InvoiceScanner:
         return None
 
     # ------------------------------------------------------------------
+    # ------------------------------------------------------------------
     def _extract_line_items(
         self,
         words: List[Dict],
@@ -1024,69 +1025,108 @@ class InvoiceScanner:
         """
         Extract line items from the invoice table.
 
-        Strategy:
-        1. Find table region (rows between header keywords and footer keywords)
-        2. For each row, separate text words from numeric words
-        3. Parse as: description, [HSN], qty, rate, amount
+        Two-pass approach:
+          Pass 1 - detect table region using header + GRAND-TOTAL footer keywords only.
+          Pass 2 - if region too narrow (<= 2 lines), scan ALL available lines.
+
+        Each OCR entry is tokenised individually because PaddleOCR 3.x returns
+        full text lines, not individual word boxes.
         """
         items = []
-
         if not lines_dict:
             return items
 
-        # Find table boundaries
+        all_lns = sorted(lines_dict.keys())
+        max_ln = max(all_lns)
+
+        # ── Find table header ─────────────────────────────────────────────────
         table_start = None
-        table_end = None
-
-        for ln in sorted(lines_dict.keys()):
-            line_text = " ".join(w["text"] for w in lines_dict[ln])
-            if _RE_TABLE_HEADER.search(line_text):
+        for ln in all_lns:
+            lt = ' '.join(w['text'] for w in lines_dict[ln])
+            if _RE_TABLE_HEADER.search(lt):
                 table_start = ln
-            if table_start is not None and _RE_TABLE_FOOTER.search(line_text):
-                table_end = ln
-                break
 
-        # If no clear table found, use heuristic: middle 50% of page
-        if table_start is None:
-            table_start = 0
-            for ln in sorted(lines_dict.keys()):
-                y = lines_dict[ln][0]["cy"] if lines_dict[ln] else 0
-                if y > img_h * 0.20:
-                    table_start = ln
-                    break
-
-        if table_end is None:
-            table_end = max(lines_dict.keys())
-            for ln in sorted(lines_dict.keys(), reverse=True):
-                y = lines_dict[ln][0]["cy"] if lines_dict[ln] else 0
-                if y < img_h * 0.80:
+        # ── Find table footer — ONLY grand-total level lines ─────────────────
+        # NOT "CGST @ 9%" column headers which previously caused early cutoff.
+        _RE_GRAND_TOTAL = re.compile(
+            r'\b(?:grand\s*total|amount\s*payable|net\s*payable|total\s*payable|'
+            r'total\s*invoice\s*value|invoice\s*total|bill\s*total)\b',
+            re.IGNORECASE,
+        )
+        table_end = None
+        if table_start is not None:
+            for ln in all_lns:
+                if ln <= table_start:
+                    continue
+                lt = ' '.join(w['text'] for w in lines_dict[ln])
+                if _RE_GRAND_TOTAL.search(lt):
                     table_end = ln
                     break
 
-        logger.info(f'Table region: lines {table_start} -> {table_end} of {max(lines_dict.keys())}')
-        for _ln2 in sorted(lines_dict.keys()):
-            _txt2 = ' '.join(w['text'] for w in lines_dict[_ln2])
-            logger.info(f'  OCR L{_ln2}: {repr(_txt2[:80])}')
+        # ── Y-position fallback if header not found ───────────────────────────
+        if table_start is None:
+            for ln in all_lns:
+                y = lines_dict[ln][0]['cy'] if lines_dict[ln] else 0
+                if y > img_h * 0.15:
+                    table_start = ln
+                    break
+            if table_start is None:
+                table_start = 0
 
-        # Extract rows between table_start and table_end
-        for ln in range(table_start, table_end + 1):
+        if table_end is None:
+            for ln in reversed(all_lns):
+                y = lines_dict[ln][0]['cy'] if lines_dict[ln] else 0
+                if y < img_h * 0.88:
+                    table_end = ln
+                    break
+            if table_end is None:
+                table_end = max_ln
+
+        # ── Expand region if too narrow ───────────────────────────────────────
+        region_lns = [ln for ln in all_lns if table_start <= ln <= table_end]
+        if len(region_lns) <= 2:
+            logger.info(
+                f'Table region too narrow ({len(region_lns)} lines) '
+                f'— scanning all {len(all_lns)} lines'
+            )
+            region_lns = all_lns
+
+        logger.info(f'Table region: lines {table_start} -> {table_end} ({len(region_lns)} of {len(all_lns)})')
+        for _ld in all_lns:
+            _lt = ' '.join(w['text'] for w in lines_dict[_ld])
+            logger.info(f'  OCR L{_ld}: {repr(_lt[:90])}')
+
+        # ── Noise-line filter ─────────────────────────────────────────────────
+        _RE_SKIP_LINE = re.compile(
+            r'\b(?:bank|branch|ifsc|swift|micr|pan|din|cin|upi|'
+            r'authoris|signatory|seal|'
+            r'terms|condition|warranty|'
+            r'rupees|paise|words|declaration|certified|'
+            r'reverse\s*charge|original|duplicate)\b',
+            re.IGNORECASE,
+        )
+
+        for ln in region_lns:
             if ln not in lines_dict:
                 continue
 
             line_words = lines_dict[ln]
-            line_text = " ".join(w["text"] for w in line_words)
+            line_text = ' '.join(w['text'] for w in line_words)
 
-            # Skip header and footer lines
-            if _RE_TABLE_HEADER.search(line_text) and not any(
-                re.search(r'\d', w["text"]) for w in line_words
-            ):
+            # Skip pure header rows (keywords, no digits)
+            if _RE_TABLE_HEADER.search(line_text) and not re.search(r'\d', line_text):
+                logger.debug(f'  L{ln} SKIP header: {repr(line_text[:60])}')
                 continue
-            if _RE_TABLE_FOOTER.search(line_text):
+            # Skip grand total lines
+            if _RE_GRAND_TOTAL.search(line_text):
+                logger.debug(f'  L{ln} SKIP grand total')
+                continue
+            # Skip obvious noise lines
+            if _RE_SKIP_LINE.search(line_text):
+                logger.debug(f'  L{ln} SKIP noise: {repr(line_text[:60])}')
                 continue
 
-            # PaddleOCR 3.x returns FULL TEXT LINES as single entries
-            # (e.g. 'Steel Pipe 5mm 100 kg 85.00 8500.00'), not individual words.
-            # Tokenise each entry first, then classify tokens individually.
+            # ── Tokenise and classify ─────────────────────────────────────────
             desc_words = []
             numbers = []
             hsn = ''
@@ -1099,7 +1139,11 @@ class InvoiceScanner:
                     tok = token.strip('.,;:')
                     if not tok:
                         continue
-                    cleaned = tok.replace(',', '').replace('\u20b9', '').replace('Rs.', '').replace('Rs', '').strip()
+                    cleaned = (tok.replace(',', '')
+                                  .replace('\u20b9', '')
+                                  .replace('Rs.', '')
+                                  .replace('Rs', '')
+                                  .strip())
                     if re.match(r'^\d+(?:\.\d{1,3})?$', cleaned) and cleaned:
                         val = _clean_amount(cleaned)
                         if val is not None:
@@ -1110,79 +1154,80 @@ class InvoiceScanner:
                         desc_words.append(tok)
 
             desc = ' '.join(desc_words).strip()
-            logger.info(f'  Line {ln}: desc={repr(desc[:50])} nums={numbers} hsn={hsn!r}')
+            logger.info(f'  Line {ln}: desc={repr(desc[:50])} nums={numbers} hsn={repr(hsn)}')
+
+            # ── Reject weak lines ─────────────────────────────────────────────
             if not desc or len(numbers) < 1:
                 logger.info(f'    -> SKIP (no desc or no numbers)')
-                continue
-
-            # Skip obvious non-item lines
-            if _RE_VENDOR_SKIP.match(desc):
                 continue
             if len(desc) < 2:
                 continue
 
-            # Parse numbers: typically [amount], [qty, amount], or [qty, rate, amount]
+            # Reject if description is ONLY unit/tax/column-header noise
+            desc_clean = re.sub(
+                r'\b(?:pcs|nos|units?|kg|gm|ltr|mtr|box|set|pair|each|per|'
+                r'output|input|rate|value|taxable|amount|disc|incl|of|tax|@|'
+                r'cgst|sgst|igst|cess|gst|hsn|sac|qty|quantity|sr|no|sl|'
+                r's\.no|s\.n)\b',
+                '', desc, flags=re.IGNORECASE,
+            ).strip()
+            if not desc_clean or _RE_VENDOR_SKIP.match(desc_clean):
+                logger.info(f'    -> SKIP (desc only noise: {repr(desc_clean[:30])})')
+                continue
+
+            # ── Parse qty / rate / amount ─────────────────────────────────────
             qty = 1.0
             rate = 0.0
             amount = 0.0
 
-            if len(numbers) == 1:
-                amount = numbers[0]
+            # De-dup values that appear twice in multi-column OCR output
+            unique_numbers = list(dict.fromkeys(numbers))
+
+            if len(unique_numbers) == 1:
+                amount = unique_numbers[0]
                 rate = amount
-                qty = 1.0
-            elif len(numbers) == 2:
-                # [qty, amount] or [rate, amount]
-                if numbers[0] < 1000 and numbers[0] == int(numbers[0]):
-                    qty = numbers[0]
-                    amount = numbers[1]
-                    rate = round(amount / qty, 2) if qty > 0 else 0
+            elif len(unique_numbers) == 2:
+                a, b = unique_numbers
+                if a < 1000 and a == int(a):
+                    qty, amount = a, b
+                    rate = round(b / a, 2) if a > 0 else b
                 else:
-                    qty = 1.0
-                    rate = numbers[0]
-                    amount = numbers[1]
-            elif len(numbers) >= 3:
-                # [qty, rate, amount] or [qty, rate, tax, amount]
-                qty = numbers[0]
-                amount = numbers[-1]
-                if len(numbers) == 3:
-                    rate = numbers[1]
-                else:
-                    # Pick rate that makes qty * rate ≈ amount
-                    best_rate = numbers[1]
-                    best_diff = float('inf')
-                    for i in range(1, len(numbers) - 1):
-                        r = numbers[i]
-                        diff = abs(qty * r - amount)
+                    qty, rate, amount = 1.0, a, b
+            elif len(unique_numbers) >= 3:
+                # Find qty (small integer), amount (largest value)
+                int_candidates = [v for v in unique_numbers if v == int(v) and 0 < v < 10000]
+                qty = min(int_candidates) if int_candidates and min(int_candidates) < 1000 else 1.0
+                amount = max(unique_numbers)
+                # Find rate that best satisfies qty * rate ~= amount
+                best_rate, best_diff = amount, float('inf')
+                for candidate in unique_numbers:
+                    if candidate != qty and candidate != amount:
+                        diff = abs(qty * candidate - amount)
                         if diff < best_diff:
-                            best_diff = diff
-                            best_rate = r
-                    rate = best_rate
+                            best_diff, best_rate = diff, candidate
+                rate = best_rate if best_diff < amount * 0.25 else round(amount / qty, 2)
 
-                # Validate
-                if qty > 0 and rate > 0:
-                    calc = round(qty * rate, 2)
-                    if abs(calc - amount) > amount * 0.15:
-                        rate = round(amount / qty, 2)
+            if qty <= 0 or amount <= 0:
+                continue
 
-            if qty > 0 and amount > 0:
-                # Extract GST rate from description
-                gst_rate = 0.0
-                gst_m = _RE_GST_RATE.search(desc)
-                if gst_m:
-                    gst_rate = float(gst_m.group(1))
-                    desc = _RE_GST_RATE.sub('', desc).strip()
+            # Extract GST rate from desc
+            gst_rate = 0.0
+            gst_m = _RE_GST_RATE.search(desc)
+            if gst_m:
+                gst_rate = float(gst_m.group(1))
+                desc = _RE_GST_RATE.sub('', desc).strip()
 
-                # Clean description
-                desc = re.sub(r'\s+', ' ', desc).strip()
+            desc = re.sub(r'\s+', ' ', desc).strip()
 
-                items.append({
-                    "product_name": desc,
-                    "hsn_sac": hsn,
-                    "quantity": qty,
-                    "rate": rate if rate > 0 else round(amount / qty, 2),
-                    "gst_rate": gst_rate,
-                    "amount": amount,
-                })
+            items.append({
+                'product_name': desc,
+                'hsn_sac': hsn,
+                'quantity': qty,
+                'rate': rate if rate > 0 else round(amount / qty, 2),
+                'gst_rate': gst_rate,
+                'amount': amount,
+            })
+            logger.info(f'    -> ITEM: {repr(desc[:40])} qty={qty} rate={rate} amt={amount}')
 
         return items
 
