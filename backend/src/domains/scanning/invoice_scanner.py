@@ -503,24 +503,36 @@ class InvoiceScanner:
                 text_lines = []
 
                 # PaddleOCR 3.x OCRResult object — try multiple access patterns
-                # Pattern 1: dict-like with 'rec_text' key
+                # Pattern 1: dict-like with 'rec_text' or 'rec_texts' key
                 if isinstance(page, dict):
-                    rec_texts = page.get("rec_text", [])
-                    rec_scores = page.get("rec_score", [])
+                    rec_texts = page.get("rec_texts") or page.get("rec_text", [])
+                    rec_scores = page.get("rec_scores") or page.get("rec_score", [])
                     dt_polys = page.get("dt_polys", [])
                     ocr_res = page.get("ocr_res", [])
                 else:
                     # Pattern 2: object attributes
-                    rec_texts = getattr(page, "rec_text", None)
-                    rec_scores = getattr(page, "rec_score", None)
+                    rec_texts = getattr(page, "rec_texts", None) or getattr(page, "rec_text", None)
+                    rec_scores = getattr(page, "rec_scores", None) or getattr(page, "rec_score", None)
                     dt_polys = getattr(page, "dt_polys", None)
                     ocr_res = getattr(page, "ocr_res", None)
 
                     # Pattern 3: OCRResult.__getitem__ with string keys
                     if rec_texts is None and hasattr(page, "__getitem__"):
                         try:
-                            rec_texts = page["rec_text"]
-                            rec_scores = page["rec_score"]
+                            rec_texts = page.get("rec_texts") if hasattr(page, "get") else page["rec_texts"]
+                        except (KeyError, TypeError, AttributeError):
+                            try:
+                                rec_texts = page["rec_text"]
+                            except (KeyError, TypeError):
+                                pass
+                        try:
+                            rec_scores = page.get("rec_scores") if hasattr(page, "get") else page["rec_scores"]
+                        except (KeyError, TypeError, AttributeError):
+                            try:
+                                rec_scores = page["rec_score"]
+                            except (KeyError, TypeError):
+                                pass
+                        try:
                             dt_polys = page["dt_polys"]
                             ocr_res = page.get("ocr_res", []) if hasattr(page, "get") else []
                         except (KeyError, TypeError):
