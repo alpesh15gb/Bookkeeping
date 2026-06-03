@@ -330,13 +330,14 @@ class InvoiceScanner:
                 ocr_input = processed
 
             if self._ocr_version >= 3:
-                # PaddleOCR 3.x: use predict() — returns list of dicts
+                # PaddleOCR 3.x: use predict() — returns list of result objects
                 result = self._ocr.predict(ocr_input)
+                logger.info(f"PaddleOCR 3.x returned {len(result)} results, type={type(result[0]) if result else 'empty'}")
             else:
                 # PaddleOCR 2.x: use ocr() — returns nested list
                 result = self._ocr.ocr(ocr_input, cls=True)
         except Exception as e:
-            logger.error(f"PaddleOCR failed: {e}")
+            logger.error(f"PaddleOCR failed: {e}", exc_info=True)
             return self._empty_result([f"OCR engine error: {e}"])
 
         # ── 3b. Check for empty result ────────────────────────────────
@@ -364,8 +365,7 @@ class InvoiceScanner:
 
         # ── 7. Confidence scoring ─────────────────────────────────────
         scores = _compute_confidence(result_data)
-        found = sum(1 for v in scores.values() if v > 0)
-        overall = round(found / max(len(scores), 1), 2)
+        overall = round(sum(scores.values()), 2)
         result_data["confidence_scores"] = scores
         result_data["overall_confidence"] = overall
         result_data["warnings"] = warnings
@@ -384,14 +384,21 @@ class InvoiceScanner:
 
         Supports both PaddleOCR 2.x and 3.x output formats:
         - 2.x: [[bbox, (text, score)], ...]
-        - 3.x: [{'rec_text': [...], 'rec_score': [...], 'dt_polys': [...]}, ...]
+        - 3.x: list of result objects/dicts with rec_text, rec_score, dt_polys
         """
         words = []
         if not raw_result:
             return words
 
-        # Detect format: PaddleOCR 3.x returns list of dicts
-        if isinstance(raw_result, list) and len(raw_result) > 0 and isinstance(raw_result[0], dict):
+        # Detect format: PaddleOCR 3.x returns list of dicts or objects
+        sample = raw_result[0]
+        is_v3 = False
+        if isinstance(sample, dict):
+            is_v3 = 'rec_text' in sample or 'ocr_res' in sample
+        elif hasattr(sample, 'rec_text') or hasattr(sample, 'ocr_res'):
+            is_v3 = True
+
+        if is_v3:
             return self._parse_ocr_result_v3(raw_result)
 
         # PaddleOCR 2.x format
@@ -431,56 +438,104 @@ class InvoiceScanner:
         return words
 
     def _parse_ocr_result_v3(self, raw_result: list) -> List[Dict]:
-        """Parse PaddleOCR 3.x output: [{'rec_text': [...], 'rec_score': [...], 'dt_polys': [...]}, ...]"""
+        """Parse PaddleOCR 3.x output: list of result objects/dicts.
+
+        Handles both:
+        - Dict format: {'rec_text': [...], 'rec_score': [...], 'dt_polys': [...]}
+        - Object format: .rec_text, .rec_score, .dt_polys attributes
+        - Nested format: {'ocr_res': [{'text': ..., 'score': ..., 'dt_polys': ...}]}
+        """
         words = []
         import numpy as np
 
         for page in raw_result:
-            if not isinstance(page, dict):
+            # Get fields from dict or object
+            if isinstance(page, dict):
+                rec_texts = page.get("rec_text", [])
+                rec_scores = page.get("rec_score", [])
+                dt_polys = page.get("dt_polys", [])
+                ocr_res = page.get("ocr_res", [])
+            elif hasattr(page, "rec_text"):
+                rec_texts = getattr(page, "rec_text", [])
+                rec_scores = getattr(page, "rec_score", [])
+                dt_polys = getattr(page, "dt_polys", [])
+                ocr_res = getattr(page, "ocr_res", [])
+            else:
                 continue
-            rec_texts = page.get("rec_text", [])
-            rec_scores = page.get("rec_score", [])
-            dt_polys = page.get("dt_polys", [])
 
-            for i, text in enumerate(rec_texts):
-                conf = float(rec_scores[i]) if i < len(rec_scores) else 0.0
-                if not str(text).strip() or conf < 0.3:
-                    continue
-
-                if i < len(dt_polys):
-                    poly = dt_polys[i]
-                    if isinstance(poly, np.ndarray):
-                        pts = poly.tolist() if poly.ndim == 2 else poly.flatten().tolist()
-                        # Reshape flat list into [[x,y], ...] pairs
-                        if len(pts) >= 8:
-                            coords = [(pts[j], pts[j+1]) for j in range(0, min(len(pts), 8), 2)]
+            # If ocr_res is available (list of dicts), use it directly
+            if ocr_res and isinstance(ocr_res, list):
+                for item in ocr_res:
+                    if isinstance(item, dict):
+                        text = item.get("text", "") or item.get("rec_text", "")
+                        conf = float(item.get("score", 0) or item.get("rec_score", 0))
+                        bbox = item.get("dt_polys", []) or item.get("bbox", [])
+                    elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                        # (text, score) or (bbox, (text, score))
+                        if isinstance(item[0], str):
+                            text, conf = item[0], float(item[1])
+                            bbox = item[2] if len(item) > 2 else []
+                        elif isinstance(item[1], (list, tuple)):
+                            bbox = item[0]
+                            text, conf = item[1][0], float(item[1][1])
                         else:
-                            coords = [(pts[j], pts[j+1]) for j in range(0, len(pts)-1, 2)]
+                            continue
                     else:
-                        coords = poly if isinstance(poly, list) else []
+                        continue
 
+                    if not str(text).strip() or conf < 0.3:
+                        continue
+                    words.append(self._make_word(str(text).strip(), conf, bbox, np))
+
+            # Fall back to rec_text + dt_polys
+            elif rec_texts:
+                for i, text in enumerate(rec_texts):
+                    conf = float(rec_scores[i]) if i < len(rec_scores) else 0.0
+                    if not str(text).strip() or conf < 0.3:
+                        continue
+
+                    bbox = dt_polys[i] if i < len(dt_polys) else []
+                    words.append(self._make_word(str(text).strip(), conf, bbox, np))
+
+        return words
+
+    @staticmethod
+    def _make_word(text: str, conf: float, bbox, np) -> dict:
+        """Build a word dict from text, confidence, and bounding box."""
+        x1, y1, x2, y2 = 0, 0, 0, 0
+
+        if bbox is not None and (isinstance(bbox, np.ndarray) or isinstance(bbox, list)):
+            try:
+                if isinstance(bbox, np.ndarray):
+                    pts = bbox.tolist() if bbox.ndim == 2 else bbox.flatten().tolist()
+                else:
+                    pts = []
+                    for p in bbox:
+                        if isinstance(p, (list, tuple)) and len(p) >= 2:
+                            pts.extend([p[0], p[1]])
+                        elif isinstance(p, (int, float)):
+                            pts.append(p)
+
+                if len(pts) >= 4:
+                    coords = [(pts[j], pts[j+1]) for j in range(0, min(len(pts), 8), 2)]
                     if coords:
                         x1 = int(min(p[0] for p in coords))
                         y1 = int(min(p[1] for p in coords))
                         x2 = int(max(p[0] for p in coords))
                         y2 = int(max(p[1] for p in coords))
-                    else:
-                        x1, y1, x2, y2 = 0, 0, 0, 0
-                else:
-                    x1, y1, x2, y2 = 0, 0, 0, 0
+            except Exception:
+                pass
 
-                words.append({
-                    "text": str(text).strip(),
-                    "conf": conf,
-                    "x": x1,
-                    "y": y1,
-                    "w": x2 - x1,
-                    "h": y2 - y1,
-                    "cx": (x1 + x2) // 2,
-                    "cy": (y1 + y2) // 2,
-                })
-
-        return words
+        return {
+            "text": text,
+            "conf": conf,
+            "x": x1,
+            "y": y1,
+            "w": x2 - x1,
+            "h": y2 - y1,
+            "cx": (x1 + x2) // 2,
+            "cy": (y1 + y2) // 2,
+        }
 
     # ------------------------------------------------------------------
     def _group_words_into_lines(self, words: List[Dict]) -> Dict[int, List[Dict]]:
@@ -494,7 +549,9 @@ class InvoiceScanner:
         lines_dict: Dict[int, List[Dict]] = {}
         current_line_num = 0
         current_y = sorted_words[0]["cy"]
-        line_threshold = 15  # pixels — words within this Y range are on same line
+        # Dynamic threshold: 2% of average word height, min 8px
+        avg_h = max(sum(w["h"] for w in words) / max(len(words), 1), 8)
+        line_threshold = max(int(avg_h * 0.5), 8)  # words within this Y range are on same line
 
         for word in sorted_words:
             if abs(word["cy"] - current_y) > line_threshold:
@@ -953,19 +1010,42 @@ class InvoiceScanner:
 # ---------------------------------------------------------------------------
 
 def _compute_confidence(data: dict) -> dict:
-    key_fields = [
-        'vendor_name', 'vendor_gstin', 'bill_number', 'bill_date',
-        'subtotal', 'cgst', 'sgst', 'igst', 'total',
-    ]
     scores = {}
-    for f in key_fields:
-        val = data.get(f)
-        scores[f] = 1.0 if val not in (None, '', [], 0.0, 0) else 0.0
 
-    # Bonus for having line items
+    # ── Header fields (weighted) ──────────────────────────────────────
+    header_fields = {
+        'vendor_name': 0.15,
+        'vendor_gstin': 0.10,
+        'bill_number': 0.10,
+        'bill_date': 0.05,
+    }
+    for f, weight in header_fields.items():
+        val = data.get(f)
+        scores[f] = weight if val not in (None, '', [], 0.0, 0) else 0.0
+
+    # ── Financial totals (weighted) ───────────────────────────────────
+    total_fields = {
+        'subtotal': 0.10,
+        'total': 0.15,
+    }
+    for f, weight in total_fields.items():
+        val = data.get(f)
+        scores[f] = weight if val not in (None, '', [], 0.0, 0) else 0.0
+
+    # ── Line items (most important — 35% weight) ──────────────────────
     items = data.get('line_items', [])
     if items:
-        scores['line_items'] = 1.0
+        # Score based on item quality
+        item_score = 0.35
+        # Bonus if items have HSN codes
+        items_with_hsn = sum(1 for i in items if i.get('hsn_sac'))
+        if items_with_hsn > 0:
+            item_score += 0.05
+        # Bonus if items have GST rates
+        items_with_gst = sum(1 for i in items if i.get('gst_rate', 0) > 0)
+        if items_with_gst > 0:
+            item_score += 0.05
+        scores['line_items'] = min(item_score, 0.45)
     else:
         scores['line_items'] = 0.0
 
