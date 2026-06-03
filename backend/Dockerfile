@@ -33,6 +33,9 @@ COPY . .
 
 RUN find /app -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
 
+# Pre-download PaddleOCR models during build (avoids runtime HuggingFace downloads)
+RUN python -c "import os; os.environ['FLAGS_enable_pir_in_executor']='0'; os.environ['FLAGS_enable_pir_api']='0'; os.environ['FLAGS_pir_apply_inplace_pass']='0'; from paddleocr import PaddleOCR; ocr = PaddleOCR(lang='en', device='cpu', enable_mkldnn=False); print('Models pre-downloaded')" 2>/dev/null || true
+
 EXPOSE 8000
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "FLAGS_enable_pir_in_executor=0 FLAGS_enable_pir_api=0 FLAGS_pir_apply_inplace_pass=0 exec uvicorn src.main:app --host 0.0.0.0 --port 8000"]

@@ -16,6 +16,7 @@ POST /api/v1/bills/scan-save
   — Returns the created bill.
 """
 import logging
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -77,6 +78,16 @@ def _run_ocr(file_bytes: bytes, filename: str, confidence: float) -> dict:
         file_bytes=file_bytes,
         filename=filename,
         confidence_threshold=confidence,
+    )
+
+
+async def _run_ocr_async(file_bytes: bytes, filename: str, confidence: float) -> dict:
+    """Run OCR in a thread pool so it doesn't block the event loop."""
+    import asyncio
+    loop = asyncio.get_event_loop()
+    return await asyncio.wait_for(
+        loop.run_in_executor(None, _run_ocr, file_bytes, filename, confidence),
+        timeout=120.0,
     )
 
 
@@ -161,7 +172,9 @@ async def scan_preview(
     file_bytes = await _read_and_validate_file(file)
 
     try:
-        ocr = _run_ocr(file_bytes, file.filename or "", confidence)
+        ocr = await _run_ocr_async(file_bytes, file.filename or "", confidence)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Scan timed out. The image may be too large or complex. Try a smaller image.")
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
