@@ -59,6 +59,8 @@ services:
       - S3_BUCKET=${S3_BUCKET:-bookkeeping-documents}
       - FLAGS_enable_pir_in_executor=0
       - FLAGS_enable_pir_api=0
+      - FLAGS_pir_apply_inplace_pass=0
+      - GLOG_minloglevel=2
     volumes:
       - paddle_models:/root/.paddlex
     depends_on:
