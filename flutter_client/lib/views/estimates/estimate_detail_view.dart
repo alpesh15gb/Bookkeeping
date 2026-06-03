@@ -166,7 +166,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                                             crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
                                               Text(
-                                                line['product_name'] ?? 'Product',
+                                                line['description'] ?? line['product_name'] ?? 'Item',
                                                 style: AppTextStyles.bodyMedium,
                                               ),
                                               const SizedBox(height: 2),

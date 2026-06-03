@@ -85,6 +85,7 @@ def create_invoice(
         if not product:
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found in this company context.")
 
+        line_desc = line.description or product.name or "Item"
         line_subtotal = (line.quantity * line.rate) - line.discount
         if line_subtotal < 0:
             raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
@@ -98,6 +99,7 @@ def create_invoice(
 
         db_line = InvoiceLine(
             product_id=line.product_id,
+            description=line_desc,
             quantity=line.quantity,
             rate=line.rate,
             discount=line.discount,
@@ -283,6 +285,7 @@ def preview_invoice(
         if not product:
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
 
+        line_desc = line.description or product.name or "Item"
         line_subtotal = (line.quantity * line.rate) - line.discount
         if line_subtotal < 0:
             raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
@@ -297,6 +300,7 @@ def preview_invoice(
         db_line = InvoiceLine(
             id=uuid.UUID(int=0),
             product_id=line.product_id,
+            description=line_desc,
             quantity=line.quantity,
             rate=line.rate,
             discount=line.discount,
@@ -1187,6 +1191,8 @@ def update_invoice(
                 gst_rate=line.gst_rate
             )
 
+            line_desc = line.description or product.name or "Item"
+
             db_line = None
             if line.id and str(line.id) in existing_by_id:
                 db_line = existing_by_id[str(line.id)]
@@ -1196,6 +1202,7 @@ def update_invoice(
 
             if db_line is not None:
                 kept_ids.add(str(db_line.id))
+                db_line.description = line_desc
                 db_line.quantity = line.quantity
                 db_line.rate = line.rate
                 db_line.discount = line.discount
@@ -1217,6 +1224,7 @@ def update_invoice(
                 db_line = InvoiceLine(
                     invoice_id=invoice.id,
                     product_id=line.product_id,
+                    description=line_desc,
                     quantity=line.quantity,
                     rate=line.rate,
                     discount=line.discount,

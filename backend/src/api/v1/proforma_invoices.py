@@ -70,8 +70,10 @@ def create_proforma_invoice(
             gst_rate=line.gst_rate
         )
 
+        line_desc = line.description or product.name or "Item"
         db_line = ProformaInvoiceLine(
             product_id=line.product_id,
+            description=line_desc,
             quantity=line.quantity,
             rate=line.rate,
             discount=line.discount,
@@ -176,9 +178,11 @@ def preview_proforma_invoice(
             gst_rate=line.gst_rate
         )
 
+        line_desc = line.description or product.name or "Item"
         db_line = ProformaInvoiceLine(
             id=uuid.UUID(int=0),
             product_id=line.product_id,
+            description=line_desc,
             quantity=line.quantity,
             rate=line.rate,
             discount=line.discount,
@@ -341,9 +345,11 @@ def update_proforma_invoice(
                 gst_rate=line.gst_rate
             )
 
+            line_desc = line.description or product.name or "Item"
             db_line = ProformaInvoiceLine(
                 proforma_invoice_id=pi.id,
                 product_id=line.product_id,
+                description=line_desc,
                 quantity=line.quantity,
                 rate=line.rate,
                 discount=line.discount,
@@ -574,7 +580,8 @@ def get_proforma_invoice_pdf_payload(
         },
         "lines": [
             {
-                "product_name": line.product.name if line.product else "N/A",
+                "description": line.description,
+                "product_name": line.description or (line.product.name if line.product else "N/A"),
                 "hsn_sac": line.hsn_sac,
                 "quantity": float(line.quantity),
                 "rate": float(line.rate),
@@ -643,7 +650,7 @@ def print_proforma_invoice(
     for line in pi.lines:
         product = line.product
         items.append({
-            'description': product.name if product else line.hsn_sac,
+            'description': line.description or (product.name if product else line.hsn_sac),
             'quantity': float(line.quantity),
             'rate': float(line.rate),
             'total': float(line.total),

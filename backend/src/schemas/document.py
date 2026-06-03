@@ -49,6 +49,7 @@ class ProductResponse(ProductBase):
 # Invoice Line Schemas
 class InvoiceLineBase(SchemaBase):
     product_id: uuid.UUID
+    description: Optional[str] = None
     quantity: Decimal = Field(..., gt=0)
     rate: Decimal = Field(..., ge=0)
     discount: Decimal = Field(default=Decimal("0.0000"), ge=0)

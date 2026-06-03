@@ -11,6 +11,7 @@ from src.schemas.payment_schemas import PaymentResponse, BillPaymentResponse
 # Bill Line Items Schemas
 class BillLineBase(SchemaBase):
     product_id: uuid.UUID
+    description: Optional[str] = None
     quantity: Decimal = Field(..., gt=0)
     rate: Decimal = Field(..., ge=0)
     discount: Decimal = Field(default=Decimal("0.0000"), ge=0)
@@ -357,6 +358,7 @@ class DeliveryChallanListResponse(SchemaBase):
 # PROFORMA INVOICE SCHEMAS
 class ProformaInvoiceLineBase(SchemaBase):
     product_id: uuid.UUID
+    description: Optional[str] = None
     quantity: Decimal = Field(..., gt=0)
     rate: Decimal = Field(..., ge=0)
     discount: Decimal = Field(default=Decimal("0.0000"), ge=0)

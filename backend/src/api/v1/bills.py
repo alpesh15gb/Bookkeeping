@@ -57,6 +57,7 @@ def create_bill(
         if not product:
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found in this context.")
 
+        line_desc = line.description or product.name or "Item"
         line_subtotal = (line.quantity * line.rate) - line.discount
         if line_subtotal < 0:
             raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
@@ -70,6 +71,7 @@ def create_bill(
 
         db_line = BillLine(
             product_id=line.product_id,
+            description=line_desc,
             quantity=line.quantity,
             rate=line.rate,
             discount=line.discount,
@@ -194,6 +196,7 @@ def preview_bill(
         if not product:
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
 
+        line_desc = line.description or product.name or "Item"
         line_subtotal = (line.quantity * line.rate) - line.discount
         if line_subtotal < 0:
             raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
@@ -208,6 +211,7 @@ def preview_bill(
         db_line = BillLine(
             id=uuid.UUID(int=0),
             product_id=line.product_id,
+            description=line_desc,
             quantity=line.quantity,
             rate=line.rate,
             discount=line.discount,
@@ -518,6 +522,8 @@ def update_bill(
                 gst_rate=line.gst_rate
             )
 
+            line_desc = line.description or product.name or "Item"
+
             db_line = None
             if line.id and str(line.id) in existing_by_id:
                 db_line = existing_by_id[str(line.id)]
@@ -527,6 +533,7 @@ def update_bill(
 
             if db_line is not None:
                 kept_ids.add(str(db_line.id))
+                db_line.description = line_desc
                 db_line.quantity = line.quantity
                 db_line.rate = line.rate
                 db_line.discount = line.discount
@@ -548,6 +555,7 @@ def update_bill(
                 db_line = BillLine(
                     bill_id=bill.id,
                     product_id=line.product_id,
+                    description=line_desc,
                     quantity=line.quantity,
                     rate=line.rate,
                     discount=line.discount,
