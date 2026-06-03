@@ -283,6 +283,7 @@ class InvoiceScanner:
             self._ocr = PaddleOCR(
                 lang='en',
                 device='cpu',
+                enable_mkldnn=False,
             )
         except TypeError:
             # Fallback for PaddleOCR 2.x
