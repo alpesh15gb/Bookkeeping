@@ -1474,8 +1474,12 @@ class InvoiceScanner:
         if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
             content = content[first_brace:last_brace+1]
 
-        cleaned_content = _clean_json_string(content)
-        parsed = _robust_json_loads(cleaned_content)
+        try:
+            cleaned_content = _clean_json_string(content)
+            parsed = _robust_json_loads(cleaned_content)
+        except Exception as e:
+            logger.error(f"Failed to parse JSON from NIM response. Raw content was: {repr(content)}")
+            raise ValueError(f"Failed to parse JSON from NIM response: {e}. Raw content: {content[:500]}")
 
         # Validate types and set defaults
         result = {
