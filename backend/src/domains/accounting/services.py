@@ -997,12 +997,15 @@ class AccountResolver:
     # ------------------------------------------------------------------
     def _resolve_standard(self, key: str) -> uuid.UUID:
         from src.infrastructure.database.models import Account
+        from sqlalchemy import func
 
         definition = _STANDARD_ACCOUNTS.get(key)
         if definition is None:
             raise LedgerValidationError(f"Unknown standard account key: {key}")
 
         account_id = uuid.uuid5(uuid.NAMESPACE_DNS, f"account.{key}-{self.tenant_id}")
+
+        # 1. Try deterministic UUID lookup
         existing = self.db.query(Account).filter(
             Account.id == account_id,
             Account.tenant_id == self.tenant_id,
@@ -1011,6 +1014,17 @@ class AccountResolver:
         if existing is not None:
             return existing.id
 
+        # 2. Try code lookup (handles accounts created with different UUIDs,
+        #    e.g. from imports, or before deterministic UUID was used)
+        existing_by_code = self.db.query(Account).filter(
+            Account.tenant_id == self.tenant_id,
+            func.upper(Account.code) == definition["code"].upper(),
+            Account.deleted_at == None,
+        ).first()
+        if existing_by_code is not None:
+            return existing_by_code.id
+
+        # 3. Create new account with deterministic UUID
         account = Account(
             id=account_id,
             tenant_id=self.tenant_id,

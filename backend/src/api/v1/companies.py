@@ -608,6 +608,14 @@ def verify_and_execute_purge(
             synchronize_session=False
         )
 
+        # Reset numbering series back to 1
+        db.query(NumberingSeries).filter(
+            NumberingSeries.tenant_id == tenant_id,
+        ).update(
+            {NumberingSeries.next_number: 1},
+            synchronize_session=False
+        )
+
         log = AuditLog(
             action="tenant.purge",
             actor_id=current_user.id,
