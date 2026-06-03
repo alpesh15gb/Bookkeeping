@@ -512,6 +512,16 @@ class InvoiceScanner:
 
                 # DIAGNOSTIC LOGGING
                 logger.info(f"DIAG: rt is not None: {rt is not None}, dp is not None: {dp is not None}, rs is not None: {rs is not None}")
+                try:
+                    logger.info(f"DIAG: raw access page.rec_texts: {page.rec_texts[:3] if page.rec_texts else 'empty'}")
+                except Exception as e:
+                    logger.error(f"DIAG: error accessing page.rec_texts: {e}", exc_info=True)
+
+                try:
+                    logger.info(f"DIAG: raw access page.dt_polys: {page.dt_polys[:3] if page.dt_polys else 'empty'}")
+                except Exception as e:
+                    logger.error(f"DIAG: error accessing page.dt_polys: {e}", exc_info=True)
+
                 if rt is not None:
                     logger.info(f"DIAG: len(rt) = {len(rt)}, type(rt) = {type(rt)}")
                     if len(rt) > 0:
