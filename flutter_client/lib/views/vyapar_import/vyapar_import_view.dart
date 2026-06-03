@@ -64,6 +64,14 @@ class _VyaparImportViewState extends State<VyaparImportView> {
       final uri = Uri.parse('${ApiClient.baseUrl}/import/vyapar');
       final request = http.MultipartRequest('POST', uri);
 
+      // Add auth headers directly (bypass ApiClient timeout for heavy imports)
+      if (ApiClient.accessToken != null) {
+        request.headers['Authorization'] = 'Bearer ${ApiClient.accessToken}';
+      }
+      if (ApiClient.tenantId != null) {
+        request.headers['X-Tenant-ID'] = ApiClient.tenantId!;
+      }
+
       // Use bytes if available (mobile/web), otherwise use path (desktop)
       if (fileBytes != null) {
         request.files.add(
@@ -83,26 +91,39 @@ class _VyaparImportViewState extends State<VyaparImportView> {
         );
       }
 
-      final streamed = await ApiClient().send(request);
-      final response = await http.Response.fromStream(streamed);
+      // Use raw http client with longer timeout (import can be heavy)
+      final client = http.Client();
+      try {
+        final streamed = await client.send(request).timeout(
+          const Duration(seconds: 120),
+        );
+        final response = await http.Response.fromStream(streamed);
 
-      if (!mounted) return;
+        if (!mounted) return;
 
-      if (response.statusCode == 200) {
-        setState(() {
-          _isImporting = false;
-          _result = jsonDecode(response.body);
-        });
-      } else {
-        String msg = 'Import failed (${response.statusCode})';
-        try {
-          final body = jsonDecode(response.body);
-          if (body is Map) msg = body['detail']?.toString() ?? msg;
-        } catch (_) {}
-        setState(() {
-          _isImporting = false;
-          _error = msg;
-        });
+        if (response.statusCode == 200) {
+          setState(() {
+            _isImporting = false;
+            _result = jsonDecode(response.body);
+          });
+        } else if (response.statusCode == 401) {
+          setState(() {
+            _isImporting = false;
+            _error = 'Session expired. Please log in again.';
+          });
+        } else {
+          String msg = 'Import failed (${response.statusCode})';
+          try {
+            final body = jsonDecode(response.body);
+            if (body is Map) msg = body['detail']?.toString() ?? msg;
+          } catch (_) {}
+          setState(() {
+            _isImporting = false;
+            _error = msg;
+          });
+        }
+      } finally {
+        client.close();
       }
     } catch (e) {
       if (mounted) {
@@ -204,7 +225,10 @@ class _VyaparImportViewState extends State<VyaparImportView> {
         (r['invoices_imported'] ?? 0) +
         (r['bills_imported'] ?? 0) +
         (r['estimates_imported'] ?? 0) +
-        (r['expenses_imported'] ?? 0);
+        (r['expenses_imported'] ?? 0) +
+        (r['payments_imported'] ?? 0) +
+        (r['stock_entries_imported'] ?? 0) +
+        (r['opening_balances_set'] ?? 0);
 
     return ListView(
       padding: AppSpacing.pagePadding,
@@ -288,6 +312,46 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                 Icons.account_balance_wallet_outlined,
                 'Expenses',
                 r['expenses_imported'] ?? 0,
+              ),
+              _summaryRow(
+                Icons.payments_outlined,
+                'Payments',
+                r['payments_imported'] ?? 0,
+              ),
+              _summaryRow(
+                Icons.inventory_outlined,
+                'Stock Entries',
+                r['stock_entries_imported'] ?? 0,
+              ),
+              _summaryRow(
+                Icons.account_balance_outlined,
+                'Opening Balances',
+                r['opening_balances_set'] ?? 0,
+              ),
+              _summaryRow(
+                Icons.link_outlined,
+                'Linked Transactions',
+                r['linked_transactions_imported'] ?? 0,
+              ),
+              _summaryRow(
+                Icons.tune_outlined,
+                'Custom Fields',
+                r['custom_fields_imported'] ?? 0,
+              ),
+              _summaryRow(
+                Icons.location_on_outlined,
+                'Party Addresses',
+                r['party_addresses_imported'] ?? 0,
+              ),
+              _summaryRow(
+                Icons.price_change_outlined,
+                'Party-Item Rates',
+                r['party_item_rates_imported'] ?? 0,
+              ),
+              _summaryRow(
+                Icons.document_scanner_outlined,
+                'E-Invoice/E-Way Data',
+                r['e_invoice_data_imported'] ?? 0,
               ),
               if (errors.isNotEmpty) ...[
                 const SizedBox(height: 12),
@@ -458,6 +522,36 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                 Icons.account_balance_wallet_outlined,
                 'Expenses',
                 'Business expenses with category mapping',
+              ),
+              _infoRow(
+                Icons.payments_outlined,
+                'Payments',
+                'Payment records linked to invoices and bills',
+              ),
+              _infoRow(
+                Icons.inventory_outlined,
+                'Stock',
+                'Opening stock quantities and adjustments',
+              ),
+              _infoRow(
+                Icons.account_balance_outlined,
+                'Opening Balances',
+                'Party outstanding balances from Vyapar',
+              ),
+              _infoRow(
+                Icons.link_outlined,
+                'Linked Transactions',
+                'Quotation to invoice conversion links',
+              ),
+              _infoRow(
+                Icons.tune_outlined,
+                'Custom Fields',
+                'UDF definitions and per-transaction values',
+              ),
+              _infoRow(
+                Icons.location_on_outlined,
+                'Party Addresses',
+                'Full billing addresses with city, state, pincode',
               ),
             ],
           ),
