@@ -510,6 +510,19 @@ class InvoiceScanner:
                 dp = getattr(page, 'dt_polys', None) or getattr(page, 'rec_polys', None) or getattr(page, 'rec_boxes', None)
                 rs = getattr(page, 'rec_scores', None) or getattr(page, 'rec_score', None)
 
+                # DIAGNOSTIC LOGGING
+                logger.info(f"DIAG: rt is not None: {rt is not None}, dp is not None: {dp is not None}, rs is not None: {rs is not None}")
+                if rt is not None:
+                    logger.info(f"DIAG: len(rt) = {len(rt)}, type(rt) = {type(rt)}")
+                    if len(rt) > 0:
+                        logger.info(f"DIAG: first rt: {rt[0]}")
+                if dp is not None:
+                    logger.info(f"DIAG: len(dp) = {len(dp)}, type(dp) = {type(dp)}")
+                    if len(dp) > 0:
+                        logger.info(f"DIAG: first dp: {dp[0]}")
+                if rs is not None:
+                    logger.info(f"DIAG: len(rs) = {len(rs)}, type(rs) = {type(rs)}")
+
                 if rt is not None and dp is not None and len(rt) > 0 and len(rt) == len(dp):
                     rec_texts  = rt
                     rec_scores = rs or []
