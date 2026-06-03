@@ -676,6 +676,10 @@ class InvoiceScanner:
                         bbox = dt_polys[i] if i < len(dt_polys) else []
                         words.append(self._make_word(str(text).strip(), conf, bbox, np))
 
+                    logger.info("DIAG: first 10 parsed words coordinates:")
+                    for w in words[:10]:
+                        logger.info(f"  DIAG_COORD {repr(w['text'])}: x={w['x']}, y={w['y']}, cx={w['cx']}, cy={w['cy']}")
+
                     logger.info(f"Materialised {len(words)} words total from page")
                 elif not extracted:
                     logger.warning(f"Could not extract text from OCRResult type {type(page).__name__}")
