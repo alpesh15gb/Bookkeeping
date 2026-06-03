@@ -14,7 +14,7 @@ from src.infrastructure.database.models import (
     Contact, Product, Invoice, InvoiceLine, Bill, BillLine,
     Expense, ExpenseCategory, Account, Tenant,
     ProformaInvoice, ProformaInvoiceLine,
-    Payment, PaymentAllocation, BillPaymentAllocation,
+    Payment, PaymentAllocation, BillPayment, BillPaymentAllocation,
     StockLedger, EWayBill,
 )
 from src.api.deps import enforce_permission
@@ -1056,24 +1056,30 @@ def import_vyapar_backup(
                     mode_map = {"CASH": "CASH", "CHEQUE": "BANK", "BANK": "BANK", "UPI": "UPI"}
                     payment_mode = mode_map.get(vy_mode, "OTHER")
 
-                    payment = Payment(
-                        tenant_id=tenant_id,
-                        contact_id=uuid.UUID(contact_map.get(
-                            next((t["txn_name_id"] for t in vy_txns if t["txn_id"] == txn_id), 0), ""
-                        )) if any(t["txn_name_id"] for t in vy_txns if t["txn_id"] == txn_id) else None,
-                        payment_number=f"VYP-PAY-{txn_id}",
-                        payment_date=_parse_date(pm.get("payment_date") or date.today().isoformat()),
-                        payment_mode=payment_mode,
-                        amount=Decimal(str(round(amount, 2))),
-                        reference_number=pm.get("payment_reference") or "",
-                        description=f"Imported from Vyapar ({pm['paymentType_name'] or ''})",
-                        status="ACTIVE",
-                    )
-                    db.add(payment)
-                    db.flush()
+                    # Resolve contact_id from the transaction
+                    contact_id_val = None
+                    for t in vy_txns:
+                        if t["txn_id"] == txn_id and t["txn_name_id"]:
+                            cid_str = contact_map.get(t["txn_name_id"])
+                            if cid_str:
+                                contact_id_val = uuid.UUID(cid_str)
+                            break
 
-                    # Allocate to invoice or bill
                     if inv_uuid:
+                        # Customer receipt → Payment + PaymentAllocation
+                        payment = Payment(
+                            tenant_id=tenant_id,
+                            contact_id=contact_id_val,
+                            payment_number=f"VYP-PAY-{txn_id}",
+                            payment_date=_parse_date(pm.get("payment_date") or date.today().isoformat()),
+                            payment_mode=payment_mode,
+                            amount=Decimal(str(round(amount, 2))),
+                            reference_number=pm.get("payment_reference") or "",
+                            description=f"Imported from Vyapar ({pm['paymentType_name'] or ''})",
+                            status="ACTIVE",
+                        )
+                        db.add(payment)
+                        db.flush()
                         alloc = PaymentAllocation(
                             payment_id=payment.id,
                             invoice_id=uuid.UUID(inv_uuid),
@@ -1081,8 +1087,22 @@ def import_vyapar_backup(
                         )
                         db.add(alloc)
                     elif bill_uuid:
+                        # Vendor payment → BillPayment + BillPaymentAllocation
+                        bill_payment = BillPayment(
+                            tenant_id=tenant_id,
+                            contact_id=contact_id_val,
+                            payment_number=f"VYP-BPAY-{txn_id}",
+                            payment_date=_parse_date(pm.get("payment_date") or date.today().isoformat()),
+                            payment_mode=payment_mode,
+                            amount=Decimal(str(round(amount, 2))),
+                            reference_number=pm.get("payment_reference") or "",
+                            description=f"Imported from Vyapar ({pm['paymentType_name'] or ''})",
+                            status="ACTIVE",
+                        )
+                        db.add(bill_payment)
+                        db.flush()
                         alloc = BillPaymentAllocation(
-                            bill_payment_id=payment.id,
+                            payment_id=bill_payment.id,
                             bill_id=uuid.UUID(bill_uuid),
                             amount=Decimal(str(round(amount, 2))),
                         )
