@@ -278,17 +278,20 @@ class InvoiceScanner:
 
     def __init__(self):
         PaddleOCR = _require_paddleocr()
+        self._ocr_version = 3  # assume 3.x
         try:
+            self._ocr = PaddleOCR(
+                lang='en',
+                device='cpu',
+            )
+        except TypeError:
+            # Fallback for PaddleOCR 2.x
+            self._ocr_version = 2
             self._ocr = PaddleOCR(
                 use_angle_cls=True,
                 lang='en',
                 show_log=False,
                 use_gpu=False,
-            )
-        except TypeError:
-            self._ocr = PaddleOCR(
-                use_angle_cls=True,
-                lang='en',
             )
 
     def scan(self, file_bytes: bytes, filename: str = "", confidence_threshold: float = 0.3) -> dict:
@@ -326,13 +329,25 @@ class InvoiceScanner:
             else:
                 ocr_input = processed
 
-            result = self._ocr.ocr(ocr_input, cls=True)
+            if self._ocr_version >= 3:
+                # PaddleOCR 3.x: use predict() — returns list of dicts
+                result = self._ocr.predict(ocr_input)
+            else:
+                # PaddleOCR 2.x: use ocr() — returns nested list
+                result = self._ocr.ocr(ocr_input, cls=True)
         except Exception as e:
             logger.error(f"PaddleOCR failed: {e}")
             return self._empty_result([f"OCR engine error: {e}"])
 
-        if not result or not result[0]:
-            return self._empty_result(["OCR produced no text — check image quality."])
+        # ── 3b. Check for empty result ────────────────────────────────
+        if self._ocr_version >= 3:
+            # PaddleOCR 3.x predict() returns list of dicts
+            if not result or (isinstance(result, list) and not result):
+                return self._empty_result(["OCR produced no text — check image quality."])
+        else:
+            # PaddleOCR 2.x ocr() returns [[...]]
+            if not result or not result[0]:
+                return self._empty_result(["OCR produced no text — check image quality."])
 
         # ── 4. Parse OCR results into words with positions ─────────────
         words = self._parse_ocr_result(result)
@@ -365,7 +380,25 @@ class InvoiceScanner:
 
     # ------------------------------------------------------------------
     def _parse_ocr_result(self, raw_result: list) -> List[Dict]:
-        """Convert PaddleOCR output to a flat list of word dicts."""
+        """Convert PaddleOCR output to a flat list of word dicts.
+
+        Supports both PaddleOCR 2.x and 3.x output formats:
+        - 2.x: [[bbox, (text, score)], ...]
+        - 3.x: [{'rec_text': [...], 'rec_score': [...], 'dt_polys': [...]}, ...]
+        """
+        words = []
+        if not raw_result:
+            return words
+
+        # Detect format: PaddleOCR 3.x returns list of dicts
+        if isinstance(raw_result, list) and len(raw_result) > 0 and isinstance(raw_result[0], dict):
+            return self._parse_ocr_result_v3(raw_result)
+
+        # PaddleOCR 2.x format
+        return self._parse_ocr_result_v2(raw_result)
+
+    def _parse_ocr_result_v2(self, raw_result: list) -> List[Dict]:
+        """Parse PaddleOCR 2.x output: [[bbox, (text, score)], ...]"""
         words = []
         if not raw_result or not raw_result[0]:
             return words
@@ -391,9 +424,61 @@ class InvoiceScanner:
                 "y": y1,
                 "w": x2 - x1,
                 "h": y2 - y1,
-                "cx": (x1 + x2) // 2,  # center x
-                "cy": (y1 + y2) // 2,  # center y
+                "cx": (x1 + x2) // 2,
+                "cy": (y1 + y2) // 2,
             })
+
+        return words
+
+    def _parse_ocr_result_v3(self, raw_result: list) -> List[Dict]:
+        """Parse PaddleOCR 3.x output: [{'rec_text': [...], 'rec_score': [...], 'dt_polys': [...]}, ...]"""
+        words = []
+        import numpy as np
+
+        for page in raw_result:
+            if not isinstance(page, dict):
+                continue
+            rec_texts = page.get("rec_text", [])
+            rec_scores = page.get("rec_score", [])
+            dt_polys = page.get("dt_polys", [])
+
+            for i, text in enumerate(rec_texts):
+                conf = float(rec_scores[i]) if i < len(rec_scores) else 0.0
+                if not str(text).strip() or conf < 0.3:
+                    continue
+
+                if i < len(dt_polys):
+                    poly = dt_polys[i]
+                    if isinstance(poly, np.ndarray):
+                        pts = poly.tolist() if poly.ndim == 2 else poly.flatten().tolist()
+                        # Reshape flat list into [[x,y], ...] pairs
+                        if len(pts) >= 8:
+                            coords = [(pts[j], pts[j+1]) for j in range(0, min(len(pts), 8), 2)]
+                        else:
+                            coords = [(pts[j], pts[j+1]) for j in range(0, len(pts)-1, 2)]
+                    else:
+                        coords = poly if isinstance(poly, list) else []
+
+                    if coords:
+                        x1 = int(min(p[0] for p in coords))
+                        y1 = int(min(p[1] for p in coords))
+                        x2 = int(max(p[0] for p in coords))
+                        y2 = int(max(p[1] for p in coords))
+                    else:
+                        x1, y1, x2, y2 = 0, 0, 0, 0
+                else:
+                    x1, y1, x2, y2 = 0, 0, 0, 0
+
+                words.append({
+                    "text": str(text).strip(),
+                    "conf": conf,
+                    "x": x1,
+                    "y": y1,
+                    "w": x2 - x1,
+                    "h": y2 - y1,
+                    "cx": (x1 + x2) // 2,
+                    "cy": (y1 + y2) // 2,
+                })
 
         return words
 
