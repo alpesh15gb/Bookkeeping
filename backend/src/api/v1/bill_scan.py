@@ -19,7 +19,7 @@ import logging
 import asyncio
 import base64
 import uuid as _uuid
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -307,6 +307,7 @@ def _build_preview_response(ocr: dict, db: Session, tenant_id: uuid.UUID) -> dic
 )
 def scan_save(
     payload: dict,
+    request: Request,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
 ):
@@ -471,19 +472,9 @@ def scan_save(
 
     # ── Create bill using existing logic ───────────────────────────────────
     from src.api.v1.bills import create_bill as _create_bill_core
-    from fastapi import Request
-
-    # Build a minimal mock Request for the dependency
-    class _MockRequest:
-        def __init__(self):
-            self.state = type("State", (), {"tenant_id": tenant_id})()
-            self.headers = {}
-            self.method = "POST"
-            self.url = type("URL", (), {"path": "/api/v1/bills"})()
-
     try:
         result = _create_bill_core(
-            request=_MockRequest(),
+            request=request,
             payload=BillCreate(**bill_create_payload),
             db=db,
             tenant_id=tenant_id,
