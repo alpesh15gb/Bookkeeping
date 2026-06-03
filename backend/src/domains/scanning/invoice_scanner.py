@@ -356,6 +356,18 @@ class InvoiceScanner:
                 # PaddleOCR 3.x: use predict() — returns list of result objects
                 result = self._ocr.predict(ocr_input)
                 logger.info(f"PaddleOCR 3.x returned {len(result)} results, type={type(result[0]) if result else 'empty'}")
+                # Debug: dump first result structure
+                if result:
+                    r0 = result[0]
+                    logger.info(f"Result keys/attrs: {list(r0.keys()) if isinstance(r0, dict) else [a for a in dir(r0) if not a.startswith('_')][:30]}")
+                    # Try to access rec_text
+                    for attr in ['rec_text', 'rec_texts', 'text', 'texts', 'ocr_res']:
+                        try:
+                            val = r0[attr] if isinstance(r0, dict) else getattr(r0, attr, 'N/A')
+                            if val != 'N/A' and val is not None:
+                                logger.info(f"  .{attr} = {str(val)[:200]}")
+                        except Exception:
+                            pass
             else:
                 # PaddleOCR 2.x: use ocr() — returns nested list
                 result = self._ocr.ocr(ocr_input, cls=True)
@@ -417,9 +429,13 @@ class InvoiceScanner:
         sample = raw_result[0]
         is_v3 = False
         if isinstance(sample, dict):
-            is_v3 = 'rec_text' in sample or 'ocr_res' in sample
-        elif hasattr(sample, 'rec_text') or hasattr(sample, 'ocr_res'):
+            is_v3 = True  # Any dict is v3 format
+        elif isinstance(sample, (list, tuple)):
+            is_v3 = False  # Nested list = v2 format
+        else:
+            # Unknown object (OCRResult from PaddleOCR 3.x) — treat as v3
             is_v3 = True
+            logger.info(f"OCR result is object type {type(sample).__name__}, treating as v3")
 
         if is_v3:
             return self._parse_ocr_result_v3(raw_result)
@@ -466,25 +482,126 @@ class InvoiceScanner:
         Handles both:
         - Dict format: {'rec_text': [...], 'rec_score': [...], 'dt_polys': [...]}
         - Object format: .rec_text, .rec_score, .dt_polys attributes
+        - OCRResult object: dict-like access with string keys
         - Nested format: {'ocr_res': [{'text': ..., 'score': ..., 'dt_polys': ...}]}
         """
         words = []
         import numpy as np
 
         for page in raw_result:
-            # Get fields from dict or object
-            if isinstance(page, dict):
-                rec_texts = page.get("rec_text", [])
-                rec_scores = page.get("rec_score", [])
-                dt_polys = page.get("dt_polys", [])
-                ocr_res = page.get("ocr_res", [])
-            elif hasattr(page, "rec_text"):
-                rec_texts = getattr(page, "rec_text", [])
-                rec_scores = getattr(page, "rec_score", [])
-                dt_polys = getattr(page, "dt_polys", [])
-                ocr_res = getattr(page, "ocr_res", [])
-            else:
+            try:
+                # Debug: log the actual type and available attributes/keys
+                logger.info(f"OCRResult type: {type(page)}")
+
+                # Try to extract text lines from the object
+                text_lines = []
+
+                # PaddleOCR 3.x OCRResult object — try multiple access patterns
+                # Pattern 1: dict-like with 'rec_text' key
+                if isinstance(page, dict):
+                    rec_texts = page.get("rec_text", [])
+                    rec_scores = page.get("rec_score", [])
+                    dt_polys = page.get("dt_polys", [])
+                    ocr_res = page.get("ocr_res", [])
+                else:
+                    # Pattern 2: object attributes
+                    rec_texts = getattr(page, "rec_text", None)
+                    rec_scores = getattr(page, "rec_score", None)
+                    dt_polys = getattr(page, "dt_polys", None)
+                    ocr_res = getattr(page, "ocr_res", None)
+
+                    # Pattern 3: OCRResult.__getitem__ with string keys
+                    if rec_texts is None and hasattr(page, "__getitem__"):
+                        try:
+                            rec_texts = page["rec_text"]
+                            rec_scores = page["rec_score"]
+                            dt_polys = page["dt_polys"]
+                            ocr_res = page.get("ocr_res", []) if hasattr(page, "get") else []
+                        except (KeyError, TypeError):
+                            pass
+
+                    # Pattern 4: Try to iterate or use keys()
+                    if rec_texts is None and ocr_res is None:
+                        logger.warning(f"OCRResult attrs: {[a for a in dir(page) if not a.startswith('_')][:50]}")
+                        # Try keys() if available
+                        if hasattr(page, 'keys'):
+                            try:
+                                keys = list(page.keys())
+                                logger.warning(f"OCRResult keys: {keys}")
+                                for k in keys:
+                                    if 'text' in k.lower() or 'rec' in k.lower() or 'ocr' in k.lower():
+                                        logger.warning(f"  key '{k}' = {str(page[k])[:200]}")
+                            except Exception as e:
+                                logger.warning(f"Could not enumerate keys: {e}")
+                        # Try to iterate the object directly
+                        try:
+                            # Some PaddleOCR 3.x objects yield line results directly
+                            for item in page:
+                                if isinstance(item, dict):
+                                    t = item.get("rec_text", "") or item.get("text", "")
+                                    s = float(item.get("rec_score", 0) or item.get("score", 0))
+                                    b = item.get("dt_polys", [])
+                                elif isinstance(item, (list, tuple)):
+                                    if len(item) >= 2 and isinstance(item[0], (list, tuple)):
+                                        b = item[0]
+                                        t = str(item[1][0]) if isinstance(item[1], (list, tuple)) else str(item[1])
+                                        s = float(item[1][1]) if isinstance(item[1], (list, tuple)) and len(item[1]) > 1 else 0.0
+                                    elif len(item) >= 2 and isinstance(item[0], str):
+                                        t, s = str(item[0]), float(item[1])
+                                        b = item[2] if len(item) > 2 else []
+                                    else:
+                                        continue
+                                else:
+                                    continue
+                                if t.strip():
+                                    words.append(self._make_word(t.strip(), s, b, np))
+                            continue  # Already processed via iteration
+                        except (TypeError, StopIteration):
+                            logger.warning("OCRResult not iterable, falling back to dict extraction")
+                            rec_texts, rec_scores, dt_polys, ocr_res = [], [], [], []
+
+                # If ocr_res is available (list of dicts), use it directly
+                if ocr_res and isinstance(ocr_res, list):
+                    for item in ocr_res:
+                        if isinstance(item, dict):
+                            text = item.get("text", "") or item.get("rec_text", "")
+                            conf = float(item.get("score", 0) or item.get("rec_score", 0))
+                            bbox = item.get("dt_polys", []) or item.get("bbox", [])
+                        elif isinstance(item, (list, tuple)) and len(item) >= 2:
+                            if isinstance(item[0], str):
+                                text, conf = item[0], float(item[1])
+                                bbox = item[2] if len(item) > 2 else []
+                            elif isinstance(item[1], (list, tuple)):
+                                bbox = item[0]
+                                text, conf = item[1][0], float(item[1][1])
+                            else:
+                                continue
+                        else:
+                            continue
+
+                        if not str(text).strip() or conf < 0.3:
+                            continue
+                        words.append(self._make_word(str(text).strip(), conf, bbox, np))
+
+                # Fall back to rec_text + dt_polys
+                elif rec_texts:
+                    rec_texts = rec_texts if isinstance(rec_texts, (list, tuple)) else [rec_texts]
+                    rec_scores = rec_scores if isinstance(rec_scores, (list, tuple)) else [rec_scores]
+                    dt_polys = dt_polys if isinstance(dt_polys, (list, tuple)) else [dt_polys] if dt_polys else []
+                    for i, text in enumerate(rec_texts):
+                        conf = float(rec_scores[i]) if i < len(rec_scores) else 0.0
+                        if not str(text).strip() or conf < 0.3:
+                            continue
+                        bbox = dt_polys[i] if i < len(dt_polys) else []
+                        words.append(self._make_word(str(text).strip(), conf, bbox, np))
+                else:
+                    logger.warning(f"Could not extract OCR text from result object type {type(page)}")
+
+            except Exception as e:
+                logger.error(f"Error parsing OCRResult: {e}", exc_info=True)
                 continue
+
+        return words
 
             # If ocr_res is available (list of dicts), use it directly
             if ocr_res and isinstance(ocr_res, list):
