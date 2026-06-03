@@ -90,6 +90,8 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------------
     OCR_ENGINE: str = "paddleocr"  # "google_vision" or "paddleocr"
     GOOGLE_VISION_API_KEY: str = ""
+    NVIDIA_NIM_API_KEY: str = ""
+    NVIDIA_NIM_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
 
     # ----------------------------------------------------------------
     # Rate Limiting

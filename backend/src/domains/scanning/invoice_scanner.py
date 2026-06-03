@@ -21,6 +21,7 @@ import re
 import warnings
 from datetime import date
 from typing import Optional, List, Dict, Any, Tuple
+from src.core.config import settings
 
 # Suppress PaddleOCR model/lang warnings, Pydantic model_ protected namespace warnings, and requests/urllib3 version warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*lang and ocr_version will be ignored.*")
@@ -325,6 +326,15 @@ class InvoiceScanner:
 
     def scan(self, file_bytes: bytes, filename: str = "", confidence_threshold: float = 0.3) -> dict:
         warnings: list[str] = []
+
+        # ── Nvidia NIM integration ───────────────────────────────────────
+        if getattr(settings, "NVIDIA_NIM_API_KEY", None):
+            try:
+                logger.info("Nvidia NIM key found. Intercepting scan with Nvidia NIM multimodal extractor.")
+                return self._scan_with_nvidia_nim(file_bytes, filename)
+            except Exception as e:
+                logger.error(f"Nvidia NIM scan failed: {e}", exc_info=True)
+                warnings.append(f"Nvidia NIM scan failed: {e}. Falling back to Local PaddleOCR.")
 
         # ── 1. Convert PDF if needed ─────────────────────────────────────
         lower_name = filename.lower()
@@ -1277,6 +1287,140 @@ class InvoiceScanner:
             "overall_confidence": 0.0,
             "warnings":          warnings,
         }
+
+    def _scan_with_nvidia_nim(self, file_bytes: bytes, filename: str) -> dict:
+        import base64
+        import requests
+        import json
+
+        # 1. Convert PDF to image bytes if needed
+        lower_name = filename.lower()
+        if lower_name.endswith(".pdf") or file_bytes[:4] == b"%PDF":
+            image_bytes = _pdf_to_image_bytes(file_bytes)
+        else:
+            image_bytes = file_bytes
+
+        img_b64 = base64.b64encode(image_bytes).decode("utf-8")
+
+        api_key = settings.NVIDIA_NIM_API_KEY
+        model = settings.NVIDIA_NIM_MODEL or "meta/llama-3.2-11b-vision-instruct"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+
+        prompt = (
+            "You are an expert bookkeeping and invoice scanning assistant.\n"
+            "Analyze the uploaded invoice image and extract all relevant details.\n"
+            "Respond ONLY with a valid JSON object. Do not include markdown code block formatting (like ```json), explanations, or other text.\n"
+            "The JSON must have the following schema:\n"
+            "{\n"
+            '  "vendor_name": "string or null (e.g. Mahaveer Computers)",\n'
+            '  "vendor_gstin": "string or null (15-character GSTIN, e.g. 36BFAPM4787A1ZJ)",\n'
+            '  "vendor_address": "string or null",\n'
+            '  "bill_number": "string or null (e.g. MC2025-26/7164)",\n'
+            '  "bill_date": "string or null (format YYYY-MM-DD)",\n'
+            '  "due_date": "string or null (format YYYY-MM-DD)",\n'
+            '  "po_number": "string or null",\n'
+            '  "subtotal": 0.0,\n'
+            '  "cgst": 0.0,\n'
+            '  "sgst": 0.0,\n'
+            '  "igst": 0.0,\n'
+            '  "total": 0.0,\n'
+            '  "line_items": [\n'
+            "    {\n"
+            '      "product_name": "string (clear product description)",\n'
+            '      "hsn_sac": "string or null",\n'
+            '      "quantity": 1.0,\n'
+            '      "rate": 0.0,\n'
+            '      "gst_rate": 0.0,\n'
+            '      "amount": 0.0\n'
+            "    }\n"
+            "  ]\n"
+            "}"
+        )
+
+        payload = {
+            "model": model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": prompt
+                        },
+                        {
+                            "type": "image_url",
+                            "image_url": {
+                                "url": f"data:image/jpeg;base64,{img_b64}"
+                            }
+                        }
+                    ]
+                }
+            ],
+            "temperature": 0.1,
+            "max_tokens": 2048
+        }
+
+        logger.info(f"Sending vision extraction request to Nvidia NIM with model {model}...")
+        response = requests.post(
+            "https://integrate.api.nvidia.com/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
+        response.raise_for_status()
+        res_data = response.json()
+        content = res_data["choices"][0]["message"]["content"].strip()
+
+        # Clean markdown code block wraps if LLM outputted them
+        if content.startswith("```"):
+            lines = content.splitlines()
+            if lines[0].startswith("```"):
+                lines = lines[1:]
+            if lines[-1].startswith("```"):
+                lines = lines[:-1]
+            content = "\n".join(lines).strip()
+
+        parsed = json.loads(content)
+
+        # Validate types and set defaults
+        result = {
+            "vendor_name": parsed.get("vendor_name"),
+            "vendor_gstin": parsed.get("vendor_gstin"),
+            "vendor_address": parsed.get("vendor_address"),
+            "bill_number": parsed.get("bill_number"),
+            "bill_date": parsed.get("bill_date"),
+            "due_date": parsed.get("due_date"),
+            "po_number": parsed.get("po_number"),
+            "subtotal": _clean_amount(str(parsed.get("subtotal", 0.0))),
+            "cgst": _clean_amount(str(parsed.get("cgst", 0.0))),
+            "sgst": _clean_amount(str(parsed.get("sgst", 0.0))),
+            "igst": _clean_amount(str(parsed.get("igst", 0.0))),
+            "total": _clean_amount(str(parsed.get("total", 0.0))),
+            "line_items": [],
+            "confidence_scores": {"_engine": "nvidia_nim"},
+            "overall_confidence": 0.98,
+            "warnings": []
+        }
+
+        for item in parsed.get("line_items", []):
+            qty = float(item.get("quantity") or 1.0)
+            rate = float(item.get("rate") or 0.0)
+            amt = float(item.get("amount") or (qty * rate))
+            result["line_items"].append({
+                "product_name": str(item.get("product_name") or "").strip(),
+                "hsn_sac": str(item.get("hsn_sac") or "") if item.get("hsn_sac") else None,
+                "quantity": qty,
+                "rate": rate,
+                "gst_rate": float(item.get("gst_rate") or 0.0),
+                "amount": amt
+            })
+
+        logger.info(f"Nvidia NIM extraction complete. Extracted {len(result['line_items'])} line items.")
+        return result
 
 
 # ---------------------------------------------------------------------------
