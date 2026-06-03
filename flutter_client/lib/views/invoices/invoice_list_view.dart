@@ -621,25 +621,30 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        color: AppColors.info,
-        child: const Row(
+        color: _swipeProgress > 0.70 ? AppColors.error : AppColors.info,
+        child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            Text('Share PDF', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            SizedBox(width: 8),
-            Icon(Icons.share, color: Colors.white),
+            Text(
+              _swipeProgress > 0.70 ? 'Delete Invoice' : 'Share PDF',
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(width: 8),
+            Icon(_swipeProgress > 0.70 ? Icons.delete : Icons.share, color: Colors.white),
           ],
         ),
       ),
       onUpdate: (details) {
-        _swipeProgress = details.progress;
+        setState(() {
+          _swipeProgress = details.progress;
+        });
       },
       confirmDismiss: (direction) async {
         if (direction == DismissDirection.startToEnd) {
           _showRecordPaymentDialog(invoice);
           return false;
         } else if (direction == DismissDirection.endToStart) {
-          if (_swipeProgress > 0.90) {
+          if (_swipeProgress > 0.70) {
             final confirm = await AppConfirmDialog.show(
               context,
               title: 'Delete Invoice?',

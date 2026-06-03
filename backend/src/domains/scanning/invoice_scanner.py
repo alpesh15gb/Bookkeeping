@@ -855,19 +855,19 @@ class InvoiceScanner:
                 subtotal = round(total - tax_sum, 2)
 
         return {
-            "vendor_name":    None,
-            "vendor_gstin":   None,
-            "vendor_address": None,
-            "bill_number":    None,
-            "bill_date":      None,
-            "due_date":       None,
-            "po_number":      None,
+            "vendor_name":    vendor_name,
+            "vendor_gstin":   vendor_gstin,
+            "vendor_address": vendor_address,
+            "bill_number":    bill_number,
+            "bill_date":      bill_date,
+            "due_date":       due_date,
+            "po_number":      po_number,
             "line_items":     line_items,
-            "subtotal":       None,
-            "cgst":           None,
-            "sgst":           None,
-            "igst":           None,
-            "total":          None,
+            "subtotal":       subtotal,
+            "cgst":           cgst,
+            "sgst":           sgst,
+            "igst":           igst,
+            "total":          total,
         }
 
     # ------------------------------------------------------------------
