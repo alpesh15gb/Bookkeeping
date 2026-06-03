@@ -176,6 +176,58 @@ def _clean_amount(raw: str) -> Optional[float]:
         return None
 
 
+def _clean_json_string(s: str) -> str:
+    result = []
+    i = 0
+    n = len(s)
+    in_string = False
+    while i < n:
+        c = s[i]
+        if c == '"':
+            # Check if this quote is escaped
+            backslashes = 0
+            j = len(result) - 1
+            while j >= 0 and result[j] == '\\':
+                backslashes += 1
+                j -= 1
+            if backslashes % 2 == 0:
+                in_string = not in_string
+            result.append(c)
+            i += 1
+        elif c == '\\' and in_string:
+            if i + 1 < n:
+                next_c = s[i+1]
+                if next_c in ['"', '\\', '/', 'b', 'f', 'n', 'r', 't']:
+                    result.append(c)
+                    result.append(next_c)
+                    i += 2
+                elif next_c == 'u':
+                    # Check if followed by 4 hex digits
+                    if i + 5 < n and all(ch in '0123456789abcdefABCDEF' for ch in s[i+2:i+6]):
+                        result.append(c)
+                        result.append(next_c)
+                        result.extend(s[i+2:i+6])
+                        i += 6
+                    else:
+                        result.append('\\')
+                        result.append(c)
+                        result.append(next_c)
+                        i += 2
+                else:
+                    result.append('\\')
+                    result.append(c)
+                    result.append(next_c)
+                    i += 2
+            else:
+                result.append('\\')
+                result.append(c)
+                i += 1
+        else:
+            result.append(c)
+            i += 1
+    return "".join(result)
+
+
 def _parse_date(text: str) -> Optional[str]:
     if not text:
         return None
@@ -292,8 +344,11 @@ class InvoiceScanner:
     """
 
     def __init__(self):
+        self._ocr = None
+        self._ocr_version = 3
+
+    def _init_paddleocr(self):
         PaddleOCR = _require_paddleocr()
-        self._ocr_version = 3  # assume 3.x
         try:
             self._ocr = PaddleOCR(
                 lang='en',
@@ -314,27 +369,14 @@ class InvoiceScanner:
                 show_log=False,
                 use_gpu=False,
             )
-        except TypeError:
-            # Fallback for PaddleOCR 2.x
-            self._ocr_version = 2
-            self._ocr = PaddleOCR(
-                use_angle_cls=True,
-                lang='en',
-                show_log=False,
-                use_gpu=False,
-            )
 
     def scan(self, file_bytes: bytes, filename: str = "", confidence_threshold: float = 0.3) -> dict:
-        warnings: list[str] = []
-
         # ── Nvidia NIM integration ───────────────────────────────────────
         if getattr(settings, "NVIDIA_NIM_API_KEY", None):
-            try:
-                logger.info("Nvidia NIM key found. Intercepting scan with Nvidia NIM multimodal extractor.")
-                return self._scan_with_nvidia_nim(file_bytes, filename)
-            except Exception as e:
-                logger.error(f"Nvidia NIM scan failed: {e}", exc_info=True)
-                warnings.append(f"Nvidia NIM scan failed: {e}. Falling back to Local PaddleOCR.")
+            logger.info("Nvidia NIM key found. Running Nvidia NIM standalone multimodal extractor.")
+            return self._scan_with_nvidia_nim(file_bytes, filename)
+
+        warnings: list[str] = []
 
         # ── 1. Convert PDF if needed ─────────────────────────────────────
         lower_name = filename.lower()
@@ -360,6 +402,9 @@ class InvoiceScanner:
             import numpy as np
             cv2 = _require_cv2()
             Image = _require_pil()
+
+            if self._ocr is None:
+                self._init_paddleocr()
 
             # PaddleOCR expects a numpy array or file path
             # Convert grayscale back to 3-channel for PaddleOCR
@@ -1384,7 +1429,14 @@ class InvoiceScanner:
                 lines = lines[:-1]
             content = "\n".join(lines).strip()
 
-        parsed = json.loads(content)
+        # Find first '{' and last '}' to strip any surrounding text/garbage
+        first_brace = content.find('{')
+        last_brace = content.rfind('}')
+        if first_brace != -1 and last_brace != -1 and last_brace > first_brace:
+            content = content[first_brace:last_brace+1]
+
+        cleaned_content = _clean_json_string(content)
+        parsed = json.loads(cleaned_content)
 
         # Validate types and set defaults
         result = {
