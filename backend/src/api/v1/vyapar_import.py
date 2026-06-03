@@ -1033,8 +1033,9 @@ def import_vyapar_backup(
             # Group payments by transaction
             payments_by_txn: Dict[int, list] = {}
             for pm in vy_payments:
-                txn_id = pm["txn_id"]
-                payments_by_txn.setdefault(txn_id, []).append(pm)
+                pm_dict = dict(pm)
+                txn_id = pm_dict["txn_id"]
+                payments_by_txn.setdefault(txn_id, []).append(pm_dict)
 
             # Process payments for sale invoices (type=1)
             for pm_list in payments_by_txn.values():
