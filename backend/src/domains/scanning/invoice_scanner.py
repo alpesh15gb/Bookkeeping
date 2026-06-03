@@ -505,12 +505,24 @@ class InvoiceScanner:
                 dt_polys: list = []
                 extracted = False
 
-                # ── Strategy 1: .json() method (PaddleOCR 3.x / PaddleX) ───────
+                # ── Strategy 1 (Preferred): Direct Attribute Access (Aligned) ──────
+                rt = getattr(page, 'rec_texts', None) or getattr(page, 'rec_text', None)
+                dp = getattr(page, 'dt_polys', None) or getattr(page, 'rec_polys', None) or getattr(page, 'rec_boxes', None)
+                rs = getattr(page, 'rec_scores', None) or getattr(page, 'rec_score', None)
+
+                if rt is not None and dp is not None and len(rt) > 0 and len(rt) == len(dp):
+                    rec_texts  = rt
+                    rec_scores = rs or []
+                    dt_polys   = dp
+                    extracted = True
+                    logger.info(f"Direct Attribute Access succeeded: {len(rec_texts)} aligned entries.")
+
+                # ── Strategy 2: .json() method (PaddleOCR 3.x / PaddleX) ───────
                 # NOTE: rec_texts/rec_scores survive JSON fine (strings/floats).
                 # dt_polys are numpy arrays and do NOT survive JSON serialization —
                 # they come back as empty lists. We ALWAYS fetch bboxes directly
                 # from the object attributes after getting texts from json().
-                if hasattr(page, 'json') and callable(page.json):
+                if not extracted and hasattr(page, 'json') and callable(page.json):
                     try:
                         data = page.json()
                         logger.info(f"page.json() type={type(data).__name__}, "
@@ -520,15 +532,12 @@ class InvoiceScanner:
                             inner = data.get('res', data)
                             rec_texts  = inner.get('rec_texts',  inner.get('rec_text',  []))
                             rec_scores = inner.get('rec_scores', inner.get('rec_score', []))
-                            # dt_polys from JSON are empty (numpy not serializable).
-                            # Always fetch bbox data directly from object attributes.
                             extracted = bool(rec_texts)
                     except Exception as e:
                         logger.warning(f"page.json() failed: {e}")
 
-                # Always try to get bboxes directly from object (numpy arrays intact)
-                # Try dt_polys first, then rec_polys, then rec_boxes (rect format)
-                if not dt_polys:
+                # If Strategy 2 was used and we don't have bboxes, get them from object attributes
+                if extracted and not dt_polys:
                     for bbox_attr in ('dt_polys', 'rec_polys', 'rec_boxes'):
                         raw = getattr(page, bbox_attr, None)
                         if raw is not None and hasattr(raw, '__len__') and len(raw) > 0:
@@ -548,7 +557,7 @@ class InvoiceScanner:
 
                 logger.info(f"  rec_texts={len(rec_texts)}, dt_polys={len(dt_polys)}, extracted={extracted}")
 
-                # ── Strategy 2: plain dict ───────────────────────────────────────
+                # ── Strategy 3: plain dict ───────────────────────────────────────
                 if not extracted and isinstance(page, dict):
                     inner = page.get('res', page)
                     rec_texts  = inner.get('rec_texts',  inner.get('rec_text',  []))
@@ -565,17 +574,6 @@ class InvoiceScanner:
                                     words.append(self._make_word(t.strip(), s, b, np))
                         continue
                     extracted = True
-
-                # ── Strategy 3: attribute access ─────────────────────────────────
-                if not extracted:
-                    rt = getattr(page, 'rec_texts', None) or getattr(page, 'rec_text', None)
-                    rs = getattr(page, 'rec_scores', None) or getattr(page, 'rec_score', None)
-                    dp = getattr(page, 'dt_polys', None)
-                    if rt is not None:
-                        rec_texts  = rt
-                        rec_scores = rs or []
-                        dt_polys   = dp or []
-                        extracted = True
 
                 # ── Strategy 4: __getitem__ with string keys ──────────────────────
                 if not extracted and hasattr(page, '__getitem__'):
