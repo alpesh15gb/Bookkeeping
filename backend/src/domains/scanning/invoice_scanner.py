@@ -506,39 +506,39 @@ class InvoiceScanner:
                 extracted = False
 
                 # ── Strategy 1 (Preferred): Direct Attribute Access (Aligned) ──────
-                rt = getattr(page, 'rec_texts', None) or getattr(page, 'rec_text', None)
-                dp = getattr(page, 'dt_polys', None) or getattr(page, 'rec_polys', None) or getattr(page, 'rec_boxes', None)
-                rs = getattr(page, 'rec_scores', None) or getattr(page, 'rec_score', None)
+                # ── Strategy 1 (Preferred): Dictionary-style or Attribute Access ──────
+                rt = None
+                dp = None
+                rs = None
+                
+                if hasattr(page, '__getitem__'):
+                    try:
+                        rt = page['rec_texts']
+                    except (KeyError, TypeError):
+                        pass
+                    try:
+                        dp = page['dt_polys']
+                    except (KeyError, TypeError):
+                        pass
+                    try:
+                        rs = page['rec_scores']
+                    except (KeyError, TypeError):
+                        pass
 
-                # DIAGNOSTIC LOGGING
-                logger.info(f"DIAG: rt is not None: {rt is not None}, dp is not None: {dp is not None}, rs is not None: {rs is not None}")
-                try:
-                    logger.info(f"DIAG: raw access page.rec_texts: {page.rec_texts[:3] if page.rec_texts else 'empty'}")
-                except Exception as e:
-                    logger.error(f"DIAG: error accessing page.rec_texts: {e}", exc_info=True)
-
-                try:
-                    logger.info(f"DIAG: raw access page.dt_polys: {page.dt_polys[:3] if page.dt_polys else 'empty'}")
-                except Exception as e:
-                    logger.error(f"DIAG: error accessing page.dt_polys: {e}", exc_info=True)
-
-                if rt is not None:
-                    logger.info(f"DIAG: len(rt) = {len(rt)}, type(rt) = {type(rt)}")
-                    if len(rt) > 0:
-                        logger.info(f"DIAG: first rt: {rt[0]}")
-                if dp is not None:
-                    logger.info(f"DIAG: len(dp) = {len(dp)}, type(dp) = {type(dp)}")
-                    if len(dp) > 0:
-                        logger.info(f"DIAG: first dp: {dp[0]}")
-                if rs is not None:
-                    logger.info(f"DIAG: len(rs) = {len(rs)}, type(rs) = {type(rs)}")
+                # Fallback to getattr if dict-style access failed or was incomplete
+                if rt is None:
+                    rt = getattr(page, 'rec_texts', None) or getattr(page, 'rec_text', None)
+                if dp is None:
+                    dp = getattr(page, 'dt_polys', None) or getattr(page, 'rec_polys', None) or getattr(page, 'rec_boxes', None)
+                if rs is None:
+                    rs = getattr(page, 'rec_scores', None) or getattr(page, 'rec_score', None)
 
                 if rt is not None and dp is not None and len(rt) > 0 and len(rt) == len(dp):
                     rec_texts  = rt
                     rec_scores = rs or []
                     dt_polys   = dp
                     extracted = True
-                    logger.info(f"Direct Attribute Access succeeded: {len(rec_texts)} aligned entries.")
+                    logger.info(f"Direct aligned access succeeded: {len(rec_texts)} entries.")
 
                 # ── Strategy 2: .json() method (PaddleOCR 3.x / PaddleX) ───────
                 # NOTE: rec_texts/rec_scores survive JSON fine (strings/floats).
