@@ -20,18 +20,16 @@ class _VyaparImportViewState extends State<VyaparImportView> {
   String? _selectedFileName;
 
   Future<void> _pickAndImport() async {
-    // Step 1: Pick the .vyb file using the native file picker
     FilePickerResult? result;
     try {
       result = await FilePicker.platform.pickFiles(
-        type: FileType.custom,
-        allowedExtensions: ['vyb'],
+        type: FileType.any,
         allowMultiple: false,
         dialogTitle: 'Select Vyapar Backup File (.vyb)',
-        withData: true, // load bytes directly (works on all platforms)
+        withData: true,
       );
     } catch (e) {
-      setState(() => _error = 'Could not open file picker: $e');
+      if (mounted) setState(() => _error = 'Could not open file picker: $e');
       return;
     }
 
@@ -39,91 +37,64 @@ class _VyaparImportViewState extends State<VyaparImportView> {
 
     final picked = result.files.first;
 
-    // Validate extension
     if (!(picked.name.toLowerCase().endsWith('.vyb'))) {
-      setState(() => _error = 'Please select a valid .vyb file from Vyapar.');
+      if (mounted) setState(() => _error = 'Please select a valid .vyb file from Vyapar.');
       return;
     }
 
     final fileBytes = picked.bytes;
-    final filePath = picked.path;
-
-    if (fileBytes == null && filePath == null) {
-      setState(() => _error = 'Could not read the selected file.');
+    if (fileBytes == null || fileBytes.isEmpty) {
+      if (mounted) setState(() => _error = 'Could not read the selected file.');
       return;
     }
 
-    setState(() {
-      _isImporting = true;
-      _error = null;
-      _result = null;
-      _selectedFileName = picked.name;
-    });
+    if (mounted) {
+      setState(() {
+        _isImporting = true;
+        _error = null;
+        _result = null;
+        _selectedFileName = picked.name;
+      });
+    }
 
     try {
       final uri = Uri.parse('${ApiClient.baseUrl}/import/vyapar');
       final request = http.MultipartRequest('POST', uri);
 
-      // Add auth headers directly (bypass ApiClient timeout for heavy imports)
-      if (ApiClient.accessToken != null) {
-        request.headers['Authorization'] = 'Bearer ${ApiClient.accessToken}';
-      }
-      if (ApiClient.tenantId != null) {
-        request.headers['X-Tenant-ID'] = ApiClient.tenantId!;
-      }
+      request.headers['Authorization'] = 'Bearer ${ApiClient.accessToken ?? ''}';
+      request.headers['X-Tenant-ID'] = ApiClient.tenantId ?? '';
 
-      // Use bytes if available (mobile/web), otherwise use path (desktop)
-      if (fileBytes != null) {
-        request.files.add(
-          http.MultipartFile.fromBytes(
-            'file',
-            fileBytes,
-            filename: picked.name,
-          ),
-        );
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: picked.name,
+      ));
+
+      final streamed = await ApiClient().send(request);
+      final response = await http.Response.fromStream(streamed);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _isImporting = false;
+          _result = jsonDecode(response.body);
+        });
+      } else if (response.statusCode == 401) {
+        setState(() {
+          _isImporting = false;
+          _error = 'Session expired. Please log in again.';
+        });
       } else {
-        request.files.add(
-          await http.MultipartFile.fromPath(
-            'file',
-            filePath!,
-            filename: picked.name,
-          ),
-        );
-      }
-
-      // Use raw http client with longer timeout (import can be heavy)
-      final client = http.Client();
-      try {
-        final streamed = await client.send(request).timeout(
-          const Duration(seconds: 120),
-        );
-        final response = await http.Response.fromStream(streamed);
-
-        if (!mounted) return;
-
-        if (response.statusCode == 200) {
-          setState(() {
-            _isImporting = false;
-            _result = jsonDecode(response.body);
-          });
-        } else if (response.statusCode == 401) {
-          setState(() {
-            _isImporting = false;
-            _error = 'Session expired. Please log in again.';
-          });
-        } else {
-          String msg = 'Import failed (${response.statusCode})';
-          try {
-            final body = jsonDecode(response.body);
-            if (body is Map) msg = body['detail']?.toString() ?? msg;
-          } catch (_) {}
-          setState(() {
-            _isImporting = false;
-            _error = msg;
-          });
-        }
-      } finally {
-        client.close();
+        String msg = 'Import failed (${response.statusCode})';
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map) msg = body['detail']?.toString() ?? msg;
+        } catch (_) {}
+        setState(() {
+          _isImporting = false;
+          _error = msg;
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -177,20 +148,17 @@ class _VyaparImportViewState extends State<VyaparImportView> {
               ),
             ),
             const SizedBox(height: 20),
-            const Text('Importing from Vyapar…', style: AppTextStyles.h3),
+            const Text('Importing from Vyapar\u2026', style: AppTextStyles.h3),
             const SizedBox(height: 6),
             Text(
-              'Reading contacts, products, invoices and bills.\nThis may take a moment for large backups.',
+              'Reading contacts, products, invoices, payments and more.\nThis may take a moment for large backups.',
               style: AppTextStyles.bodySmall,
               textAlign: TextAlign.center,
             ),
             if (_selectedFileName != null) ...[
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 8,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                 decoration: BoxDecoration(
                   color: AppColors.bgSurface,
                   borderRadius: AppRadius.card,
@@ -199,11 +167,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(
-                      Icons.folder_zip_outlined,
-                      size: 16,
-                      color: AppColors.textMuted,
-                    ),
+                    const Icon(Icons.folder_zip_outlined, size: 16, color: AppColors.textMuted),
                     const SizedBox(width: 8),
                     Text(_selectedFileName!, style: AppTextStyles.caption),
                   ],
@@ -234,8 +198,6 @@ class _VyaparImportViewState extends State<VyaparImportView> {
       padding: AppSpacing.pagePadding,
       children: [
         const SizedBox(height: 40),
-
-        // Success banner
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -252,11 +214,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                   color: AppColors.success.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(22),
                 ),
-                child: const Icon(
-                  Icons.check_circle_outline,
-                  color: AppColors.success,
-                  size: 24,
-                ),
+                child: const Icon(Icons.check_circle_outline, color: AppColors.success, size: 24),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -275,111 +233,45 @@ class _VyaparImportViewState extends State<VyaparImportView> {
           ),
         ),
         const SizedBox(height: 20),
-
-        // Breakdown card
         AppCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SectionHeader(title: 'IMPORT SUMMARY'),
               const SizedBox(height: 4),
-              _summaryRow(
-                Icons.people_outline,
-                'Contacts',
-                r['contacts_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.inventory_2_outlined,
-                'Products',
-                r['products_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.receipt_outlined,
-                'Sales Invoices',
-                r['invoices_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.shopping_bag_outlined,
-                'Purchase Bills',
-                r['bills_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.description_outlined,
-                'Estimates',
-                r['estimates_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.account_balance_wallet_outlined,
-                'Expenses',
-                r['expenses_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.payments_outlined,
-                'Payments',
-                r['payments_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.inventory_outlined,
-                'Stock Entries',
-                r['stock_entries_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.account_balance_outlined,
-                'Opening Balances',
-                r['opening_balances_set'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.link_outlined,
-                'Linked Transactions',
-                r['linked_transactions_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.tune_outlined,
-                'Custom Fields',
-                r['custom_fields_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.location_on_outlined,
-                'Party Addresses',
-                r['party_addresses_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.price_change_outlined,
-                'Party-Item Rates',
-                r['party_item_rates_imported'] ?? 0,
-              ),
-              _summaryRow(
-                Icons.document_scanner_outlined,
-                'E-Invoice/E-Way Data',
-                r['e_invoice_data_imported'] ?? 0,
-              ),
+              _summaryRow(Icons.people_outline, 'Contacts', r['contacts_imported'] ?? 0),
+              _summaryRow(Icons.inventory_2_outlined, 'Products', r['products_imported'] ?? 0),
+              _summaryRow(Icons.receipt_outlined, 'Sales Invoices', r['invoices_imported'] ?? 0),
+              _summaryRow(Icons.shopping_bag_outlined, 'Purchase Bills', r['bills_imported'] ?? 0),
+              _summaryRow(Icons.description_outlined, 'Estimates', r['estimates_imported'] ?? 0),
+              _summaryRow(Icons.account_balance_wallet_outlined, 'Expenses', r['expenses_imported'] ?? 0),
+              _summaryRow(Icons.payments_outlined, 'Payments', r['payments_imported'] ?? 0),
+              _summaryRow(Icons.inventory_outlined, 'Stock Entries', r['stock_entries_imported'] ?? 0),
+              _summaryRow(Icons.account_balance_outlined, 'Opening Balances', r['opening_balances_set'] ?? 0),
+              _summaryRow(Icons.link_outlined, 'Linked Transactions', r['linked_transactions_imported'] ?? 0),
+              _summaryRow(Icons.tune_outlined, 'Custom Fields', r['custom_fields_imported'] ?? 0),
+              _summaryRow(Icons.location_on_outlined, 'Party Addresses', r['party_addresses_imported'] ?? 0),
+              _summaryRow(Icons.price_change_outlined, 'Party-Item Rates', r['party_item_rates_imported'] ?? 0),
+              _summaryRow(Icons.receipt_long_outlined, 'E-Invoice/E-Way', r['e_invoice_data_imported'] ?? 0),
               if (errors.isNotEmpty) ...[
                 const SizedBox(height: 12),
                 const Divider(),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(
-                      Icons.warning_amber_outlined,
-                      size: 16,
-                      color: AppColors.warning,
-                    ),
+                    const Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.warning),
                     const SizedBox(width: 6),
                     Text(
                       '${errors.length} Warning(s)',
-                      style: AppTextStyles.label.copyWith(
-                        color: AppColors.warning,
-                      ),
+                      style: AppTextStyles.label.copyWith(color: AppColors.warning),
                     ),
                   ],
                 ),
                 const SizedBox(height: 6),
-                ...errors.map(
-                  (e) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: Text('• $e', style: AppTextStyles.caption),
-                  ),
-                ),
+                ...errors.map((e) => Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text('\u2022 $e', style: AppTextStyles.caption),
+                )),
               ],
             ],
           ),
@@ -440,11 +332,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
             ),
             child: Row(
               children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: AppColors.error,
-                  size: 20,
-                ),
+                const Icon(Icons.error_outline, color: AppColors.error, size: 20),
                 const SizedBox(width: 12),
                 Expanded(child: Text(_error!, style: AppTextStyles.bodySmall)),
                 TextButton(
@@ -455,8 +343,6 @@ class _VyaparImportViewState extends State<VyaparImportView> {
             ),
           ),
         ],
-
-        // Hero illustration
         Center(
           child: Container(
             width: 80,
@@ -465,100 +351,42 @@ class _VyaparImportViewState extends State<VyaparImportView> {
               color: AppColors.brandNavy.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(40),
             ),
-            child: const Icon(
-              Icons.file_upload_outlined,
-              size: 40,
-              color: AppColors.brandNavy,
-            ),
+            child: const Icon(Icons.file_upload_outlined, size: 40, color: AppColors.brandNavy),
           ),
         ),
         const SizedBox(height: 20),
-        const Center(
-          child: Text('Import from Vyapar', style: AppTextStyles.h2),
-        ),
+        const Center(child: Text('Import from Vyapar', style: AppTextStyles.h2)),
         const SizedBox(height: 8),
         const Center(
           child: Text(
-            'Select a .vyb backup file exported from Vyapar to import\nyour contacts, products, sales invoices, purchase bills,\nand expenses into this app.',
+            'Select a .vyb backup file exported from Vyapar to import\nyour contacts, products, invoices, payments, stock and more.',
             style: AppTextStyles.bodySmall,
             textAlign: TextAlign.center,
           ),
         ),
         const SizedBox(height: 32),
-
-        // What gets imported info card
         AppCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SectionHeader(title: 'WHAT WILL BE IMPORTED'),
               const SizedBox(height: 4),
-              _infoRow(
-                Icons.people_outline,
-                'Contacts',
-                'Customers and vendors with GSTIN, address and phone',
-              ),
-              _infoRow(
-                Icons.inventory_2_outlined,
-                'Products',
-                'Items with HSN code, sale price, stock quantity',
-              ),
-              _infoRow(
-                Icons.receipt_outlined,
-                'Sales Invoices',
-                'All sale transactions with line items and GST breakdown',
-              ),
-              _infoRow(
-                Icons.shopping_bag_outlined,
-                'Purchase Bills',
-                'All purchase transactions with line items and GST',
-              ),
-              _infoRow(
-                Icons.description_outlined,
-                'Estimates',
-                'Quotations and estimates with line items and status tracking',
-              ),
-              _infoRow(
-                Icons.account_balance_wallet_outlined,
-                'Expenses',
-                'Business expenses with category mapping',
-              ),
-              _infoRow(
-                Icons.payments_outlined,
-                'Payments',
-                'Payment records linked to invoices and bills',
-              ),
-              _infoRow(
-                Icons.inventory_outlined,
-                'Stock',
-                'Opening stock quantities and adjustments',
-              ),
-              _infoRow(
-                Icons.account_balance_outlined,
-                'Opening Balances',
-                'Party outstanding balances from Vyapar',
-              ),
-              _infoRow(
-                Icons.link_outlined,
-                'Linked Transactions',
-                'Quotation to invoice conversion links',
-              ),
-              _infoRow(
-                Icons.tune_outlined,
-                'Custom Fields',
-                'UDF definitions and per-transaction values',
-              ),
-              _infoRow(
-                Icons.location_on_outlined,
-                'Party Addresses',
-                'Full billing addresses with city, state, pincode',
-              ),
+              _infoRow(Icons.people_outline, 'Contacts', 'Customers and vendors with GSTIN, address and phone'),
+              _infoRow(Icons.inventory_2_outlined, 'Products', 'Items with HSN code, sale price, stock quantity'),
+              _infoRow(Icons.receipt_outlined, 'Sales Invoices', 'All sale transactions with line items and GST'),
+              _infoRow(Icons.shopping_bag_outlined, 'Purchase Bills', 'All purchase transactions with line items and GST'),
+              _infoRow(Icons.description_outlined, 'Estimates', 'Quotations with line items and status tracking'),
+              _infoRow(Icons.account_balance_wallet_outlined, 'Expenses', 'Business expenses with category mapping'),
+              _infoRow(Icons.payments_outlined, 'Payments', 'Payment records linked to invoices and bills'),
+              _infoRow(Icons.inventory_outlined, 'Stock', 'Opening stock quantities and adjustments'),
+              _infoRow(Icons.account_balance_outlined, 'Opening Balances', 'Party outstanding balances'),
+              _infoRow(Icons.link_outlined, 'Linked Transactions', 'Quotation to invoice conversion links'),
+              _infoRow(Icons.tune_outlined, 'Custom Fields', 'UDF definitions and per-transaction values'),
+              _infoRow(Icons.location_on_outlined, 'Party Addresses', 'Full billing addresses'),
             ],
           ),
         ),
         const SizedBox(height: 24),
-
-        // File picker button
         ActionButton(
           label: 'Browse & Select .vyb File',
           tier: ActionTier.safe,
