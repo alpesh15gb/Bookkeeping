@@ -4,9 +4,12 @@ SQLAlchemy engine, session factory, and tenant context variable.
 All connection config comes from src.core.config (never hardcoded).
 """
 import contextvars
+import logging
 from sqlalchemy import create_engine, text, event
 from sqlalchemy.orm import sessionmaker, Session, declarative_base
 from sqlalchemy.pool import QueuePool
+
+logger = logging.getLogger(__name__)
 
 from src.core.config import settings
 
@@ -84,6 +87,7 @@ def ensure_vyapar_import_columns():
     dialect = engine.dialect.name
 
     migrations = [
+        ("expense_categories", "deleted_at", "ALTER TABLE expense_categories ADD COLUMN deleted_at TIMESTAMPTZ"),
         ("contacts", "opening_balance", "ALTER TABLE contacts ADD COLUMN opening_balance NUMERIC(15,4) NOT NULL DEFAULT 0"),
         ("contacts", "custom_fields", "ALTER TABLE contacts ADD COLUMN custom_fields JSONB NOT NULL DEFAULT '{}'"),
         ("products", "party_item_rates", "ALTER TABLE products ADD COLUMN party_item_rates JSONB NOT NULL DEFAULT '{}'"),
