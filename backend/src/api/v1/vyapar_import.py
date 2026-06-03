@@ -422,7 +422,7 @@ def import_vyapar_backup(
             item_gst_rate = group_rate_map.get(item_tax_id or 0, 18.0) if item_tax_id else 18.0
 
             # item_type: 1=product, 2=service
-            product_type = "SERVICE" if (i["item_type"] == 2 or purchase_price == 0) else "GOODS"
+            product_type = "SERVICE" if i["item_type"] == 2 else "GOODS"
 
             hsn = (i["item_hsn_sac_code"] or "").strip() or "998313"
 
@@ -969,56 +969,192 @@ def import_vyapar_backup(
 
                     summary.bills_imported += 1
 
-            # ── EXPENSES (type=28) ──────────────────────────────────────────
-            elif txn_type == 28:
-                cash_amt = float(txn["txn_cash_amount"] or 0)
-                bal_amt = float(txn["txn_balance_amount"] or 0)
-                total_expense = cash_amt + bal_amt
-                if total_expense <= 0:
-                    continue
-
-                expense_cat_id = None
-                if name_id and name_id in vy_expense_cat_names:
-                    cat_key = vy_expense_cat_names[name_id].lower()
-                    expense_cat_id = expense_cat_map.get(cat_key)
-                if not expense_cat_id and expense_cat_map:
-                    expense_cat_id = next(iter(expense_cat_map.values()))
-
-                if not expense_cat_id:
-                    summary.errors.append(
-                        f"Expense txn#{txn_id} on {txn_date} skipped — no category"
-                    )
-                    continue
-
-                exp_num = ref_number or f"VYP-EXP-{txn_id}"
-                existing_exp = (
-                    db.query(Expense)
+            # ── PURCHASE BILLS (type=28) ──────────────────────────────────────
+            elif txn_type == 28 and contact_id_str:
+                bill_number = _gen_inv_number(ref_number, "BILL")
+                existing_bill = (
+                    db.query(Bill)
                     .filter(
-                        Expense.tenant_id == tenant_id,
-                        Expense.expense_number == exp_num,
-                        Expense.deleted_at == None,
+                        Bill.tenant_id == tenant_id,
+                        Bill.bill_number == bill_number,
+                        Bill.deleted_at == None,
                     )
                     .first()
                 )
-                if existing_exp:
+                if existing_bill:
                     continue
 
-                expense = Expense(
+                cash_amt = float(txn["txn_cash_amount"] or 0)
+                bal_amt = float(txn["txn_balance_amount"] or 0)
+                total_from_txn = cash_amt + bal_amt
+
+                subtotal = Decimal("0")
+                total_cgst = Decimal("0")
+                total_sgst = Decimal("0")
+                total_igst = Decimal("0")
+                total_val = Decimal("0")
+                discount_total = Decimal("0")
+
+                bill_lines_data = []
+                for vl in txn_lines:
+                    line_total_f = float(vl["total_amount"] or 0)
+                    line_tax_f = float(vl["lineitem_tax_amount"] or 0)
+                    line_disc_f = float(vl["lineitem_discount_amount"] or 0)
+                    qty_f = float(vl["quantity"] or 1)
+                    rate_f = float(vl["priceperunit"] or 0)
+                    line_subtotal_f = line_total_f - line_tax_f
+
+                    line_tax_id = vl["lineitem_tax_id"]
+                    cgst_r, cgst_a, sgst_r, sgst_a, igst_r, igst_a = _split_gst(
+                        line_tax_f, line_tax_id, group_rate_map, is_intrastate
+                    )
+                    total_rate_pct = group_rate_map.get(line_tax_id or 0, 18.0) if line_tax_id else 18.0
+                    hsn = (vl["_hsn"] or "").strip() or "998313"
+
+                    subtotal += Decimal(str(round(max(line_subtotal_f, 0), 2)))
+                    total_cgst += cgst_a
+                    total_sgst += sgst_a
+                    total_igst += igst_a
+                    total_val += Decimal(str(round(line_total_f, 2)))
+                    discount_total += Decimal(str(round(line_disc_f, 2)))
+
+                    product_id = None
+                    if vl["item_id"] and vl["item_id"] in item_map:
+                        try:
+                            product_id = uuid.UUID(item_map[vl["item_id"]])
+                        except Exception:
+                            pass
+
+                    bill_lines_data.append(BillLine(
+                        product_id=product_id,
+                        description=(vl["_item_name"] or "").strip() or "Item",
+                        quantity=Decimal(str(qty_f)),
+                        rate=Decimal(str(round(rate_f, 6))),
+                        discount=Decimal(str(round(line_disc_f, 2))),
+                        subtotal=Decimal(str(round(max(line_subtotal_f, 0), 2))),
+                        hsn_sac=hsn,
+                        gst_rate=Decimal(str(total_rate_pct)),
+                        cgst_rate=cgst_r,
+                        cgst_amount=cgst_a,
+                        sgst_rate=sgst_r,
+                        sgst_amount=sgst_a,
+                        igst_rate=igst_r,
+                        igst_amount=igst_a,
+                        utgst_rate=Decimal("0"),
+                        utgst_amount=Decimal("0"),
+                        cess_rate=Decimal("0"),
+                        cess_amount=Decimal("0"),
+                        total=Decimal(str(round(line_total_f, 2))),
+                    ))
+
+                if not bill_lines_data:
+                    total_val = Decimal(str(round(total_from_txn, 2)))
+                    subtotal = total_val
+                    bill_lines_data.append(BillLine(
+                        product_id=None,
+                        description="Imported Purchase Transaction",
+                        quantity=Decimal("1"),
+                        rate=total_val,
+                        discount=Decimal("0"),
+                        subtotal=total_val,
+                        hsn_sac="998313",
+                        gst_rate=Decimal("18.00"),
+                        cgst_rate=Decimal("9.00"),
+                        cgst_amount=Decimal("0"),
+                        sgst_rate=Decimal("9.00"),
+                        sgst_amount=Decimal("0"),
+                        igst_rate=Decimal("0"),
+                        igst_amount=Decimal("0"),
+                        utgst_rate=Decimal("0"),
+                        utgst_amount=Decimal("0"),
+                        cess_rate=Decimal("0"),
+                        cess_amount=Decimal("0"),
+                        total=total_val,
+                    ))
+
+                amount_paid = Decimal(str(round(cash_amt, 2)))
+                if amount_paid > total_val:
+                    amount_paid = total_val
+                if amount_paid >= total_val:
+                    bill_status = "PAID"
+                elif amount_paid > 0:
+                    bill_status = "PARTIALLY_PAID"
+                else:
+                    bill_status = "UNPAID"
+
+                round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst - discount_total)
+
+                bill = Bill(
                     tenant_id=tenant_id,
-                    expense_number=exp_num,
-                    expense_category_id=uuid.UUID(expense_cat_id),
-                    expense_date=txn_date,
-                    vendor_name=None,
-                    description="Imported from Vyapar",
-                    amount=Decimal(str(round(total_expense, 2))),
-                    total=Decimal(str(round(total_expense, 2))),
-                    status="DRAFT",
+                    contact_id=uuid.UUID(contact_id_str),
+                    bill_number=bill_number,
+                    issue_date=txn_date,
+                    due_date=due_date,
+                    status=bill_status,
+                    subtotal=subtotal,
+                    discount_total=discount_total,
+                    cgst_amount=total_cgst,
+                    sgst_amount=total_sgst,
+                    igst_amount=total_igst,
+                    utgst_amount=Decimal("0"),
+                    cess_amount=Decimal("0"),
+                    round_off=round_off,
+                    total=total_val,
+                    amount_paid=amount_paid,
+                    pos_state_code=origin_state_code,
                 )
-                db.add(expense)
-                summary.expenses_imported += 1
+                db.add(bill)
+                db.flush()
+                bill_map[txn_id] = str(bill.id)
+
+                for line in bill_lines_data:
+                    line.bill_id = bill.id
+                    db.add(line)
+
+                summary.bills_imported += 1
 
             # Other transaction types (payments, credit notes etc.) are
             # informational and don't map directly — skip silently.
+
+        # ── 10b. Fix contact types from transaction data ──────────────────────
+        # Contacts appearing in type=28 (purchase) transactions should be VENDOR or BOTH
+        purchase_name_ids = set()
+        for txn in vy_txns:
+            if txn["txn_type"] == 28 and txn["txn_name_id"]:
+                purchase_name_ids.add(txn["txn_name_id"])
+        for name_id in purchase_name_ids:
+            if name_id in contact_map:
+                try:
+                    c = db.query(Contact).filter(
+                        Contact.id == uuid.UUID(contact_map[name_id])
+                    ).first()
+                    if c and c.contact_type == "CUSTOMER":
+                        c.contact_type = "BOTH"
+                    elif c and c.contact_type != "BOTH":
+                        c.contact_type = "VENDOR"
+                except Exception:
+                    pass
+
+        # ── 10c. Auto-post journal entries for invoices and bills ──────────────
+        from src.domains.accounting.auto_post import auto_post_invoice, auto_post_bill
+        posted_invoices = 0
+        posted_bills = 0
+        for inv_id_str in inv_map.values():
+            try:
+                inv = db.query(Invoice).filter(Invoice.id == uuid.UUID(inv_id_str)).first()
+                if inv and inv.status in ("SENT", "DRAFT"):
+                    auto_post_invoice(db, tenant_id, inv)
+                    posted_invoices += 1
+            except Exception as e:
+                summary.errors.append(f"Auto-post invoice {inv_id_str}: {e}")
+        for bill_id_str in bill_map.values():
+            try:
+                bill = db.query(Bill).filter(Bill.id == uuid.UUID(bill_id_str)).first()
+                if bill and bill.status in ("UNPAID", "DRAFT"):
+                    auto_post_bill(db, tenant_id, bill)
+                    posted_bills += 1
+            except Exception as e:
+                summary.errors.append(f"Auto-post bill {bill_id_str}: {e}")
 
         # ── 11. Import payments from txn_payment_mapping ──────────────────────
         try:
