@@ -1,14 +1,15 @@
 """
 src/domains/scanning/invoice_scanner.py
 
-OCR-based invoice scanner for extracting GST bill fields from images and PDFs.
+OCR-based invoice scanner using PaddleOCR for extracting line items from
+vendor bills / purchase invoices.
 
-New pipeline (simpler, layout-aware):
-  1. Image preprocessing  — deskew, denoise, adaptive threshold
-  2. OCR                  — Single high-quality Tesseract pass + image_to_data
-  3. Layout analysis      — Use word positions to identify header/table/footer regions
-  4. Field extraction     — Extract fields from appropriate regions using regex + position
-  5. Post-processing      — Clean, validate, compute confidence scores
+Pipeline:
+  1. Image preprocessing  — decode, grayscale, deskew, denoise
+  2. OCR                  — PaddleOCR (text detection + recognition)
+  3. Layout analysis      — group words into rows, detect table region
+  4. Line item extraction  — parse table rows into structured items
+  5. Post-processing      — validate amounts, compute confidence
 
 Supports: JPEG, PNG, TIFF (images) + PDF (all pages via pdf2image).
 """
@@ -24,8 +25,19 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Lazy imports
+# Lazy imports — PaddleOCR is heavy; raise clear error only on actual use
 # ---------------------------------------------------------------------------
+
+def _require_paddleocr():
+    try:
+        from paddleocr import PaddleOCR
+        return PaddleOCR
+    except ImportError:
+        raise RuntimeError(
+            "PaddleOCR is required for bill scanning. "
+            "Install it: pip install paddlepaddle paddleocr"
+        )
+
 
 def _require_cv2():
     try:
@@ -35,17 +47,6 @@ def _require_cv2():
         raise RuntimeError(
             "opencv-python-headless is required for bill scanning. "
             "Install it: pip install opencv-python-headless"
-        )
-
-
-def _require_tesseract():
-    try:
-        import pytesseract
-        return pytesseract
-    except ImportError:
-        raise RuntimeError(
-            "pytesseract is required for bill scanning. "
-            "Install it: pip install pytesseract  (also install Tesseract binary)"
         )
 
 
@@ -66,13 +67,40 @@ def _require_pil():
 
 
 # ---------------------------------------------------------------------------
-# Regex patterns
+# Regex patterns for line item parsing
 # ---------------------------------------------------------------------------
 
 _RE_GSTIN = re.compile(
     r'\b(\d{2}[A-Z]{5}\d{4}[A-Z]{1}\d{1}Z[A-Z\d]{1})\b',
     re.IGNORECASE,
 )
+
+_RE_DATE_DMY = re.compile(r'\b(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})\b')
+_RE_DATE_YMD = re.compile(r'\b(\d{4})[/\-\.](\d{2})[/\-\.](\d{2})\b')
+
+_RE_AMOUNT = re.compile(
+    r'(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)',
+    re.IGNORECASE,
+)
+
+_RE_TOTAL_KEYWORDS = re.compile(
+    r'(?:grand\s*total|total\s*amount|amount\s*payable|net\s*(?:amount|payable|total)|'
+    r'invoice\s*total|bill\s*total|total\s*payable|amount\s*due|total\s*due|'
+    r'bill\s*amount|net\s*amount|final\s*amount|total\s*value|amount)',
+    re.IGNORECASE,
+)
+
+_RE_SUBTOTAL_KEYWORDS = re.compile(
+    r'(?:taxable\s*(?:amount|value)|subtotal|sub\s*total|value\s*before\s*tax|'
+    r'taxable\s*value|total\s*before\s*tax|amount\s*before\s*tax)',
+    re.IGNORECASE,
+)
+
+_RE_CGST = re.compile(r'cgst\s*(?:@\s*[\d.]+%?)?\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)', re.IGNORECASE)
+_RE_SGST = re.compile(r'sgst\s*(?:@\s*[\d.]+%?)?\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)', re.IGNORECASE)
+_RE_IGST = re.compile(r'igst\s*(?:@\s*[\d.]+%?)?\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)', re.IGNORECASE)
+
+_RE_GST_RATE = re.compile(r'(\d+(?:\.\d+)?)\s*%')
 
 _RE_INV_NUMBER = re.compile(
     r'(?:invoice\s*(?:no|number|#|num|\.|:)?\s*|bill\s*(?:no|number|#)?\s*|'
@@ -81,72 +109,6 @@ _RE_INV_NUMBER = re.compile(
     r'([A-Z0-9/\-_\.]{3,})',
     re.IGNORECASE,
 )
-
-_RE_INV_NUMBER_FALLBACK = re.compile(
-    r'(?:invoice|bill)[^\n]{0,60}?([A-Z]?\d{3,}[A-Z0-9/\-_]*)',
-    re.IGNORECASE,
-)
-
-_RE_DATE_DMY = re.compile(r'\b(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})\b')
-_RE_DATE_YMD = re.compile(r'\b(\d{4})[/\-\.](\d{2})[/\-\.](\d{2})\b')
-_RE_DATE_WORDS = re.compile(
-    r'\b(\d{1,2})\s*(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|'
-    r'may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|'
-    r'nov(?:ember)?|dec(?:ember)?)\s*(\d{4})\b',
-    re.IGNORECASE,
-)
-
-_MONTH_MAP = {
-    'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
-    'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
-}
-
-_RE_AMOUNT = re.compile(
-    r'(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)',
-    re.IGNORECASE,
-)
-
-_RE_TOTAL = re.compile(
-    r'(?:grand\s*total|total\s*amount|amount\s*payable|net\s*(?:amount|payable|total)|'
-    r'invoice\s*total|bill\s*total|net\s*payable|total\s*payable|'
-    r'amount\s*due|total\s*due|bill\s*amount|net\s*amount|'
-    r'final\s*amount|total\s*value|amount)\s*[:\-]?\s*'
-    r'(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)',
-    re.IGNORECASE,
-)
-
-_RE_SUBTOTAL = re.compile(
-    r'(?:taxable\s*(?:amount|value)|subtotal|sub\s*total|value\s*before\s*tax|'
-    r'taxable\s*value|total\s*before\s*tax|amount\s*before\s*tax)'
-    r'\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)',
-    re.IGNORECASE,
-)
-
-_RE_CGST = re.compile(
-    r'cgst\s*(?:@\s*[\d.]+%?)?\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)',
-    re.IGNORECASE,
-)
-_RE_SGST = re.compile(
-    r'sgst\s*(?:@\s*[\d.]+%?)?\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)',
-    re.IGNORECASE,
-)
-_RE_IGST = re.compile(
-    r'igst\s*(?:@\s*[\d.]+%?)?\s*[:\-]?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{2})?)',
-    re.IGNORECASE,
-)
-
-_RE_PO = re.compile(
-    r'(?:p\.?o\.?\s*(?:no|number|#)[.:]?\s*|purchase\s*order\s*(?:no|#)[.:]?\s*)'
-    r'([A-Z0-9/\-_]+)',
-    re.IGNORECASE,
-)
-
-_RE_DUE = re.compile(
-    r'(?:due\s*date|payment\s*due)[\s:]+([0-9/\-\.A-Za-z]+)',
-    re.IGNORECASE,
-)
-
-_RE_GST_RATE = re.compile(r'(\d+(?:\.\d+)?)\s*%')
 
 _RE_COMPANY_SUFFIX = re.compile(
     r'\b(pvt\s+ltd|private\s+limited|ltd|limited|llp|'
@@ -160,12 +122,27 @@ _RE_COMPANY_SUFFIX = re.compile(
 _RE_VENDOR_SKIP = re.compile(
     r'^(?:tax|gst|invoice|bill|date|gstin|pan|address|phone|mob|tel|fax|email|'
     r'original|duplicate|copy|for|buyer|supplier|vendor|seller|'
-    r'ship|to|bill|to|from|qty|quantity|rate|amount|total|subtotal|'
-    r'cgst|sgst|igst|tax|hsn|sr|no|item|description|particulars)$',
+    r'ship|to|from|qty|quantity|rate|amount|total|subtotal|'
+    r'cgst|sgst|igst|hsn|sr|no|item|description|particulars|'
+    r'sl\.?\s*no|s\.?\s*no|sr\.?\s*no|hsn\/sac|uom|unit)$',
     re.IGNORECASE,
 )
 
-_RE_OCR_NOISE = re.compile(r'[^\w\s\d.,/\-₹@#:&\(\)\[\]\{\}%*+=_]')
+# Words that indicate a table header row
+_RE_TABLE_HEADER = re.compile(
+    r'\b(?:description|item|particulars|goods|product|hsn|sac|'
+    r'qty|quantity|rate|amount|tax|gst|sr\.?\s*no|sl\.?\s*no|'
+    r'uom|unit|disc|discount)\b',
+    re.IGNORECASE,
+)
+
+# Words that indicate totals/footer region
+_RE_TABLE_FOOTER = re.compile(
+    r'\b(?:subtotal|total|taxable|cgst|sgst|igst|cess|'
+    r'amount\s*payable|grand\s*total|round\s*off|discount)\b',
+    re.IGNORECASE,
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -188,7 +165,7 @@ def _parse_date(text: str) -> Optional[str]:
     if not text:
         return None
     text = text.strip()
-    
+
     m = _RE_DATE_DMY.search(text)
     if m:
         d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
@@ -207,17 +184,6 @@ def _parse_date(text: str) -> Optional[str]:
             except ValueError:
                 pass
 
-    m = _RE_DATE_WORDS.search(text)
-    if m:
-        d = int(m.group(1))
-        mo = _MONTH_MAP.get(m.group(2)[:3].lower(), 0)
-        y = int(m.group(3))
-        if 1 <= d <= 31 and mo and 2000 <= y <= 2099:
-            try:
-                return date(y, mo, d).isoformat()
-            except ValueError:
-                pass
-
     return None
 
 
@@ -231,29 +197,7 @@ def _extract_all_dates(text: str) -> List[str]:
         d = _parse_date(m.group(0))
         if d and d not in dates:
             dates.append(d)
-    for m in _RE_DATE_WORDS.finditer(text):
-        d = _parse_date(m.group(0))
-        if d and d not in dates:
-            dates.append(d)
     return sorted(set(dates))
-
-
-def _clean_ocr_text(text: str) -> str:
-    """Remove common OCR garbage characters."""
-    # Remove control chars and weird symbols
-    text = re.sub(r'[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]', '', text)
-    # Remove lines that are just noise
-    lines = []
-    for line in text.splitlines():
-        stripped = line.strip()
-        if len(stripped) < 1:
-            continue
-        # Skip lines that are mostly non-alphanumeric garbage
-        alpha_num_count = sum(1 for c in stripped if c.isalnum() or c in '.,/-₹')
-        if alpha_num_count < len(stripped) * 0.3 and len(stripped) < 10:
-            continue
-        lines.append(line)
-    return '\n'.join(lines)
 
 
 # ---------------------------------------------------------------------------
@@ -271,45 +215,28 @@ def _preprocess_image(image_bytes: bytes):
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = _deskew(gray)
-    
-    # Denoise while preserving edges
     denoised = cv2.bilateralFilter(gray, 11, 17, 17)
-    
-    # Enhance contrast
-    enhanced = cv2.convertScaleAbs(denoised, alpha=1.3, beta=10)
-    
-    # Upscale 1.5x for better recognition (2x was too much, creates noise)
-    h, w = enhanced.shape
-    resized = cv2.resize(enhanced, (int(w * 1.5), int(h * 1.5)), interpolation=cv2.INTER_CUBIC)
-    
-    # Adaptive threshold
-    binary = cv2.adaptiveThreshold(
-        resized, 255,
-        cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-        cv2.THRESH_BINARY, 13, 7,
-    )
-    
-    final = cv2.medianBlur(binary, 3)
-    return final
+    enhanced = cv2.convertScaleAbs(denoised, alpha=1.2, beta=8)
+    return enhanced
 
 
 def _deskew(gray):
     cv2 = _require_cv2()
     np = _require_numpy()
-    
+
     coords = np.column_stack(np.where(gray < 255))
     if len(coords) < 100:
         return gray
-    
+
     angle = cv2.minAreaRect(coords)[-1]
     if angle < -45:
         angle = -(90 + angle)
     else:
         angle = -angle
-    
+
     if abs(angle) < 0.5:
         return gray
-    
+
     (h, w) = gray.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
@@ -337,65 +264,27 @@ def _pdf_to_image_bytes(pdf_bytes: bytes, page: int = 1) -> bytes:
 
 
 # ---------------------------------------------------------------------------
-# Layout-aware word data
-# ---------------------------------------------------------------------------
-
-def _build_word_data(structured_data: dict) -> List[Dict]:
-    """Convert pytesseract image_to_data dict into a clean list of word dicts."""
-    words = []
-    n = len(structured_data.get("text", []))
-    for i in range(n):
-        text = structured_data["text"][i].strip()
-        conf = int(structured_data["conf"][i])
-        if not text or conf < 15:
-            continue
-        words.append({
-            "text": text,
-            "conf": conf,
-            "x": structured_data["left"][i],
-            "y": structured_data["top"][i],
-            "w": structured_data["width"][i],
-            "h": structured_data["height"][i],
-            "line_num": structured_data["line_num"][i],
-            "block_num": structured_data["block_num"][i],
-            "par_num": structured_data["par_num"][i],
-        })
-    return words
-
-
-def _group_words_into_lines(words: List[Dict]) -> Dict[int, List[Dict]]:
-    """Group words by line_num, sort by x within each line."""
-    lines_dict = {}
-    for w in words:
-        ln = w["line_num"]
-        if ln not in lines_dict:
-            lines_dict[ln] = []
-        lines_dict[ln].append(w)
-    for ln in lines_dict:
-        lines_dict[ln].sort(key=lambda w: w["x"])
-    return lines_dict
-
-
-def _get_region_bounds(words: List[Dict]) -> Tuple[int, int, int, int]:
-    """Return (min_x, min_y, max_x, max_y) for a set of words."""
-    if not words:
-        return 0, 0, 0, 0
-    min_x = min(w["x"] for w in words)
-    min_y = min(w["y"] for w in words)
-    max_x = max(w["x"] + w["w"] for w in words)
-    max_y = max(w["y"] + w["h"] for w in words)
-    return min_x, min_y, max_x, max_y
-
-
-def _line_text(words: List[Dict]) -> str:
-    return " ".join(w["text"] for w in words)
-
-
-# ---------------------------------------------------------------------------
-# Main scanner
+# PaddleOCR-based scanner
 # ---------------------------------------------------------------------------
 
 class InvoiceScanner:
+    """
+    Stateless invoice scanner using PaddleOCR.
+
+    Focuses on extracting line items from the invoice table.
+    Other fields (vendor name, GSTIN, dates) are extracted opportunistically
+    but the primary goal is line item extraction.
+    """
+
+    def __init__(self):
+        PaddleOCR = _require_paddleocr()
+        self._ocr = PaddleOCR(
+            use_angle_cls=True,
+            lang='en',
+            show_log=False,
+            use_gpu=False,
+        )
+
     def scan(self, file_bytes: bytes, filename: str = "", confidence_threshold: float = 0.3) -> dict:
         warnings: list[str] = []
 
@@ -418,75 +307,47 @@ class InvoiceScanner:
             logger.error(f"Image preprocessing failed: {e}")
             return self._empty_result([f"Image could not be processed: {e}"])
 
-        pytesseract = _require_tesseract()
-        Image = _require_pil()
-        cv2 = _require_cv2()
-
-        pil_img = Image.fromarray(processed)
-        img_h, img_w = processed.shape[:2]
-
-        # ── 3. Single high-quality OCR pass ────────────────────────────
-        # PSM 6 = uniform block of text (best for documents)
-        # OEM 3 = default engine mode (LSTM + legacy)
-        raw_text = ""
+        # ── 3. Run PaddleOCR ───────────────────────────────────────────
         try:
-            raw_text = pytesseract.image_to_string(
-                pil_img,
-                config="--psm 6 --oem 3 -l eng"
-            )
+            import numpy as np
+            cv2 = _require_cv2()
+            Image = _require_pil()
+
+            # PaddleOCR expects a numpy array or file path
+            # Convert grayscale back to 3-channel for PaddleOCR
+            if len(processed.shape) == 2:
+                ocr_input = cv2.cvtColor(processed, cv2.COLOR_GRAY2RGB)
+            else:
+                ocr_input = processed
+
+            result = self._ocr.ocr(ocr_input, cls=True)
         except Exception as e:
-            logger.error(f"OCR failed: {e}")
+            logger.error(f"PaddleOCR failed: {e}")
             return self._empty_result([f"OCR engine error: {e}"])
 
-        if not raw_text.strip():
-            return self._empty_result(["OCR produced no text — check image quality or Tesseract installation."])
+        if not result or not result[0]:
+            return self._empty_result(["OCR produced no text — check image quality."])
 
-        # Clean OCR noise
-        raw_text = _clean_ocr_text(raw_text)
-        lines = [l.strip() for l in raw_text.splitlines() if l.strip()]
+        # ── 4. Parse OCR results into words with positions ─────────────
+        words = self._parse_ocr_result(result)
 
-        # ── 4. Structured data for layout ──────────────────────────────
-        words = []
-        lines_dict = {}
-        try:
-            structured_data = pytesseract.image_to_data(
-                pil_img,
-                config="--psm 6 -l eng",
-                output_type=pytesseract.Output.DICT
-            )
-            words = _build_word_data(structured_data)
-            lines_dict = _group_words_into_lines(words)
-        except Exception as e:
-            logger.debug(f"Structured OCR failed: {e}")
+        if not words:
+            return self._empty_result(["No text detected in image."])
 
         # ── 5. Layout analysis ─────────────────────────────────────────
-        # Divide page into regions using Y coordinates
-        header_words = [w for w in words if w["y"] < img_h * 0.30]
-        table_words = [w for w in words if img_h * 0.25 <= w["y"] <= img_h * 0.75]
-        footer_words = [w for w in words if w["y"] > img_h * 0.70]
-
-        header_text = " ".join(w["text"] for w in header_words)
-        footer_text = " ".join(w["text"] for w in footer_words)
+        img_h = processed.shape[0]
+        lines_dict = self._group_words_into_lines(words)
 
         # ── 6. Extract fields ──────────────────────────────────────────
-        result = self._extract_fields(
-            raw_text=raw_text,
-            lines=lines,
-            words=words,
-            lines_dict=lines_dict,
-            header_text=header_text,
-            footer_text=footer_text,
-            img_h=img_h,
-            warnings=warnings,
-        )
+        result_data = self._extract_fields(words, lines_dict, img_h, warnings)
 
         # ── 7. Confidence scoring ─────────────────────────────────────
-        scores = _compute_confidence(result)
+        scores = _compute_confidence(result_data)
         found = sum(1 for v in scores.values() if v > 0)
         overall = round(found / max(len(scores), 1), 2)
-        result["confidence_scores"] = scores
-        result["overall_confidence"] = overall
-        result["warnings"] = warnings
+        result_data["confidence_scores"] = scores
+        result_data["overall_confidence"] = overall
+        result_data["warnings"] = warnings
 
         if overall < confidence_threshold:
             warnings.append(
@@ -494,88 +355,166 @@ class InvoiceScanner:
                 "skewed, or the bill format is unusual. Please verify all fields."
             )
 
-        return result
+        return result_data
+
+    # ------------------------------------------------------------------
+    def _parse_ocr_result(self, raw_result: list) -> List[Dict]:
+        """Convert PaddleOCR output to a flat list of word dicts."""
+        words = []
+        if not raw_result or not raw_result[0]:
+            return words
+
+        for line in raw_result[0]:
+            bbox = line[0]  # [[x1,y1], [x2,y2], [x3,y3], [x4,y4]]
+            text = line[1][0]
+            conf = float(line[1][1])
+
+            if not text.strip() or conf < 0.3:
+                continue
+
+            # Get bounding box coordinates
+            x1 = int(min(p[0] for p in bbox))
+            y1 = int(min(p[1] for p in bbox))
+            x2 = int(max(p[0] for p in bbox))
+            y2 = int(max(p[1] for p in bbox))
+
+            words.append({
+                "text": text.strip(),
+                "conf": conf,
+                "x": x1,
+                "y": y1,
+                "w": x2 - x1,
+                "h": y2 - y1,
+                "cx": (x1 + x2) // 2,  # center x
+                "cy": (y1 + y2) // 2,  # center y
+            })
+
+        return words
+
+    # ------------------------------------------------------------------
+    def _group_words_into_lines(self, words: List[Dict]) -> Dict[int, List[Dict]]:
+        """Group words by Y-position into logical lines."""
+        if not words:
+            return {}
+
+        # Sort by Y position
+        sorted_words = sorted(words, key=lambda w: w["cy"])
+
+        lines_dict: Dict[int, List[Dict]] = {}
+        current_line_num = 0
+        current_y = sorted_words[0]["cy"]
+        line_threshold = 15  # pixels — words within this Y range are on same line
+
+        for word in sorted_words:
+            if abs(word["cy"] - current_y) > line_threshold:
+                current_line_num += 1
+                current_y = word["cy"]
+            if current_line_num not in lines_dict:
+                lines_dict[current_line_num] = []
+            lines_dict[current_line_num].append(word)
+
+        # Sort words within each line by X position
+        for ln in lines_dict:
+            lines_dict[ln].sort(key=lambda w: w["cx"])
+
+        return lines_dict
 
     # ------------------------------------------------------------------
     def _extract_fields(
         self,
-        raw_text: str,
-        lines: list[str],
         words: List[Dict],
         lines_dict: Dict[int, List[Dict]],
-        header_text: str,
-        footer_text: str,
         img_h: int,
         warnings: list[str],
     ) -> dict:
+        """Extract all fields from OCR words."""
+
+        # Build full text for regex searches
+        all_text = " ".join(w["text"] for w in words)
+        all_lines = []
+        for ln in sorted(lines_dict.keys()):
+            line_text = " ".join(w["text"] for w in lines_dict[ln])
+            all_lines.append(line_text)
+
+        full_text = "\n".join(all_lines)
+
+        # ── GSTIN ───────────────────────────────────────────────────────
+        gstins = _RE_GSTIN.findall(all_text)
+        vendor_gstin = gstins[0].upper() if gstins else None
 
         # ── Vendor name ─────────────────────────────────────────────────
         vendor_name = self._extract_vendor_name(words, lines_dict, img_h)
-
-        # ── GSTIN ───────────────────────────────────────────────────────
-        # Search full text first, then header specifically
-        vendor_gstin = None
-        gstins = _RE_GSTIN.findall(raw_text)
-        if gstins:
-            vendor_gstin = gstins[0].upper()
-        
-        # If multiple GSTINs, prefer the one in the header (vendor) not buyer
-        if len(gstins) > 1:
-            header_gstins = _RE_GSTIN.findall(header_text)
-            if header_gstins:
-                vendor_gstin = header_gstins[0].upper()
 
         # ── Vendor address ─────────────────────────────────────────────
         vendor_address = self._extract_address(words, lines_dict, img_h, vendor_gstin)
 
         # ── Bill number ───────────────────────────────────────────────
-        bill_number = self._extract_bill_number(raw_text, lines, header_text)
+        bill_number = None
+        m = _RE_INV_NUMBER.search(full_text)
+        if m:
+            bill_number = m.group(1).strip()
+        else:
+            # Fallback: first line with "invoice" or "bill" keyword
+            for line in all_lines:
+                if re.search(r'\b(?:invoice|bill)\b', line, re.I):
+                    m2 = _RE_INV_NUMBER.search(line)
+                    if m2:
+                        bill_number = m2.group(1).strip()
+                        break
 
         # ── Dates ───────────────────────────────────────────────────────
-        all_dates = _extract_all_dates(raw_text)
-        
-        # Bill date: first date in header area, or first date overall
-        header_dates = _extract_all_dates(header_text)
-        bill_date = header_dates[0] if header_dates else (all_dates[0] if all_dates else None)
-        
-        # Due date: look for "due" keyword, or use last date
+        all_dates = _extract_all_dates(full_text)
+        bill_date = all_dates[0] if all_dates else None
+
+        # Due date: look for "due" keyword
         due_date = None
-        m = _RE_DUE.search(raw_text)
-        if m:
-            due_date = _parse_date(m.group(1))
+        for line in all_lines:
+            m = re.search(r'(?:due\s*date|payment\s*due)[\s:]+([0-9/\-\.A-Za-z]+)', line, re.I)
+            if m:
+                due_date = _parse_date(m.group(1))
+                break
         if not due_date and len(all_dates) >= 2:
-            # Use the later date as due date if bill_date is the earlier one
             remaining = [d for d in all_dates if d != bill_date]
             if remaining:
                 due_date = remaining[-1]
 
         # ── PO number ───────────────────────────────────────────────────
         po_number = None
-        m = _RE_PO.search(raw_text)
+        m = re.search(
+            r'(?:p\.?o\.?\s*(?:no|number|#)[.:]?\s*|purchase\s*order\s*(?:no|#)[.:]?\s*)'
+            r'([A-Z0-9/\-_]+)',
+            full_text, re.IGNORECASE,
+        )
         if m:
             po_number = m.group(1).strip()
 
-        # ── Tax amounts (from footer area only to avoid confusion) ─────
-        total = self._extract_amount(_RE_TOTAL, footer_text) or self._extract_amount(_RE_TOTAL, raw_text)
-        subtotal = self._extract_amount(_RE_SUBTOTAL, footer_text) or self._extract_amount(_RE_SUBTOTAL, raw_text)
-        cgst = self._extract_amount(_RE_CGST, footer_text) or self._extract_amount(_RE_CGST, raw_text)
-        sgst = self._extract_amount(_RE_SGST, footer_text) or self._extract_amount(_RE_SGST, raw_text)
-        igst = self._extract_amount(_RE_IGST, footer_text) or self._extract_amount(_RE_IGST, raw_text)
+        # ── Line items (primary extraction) ─────────────────────────────
+        line_items = self._extract_line_items(words, lines_dict, img_h)
 
-        # Fallback: largest amount in footer as total
+        # ── Totals (from footer area) ──────────────────────────────────
+        footer_text = self._get_footer_text(words, lines_dict, img_h)
+
+        total = self._extract_total(footer_text, full_text)
+        subtotal = self._extract_subtotal(footer_text, full_text)
+        cgst = self._extract_tax(_RE_CGST, footer_text, full_text)
+        sgst = self._extract_tax(_RE_SGST, footer_text, full_text)
+        igst = self._extract_tax(_RE_IGST, footer_text, full_text)
+
+        # Fallback: largest amount as total
         if total is None:
-            total = self._find_largest_amount(footer_text)
-        if total is None:
-            total = self._find_largest_amount(raw_text)
+            amounts = []
+            for m in _RE_AMOUNT.finditer(full_text):
+                val = _clean_amount(m.group(1))
+                if val and val > 0:
+                    amounts.append(val)
+            if amounts:
+                total = max(amounts)
 
         # Derive subtotal if missing
         if subtotal is None and total is not None:
             tax_sum = (cgst or 0) + (sgst or 0) + (igst or 0)
             if tax_sum > 0 and tax_sum < total:
                 subtotal = round(total - tax_sum, 2)
-
-        # ── Line items (from table area) ────────────────────────────────
-        line_items = self._extract_line_items_layout(raw_text, lines, words, lines_dict, img_h, warnings)
 
         return {
             "vendor_name":    vendor_name,
@@ -595,380 +534,304 @@ class InvoiceScanner:
 
     # ------------------------------------------------------------------
     def _extract_vendor_name(self, words: List[Dict], lines_dict: Dict[int, List[Dict]], img_h: int) -> Optional[str]:
-        """
-        Extract vendor name using layout + content heuristics.
-        Priority: top-of-page words with company suffixes, or high-confidence long text.
-        """
+        """Extract vendor name from top region of page."""
         candidates = []
-        
-        # Collect words from top 25% of page
-        top_words = [w for w in words if w["y"] < img_h * 0.25]
-        top_lines = {}
-        for w in top_words:
-            ln = w["line_num"]
-            if ln not in top_lines:
-                top_lines[ln] = []
-            top_lines[ln].append(w)
-        
-        for ln in sorted(top_lines.keys()):
-            words_in_line = sorted(top_lines[ln], key=lambda w: w["x"])
-            text = " ".join(w["text"] for w in words_in_line)
-            conf = sum(w["conf"] for w in words_in_line) / len(words_in_line)
-            
+
+        for ln in sorted(lines_dict.keys()):
+            line_words = lines_dict[ln]
+            y = line_words[0]["cy"] if line_words else 0
+
+            # Only top 30% of page
+            if y > img_h * 0.30:
+                break
+
+            text = " ".join(w["text"] for w in line_words)
+            conf = sum(w["conf"] for w in line_words) / len(line_words)
             stripped = text.strip()
+
             if len(stripped) < 3:
                 continue
             if _RE_VENDOR_SKIP.match(stripped):
                 continue
             if re.fullmatch(r'[\d\s/\-.,]+', stripped):
                 continue
-            
-            score = conf  # base score from OCR confidence
-            
-            # Boost for company suffixes
+
+            score = conf
+
             if _RE_COMPANY_SUFFIX.search(stripped):
                 score += 50
-            
-            # Boost for all-caps (common for Indian company names)
+
             caps_ratio = sum(1 for c in stripped if c.isupper()) / max(len(stripped), 1)
             if caps_ratio > 0.5:
                 score += 20
-            
-            # Boost for length (company names are usually 2-6 words)
+
             word_count = len(stripped.split())
             if 2 <= word_count <= 8:
                 score += 15
-            
-            candidates.append((score, stripped, text))
-        
+
+            candidates.append((score, stripped))
+
         if candidates:
-            # Sort by score descending, pick best
             candidates.sort(key=lambda x: x[0], reverse=True)
             return candidates[0][1]
-        
-        # Fallback: use first few lines of raw text
-        for line in lines_dict.values():
-            text = _line_text(line)
-            stripped = text.strip()
-            if len(stripped) > 3 and not _RE_VENDOR_SKIP.match(stripped) and not re.fullmatch(r'[\d\s/\-.,]+', stripped):
-                return stripped
-        
+
         return None
 
     # ------------------------------------------------------------------
     def _extract_address(self, words: List[Dict], lines_dict: Dict[int, List[Dict]], img_h: int, gstin: Optional[str]) -> Optional[str]:
-        """Extract vendor address from lines near the vendor name and before GSTIN."""
+        """Extract vendor address from lines near the vendor name."""
         addr_parts = []
-        
+
         # Find GSTIN line
-        gstin_line = None
-        for ln, line_words in lines_dict.items():
-            text = _line_text(line_words)
-            if gstin and gstin in text:
-                gstin_line = ln
+        gstin_y = None
+        for w in words:
+            if gstin and gstin in w["text"]:
+                gstin_y = w["cy"]
                 break
-        
-        # Look for address-like lines before GSTIN
+
         for ln in sorted(lines_dict.keys()):
-            if gstin_line and ln >= gstin_line:
+            line_words = lines_dict[ln]
+            y = line_words[0]["cy"] if line_words else 0
+
+            # Stop at GSTIN
+            if gstin_y and y >= gstin_y:
                 break
-            
-            text = _line_text(lines_dict[ln])
+
+            text = " ".join(w["text"] for w in line_words)
             stripped = text.strip()
-            
-            # Skip obvious non-address lines
+
             if _RE_VENDOR_SKIP.match(stripped):
                 continue
             if re.search(r'(?:gstin|pan|phone|mob|tel|email|fax|invoice|bill)\s*[:\-]?\s*\w', stripped, re.I):
                 continue
-            
+
             # Address indicators
             addr_indicators = [
-                r'\b\d{6}\b',  # PIN code
+                r'\b\d{6}\b',
                 r'\b(road|street|nagar|colony|sector|phase|block|complex|building|tower|floor|shop|plot)\b',
-                r'\b(mumbai|delhi|bangalore|chennai|kolkata|pune|hyderabad|ahmedabad|jaipur|lucknow|kanpur|nagpur|indore|thane|bhopal|visakhapatnam|vadodara|firozabad|ludhiana|rajkot|agra|faridabad|meerut|nashik|jodhpur|gwalior|jabalpur|raipur|kota|guwahati|solapur|hubli|mysore|salem|tiruchirappalli|tiruppur|ambattur|nellore|tirunelveli|malegaon|gaya|jalgaon|udaipur|maheshtala|davanagere|kozhikode|akola|kurnool|rajpur|sonarpur|rajahmundry|bhiwandi|gopalpur|bhubaneswar|warangal|mira|bhayander|durgapur|asansol|kolhapur|ajmer|gulbarga|jamnagar|bhilwara|saharanpur|guntur|bikaner|amravati|noida|jamshedpur|bhilai|cuttack|firozabad|kochi|nellore|bhavnagar|dehradun|dhanbad|aurangabad|amritsar|navi\s+mumbai|allahabad|ranchi|howrah|coimbatore|jabalpur|srinagar|solapur|chandigarh|patna|trichy|madurai|varanasi|agra|meerut|faridabad|ghaziabad)\b',
             ]
-            
+
             is_addr = any(re.search(p, stripped, re.I) for p in addr_indicators)
-            
-            # Also accept multi-word lines in the top half that look like addresses
             if is_addr or (len(stripped) > 10 and len(stripped.split()) >= 3 and not re.fullmatch(r'[\d\s/\-.,]+', stripped)):
-                # Avoid GSTIN
                 if not _RE_GSTIN.search(stripped):
                     addr_parts.append(stripped)
-        
+
         return ", ".join(addr_parts[:4]) if addr_parts else None
 
     # ------------------------------------------------------------------
-    def _extract_bill_number(self, raw_text: str, lines: list[str], header_text: str) -> Optional[str]:
-        """Extract invoice/bill number with multiple strategies."""
-        # Try header first (bill number usually in header)
-        m = _RE_INV_NUMBER.search(header_text)
-        if m:
-            val = m.group(1).strip()
-            if len(val) >= 2:
-                return val
+    def _get_footer_text(self, words: List[Dict], lines_dict: Dict[int, List[Dict]], img_h: int) -> str:
+        """Get text from bottom 25% of page (totals/footer area)."""
+        footer_words = [w for w in words if w["cy"] > img_h * 0.75]
+        return " ".join(w["text"] for w in footer_words)
 
-        m = _RE_INV_NUMBER.search(raw_text)
+    # ------------------------------------------------------------------
+    def _extract_total(self, footer_text: str, full_text: str) -> Optional[float]:
+        """Extract total amount from footer or full text."""
+        # Try footer first
+        m = _RE_TOTAL_KEYWORDS.search(footer_text)
         if m:
-            val = m.group(1).strip()
-            if len(val) >= 2:
-                return val
+            # Find amount after the keyword
+            rest = footer_text[m.end():]
+            m2 = _RE_AMOUNT.search(rest)
+            if m2:
+                return _clean_amount(m2.group(1))
 
-        m = _RE_INV_NUMBER_FALLBACK.search(raw_text)
+        # Try full text
+        m = _RE_TOTAL_KEYWORDS.search(full_text)
         if m:
-            val = m.group(1).strip()
-            if len(val) >= 2 and val.lower() not in ('date', 'no', 'number'):
-                return val
-
-        # Look for pattern near "Invoice" keyword
-        for i, line in enumerate(lines):
-            if re.search(r'\binvoice\b', line, re.I):
-                for j in range(i, min(i+3, len(lines))):
-                    m = re.search(r'([A-Z]*\d+[A-Z0-9/\-_\.]+)', lines[j], re.I)
-                    if m:
-                        val = m.group(1).strip()
-                        if len(val) >= 2:
-                            return val
+            rest = full_text[m.end():]
+            m2 = _RE_AMOUNT.search(rest)
+            if m2:
+                return _clean_amount(m2.group(1))
 
         return None
 
     # ------------------------------------------------------------------
-    def _extract_amount(self, pattern: re.Pattern, text: str) -> Optional[float]:
-        m = pattern.search(text)
-        if not m:
-            return None
-        return _clean_amount(m.group(1))
+    def _extract_subtotal(self, footer_text: str, full_text: str) -> Optional[float]:
+        """Extract subtotal/taxable amount."""
+        m = _RE_SUBTOTAL_KEYWORDS.search(footer_text)
+        if m:
+            rest = footer_text[m.end():]
+            m2 = _RE_AMOUNT.search(rest)
+            if m2:
+                return _clean_amount(m2.group(1))
+
+        m = _RE_SUBTOTAL_KEYWORDS.search(full_text)
+        if m:
+            rest = full_text[m.end():]
+            m2 = _RE_AMOUNT.search(rest)
+            if m2:
+                return _clean_amount(m2.group(1))
+
+        return None
 
     # ------------------------------------------------------------------
-    def _find_largest_amount(self, text: str) -> Optional[float]:
-        amounts = []
-        for m in _RE_AMOUNT.finditer(text):
-            val = _clean_amount(m.group(1))
-            if val is not None and val > 0:
-                amounts.append(val)
-        return max(amounts) if amounts else None
+    def _extract_tax(self, pattern: re.Pattern, footer_text: str, full_text: str) -> Optional[float]:
+        """Extract tax amount (CGST/SGST/IGST)."""
+        m = pattern.search(footer_text)
+        if m:
+            return _clean_amount(m.group(1))
+        m = pattern.search(full_text)
+        if m:
+            return _clean_amount(m.group(1))
+        return None
 
     # ------------------------------------------------------------------
-    def _extract_line_items_layout(
+    def _extract_line_items(
         self,
-        raw_text: str,
-        lines: list[str],
         words: List[Dict],
         lines_dict: Dict[int, List[Dict]],
         img_h: int,
-        warnings: list[str],
     ) -> list:
         """
-        Extract line items using layout-aware table detection.
-        Uses word positions to identify table columns, then reads each row.
+        Extract line items from the invoice table.
+
+        Strategy:
+        1. Find table region (rows between header keywords and footer keywords)
+        2. For each row, separate text words from numeric words
+        3. Parse as: description, [HSN], qty, rate, amount
         """
         items = []
-        
-        if not words or not lines_dict:
-            # Fallback to regex
-            return self._extract_line_items_regex(raw_text, lines)
 
-        # Find table region: middle of page, lines with multiple numbers
-        table_lines = {}
-        for ln, line_words in lines_dict.items():
-            y = line_words[0]["y"] if line_words else 0
-            # Only consider lines in the middle 50% of the page
-            if y < img_h * 0.20 or y > img_h * 0.85:
+        if not lines_dict:
+            return items
+
+        # Find table boundaries
+        table_start = None
+        table_end = None
+
+        for ln in sorted(lines_dict.keys()):
+            line_text = " ".join(w["text"] for w in lines_dict[ln])
+            if _RE_TABLE_HEADER.search(line_text):
+                table_start = ln
+            if table_start is not None and _RE_TABLE_FOOTER.search(line_text):
+                table_end = ln
+                break
+
+        # If no clear table found, use heuristic: middle 50% of page
+        if table_start is None:
+            table_start = 0
+            for ln in sorted(lines_dict.keys()):
+                y = lines_dict[ln][0]["cy"] if lines_dict[ln] else 0
+                if y > img_h * 0.20:
+                    table_start = ln
+                    break
+
+        if table_end is None:
+            table_end = max(lines_dict.keys())
+            for ln in sorted(lines_dict.keys(), reverse=True):
+                y = lines_dict[ln][0]["cy"] if lines_dict[ln] else 0
+                if y < img_h * 0.80:
+                    table_end = ln
+                    break
+
+        # Extract rows between table_start and table_end
+        for ln in range(table_start, table_end + 1):
+            if ln not in lines_dict:
                 continue
-            
-            text = _line_text(line_words)
-            lower = text.lower()
-            
-            # Skip header/footer keywords
-            if re.search(r'\b(?:subtotal|total|tax|cgst|sgst|igst|amount\s*payable|grand\s*total|taxable)\b', lower):
+
+            line_words = lines_dict[ln]
+            line_text = " ".join(w["text"] for w in line_words)
+
+            # Skip header and footer lines
+            if _RE_TABLE_HEADER.search(line_text) and not any(
+                re.search(r'\d', w["text"]) for w in line_words
+            ):
                 continue
-            if re.search(r'\b(?:description|item|particulars|goods|product|sr\.?\s*no|sl\.?\s*no|s\.?no)\b', lower):
+            if _RE_TABLE_FOOTER.search(line_text):
                 continue
-            
-            # Look for numeric values in this line
-            nums = []
+
+            # Separate text words from numeric words
             desc_words = []
+            numbers = []
             hsn = ""
-            
+
             for w in line_words:
-                wtext = w["text"]
-                # Check if it's a pure number (could be qty, rate, amount)
-                if re.match(r'^[\d,]+(?:\.\d+)?$', wtext.replace(',', '')):
-                    val = _clean_amount(wtext)
+                wtext = w["text"].strip()
+                if not wtext:
+                    continue
+
+                # Check if it's a pure number
+                cleaned = wtext.replace(',', '').replace('₹', '').replace('Rs', '').strip()
+                if re.match(r'^\d+(?:\.\d+)?$', cleaned):
+                    val = _clean_amount(cleaned)
                     if val is not None:
-                        nums.append(val)
+                        numbers.append(val)
                 elif re.match(r'^\d{4,8}$', wtext) and not hsn:
                     hsn = wtext
                 else:
                     desc_words.append(wtext)
-            
-            # A table row needs at least 2 numbers (qty + amount, or qty + rate + amount)
-            if len(nums) >= 2 and desc_words:
-                desc = " ".join(desc_words).strip()
-                # Clean description
-                desc = re.sub(r'\s+', ' ', desc)
-                if len(desc) > 1 and not _RE_VENDOR_SKIP.match(desc):
-                    table_lines[ln] = {
-                        "desc": desc,
-                        "hsn": hsn,
-                        "nums": nums,
-                        "y": y,
-                    }
 
-        if not table_lines:
-            return self._extract_line_items_regex(raw_text, lines)
+            # Need at least a description and 2 numbers (qty + amount)
+            desc = " ".join(desc_words).strip()
+            if not desc or len(numbers) < 2:
+                continue
 
-        # Sort by Y position (top to bottom)
-        sorted_lines = sorted(table_lines.items(), key=lambda x: x[0])
+            # Skip obvious non-item lines
+            if _RE_VENDOR_SKIP.match(desc):
+                continue
+            if len(desc) < 2:
+                continue
 
-        for ln, row in sorted_lines:
-            nums = row["nums"]
-            desc = row["desc"]
-            
-            # Heuristic: assign numbers to qty, rate, amount based on typical patterns
-            # Common patterns: [qty, rate, amount] or [qty, amount] or [qty, rate, tax, amount]
+            # Parse numbers: typically [qty, rate, amount] or [qty, amount]
             qty = 1.0
             rate = 0.0
             amount = 0.0
-            
-            if len(nums) == 2:
-                # Likely [qty, amount] or [rate, amount]
-                if nums[0] < nums[1] and nums[0] < 1000:
-                    qty = nums[0]
-                    amount = nums[1]
+
+            if len(numbers) == 2:
+                # [qty, amount] or [rate, amount]
+                if numbers[0] < 1000 and numbers[0] == int(numbers[0]):
+                    qty = numbers[0]
+                    amount = numbers[1]
                     rate = round(amount / qty, 2) if qty > 0 else 0
                 else:
                     qty = 1.0
-                    rate = nums[0]
-                    amount = nums[1]
-            elif len(nums) >= 3:
-                # Likely [qty, rate, amount] or [qty, rate, tax, amount]
-                # qty is usually the smallest integer-like number
-                qty = nums[0]
-                amount = nums[-1]
-                if len(nums) == 3:
-                    rate = nums[1]
+                    rate = numbers[0]
+                    amount = numbers[1]
+            elif len(numbers) >= 3:
+                # [qty, rate, amount] or [qty, rate, tax, amount]
+                qty = numbers[0]
+                amount = numbers[-1]
+                if len(numbers) == 3:
+                    rate = numbers[1]
                 else:
-                    # More numbers: pick the one that makes qty * rate ≈ amount
-                    best_rate = 0
+                    # Pick rate that makes qty * rate ≈ amount
+                    best_rate = numbers[1]
                     best_diff = float('inf')
-                    for i in range(1, len(nums) - 1):
-                        r = nums[i]
+                    for i in range(1, len(numbers) - 1):
+                        r = numbers[i]
                         diff = abs(qty * r - amount)
                         if diff < best_diff:
                             best_diff = diff
                             best_rate = r
                     rate = best_rate
-                
-                # Validate: if qty * rate is way off from amount, recalculate
+
+                # Validate
                 if qty > 0 and rate > 0:
-                    calc_amount = round(qty * rate, 2)
-                    if abs(calc_amount - amount) > amount * 0.1:
-                        # Try alternative assignment
+                    calc = round(qty * rate, 2)
+                    if abs(calc - amount) > amount * 0.15:
                         rate = round(amount / qty, 2)
-            
+
             if qty > 0 and amount > 0:
+                # Extract GST rate from description
                 gst_rate = 0.0
                 gst_m = _RE_GST_RATE.search(desc)
                 if gst_m:
                     gst_rate = float(gst_m.group(1))
                     desc = _RE_GST_RATE.sub('', desc).strip()
-                
+
+                # Clean description
+                desc = re.sub(r'\s+', ' ', desc).strip()
+
                 items.append({
-                    "description": desc,
-                    "hsn": row["hsn"],
-                    "qty": qty,
+                    "product_name": desc,
+                    "hsn_sac": hsn,
+                    "quantity": qty,
                     "rate": rate if rate > 0 else round(amount / qty, 2),
                     "gst_rate": gst_rate,
                     "amount": amount,
                 })
 
-        if not items:
-            return self._extract_line_items_regex(raw_text, lines)
-        
-        return items
-
-    # ------------------------------------------------------------------
-    def _extract_line_items_regex(self, text: str, lines: list[str]) -> list:
-        """Regex-based fallback for line item extraction."""
-        items = []
-        
-        # Pattern: description [optional HSN] qty rate amount [optional GST%]
-        line_pattern = re.compile(
-            r'^(.+?)\s+'
-            r'(?:HSN\s*[\-/]?\s*(\d{4,8}))?\s*'
-            r'(\d+(?:\.\d+)?)\s*'
-            r'([\d,]+(?:\.\d+)?)\s*'
-            r'([\d,]+(?:\.\d+)?)\s*'
-            r'(?:\d+(?:\.\d+)?%)?\s*$',
-            re.IGNORECASE,
-        )
-        
-        simple_pattern = re.compile(
-            r'^(.+?)\s+(\d+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)\s+([\d,]+(?:\.\d+)?)$'
-        )
-        
-        in_table = False
-        for line in lines:
-            line_lower = line.lower()
-            
-            if re.search(r'\b(?:description|item|particulars|goods|product|sr\.?\s*no|sl\.?\s*no)\b', line_lower):
-                in_table = True
-                continue
-            if in_table and re.search(r'\b(?:subtotal|total|taxable|cgst|sgst|igst|amount\s*payable|grand\s*total)\b', line_lower):
-                break
-            if not in_table:
-                continue
-            
-            m = line_pattern.match(line)
-            if m:
-                desc = m.group(1).strip()
-                hsn = m.group(2) or ""
-                qty = float(m.group(3))
-                rate = _clean_amount(m.group(4)) or 0.0
-                amount = _clean_amount(m.group(5)) or 0.0
-                
-                if qty > 0:
-                    gst_rate = 0.0
-                    gst_m = _RE_GST_RATE.search(desc)
-                    if gst_m:
-                        gst_rate = float(gst_m.group(1))
-                        desc = _RE_GST_RATE.sub('', desc).strip()
-                    
-                    items.append({
-                        "description": desc,
-                        "hsn": hsn,
-                        "qty": qty,
-                        "rate": rate,
-                        "gst_rate": gst_rate,
-                        "amount": amount if amount > 0 else qty * rate,
-                    })
-                continue
-            
-            m = simple_pattern.match(line)
-            if m:
-                desc = m.group(1).strip()
-                qty = float(m.group(2))
-                rate = _clean_amount(m.group(3)) or 0.0
-                amount = _clean_amount(m.group(4)) or 0.0
-                
-                if qty > 0:
-                    gst_rate = 0.0
-                    gst_m = _RE_GST_RATE.search(desc)
-                    if gst_m:
-                        gst_rate = float(gst_m.group(1))
-                        desc = _RE_GST_RATE.sub('', desc).strip()
-                    
-                    items.append({
-                        "description": desc,
-                        "hsn": "",
-                        "qty": qty,
-                        "rate": rate,
-                        "gst_rate": gst_rate,
-                        "amount": amount if amount > 0 else qty * rate,
-                    })
-        
         return items
 
     # ------------------------------------------------------------------
@@ -1007,6 +870,14 @@ def _compute_confidence(data: dict) -> dict:
     for f in key_fields:
         val = data.get(f)
         scores[f] = 1.0 if val not in (None, '', [], 0.0, 0) else 0.0
+
+    # Bonus for having line items
+    items = data.get('line_items', [])
+    if items:
+        scores['line_items'] = 1.0
+    else:
+        scores['line_items'] = 0.0
+
     return scores
 
 
@@ -1021,5 +892,5 @@ def get_scanner() -> InvoiceScanner:
     global _scanner
     if _scanner is None:
         _scanner = InvoiceScanner()
-        logger.info("InvoiceScanner initialised (layout-aware Tesseract OCR pipeline)")
+        logger.info("InvoiceScanner initialised (PaddleOCR pipeline)")
     return _scanner

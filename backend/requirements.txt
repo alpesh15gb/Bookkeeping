@@ -20,8 +20,9 @@ pyotp==2.9.0
 qrcode[pil]==7.4.2
 reportlab==4.1.0
 
-# ── OCR / Bill Scanning (Invoiscope pipeline) ────────────────────────────
-pytesseract==0.3.10
+# ── OCR / Bill Scanning (PaddleOCR pipeline) ─────────────────────────────
+paddlepaddle==2.6.2
+paddleocr>=2.7.0.3
 opencv-python-headless==4.9.0.80
 Pillow==10.3.0
 pdf2image==1.17.0
