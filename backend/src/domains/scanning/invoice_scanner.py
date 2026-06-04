@@ -228,6 +228,149 @@ def _clean_json_string(s: str) -> str:
     return "".join(result)
 
 
+def _parse_json_via_regex(s: str) -> dict:
+    import re
+    parsed = {}
+    
+    # Clean up whitespace and newlines to make matching simpler
+    s_clean = re.sub(r'\s+', ' ', s)
+
+    # Helper to find standard key-value pairs
+    def get_scalar_field(key: str) -> Optional[str]:
+        # Try double quotes: "key": "value"
+        pattern_str = f'"{key}"\\s*:\\s*"(.*?)"(?=\\s*(?:,|\\}}))'
+        m = re.search(pattern_str, s_clean)
+        if m:
+            return m.group(1).strip()
+            
+        # Try single quotes: 'key': 'value'
+        pattern_str = f"'{key}'\\s*:\\s*'(.*?)'(?=\\s*(?:,|\\}}))"
+        m = re.search(pattern_str, s_clean)
+        if m:
+            return m.group(1).strip()
+            
+        # Try unquoted string or number or null: "key": value
+        pattern_str = f'"{key}"\\s*:\\s*([^,\\}}\\]]+)'
+        m = re.search(pattern_str, s_clean)
+        if m:
+            val = m.group(1).strip()
+            if val.lower() == 'null':
+                return None
+            val = val.strip(' "\'')
+            return val
+            
+        # Try single quote key unquoted value: 'key': value
+        pattern_str = f"'{key}'\\s*:\\s*([^,\\}}\\]]+)"
+        m = re.search(pattern_str, s_clean)
+        if m:
+            val = m.group(1).strip()
+            if val.lower() == 'null':
+                return None
+            val = val.strip(' "\'')
+            return val
+            
+        return None
+
+    parsed["vendor_name"] = get_scalar_field("vendor_name")
+    parsed["vendor_gstin"] = get_scalar_field("vendor_gstin")
+    parsed["vendor_address"] = get_scalar_field("vendor_address")
+    parsed["buyer_name"] = get_scalar_field("buyer_name")
+    parsed["buyer_gstin"] = get_scalar_field("buyer_gstin")
+    parsed["buyer_address"] = get_scalar_field("buyer_address")
+    parsed["bill_number"] = get_scalar_field("bill_number")
+    parsed["bill_date"] = get_scalar_field("bill_date")
+    parsed["due_date"] = get_scalar_field("due_date")
+    parsed["po_number"] = get_scalar_field("po_number")
+
+    # Numeric fields
+    for num_field in ["subtotal", "cgst", "sgst", "igst", "total"]:
+        val = get_scalar_field(num_field)
+        if val is not None:
+            parsed[num_field] = _clean_amount(str(val))
+        else:
+            parsed[num_field] = 0.0
+
+    # Extract line items
+    line_items = []
+    items_match = re.search(r'"line_items"\s*:\s*\[(.*?)\]', s_clean, re.IGNORECASE)
+    if not items_match:
+        items_match = re.search(r"'line_items'\s*:\s*\[(.*?)\]", s_clean, re.IGNORECASE)
+        
+    if items_match:
+        items_block = items_match.group(1)
+        # Find all objects inside the list: { ... }
+        object_matches = re.findall(r'\{(.*?)\}', items_block)
+        for obj_str in object_matches:
+            def get_obj_field(key: str) -> Optional[str]:
+                pattern_str = f'"{key}"\\s*:\\s*"(.*?)"(?=\\s*(?:,|\\}}|$))'
+                m = re.search(pattern_str, obj_str)
+                if m:
+                    return m.group(1).strip()
+                pattern_str = f"'{key}'\\s*:\\s*'(.*?)'(?=\\s*(?:,|\\}}|$))"
+                m = re.search(pattern_str, obj_str)
+                if m:
+                    return m.group(1).strip()
+                pattern_str = f'"{key}"\\s*:\\s*([^,\\}}]+)'
+                m = re.search(pattern_str, obj_str)
+                if m:
+                    val = m.group(1).strip().strip(' "\'')
+                    return val if val.lower() != 'null' else None
+                pattern_str = f"'{key}'\\s*:\\s*([^,\\}}]+)"
+                m = re.search(pattern_str, obj_str)
+                if m:
+                    val = m.group(1).strip().strip(' "\'')
+                    return val if val.lower() != 'null' else None
+                return None
+
+            prod_name = get_obj_field("product_name")
+            if prod_name:
+                hsn = get_obj_field("hsn_sac")
+                
+                qty = 1.0
+                qty_str = get_obj_field("quantity")
+                if qty_str:
+                    try:
+                        qty = float(qty_str)
+                    except ValueError:
+                        pass
+                        
+                rate = 0.0
+                rate_str = get_obj_field("rate")
+                if rate_str:
+                    try:
+                        rate = float(rate_str)
+                    except ValueError:
+                        pass
+                        
+                gst = 0.0
+                gst_str = get_obj_field("gst_rate")
+                if gst_str:
+                    try:
+                        gst = float(gst_str)
+                    except ValueError:
+                        pass
+                        
+                amt = qty * rate
+                amt_str = get_obj_field("amount")
+                if amt_str:
+                    try:
+                        amt = float(amt_str)
+                    except ValueError:
+                        pass
+                        
+                line_items.append({
+                    "product_name": prod_name,
+                    "hsn_sac": hsn,
+                    "quantity": qty,
+                    "rate": rate,
+                    "gst_rate": gst,
+                    "amount": amt
+                })
+                
+    parsed["line_items"] = line_items
+    return parsed
+
+
 def _robust_json_loads(s: str) -> dict:
     import json
     import re
@@ -247,6 +390,15 @@ def _robust_json_loads(s: str) -> dict:
     try:
         val = ast.literal_eval(s_py)
         if isinstance(val, dict):
+            return val
+    except Exception:
+        pass
+
+    # Fallback to regex-based JSON-like parsing
+    try:
+        val = _parse_json_via_regex(s)
+        # Verify it has at least some meaningful fields (e.g. line_items or vendor_name or total)
+        if val and (val.get("vendor_name") or val.get("line_items") or val.get("total")):
             return val
     except Exception:
         pass

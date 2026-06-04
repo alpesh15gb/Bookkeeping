@@ -146,3 +146,38 @@ def test_scan_with_nvidia_nim_fallback(mock_post):
         assert result["line_items"][0]["hsn_sac"] == "85286900"
         assert result["line_items"][0]["gst_rate"] == 9.0
 
+
+def test_robust_json_loads_regex_fallback():
+    # Malformed JSON containing unescaped quotes inside strings (common LLM error)
+    malformed = (
+        '{\n'
+        '  "vendor_name": "Mahaveer Computers",\n'
+        '  "vendor_address": "Street "Block" 5",\n'
+        '  "total": 10847.46,\n'
+        '  "line_items": [\n'
+        '    {\n'
+        '      "product_name": "Projector "Screen" 4K",\n'
+        '      "quantity": 2.0,\n'
+        '      "rate": 5000.00,\n'
+        '      "amount": 10000.00\n'
+        '    }\n'
+        '  ]\n'
+        '}'
+    )
+    # Standard JSON loading will fail on this
+    import json
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(malformed)
+
+    # Our robust loads should recover it successfully
+    parsed = _robust_json_loads(malformed)
+    assert parsed["vendor_name"] == "Mahaveer Computers"
+    assert parsed["vendor_address"] == "Street \"Block\" 5"
+    assert parsed["total"] == 10847.46
+    assert len(parsed["line_items"]) == 1
+    assert parsed["line_items"][0]["product_name"] == "Projector \"Screen\" 4K"
+    assert parsed["line_items"][0]["quantity"] == 2.0
+    assert parsed["line_items"][0]["rate"] == 5000.00
+    assert parsed["line_items"][0]["amount"] == 10000.00
+
+
