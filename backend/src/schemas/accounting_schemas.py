@@ -106,3 +106,26 @@ class BalanceSheetResponse(SchemaBase):
     equity: List[BalanceSheetSection]
     total_equity: Decimal
     net_profit: Decimal
+
+
+# Year End Schemas
+class UnpostedDocument(SchemaBase):
+    id: uuid.UUID
+    document_type: str
+    document_number: str
+    date: date
+    amount: Decimal
+
+class YearEndPrepareResponse(SchemaBase):
+    ready: bool
+    trial_balance_balanced: bool
+    trial_balance_difference: Decimal
+    unposted_documents_count: int
+    unposted_documents: List[UnpostedDocument]
+    net_profit: Decimal
+    financial_year_start: date
+    closing_date: date
+
+class YearEndCloseRequest(SchemaBase):
+    closing_date: date
+

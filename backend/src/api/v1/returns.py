@@ -38,6 +38,9 @@ def create_sales_return(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.issue_date)
+
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
@@ -192,6 +195,10 @@ def cancel_sales_return_route(
     ).first()
     if not sr:
         raise HTTPException(status_code=404, detail="Sales return not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
+
     cancel_sales_return(db, tenant_id, sr, tenant_id)
     db.commit()
     db.refresh(sr)
@@ -208,6 +215,9 @@ def create_purchase_return(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.issue_date)
+
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
@@ -362,6 +372,10 @@ def cancel_purchase_return_route(
     ).first()
     if not pr:
         raise HTTPException(status_code=404, detail="Purchase return not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
+
     cancel_purchase_return(db, tenant_id, pr, tenant_id)
     db.commit()
     db.refresh(pr)

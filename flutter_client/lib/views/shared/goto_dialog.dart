@@ -41,6 +41,7 @@ import 'package:flutter_client/views/reminders/reminder_list_view.dart';
 import 'package:flutter_client/views/returns/returns_list_view.dart';
 import 'package:flutter_client/views/settings/settings_view.dart';
 import 'package:flutter_client/views/sales_analytics/sales_analytics_view.dart';
+import 'package:flutter_client/views/accounting/year_end_view.dart';
 
 class GoToItem {
   final String name;
@@ -377,6 +378,13 @@ class _GoToDialogState extends State<GoToDialog> {
         icon: Icons.settings_rounded,
         shellTabIndex: 27,
         builder: (_) => const SettingsView(),
+      ),
+      GoToItem(
+        name: 'Year End Lock/Close',
+        category: 'Masters & Lists',
+        icon: Icons.lock_clock_outlined,
+        shellTabIndex: 28,
+        builder: (_) => const YearEndCloseView(),
       ),
     ];
   }

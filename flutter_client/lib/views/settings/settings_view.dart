@@ -284,14 +284,22 @@ class _SettingsViewState extends State<SettingsView> {
                     labelText: 'Default PDF Template',
                     prefixIcon: Icon(Icons.picture_as_pdf_outlined, size: 18),
                   ),
-                  items: const [
+                   items: const [
                     DropdownMenuItem(
                       value: 'professional',
-                      child: Text('Professional (Navy)'),
+                      child: Text('Format 1 (Professional Navy)'),
                     ),
                     DropdownMenuItem(
-                      value: 'modern',
-                      child: Text('Modern (Indigo)'),
+                      value: 'tally_gst',
+                      child: Text('Format 2 (Tally GST style)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'classic_blue',
+                      child: Text('Format 3 (Classic Blue)'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'sleek_modern',
+                      child: Text('Format 4 (Sleek Modern)'),
                     ),
                     DropdownMenuItem(
                       value: 'minimal',

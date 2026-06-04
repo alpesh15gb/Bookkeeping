@@ -423,6 +423,324 @@ def generate_invoice_pdf(
         ])
         elements.append(bottom_table)
 
+    # Render A4 Tally GST Layout (Format 2 - Tata Motors Style Boxy Layout)
+    elif template == "tally_gst":
+        tally_primary = colors.HexColor('#0F1B3D')
+        tally_border = colors.HexColor('#475569')
+        
+        # Header banner
+        title_p = Paragraph(f"<b>TAX INVOICE</b>", ParagraphStyle('TallyTitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=12, alignment=TA_CENTER, textColor=tally_primary))
+        elements.append(Table([[title_p]], colWidths=[186*mm], style=[
+            ('BOX', (0,0), (-1,-1), 1, tally_border),
+            ('PADDING', (0,0), (-1,-1), 3),
+            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#E2E8F0'))
+        ]))
+        
+        # Header main grid
+        company_p = Paragraph(f"<b>{company_name}</b><br/>{company_address}<br/>GSTIN: {company_gstin or 'N/A'}<br/>PAN: {company_pan or 'N/A'}<br/>Mobile: {company_phone} | Email: {company_email}", normal_style)
+        invoice_meta_p = Paragraph(f"<b>Invoice No:</b> {invoice_number}<br/><b>Date:</b> {issue_date}<br/><b>Due Date:</b> {due_date}<br/><b>Place of Supply:</b> {origin_state_code or 'N/A'}", normal_style)
+        
+        header_grid = Table([[company_p, invoice_meta_p]], colWidths=[110*mm, 76*mm], style=[
+            ('BOX', (0,0), (-1,-1), 1, tally_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 6)
+        ])
+        elements.append(header_grid)
+        
+        # Billing & Shipping info side-by-side
+        bill_to_p = Paragraph(f"<b>Consignee (Ship To):</b><br/>{customer_name}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style)
+        ship_to_p = Paragraph(f"<b>Buyer (Bill To):</b><br/>{customer_name}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style)
+        
+        party_grid = Table([[bill_to_p, ship_to_p]], colWidths=[93*mm, 93*mm], style=[
+            ('BOX', (0,0), (-1,-1), 1, tally_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 6)
+        ])
+        elements.append(party_grid)
+
+        # Items Table (Tally style columns: S.No., Description, HSN/SAC, GST Rate, Qty, Rate, Amount)
+        table_headers = ['S.No.', 'Description of Goods', 'HSN/SAC', 'GST Rate', 'Qty', 'Rate', 'Amount']
+        grid_data = [[Paragraph(f"<b>{h}</b>", bold_style) for h in table_headers]]
+        for i, item in enumerate(items, 1):
+            desc = item.get('description') or item.get('product_name') or 'N/A'
+            hsn = item.get('hsn_sac') or ''
+            gst_r = f"{item.get('gst_rate', 0):.0f}%"
+            qty = float(item.get('quantity', 0))
+            rate = float(item.get('rate', 0))
+            amt = float(item.get('total', item.get('amount', 0)))
+            grid_data.append([
+                Paragraph(str(i), normal_style),
+                Paragraph(desc, normal_style),
+                Paragraph(hsn, normal_style),
+                Paragraph(gst_r, normal_style),
+                Paragraph(f"{qty:.0f}", normal_style),
+                Paragraph(f"{rate:.2f}", normal_style),
+                Paragraph(f"{amt:.2f}", normal_style)
+            ])
+            
+        items_table = Table(grid_data, colWidths=[12*mm, 84*mm, 20*mm, 18*mm, 16*mm, 18*mm, 18*mm], style=[
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8FAFC')),
+            ('BOX', (0,0), (-1,-1), 1, tally_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('PADDING', (0,0), (-1,-1), 4),
+        ])
+        elements.append(items_table)
+        
+        # Totals and GST analysis
+        # 1. Summarize GST by HSN/SAC
+        hsn_summary = {}
+        for item in items:
+            hsn = item.get('hsn_sac') or 'N/A'
+            taxable = float(item.get('total', 0)) - float(item.get('cgst_amount', 0)) - float(item.get('sgst_amount', 0)) - float(item.get('igst_amount', 0))
+            cgst_amt = float(item.get('cgst_amount', 0))
+            sgst_amt = float(item.get('sgst_amount', 0))
+            igst_amt = float(item.get('igst_amount', 0))
+            cgst_r = float(item.get('cgst_rate', 0))
+            sgst_r = float(item.get('sgst_rate', 0))
+            igst_r = float(item.get('igst_rate', 0))
+            
+            if hsn not in hsn_summary:
+                hsn_summary[hsn] = {'taxable': 0.0, 'cgst': 0.0, 'sgst': 0.0, 'igst': 0.0, 'cgst_rate': cgst_r, 'sgst_rate': sgst_r, 'igst_rate': igst_r}
+            hsn_summary[hsn]['taxable'] += taxable
+            hsn_summary[hsn]['cgst'] += cgst_amt
+            hsn_summary[hsn]['sgst'] += sgst_amt
+            hsn_summary[hsn]['igst'] += igst_amt
+
+        gst_analysis_headers = ['HSN/SAC', 'Taxable Value', 'Central Tax (Rate/Amt)', 'State Tax (Rate/Amt)', 'Total Tax']
+        gst_analysis_rows = [[Paragraph(f"<b>{h}</b>", bold_style) for h in gst_analysis_headers]]
+        for hsn, val in hsn_summary.items():
+            tot_tax = val['cgst'] + val['sgst'] + val['igst']
+            gst_analysis_rows.append([
+                Paragraph(hsn, normal_style),
+                Paragraph(f"{val['taxable']:.2f}", normal_style),
+                Paragraph(f"{val['cgst_rate']:.0f}% / {val['cgst']:.2f}", normal_style),
+                Paragraph(f"{val['sgst_rate']:.0f}% / {val['sgst']:.2f}", normal_style),
+                Paragraph(f"{tot_tax:.2f}", normal_style),
+            ])
+            
+        gst_analysis_table = Table(gst_analysis_rows, colWidths=[26*mm, 35*mm, 45*mm, 45*mm, 35*mm], style=[
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F1F5F9')),
+            ('BOX', (0,0), (-1,-1), 1, tally_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
+            ('PADDING', (0,0), (-1,-1), 4),
+        ])
+        
+        # Bank & Summary layout
+        bank_details_str = f"<b>Bank Details:</b><br/>Bank: {bank_name or 'N/A'}<br/>A/c No: {bank_account_no or 'N/A'}<br/>IFSC: {bank_ifsc or 'N/A'}<br/>Branch: {bank_branch or 'N/A'}"
+        totals_col = [
+            [Paragraph("Taxable Amount:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
+            [Paragraph("Total CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)],
+            [Paragraph("Total SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
+            [Paragraph("Total IGST:", normal_style), Paragraph(f"Rs. {igst:.2f}", right_style)],
+            [Paragraph("<b>Grand Total:</b>", bold_style), Paragraph(f"<b>Rs. {total:.2f}</b>", bold_right)],
+        ]
+        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
+        
+        bottom_summary_grid = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[80*mm, 31*mm, 75*mm], style=[
+            ('BOX', (0,0), (-1,-1), 1, tally_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 6)
+        ])
+        
+        elements.append(Spacer(1, 2*mm))
+        elements.append(Paragraph("<b>GST Tax Analysis Breakdown</b>", bold_style))
+        elements.append(Spacer(1, 1*mm))
+        elements.append(gst_analysis_table)
+        elements.append(Spacer(1, 2*mm))
+        elements.append(bottom_summary_grid)
+        
+        elements.append(Spacer(1, 2*mm))
+        terms_str = f"<b>Terms & Conditions:</b><br/>{terms or 'Goods once sold will not be taken back.'}"
+        sign_block = f"<br/>for <b>{company_name}</b><br/><br/><br/>Authorised Signatory"
+        bottom_table = Table([[Paragraph(terms_str, caption_style), Paragraph(sign_block, center_style)]], colWidths=[120*mm, 66*mm], style=[
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 0),
+        ])
+        elements.append(bottom_table)
+
+    # Render A4 Classic Blue Grid Layout (Format 3 - JOT Style with continuous vertical lines)
+    elif template == "classic_blue":
+        classic_primary = colors.HexColor('#0088CC')
+        classic_border = colors.HexColor('#99CCFF')
+        
+        # Center company header
+        elements.append(Paragraph(f"<font size=16 color='{classic_primary.hexval()}'><b>{company_name}</b></font>", center_style))
+        if company_address:
+            elements.append(Paragraph(company_address, center_style))
+        elements.append(Paragraph(f"Tel: {company_phone} | Email: {company_email} | GSTIN: {company_gstin or 'N/A'}", center_style))
+        elements.append(Spacer(1, 2*mm))
+        
+        # Header bar
+        title_p = Paragraph(f"<b>{doc_type.upper()}</b>", ParagraphStyle('ClassicTitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=12, alignment=TA_CENTER, textColor=colors.white))
+        elements.append(Table([[title_p]], colWidths=[186*mm], style=[
+            ('BACKGROUND', (0,0), (-1,-1), classic_primary),
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('PADDING', (0,0), (-1,-1), 4)
+        ]))
+        
+        # Metadata and party info in grid
+        meta_grid_data = [
+            [Paragraph(f"<b>Invoice No:</b> {invoice_number}", normal_style), Paragraph(f"<b>Billed To:</b> {customer_name}", normal_style)],
+            [Paragraph(f"<b>Date:</b> {issue_date}", normal_style), Paragraph(f"<b>Address:</b> {company_address}", normal_style)],
+            [Paragraph(f"<b>Due Date:</b> {due_date}", normal_style), Paragraph(f"<b>GSTIN:</b> {customer_gstin or 'Unregistered'}", normal_style)],
+        ]
+        elements.append(Table(meta_grid_data, colWidths=[93*mm, 93*mm], style=[
+            ('BOX', (0,0), (-1,-1), 1, classic_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, classic_border),
+            ('PADDING', (0,0), (-1,-1), 4)
+        ]))
+        elements.append(Spacer(1, 4*mm))
+        
+        # Classic Items Table. To make the vertical lines run all the way down, we pad the table with empty lines if needed.
+        table_headers = ['S.No.', 'Description', 'Qty', 'Rate', 'Amount']
+        grid_data = [[Paragraph(f"<b>{h}</b>", bold_style) for h in table_headers]]
+        for i, item in enumerate(items, 1):
+            desc = item.get('description') or item.get('product_name') or 'N/A'
+            qty = float(item.get('quantity', 0))
+            rate = float(item.get('rate', 0))
+            amt = float(item.get('total', item.get('amount', 0)))
+            grid_data.append([
+                Paragraph(str(i), normal_style),
+                Paragraph(desc, normal_style),
+                Paragraph(f"{qty:.0f}", normal_style),
+                Paragraph(f"{rate:.2f}", normal_style),
+                Paragraph(f"{amt:.2f}", normal_style)
+            ])
+        
+        # Padding rows to ensure classic Tally / Vyapar look where grid lines run to the bottom
+        target_rows = 8
+        if len(items) < target_rows:
+            for _ in range(target_rows - len(items)):
+                grid_data.append([Paragraph("", normal_style), Paragraph("", normal_style), Paragraph("", normal_style), Paragraph("", normal_style), Paragraph("", normal_style)])
+                
+        items_table = Table(grid_data, colWidths=[15*mm, 101*mm, 20*mm, 25*mm, 25*mm], style=[
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#EBF5FB')),
+            ('BOX', (0,0), (-1,-1), 1, classic_primary),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, classic_border),
+            ('PADDING', (0,0), (-1,-1), 6),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ])
+        elements.append(items_table)
+        elements.append(Spacer(1, 4*mm))
+        
+        # Totals and bank
+        bank_details_str = f"<b>Bank Details:</b><br/>Bank: {bank_name or 'N/A'}<br/>A/c No: {bank_account_no or 'N/A'}<br/>IFSC: {bank_ifsc or 'N/A'}"
+        totals_col = [
+            [Paragraph("Subtotal:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
+            [Paragraph("CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)],
+            [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
+            [Paragraph("<b>Grand Total:</b>", bold_style), Paragraph(f"<b>Rs. {total:.2f}</b>", bold_right)],
+        ]
+        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
+        
+        summary_table = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[80*mm, 31*mm, 75*mm], style=[
+            ('BOX', (0,0), (-1,-1), 1, classic_primary),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 6)
+        ])
+        elements.append(summary_table)
+        
+        elements.append(Spacer(1, 4*mm))
+        terms_str = f"<b>Terms & Conditions:</b><br/>{terms or 'Goods once sold are not returnable.'}"
+        sign_block = f"<br/>For <b>{company_name}</b><br/><br/>Authorised Signatory"
+        bottom_table = Table([[Paragraph(terms_str, caption_style), Paragraph(sign_block, center_style)]], colWidths=[120*mm, 66*mm], style=[
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 0),
+        ])
+        elements.append(bottom_table)
+
+    # Render A4 Sleek Modern Layout (Format 4 - Sleek Bill Style Minimalist Layout)
+    elif template == "sleek_modern":
+        sleek_primary = colors.HexColor('#0F1B3D')
+        sleek_accent = colors.HexColor('#DCA035')
+        
+        # Elegant header banner
+        header_p = Paragraph(f"<b><font size=16 color='white'>{company_name.upper()}</font></b><br/><font size=9 color='white'>GSTIN: {company_gstin or 'N/A'}</font>", normal_style)
+        title_p = Paragraph(f"<b><font size=16 color='white'>{doc_type.upper()}</font></b><br/><font size=11 color='white'>#{invoice_number}</font>", ParagraphStyle('SleekTitle', parent=styles['Normal'], alignment=TA_RIGHT))
+        
+        banner_table = Table([[header_p, title_p]], colWidths=[100*mm, 86*mm], style=[
+            ('BACKGROUND', (0,0), (-1,-1), sleek_primary),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('PADDING', (0,0), (-1,-1), 12)
+        ])
+        elements.append(banner_table)
+        elements.append(Spacer(1, 6*mm))
+        
+        # Metadata
+        meta_left = f"<b>Date:</b> {issue_date}<br/><b>Due Date:</b> {due_date}<br/><b>Place of Supply:</b> {origin_state_code or 'N/A'}"
+        meta_right = f"<b>Billed To:</b><br/>{customer_name}<br/>GSTIN: {customer_gstin or 'Unregistered'}"
+        
+        meta_table = Table([[Paragraph(meta_left, normal_style), Paragraph(meta_right, normal_style)]], colWidths=[93*mm, 93*mm], style=[
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 0)
+        ])
+        elements.append(meta_table)
+        elements.append(Spacer(1, 6*mm))
+        
+        # Clean items table (alternating rows, no vertical borders)
+        table_headers = ['Description', 'Qty', 'Rate', 'Amount']
+        grid_data = [[Paragraph(f"<b>{h}</b>", bold_style) for h in table_headers]]
+        for i, item in enumerate(items, 1):
+            desc = item.get('description') or item.get('product_name') or 'N/A'
+            qty = float(item.get('quantity', 0))
+            rate = float(item.get('rate', 0))
+            amt = float(item.get('total', item.get('amount', 0)))
+            grid_data.append([
+                Paragraph(desc, normal_style),
+                Paragraph(f"{qty:.0f}", normal_style),
+                Paragraph(f"{rate:.2f}", normal_style),
+                Paragraph(f"{amt:.2f}", normal_style)
+            ])
+            
+        t_style = [
+            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8FAFC')),
+            ('LINEBELOW', (0,0), (-1,0), 2, sleek_accent),
+            ('LINEBELOW', (0,1), (-1,-1), 0.5, colors.HexColor('#E2E8F0')),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('PADDING', (0,0), (-1,-1), 6),
+        ]
+        
+        # Zebra striping
+        for r in range(1, len(grid_data)):
+            if r % 2 == 0:
+                t_style.append(('BACKGROUND', (0,r), (-1,r), colors.HexColor('#F8FAFC')))
+                
+        items_table = Table(grid_data, colWidths=[116*mm, 20*mm, 25*mm, 25*mm], style=t_style)
+        elements.append(items_table)
+        elements.append(Spacer(1, 6*mm))
+        
+        # Totals alignment
+        bank_details_str = f"<b>Payment Details:</b><br/>Bank: {bank_name or 'N/A'}<br/>A/c No: {bank_account_no or 'N/A'}<br/>IFSC: {bank_ifsc or 'N/A'}"
+        totals_col = [
+            [Paragraph("Subtotal:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
+            [Paragraph("CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)],
+            [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
+            [Paragraph("<font size=11><b>Amount Due:</b></font>", bold_style), Paragraph(f"<font size=11><b>Rs. {total:.2f}</b></font>", bold_right)],
+        ]
+        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[
+            ('PADDING', (0,0), (-1,-1), 2),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE')
+        ])
+        
+        summary_table = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[80*mm, 31*mm, 75*mm], style=[
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 6)
+        ])
+        elements.append(summary_table)
+        elements.append(Spacer(1, 6*mm))
+        
+        # Footer
+        terms_str = f"<b>Terms & Conditions:</b><br/>{terms or 'Thank you for your business!'}"
+        sign_block = f"<br/><br/><b>{company_name.upper()}</b><br/><br/>Authorized Signature"
+        bottom_table = Table([[Paragraph(terms_str, caption_style), Paragraph(sign_block, right_style)]], colWidths=[120*mm, 66*mm], style=[
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ])
+        elements.append(bottom_table)
+
     # Render Minimal Layout (clean, black & white, no borders)
     elif template == "minimal":
         elements.append(Paragraph(company_name, company_title))

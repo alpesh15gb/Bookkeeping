@@ -132,6 +132,9 @@ def create_expense(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:create")),
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.expense_date)
+
     category = db.query(ExpenseCategory).filter(
         ExpenseCategory.id == payload.expense_category_id,
         ExpenseCategory.tenant_id == tenant_id,
@@ -236,6 +239,12 @@ def update_expense(
     ).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, expense.expense_date)
+    if payload.expense_date:
+        validate_period_open(db, tenant_id, payload.expense_date)
+
     if expense.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft expenses can be edited.")
 
@@ -309,6 +318,10 @@ def post_expense(
     ).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, expense.expense_date)
+
     if expense.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft expenses can be posted.")
 
@@ -380,6 +393,10 @@ def cancel_expense(
     ).first()
     if not expense:
         raise HTTPException(status_code=404, detail="Expense not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
+
     if expense.status != "POSTED":
         raise HTTPException(status_code=400, detail="Only posted expenses can be cancelled.")
 
@@ -447,6 +464,9 @@ def clone_expense(
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:create")),
 ):
     """Clone an existing expense into a new DRAFT expense."""
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
+
     original = db.query(Expense).filter(
         Expense.id == id,
         Expense.tenant_id == tenant_id,

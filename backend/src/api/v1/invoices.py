@@ -38,6 +38,9 @@ def create_invoice(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.issue_date)
+
     # Verify Customer belongs to active tenant
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
@@ -384,6 +387,9 @@ def create_credit_note(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.issue_date)
+
     if payload.invoice_id:
         inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
         if not inv:
@@ -619,6 +625,9 @@ def finalize_credit_note(
     if not cn:
         raise HTTPException(status_code=404, detail="Credit Note not found.")
 
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, cn.issue_date)
+
     if cn.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft Credit Notes can be finalized.")
 
@@ -678,6 +687,9 @@ def cancel_credit_note(
     ).first()
     if not cn:
         raise HTTPException(status_code=404, detail="Credit Note not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
 
     if cn.status != "POSTED":
         raise HTTPException(status_code=400, detail="Only posted Credit Notes can be cancelled.")
@@ -777,6 +789,9 @@ def create_debit_note(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.issue_date)
+
     if payload.invoice_id:
         inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
         if not inv:
@@ -971,6 +986,9 @@ def finalize_debit_note(
     if not dn:
         raise HTTPException(status_code=404, detail="Debit Note not found.")
 
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, dn.issue_date)
+
     if dn.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft Debit Notes can be finalized.")
 
@@ -1030,6 +1048,9 @@ def cancel_debit_note(
     ).first()
     if not dn:
         raise HTTPException(status_code=404, detail="Debit Note not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
 
     if dn.status != "POSTED":
         raise HTTPException(status_code=400, detail="Only posted Debit Notes can be cancelled.")
@@ -1139,6 +1160,11 @@ def update_invoice(
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found in this company context.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, invoice.issue_date)
+    if payload.issue_date:
+        validate_period_open(db, tenant_id, payload.issue_date)
 
     if invoice.status != "DRAFT":
         raise HTTPException(
@@ -1308,6 +1334,9 @@ def finalize_invoice(
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found in this company context.")
 
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, invoice.issue_date)
+
     if invoice.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft invoices can be finalized.")
 
@@ -1365,6 +1394,9 @@ def record_invoice_payment(
     ).with_for_update().first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found in this company context.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.payment_date)
 
     if invoice.status in ("DRAFT", "CANCELLED", "PAID"):
         raise HTTPException(status_code=400, detail="Cannot record payments on draft, cancelled, or fully paid invoices.")
@@ -1445,6 +1477,9 @@ def cancel_invoice(
     ).with_for_update().first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
     
     if invoice.status not in ("POSTED", "PARTIALLY_PAID"):
         raise HTTPException(status_code=400, detail="Only posted or partially paid invoices can be cancelled.")
@@ -1636,7 +1671,15 @@ def print_invoice(
     for line in invoice.lines:
         product = line.product
         items.append({
-            'description': product.name if product else line.hsn_sac,
+            'description': line.description or (product.name if product else 'N/A'),
+            'hsn_sac': line.hsn_sac or '',
+            'gst_rate': float(line.gst_rate or 0),
+            'cgst_rate': float(line.cgst_rate or 0),
+            'cgst_amount': float(line.cgst_amount or 0),
+            'sgst_rate': float(line.sgst_rate or 0),
+            'sgst_amount': float(line.sgst_amount or 0),
+            'igst_rate': float(line.igst_rate or 0),
+            'igst_amount': float(line.igst_amount or 0),
             'quantity': float(line.quantity),
             'rate': float(line.rate),
             'total': float(line.total),
@@ -1696,7 +1739,15 @@ def print_credit_note(
     for line in cn.lines:
         product = line.product
         items.append({
-            'description': product.name if product else line.hsn_sac,
+            'description': line.description or (product.name if product else 'N/A'),
+            'hsn_sac': line.hsn_sac or '',
+            'gst_rate': float(line.gst_rate or 0),
+            'cgst_rate': float(line.cgst_rate or 0),
+            'cgst_amount': float(line.cgst_amount or 0),
+            'sgst_rate': float(line.sgst_rate or 0),
+            'sgst_amount': float(line.sgst_amount or 0),
+            'igst_rate': float(line.igst_rate or 0),
+            'igst_amount': float(line.igst_amount or 0),
             'quantity': float(line.quantity),
             'rate': float(line.rate),
             'total': float(line.total),
@@ -1755,7 +1806,15 @@ def print_debit_note(
     for line in dn.lines:
         product = line.product
         items.append({
-            'description': product.name if product else line.hsn_sac,
+            'description': line.description or (product.name if product else 'N/A'),
+            'hsn_sac': line.hsn_sac or '',
+            'gst_rate': float(line.gst_rate or 0),
+            'cgst_rate': float(line.cgst_rate or 0),
+            'cgst_amount': float(line.cgst_amount or 0),
+            'sgst_rate': float(line.sgst_rate or 0),
+            'sgst_amount': float(line.sgst_amount or 0),
+            'igst_rate': float(line.igst_rate or 0),
+            'igst_amount': float(line.igst_amount or 0),
             'quantity': float(line.quantity),
             'rate': float(line.rate),
             'total': float(line.total),
@@ -1871,6 +1930,9 @@ def clone_invoice(
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
 ):
     """Clone an existing invoice into a new DRAFT invoice."""
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
+
     original = db.query(Invoice).filter(
         Invoice.id == id,
         Invoice.tenant_id == tenant_id,

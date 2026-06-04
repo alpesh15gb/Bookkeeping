@@ -467,7 +467,15 @@ def print_purchase_order(
     for line in po.lines:
         product = line.product
         items.append({
-            'description': product.name if product else line.hsn_sac,
+            'description': line.description or (product.name if product else 'N/A'),
+            'hsn_sac': line.hsn_sac or '',
+            'gst_rate': float(line.gst_rate or 0),
+            'cgst_rate': float(line.cgst_rate or 0),
+            'cgst_amount': float(line.cgst_amount or 0),
+            'sgst_rate': float(line.sgst_rate or 0),
+            'sgst_amount': float(line.sgst_amount or 0),
+            'igst_rate': float(line.igst_rate or 0),
+            'igst_amount': float(line.igst_amount or 0),
             'quantity': float(line.quantity),
             'rate': float(line.rate),
             'total': float(line.total),

@@ -20,6 +20,7 @@ import 'package:flutter_client/views/credit_notes/credit_note_list_view.dart';
 import 'package:flutter_client/views/purchase_orders/order_list_view.dart';
 import 'package:flutter_client/views/accounting/journal_entry_view.dart';
 import 'package:flutter_client/views/accounting/statement_view.dart';
+import 'package:flutter_client/views/accounting/year_end_view.dart';
 import 'package:flutter_client/views/payments/payment_list_view.dart';
 import 'package:flutter_client/views/accounting/account_list_view.dart';
 import 'package:flutter_client/views/einvoice/eway_bill_list_view.dart';
@@ -161,6 +162,7 @@ final List<_MenuItem> _flatItems = [
   _MenuItem(name: 'Tally Import/Export', icon: Icons.swap_horiz_rounded, view: const TallyImportView()),
   _MenuItem(name: 'Backup/Restore', icon: Icons.backup_rounded, view: const BackupRestoreView()),
   _MenuItem(name: 'Settings', icon: Icons.settings_rounded, view: const SettingsView()),
+  _MenuItem(name: 'Year End Close', icon: Icons.lock_clock_outlined, view: const YearEndCloseView()),
 ];
 
 // ─── Grouped sidebar structure ────────────────────────────────
@@ -184,7 +186,7 @@ final List<_MenuEntry> _sidebarEntries = [
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Accounting',
     icon: Icons.account_balance_outlined,
-    childIndices: [13, 14, 15, 16, 17], // Journal Entry, Payments, Bank Recon., Banking, Chart of Accounts
+    childIndices: [13, 14, 15, 16, 17, 28], // Journal Entry, Payments, Bank Recon., Banking, Chart of Accounts, Year End Close
   )),
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Reports & Compliance',

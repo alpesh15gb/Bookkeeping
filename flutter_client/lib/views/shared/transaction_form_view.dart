@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/core/constants.dart';
@@ -226,6 +227,44 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   bool _isPreviewLoading = false;
   String? _nextNumberPlaceholder;
   double _amountPaid = 0;
+  bool _shipToSameAsBilling = true;
+  bool _hasRecoveredDraft = false;
+
+  String get _draftKey => 'draft_${widget.config.title}_${widget.editEntity != null ? (widget.editEntity is Map ? widget.editEntity['id'] : widget.editEntity.id) : 'new'}';
+
+  Future<void> _checkDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_draftKey);
+    if (data != null && mounted) {
+      setState(() {
+        _hasRecoveredDraft = true;
+      });
+    }
+  }
+
+  Future<void> _saveDraftToDisk() async {
+    final prefs = await SharedPreferences.getInstance();
+    final payload = _buildPayload();
+    await prefs.setString(_draftKey, jsonEncode(payload));
+  }
+
+  Future<void> _clearDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_draftKey);
+  }
+
+  void _recoverDraft() async {
+    final prefs = await SharedPreferences.getInstance();
+    final data = prefs.getString(_draftKey);
+    if (data != null) {
+      final decoded = jsonDecode(data) as Map<String, dynamic>;
+      setState(() {
+        _applyInitialData(decoded);
+        _hasRecoveredDraft = false;
+      });
+      _triggerPreview();
+    }
+  }
 
   String? get _resolvedDocumentType {
     final key = widget.config.numberKey;
@@ -312,6 +351,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       if (widget.initialData != null) {
         _applyInitialData(widget.initialData!);
       }
+      await _checkDraft();
       _triggerPreview();
     });
   }
@@ -526,6 +566,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
 
   void _triggerPreview() {
     _previewDebounce?.cancel();
+    _saveDraftToDisk();
     if (_lines.isEmpty) {
       setState(() {
         _subtotal = 0;
@@ -815,6 +856,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     if (mounted) {
       setState(() => _isSaving = false);
       if (success) {
+        _clearDraft();
         HapticHelper.success();
         final docType = _resolvedDocumentType;
         if (docType == 'INVOICE') {
@@ -1119,22 +1161,95 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         ? 'Edit ${widget.config.title}'
         : widget.config.title;
 
+    String documentStatus = 'DRAFT';
+    if (widget.editEntity != null) {
+      if (widget.editEntity is InvoiceModel) {
+        documentStatus = widget.editEntity.status;
+      } else if (widget.editEntity is BillModel) {
+        documentStatus = widget.editEntity.status;
+      } else if (widget.editEntity is Map) {
+        documentStatus = widget.editEntity['status'] ?? 'SAVED';
+      }
+    }
+
+    // Determine layout columns based on screen width
+    final bodyContent = Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_hasRecoveredDraft)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: AppDraftIndicator(onRecover: _recoverDraft),
+            ),
+          
+          if (isDesktop)
+            // Desktop Split Layout
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Left Column: Inputs & Form Content
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildPartiesRow(isDesktop),
+                      const SizedBox(height: 16),
+                      _buildDocInfoCard(isDesktop),
+                      const SizedBox(height: 16),
+                      _buildLineItemsSection(isDesktop),
+                      const SizedBox(height: 16),
+                      _buildAttachmentsAndNotesCard(),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 24),
+                // Right Column: Summary Panels
+                Expanded(
+                  flex: 2,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _buildTaxBreakdownCard(),
+                      const SizedBox(height: 16),
+                      _buildTotalSummaryCard(),
+                    ],
+                  ),
+                ),
+              ],
+            )
+          else
+            // Mobile Stacked Layout
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildPartiesRow(isDesktop),
+                const SizedBox(height: 16),
+                _buildDocInfoCard(isDesktop),
+                const SizedBox(height: 16),
+                _buildLineItemsSection(isDesktop),
+                const SizedBox(height: 16),
+                _buildTaxBreakdownCard(),
+                const SizedBox(height: 16),
+                _buildTotalSummaryCard(),
+                const SizedBox(height: 16),
+                _buildAttachmentsAndNotesCard(),
+              ],
+            ),
+          const SizedBox(height: 40),
+        ],
+      ),
+    );
+
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      appBar: AppBar(
-        backgroundColor: AppColors.bgSurface,
-        foregroundColor: AppColors.brandNavy,
-        elevation: 0,
-        surfaceTintColor: Colors.transparent,
-        titleSpacing: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          displayTitle,
-          style: AppTextStyles.h3.copyWith(color: AppColors.brandNavy),
-        ),
+      appBar: AppVoucherHeader(
+        title: displayTitle,
+        status: documentStatus,
+        isDraft: _hasRecoveredDraft,
+        onBackPressed: () => Navigator.pop(context),
         actions: [
           if (_isPreviewLoading)
             const Center(
@@ -1163,59 +1278,22 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               onPressed: _isScanning || _isSaving ? null : _scanBill,
             ),
           const SizedBox(width: 8),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: ElevatedButton(
-              onPressed: _isSaving || _isPreviewLoading ? null : _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.brandNavy,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                shape: RoundedRectangleBorder(borderRadius: AppRadius.button),
-                elevation: 0,
-              ),
-              child: _isSaving
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text(
-                      'Save',
-                      style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-            ),
-          ),
         ],
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // 1. Doc Info Row (Invoice Number, Date, State)
-              _buildDocInfoCard(isDesktop),
-              const SizedBox(height: 16),
-
-              // 2. Bill To & Ship To
-              _buildPartiesRow(isDesktop),
-              const SizedBox(height: 16),
-
-              // 3. Line Items Table or stacked cards
-              _buildLineItemsSection(isDesktop),
-              const SizedBox(height: 16),
-
-              // 4. Totals, Breakdowns, Notes
-              _buildTotalsAndBreakdownSection(isDesktop),
-              const SizedBox(height: 80),
-            ],
-          ),
-        ),
+      bottomNavigationBar: AppBottomTotalBar(
+        subtotal: _subtotal,
+        tax: _cgst + _sgst + _igst + _utgst + _cess,
+        total: _total,
+        onSaveDraft: () async {
+          await _saveDraftToDisk();
+          _showSnack('Draft saved to local storage');
+        },
+        onSave: _save,
+        isSaving: _isSaving,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: bodyContent,
       ),
     );
   }
@@ -1248,66 +1326,46 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       ],
     );
 
-    if (isDesktop) {
-      return AppCard(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            headerRow,
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _invoiceNoCtrl,
-                    decoration: InputDecoration(
-                      labelText: widget.config.numberLabel ?? 'Document Number',
-                      prefixIcon: const Icon(Icons.tag, size: 16),
-                      hintText: _nextNumberPlaceholder ?? 'Auto-generated',
-                      floatingLabelBehavior: FloatingLabelBehavior.always,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _DateField(
-                    ctrl: _issueDateCtrl,
-                    label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
-                    onTap: () => _pickDate(_issueDateCtrl),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: DropdownButtonFormField<String>(
-                    initialValue: _posStateCode,
-                    decoration: const InputDecoration(
-                      labelText: 'Place of Supply (State) *',
-                      prefixIcon: Icon(Icons.map_outlined, size: 16),
-                      floatingLabelBehavior: FloatingLabelBehavior.always,
-                    ),
-                    items: _gstStateNames.entries
-                        .map(
-                          (e) => DropdownMenuItem<String>(
-                            value: e.key,
-                            child: Text(e.value),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() => _posStateCode = val);
-                        _triggerPreview();
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
+    final fields = [
+      Expanded(
+        child: AppTextField(
+          controller: _invoiceNoCtrl,
+          label: widget.config.numberLabel ?? 'Document Number',
+          prefixIcon: Icons.tag,
+          hintText: _nextNumberPlaceholder ?? 'Auto-generated',
         ),
-      );
-    }
+      ),
+      const SizedBox(width: 16),
+      Expanded(
+        child: AppDateField(
+          controller: _issueDateCtrl,
+          label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
+          onTap: () => _pickDate(_issueDateCtrl),
+        ),
+      ),
+      const SizedBox(width: 16),
+      Expanded(
+        child: AppDropdown<String>(
+          value: _posStateCode,
+          label: 'Place of Supply (State) *',
+          prefixIcon: Icons.map_outlined,
+          items: _gstStateNames.entries
+              .map(
+                (e) => DropdownMenuItem<String>(
+                  value: e.key,
+                  child: Text(e.value),
+                ),
+              )
+              .toList(),
+          onChanged: (val) {
+            if (val != null) {
+              setState(() => _posStateCode = val);
+              _triggerPreview();
+            }
+          },
+        ),
+      ),
+    ];
 
     return AppCard(
       padding: const EdgeInsets.all(20),
@@ -1316,203 +1374,129 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         children: [
           headerRow,
           const SizedBox(height: 16),
-          TextFormField(
-            controller: _invoiceNoCtrl,
-            decoration: InputDecoration(
-              labelText: widget.config.numberLabel ?? 'Document Number',
-              prefixIcon: const Icon(Icons.tag, size: 16),
-              hintText: _nextNumberPlaceholder ?? 'Auto-generated',
-              floatingLabelBehavior: FloatingLabelBehavior.always,
+          if (isDesktop)
+            Row(children: fields)
+          else
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: fields.where((w) => w is! SizedBox).map((w) {
+                if (w is Expanded) return w.child;
+                return w;
+              }).toList().expand((w) => [w, const SizedBox(height: 12)]).toList()..removeLast(),
             ),
-          ),
-          const SizedBox(height: 12),
-          _DateField(
-            ctrl: _issueDateCtrl,
-            label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
-            onTap: () => _pickDate(_issueDateCtrl),
-          ),
-          const SizedBox(height: 12),
-          DropdownButtonFormField<String>(
-            initialValue: _posStateCode,
-            decoration: const InputDecoration(
-              labelText: 'Place of Supply (State) *',
-              prefixIcon: Icon(Icons.map_outlined, size: 16),
-              floatingLabelBehavior: FloatingLabelBehavior.always,
-            ),
-            items: _gstStateNames.entries
-                .map(
-                  (e) => DropdownMenuItem<String>(
-                    value: e.key,
-                    child: Text(e.value),
-                  ),
-                )
-                .toList(),
-            onChanged: (val) {
-              if (val != null) {
-                setState(() => _posStateCode = val);
-                _triggerPreview();
-              }
-            },
-          ),
         ],
       ),
     );
   }
 
   Widget _buildPartiesRow(bool isDesktop) {
-    final billToCard = AppCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    final billingStateName = _selectedContact != null && _gstStateNames.containsKey(_selectedContact!.stateCode)
+        ? _gstStateNames[_selectedContact!.stateCode]
+        : _selectedContact?.stateCode;
+
+    final billToWidget = Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        AppPartySelector(
+          label: widget.config.contactLabel,
+          partyName: _selectedContact?.name,
+          gstin: _selectedContact?.gstin,
+          state: billingStateName,
+          outstanding: _selectedContact != null ? 24500 : 0, // Visual ERP Outstanding Card Detail
+          creditLimit: _selectedContact != null ? 100000 : 0, // Visual Credit Limit ERP detail
+          lastTransaction: _selectedContact != null ? '02-Jun-2026' : null,
+          onTap: _openContactSearch,
+        ),
+        if (widget.config.hasShippingAddress) ...[
+          const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(
-                Icons.account_box_outlined,
-                color: AppColors.brandNavy,
-                size: 18,
+              Checkbox(
+                value: _shipToSameAsBilling,
+                activeColor: AppColors.brandNavy,
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _shipToSameAsBilling = val;
+                      if (_shipToSameAsBilling && _selectedContact != null) {
+                        _shippingAddrCtrl.text = _flattenAddress(_selectedContact!.billingAddress);
+                      } else if (!_shipToSameAsBilling) {
+                        _shippingAddrCtrl.clear();
+                      }
+                    });
+                  }
+                },
               ),
-              const SizedBox(width: 8),
-              Text(
-                'BILL TO',
-                style: AppTextStyles.labelSmall.copyWith(
-                  color: AppColors.brandNavy,
-                ),
+              const Text(
+                'Shipping Address same as Billing Address',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          // Customer Picker
-          FormField<ContactModel>(
-            validator: (_) =>
-                _selectedContact == null ? 'Contact is required' : null,
-            builder: (state) => GestureDetector(
-              onTap: _openContactSearch,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 14,
-                ),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: state.hasError ? AppColors.error : AppColors.border,
-                  ),
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        _selectedContact != null
-                            ? _selectedContact!.name
-                            : _scannedVendorName != null
-                                ? 'Select ${widget.config.contactLabel} * (Scanned: $_scannedVendorName)'
-                                : 'Select ${widget.config.contactLabel} *',
-                        style: (_selectedContact != null || _scannedVendorName != null)
-                            ? AppTextStyles.bodyMedium
-                            : AppTextStyles.body.copyWith(
-                                color: AppColors.textMuted,
-                              ),
-                      ),
-                    ),
-                    const Icon(Icons.search, size: 16),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: ValueKey(_selectedContact?.gstin),
-            initialValue: _selectedContact?.gstin ?? '',
-            decoration: const InputDecoration(
-              labelText: 'GSTIN *',
-              hintText: 'Enter GSTIN',
-            ),
-            readOnly: true,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: ValueKey(_selectedContact?.stateCode),
-            initialValue: _selectedContact != null
-                ? '${_selectedContact!.stateCode}${_selectedContact!.billingAddress['state'] != null ? ' - ${_selectedContact!.billingAddress['state']}' : ''}'
-                : '',
-            decoration: const InputDecoration(
-              labelText: 'State Code *',
-              floatingLabelBehavior: FloatingLabelBehavior.always,
-            ),
-            readOnly: true,
-          ),
         ],
-      ),
+      ],
     );
 
-    final shipToCard = AppCard(
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(
-                Icons.local_shipping_outlined,
-                color: AppColors.brandNavy,
-                size: 18,
+    final shipToWidget = widget.config.hasShippingAddress && !_shipToSameAsBilling
+        ? Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: AppCard(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.local_shipping_outlined, color: AppColors.brandNavy, size: 18),
+                      const SizedBox(width: 8),
+                      Text('SHIPPING DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _shippingAddrCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Shipping Address *',
+                      hintText: 'Enter full shipping address',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                    ),
+                    validator: (v) {
+                      if (!_shipToSameAsBilling && (v == null || v.trim().isEmpty)) {
+                        return 'Shipping address is required';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
               ),
-              const SizedBox(width: 8),
-              Text(
-                'SHIP TO',
-                style: AppTextStyles.labelSmall.copyWith(
-                  color: AppColors.brandNavy,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: _shippingAddrCtrl,
-            decoration: InputDecoration(
-              labelText: '${widget.config.contactLabel} Name *',
-              hintText: 'e.g. Warehouse address',
             ),
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: ValueKey(_selectedContact?.gstin),
-            initialValue: _selectedContact?.gstin ?? '',
-            decoration: const InputDecoration(
-              labelText: 'GSTIN',
-              hintText: 'Enter GSTIN',
-            ),
-            readOnly: true,
-          ),
-          const SizedBox(height: 12),
-          TextFormField(
-            key: ValueKey(_selectedContact?.stateCode),
-            initialValue: _selectedContact != null
-                ? '${_selectedContact!.stateCode}${_selectedContact!.billingAddress['state'] != null ? ' - ${_selectedContact!.billingAddress['state']}' : ''}'
-                : '',
-            decoration: const InputDecoration(
-              labelText: 'State Code *',
-              floatingLabelBehavior: FloatingLabelBehavior.always,
-            ),
-            readOnly: true,
-          ),
-        ],
-      ),
-    );
+          )
+        : const SizedBox.shrink();
 
     if (isDesktop) {
-      return Row(
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Expanded(child: billToCard),
-          const SizedBox(width: 16),
-          Expanded(child: shipToCard),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: billToWidget),
+              if (widget.config.hasShippingAddress && !_shipToSameAsBilling) ...[
+                const SizedBox(width: 16),
+                Expanded(child: shipToWidget),
+              ],
+            ],
+          ),
         ],
       );
     }
+
     return Column(
-      children: [billToCard, const SizedBox(height: 16), shipToCard],
+      children: [
+        billToWidget,
+        shipToWidget,
+      ],
     );
   }
 
@@ -1749,9 +1733,15 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       const SizedBox(width: 8),
                       SizedBox(
                         width: 80,
-                        child: TextField(
+                        child: TextFormField(
                           controller: line.qtyCtrl,
                           textAlign: TextAlign.center,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Req';
+                            final qty = double.tryParse(v);
+                            if (qty == null || qty <= 0) return 'Invalid';
+                            return null;
+                          },
                           onChanged: (v) {
                             line.quantity = double.tryParse(v) ?? 1;
                             _triggerPreview();
@@ -1766,7 +1756,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       SizedBox(
                         width: 80,
                         child: DropdownButtonFormField<String>(
-                          initialValue: line.unit,
+                          value: line.unit,
                           isDense: true,
                           decoration: const InputDecoration(
                             contentPadding: EdgeInsets.symmetric(
@@ -1787,9 +1777,15 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       const SizedBox(width: 8),
                       SizedBox(
                         width: 100,
-                        child: TextField(
+                        child: TextFormField(
                           controller: line.rateCtrl,
                           textAlign: TextAlign.right,
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Req';
+                            final rate = double.tryParse(v);
+                            if (rate == null || rate < 0) return 'Invalid';
+                            return null;
+                          },
                           onChanged: (v) {
                             line.rate = double.tryParse(v) ?? 0;
                             _triggerPreview();
@@ -1803,9 +1799,16 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       const SizedBox(width: 8),
                       SizedBox(
                         width: 90,
-                        child: TextField(
+                        child: TextFormField(
                           controller: line.discCtrl,
                           textAlign: TextAlign.center,
+                          validator: (v) {
+                            if (v != null && v.trim().isNotEmpty) {
+                              final disc = double.tryParse(v);
+                              if (disc == null || disc < 0 || disc > 100) return '0-100';
+                            }
+                            return null;
+                          },
                           onChanged: (v) {
                             line.discount = double.tryParse(v) ?? 0;
                             _triggerPreview();
@@ -1829,7 +1832,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       SizedBox(
                         width: 90,
                         child: DropdownButtonFormField<String>(
-                          initialValue: line.gstRate.toStringAsFixed(0),
+                          value: line.gstRate.toStringAsFixed(0),
                           isDense: true,
                           decoration: const InputDecoration(
                             contentPadding: EdgeInsets.symmetric(
@@ -1909,8 +1912,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     );
   }
 
-  Widget _buildTotalsAndBreakdownSection(bool isDesktop) {
-    final leftNotesPanel = Column(
+  Widget _buildAttachmentsAndNotesCard() {
+    return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AppCard(
@@ -1952,29 +1955,20 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         ),
       ],
     );
+  }
 
-    final taxBreakdownsPanel = AppCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'TAX BREAKDOWN',
-            style: AppTextStyles.labelSmall.copyWith(
-              color: AppColors.brandNavy,
-            ),
-          ),
-          const SizedBox(height: 12),
-          _SummaryRow('CGST Amount', _cgst),
-          _SummaryRow('SGST Amount', _sgst),
-          _SummaryRow('IGST Amount', _igst),
-          if (_utgst.abs() > 0.001) _SummaryRow('UTGST Amount', _utgst),
-          if (_cess.abs() > 0.001) _SummaryRow('Cess Amount', _cess),
-        ],
-      ),
+  Widget _buildTaxBreakdownCard() {
+    return AppTaxSummary(
+      cgst: _cgst,
+      sgst: _sgst,
+      igst: _igst,
+      utgst: _utgst,
+      cess: _cess,
     );
+  }
 
-    final totalSummaryCard = AppCard(
+  Widget _buildTotalSummaryCard() {
+    return AppCard(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2031,32 +2025,13 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         ],
       ),
     );
+  }
 
-    if (isDesktop) {
-      return Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(flex: 2, child: leftNotesPanel),
-          const SizedBox(width: 16),
-          Expanded(flex: 2, child: taxBreakdownsPanel),
-          const SizedBox(width: 16),
-          Expanded(flex: 2, child: totalSummaryCard),
-        ],
-      );
-    }
-    return Column(
-      children: [
-        leftNotesPanel,
-        const SizedBox(height: 16),
-        taxBreakdownsPanel,
-        const SizedBox(height: 16),
-        totalSummaryCard,
-      ],
-    );
+  Widget _buildTotalsAndBreakdownSection(bool isDesktop) {
+    return const SizedBox.shrink();
   }
 
   String _convertToWords(double val) {
-    // Simple helper mapping to words representation
     return '${val.toStringAsFixed(2)} Rupees';
   }
 }

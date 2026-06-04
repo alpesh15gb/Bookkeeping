@@ -32,6 +32,9 @@ def create_payment_receipt(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:create"))
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.payment_date)
+
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
@@ -207,6 +210,9 @@ def cancel_payment_receipt(
     if not payment:
         raise HTTPException(status_code=404, detail="Payment receipt not found.")
 
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
+
     if payment.status == "CANCELLED":
         raise HTTPException(status_code=400, detail="Payment receipt is already cancelled.")
 
@@ -256,6 +262,9 @@ def create_vendor_payment(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("payment:create"))
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.payment_date)
+
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
@@ -416,6 +425,9 @@ def cancel_vendor_payment(
     ).first()
     if not payment:
         raise HTTPException(status_code=404, detail="Disbursement not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
 
     if payment.status == "CANCELLED":
         raise HTTPException(status_code=400, detail="Disbursement is already cancelled.")

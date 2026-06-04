@@ -427,4 +427,53 @@ class AccountingProvider extends ChangeNotifier {
     } catch (_) {}
     return null;
   }
+
+  Future<Map<String, dynamic>?> fetchYearEndPrepare(String closingDate) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _client.get(
+        Uri.parse('${ApiClient.baseUrl}/accounting/year-end/prepare?closing_date=$closingDate'),
+      );
+      if (response.statusCode == 200) {
+        _isLoading = false;
+        notifyListeners();
+        return jsonDecode(response.body);
+      } else {
+        final data = jsonDecode(response.body);
+        _errorMessage = data['detail'] ?? 'Failed to prepare year end';
+      }
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
+    _isLoading = false;
+    notifyListeners();
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> closeYearEnd(String closingDate) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _client.post(
+        Uri.parse('${ApiClient.baseUrl}/accounting/year-end/close'),
+        body: jsonEncode({'closing_date': closingDate}),
+      );
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _isLoading = false;
+        notifyListeners();
+        return jsonDecode(response.body);
+      } else {
+        final data = jsonDecode(response.body);
+        _errorMessage = data['detail'] ?? 'Failed to close year end';
+      }
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
+    _isLoading = false;
+    notifyListeners();
+    return null;
+  }
 }

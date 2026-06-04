@@ -26,6 +26,9 @@ def create_bill(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.issue_date)
+
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
@@ -473,6 +476,11 @@ def update_bill(
     if not bill:
         raise HTTPException(status_code=404, detail="Vendor Bill not found in this company context.")
 
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, bill.issue_date)
+    if payload.issue_date:
+        validate_period_open(db, tenant_id, payload.issue_date)
+
     if bill.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft bills can be modified.")
 
@@ -636,6 +644,9 @@ def finalize_bill(
     if not bill:
         raise HTTPException(status_code=404, detail="Vendor Bill not found in this company context.")
 
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, bill.issue_date)
+
     if bill.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft bills can be finalized.")
 
@@ -693,6 +704,9 @@ def record_bill_payment(
     ).with_for_update().first()
     if not bill:
         raise HTTPException(status_code=404, detail="Vendor Bill not found in this company context.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.payment_date)
 
     if bill.status in ("DRAFT", "CANCELLED", "PAID"):
         raise HTTPException(status_code=400, detail="Cannot record payment allocations on draft, cancelled, or settled bills.")
@@ -775,6 +789,9 @@ def cancel_bill(
     ).with_for_update().first()
     if not bill:
         raise HTTPException(status_code=404, detail="Vendor Bill not found.")
+
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, date.today())
 
     if bill.status not in ("POSTED", "PARTIALLY_PAID"):
         raise HTTPException(status_code=400, detail="Only posted or partially paid bills can be cancelled.")
@@ -883,7 +900,15 @@ def print_bill(
     for line in bill.lines:
         product = line.product
         items.append({
-            'description': product.name if product else line.hsn_sac,
+            'description': line.description or (product.name if product else 'N/A'),
+            'hsn_sac': line.hsn_sac or '',
+            'gst_rate': float(line.gst_rate or 0),
+            'cgst_rate': float(line.cgst_rate or 0),
+            'cgst_amount': float(line.cgst_amount or 0),
+            'sgst_rate': float(line.sgst_rate or 0),
+            'sgst_amount': float(line.sgst_amount or 0),
+            'igst_rate': float(line.igst_rate or 0),
+            'igst_amount': float(line.igst_amount or 0),
             'quantity': float(line.quantity),
             'rate': float(line.rate),
             'total': float(line.total),
