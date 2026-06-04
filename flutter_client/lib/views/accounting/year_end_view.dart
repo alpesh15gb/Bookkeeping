@@ -226,6 +226,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
                       ActionButton(
                         label: 'Retry Check',
                         icon: Icons.refresh,
+                        tier: ActionTier.safe,
                         onPressed: _loadPrepareData,
                       ),
                     ],
@@ -753,6 +754,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
                   child: ActionButton(
                     label: 'Done',
                     icon: Icons.done,
+                    tier: ActionTier.safe,
                     onPressed: () {
                       Navigator.of(context).pop();
                     },
