@@ -277,6 +277,46 @@ def _parse_date(text: str) -> Optional[str]:
             except ValueError:
                 pass
 
+    # Fallback for dd-MMM-yy, dd-MMM-yyyy, or MMM dd, yyyy (e.g. 27-Mar-26 or March 27, 2026)
+    months = {
+        'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+        'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+        'january': 1, 'february': 2, 'march': 3, 'april': 4, 'june': 6,
+        'july': 7, 'august': 8, 'september': 9, 'october': 10, 'november': 11, 'december': 12
+    }
+    
+    # dd-MMM-yy or dd-MMM-yyyy (e.g. 27-Mar-26)
+    m = re.search(r'\b(\d{1,2})[-\s/]+([a-zA-Z]{3,9})[-\s/]+(\d{2,4})\b', text)
+    if m:
+        d = int(m.group(1))
+        mon_str = m.group(2).lower()
+        y_str = m.group(3)
+        if mon_str in months:
+            mon = months[mon_str]
+            y = int(y_str)
+            if len(y_str) == 2:
+                y += 2000
+            try:
+                return date(y, mon, d).isoformat()
+            except ValueError:
+                pass
+                
+    # MMM dd, yyyy or Month dd, yyyy (e.g. March 27, 2026)
+    m = re.search(r'\b([a-zA-Z]{3,9})[-\s/]+(\d{1,2})[,\s/]+(\d{2,4})\b', text)
+    if m:
+        mon_str = m.group(1).lower()
+        d = int(m.group(2))
+        y_str = m.group(3)
+        if mon_str in months:
+            mon = months[mon_str]
+            y = int(y_str)
+            if len(y_str) == 2:
+                y += 2000
+            try:
+                return date(y, mon, d).isoformat()
+            except ValueError:
+                pass
+
     return None
 
 
@@ -1387,23 +1427,30 @@ class InvoiceScanner:
             "Respond ONLY with a valid JSON object. Do not include markdown code block formatting (like ```json), explanations, or other text.\n"
             "IMPORTANT:\n"
             "1. Use double quotes for all keys and string values in the JSON. Never use single quotes and do not include trailing commas.\n"
-            "2. LAYOUT ANALYSIS:\n"
-            "   - Vendor/Seller details are at the very top (often top-left) of the invoice. For example: 'Mahaveer Computers', 'SHOP NO 51 & 52 Cellar CTC...'. Use this address for 'vendor_address'. Use its GSTIN for 'vendor_gstin'.\n"
-            "   - Buyer/Consignee ('Bill to' / 'Ship to') details are lower down on the left. For example: 'Apex Integrations'. You MUST IGNORE these when extracting vendor name, vendor GSTIN, or vendor address. Do NOT use their address or GSTIN for vendor fields.\n"
-            "   - Invoice/Bill number and Date are in the right-hand block. Look at the box/cell labeled 'Invoice No.' and extract the alphanumeric value inside/below it (e.g. 'MC2025-26/7164'). Look at the box/cell labeled 'Dated' or 'Date' and extract the date value next to or below it (e.g. '27-Mar-26' or '27-Mar-2026').\n"
+            "2. LAYOUT ANALYSIS — STRICT SEPARATION OF SELLER AND BUYER:\n"
+            "   - Seller/Vendor: The company/individual selling/issuing the bill. Their details are at the very top of the invoice. Identify their name, address, and GSTIN. Use these ONLY for vendor_name, vendor_address, and vendor_gstin.\n"
+            "   - Buyer/Customer/Consignee: The company/individual purchasing the goods/services (often under 'Bill To', 'Ship To', 'Consignee', or 'Buyer'). Their details are lower down or in a separate block. You MUST extract their details into buyer_name, buyer_address, and buyer_gstin.\n"
+            "   - Do NOT mix up the seller's details with the buyer's details. Keep them strictly separate. Do NOT use the buyer's address or buyer's GSTIN for vendor fields.\n"
+            "   - Invoice/Bill number and Date are in the invoice details block. Look at the box/cell labeled 'Invoice No.' and extract the alphanumeric value. Look at the box/cell labeled 'Dated' or 'Date' and extract the date value.\n"
             "3. FIELDS TO EXTRACT:\n"
-            "   - vendor_name: The company name of the seller/issuer at the top (e.g. 'Mahaveer Computers').\n"
-            "   - vendor_gstin: The 15-character GSTIN of the seller at the top (e.g. '36BFAPM4787A1ZJ'). Do NOT use the buyer's GSTIN (e.g. '36CZFPM0045M2Z7').\n"
-            "   - vendor_address: The physical address of the seller at the top (e.g. 'SHOP NO 51 & 52 Cellar CTC...').\n"
-            "   - bill_number: The exact invoice number (e.g. 'MC2025-26/7164'). Do not leave this null if there is any invoice number on the document.\n"
-            "   - bill_date: The date of the invoice (format as YYYY-MM-DD, e.g. '2026-03-27'). Convert month names like 'Mar' to numbers (03).\n"
+            "   - vendor_name: The company name of the seller/issuer at the top.\n"
+            "   - vendor_gstin: The 15-character GSTIN of the seller at the top.\n"
+            "   - vendor_address: The physical address of the seller at the top.\n"
+            "   - buyer_name: The company name of the buyer/customer (e.g. Apex Integrations).\n"
+            "   - buyer_gstin: The 15-character GSTIN of the buyer/customer.\n"
+            "   - buyer_address: The physical address of the buyer/customer.\n"
+            "   - bill_number: The exact invoice number.\n"
+            "   - bill_date: The date of the invoice (format as YYYY-MM-DD).\n"
             "\n"
             "The JSON must have the following schema:\n"
             "{\n"
-            '  "vendor_name": "string or null (e.g. Mahaveer Computers)",\n'
-            '  "vendor_gstin": "string or null (15-character GSTIN, e.g. 36BFAPM4787A1ZJ)",\n'
-            '  "vendor_address": "string or null (the vendor/seller\'s physical address)",\n'
-            '  "bill_number": "string or null (e.g. MC2025-26/7164)",\n'
+            '  "vendor_name": "string or null",\n'
+            '  "vendor_gstin": "string or null",\n'
+            '  "vendor_address": "string or null",\n'
+            '  "buyer_name": "string or null",\n'
+            '  "buyer_gstin": "string or null",\n'
+            '  "buyer_address": "string or null",\n'
+            '  "bill_number": "string or null",\n'
             '  "bill_date": "string or null (format YYYY-MM-DD)",\n'
             '  "due_date": "string or null (format YYYY-MM-DD)",\n'
             '  "po_number": "string or null",\n'
@@ -1414,7 +1461,7 @@ class InvoiceScanner:
             '  "total": 0.0,\n'
             '  "line_items": [\n'
             "    {\n"
-            '      "product_name": "string (clear product description)",\n'
+            '      "product_name": "string",\n'
             '      "hsn_sac": "string or null",\n'
             '      "quantity": 1.0,\n'
             '      "rate": 0.0,\n'
@@ -1444,6 +1491,7 @@ class InvoiceScanner:
                     ]
                 }
             ],
+            "response_format": {"type": "json_object"},
             "temperature": 0.1,
             "max_tokens": 2048
         }
@@ -1478,8 +1526,12 @@ class InvoiceScanner:
             cleaned_content = _clean_json_string(content)
             parsed = _robust_json_loads(cleaned_content)
         except Exception as e:
-            logger.error(f"Failed to parse JSON from NIM response. Raw content was: {repr(content)}")
-            raise ValueError(f"Failed to parse JSON from NIM response: {e}. Raw content: {content[:500]}")
+            logger.warning(f"Failed to parse JSON from NIM response, attempting fallback text parsing. Error: {e}")
+            try:
+                parsed = self._parse_nim_markdown_fallback(content)
+            except Exception as fallback_err:
+                logger.error(f"Failed to parse JSON from NIM response and fallback parser failed. Raw content was: {repr(content)}")
+                raise ValueError(f"Failed to parse JSON from NIM response: {e}. Fallback error: {fallback_err}. Raw content: {content[:500]}")
 
         # Validate types and set defaults
         result = {
@@ -1516,6 +1568,166 @@ class InvoiceScanner:
 
         logger.info(f"Nvidia NIM extraction complete. Extracted {len(result['line_items'])} line items.")
         return result
+
+    def _parse_nim_markdown_fallback(self, content: str) -> dict:
+        import re
+        parsed = {}
+        
+        # Helper to find standard bullet point or colon values
+        def search_field(patterns: list[str]) -> Optional[str]:
+            for pattern in patterns:
+                match = re.search(pattern, content, re.IGNORECASE)
+                if match:
+                    val = match.group(1).strip()
+                    val = val.strip("*_:-. \t\n")
+                    if val:
+                        return val
+            return None
+
+        parsed["vendor_name"] = search_field([
+            r'\*\s*\*\*Vendor Name:\*\*\s*([^\n\*]+)',
+            r'(?:Vendor Name|vendor\'s name)(?:\s*is)?\s*[:\*]*\s*([^\n\*,.]+)',
+        ])
+        parsed["vendor_gstin"] = search_field([
+            r'\*\s*\*\*Vendor GSTIN:\*\*\s*([A-Za-z0-9]+)',
+            r'(?:Vendor GSTIN|GSTIN)(?:\s*is)?\s*[:\*]*\s*([A-Za-z0-9]+)',
+        ])
+        parsed["vendor_address"] = search_field([
+            r'\*\s*\*\*Vendor Address:\*\*\s*([^\n\*]+)',
+            r'(?:Vendor Address|vendor\'s address)(?:\s*is)?\s*[:\*]*\s*([^\n\*]+)',
+        ])
+        parsed["bill_number"] = search_field([
+            r'\*\s*\*\*Invoice Number:\*\*\s*([A-Za-z0-9/\-_\.]+)',
+            r'(?:Invoice Number|Invoice No|Invoice no\.|bill number|invoice number)(?:\s*is)?\s*[:\*]*\s*([A-Za-z0-9/\-_\.]+)',
+        ])
+        
+        raw_date = search_field([
+            r'\*\s*\*\*Date:\*\*\s*([^\n\*]+)',
+            r'(?:Date|date)(?:\s*is)?\s*[:\*]*\s*([^\n\*]+)',
+        ])
+        parsed["bill_date"] = _parse_date(raw_date) if raw_date else None
+            
+        due_date = search_field([
+            r'\*\s*\*\*Due Date:\*\*\s*([^\n\*]+)',
+            r'(?:Due Date|due date|payment due)(?:\s*is)?\s*[:\*]*\s*([^\n\*]+)',
+        ])
+        parsed["due_date"] = _parse_date(due_date) if due_date else None
+
+        parsed["po_number"] = search_field([
+            r'(?:PO Number|P\.O\.\s*No|PO\s*No|purchase order)(?:\s*is)?\s*[:\*]*\s*([^\n\*]+)',
+        ])
+
+        def search_amount(patterns: list[str]) -> float:
+            val_str = search_field(patterns)
+            if val_str:
+                amt = _clean_amount(val_str)
+                if amt is not None:
+                    return amt
+            return 0.0
+
+        parsed["total"] = search_amount([
+            r'(?:Total Amount|Total|total amount of)\s*[:\*]*\s*([\d,]+(?:\.\d+)?)',
+        ])
+        parsed["subtotal"] = search_amount([
+            r'(?:Subtotal|Sub-Total|Taxable Amount|Taxable Value)\s*[:\*]*\s*([\d,]+(?:\.\d+)?)',
+        ])
+        parsed["cgst"] = search_amount([
+            r'CGST\s*[:\*]*\s*([\d,]+(?:\.\d+)?%?)',
+        ])
+        parsed["sgst"] = search_amount([
+            r'SGST\s*[:\*]*\s*([\d,]+(?:\.\d+)?%?)',
+        ])
+        parsed["igst"] = search_amount([
+            r'IGST\s*[:\*]*\s*([\d,]+(?:\.\d+)?%?)',
+        ])
+
+        # Line items parsing
+        line_items = []
+        line_items_match = re.search(r'\*\*Line Items:\*\*(.*?)(?:\*\*Tax Details:\*\*|\*\*Total Amount:\*\*|\*\*Payment Terms:\*\*|$)', content, re.DOTALL | re.IGNORECASE)
+        if line_items_match:
+            items_block = line_items_match.group(1)
+            item_blocks = []
+            matches = list(re.finditer(r'\*\s*\*\*Product Name:\*\*', items_block, re.IGNORECASE))
+            for j in range(len(matches)):
+                start = matches[j].start()
+                end = matches[j+1].start() if j + 1 < len(matches) else len(items_block)
+                item_blocks.append(items_block[start:end])
+
+            for block in item_blocks:
+                prod_name = re.search(r'Product Name:\*\*?\s*([^\n\*]+)', block, re.IGNORECASE)
+                hsn_sac = re.search(r'HSN/SAC:\*\*?\s*([^\n\*]+)', block, re.IGNORECASE)
+                qty_match = re.search(r'Quantity:\*\*?\s*([^\n\*]+)', block, re.IGNORECASE)
+                rate_match = re.search(r'Rate:\*\*?\s*([^\n\*]+)', block, re.IGNORECASE)
+                gst_match = re.search(r'GST Rate:\*\*?\s*([^\n\*]+)', block, re.IGNORECASE)
+                amt_match = re.search(r'Amount:\*\*?\s*([^\n\*]+)', block, re.IGNORECASE)
+
+                if prod_name:
+                    p_name = prod_name.group(1).strip("*_:-. \t\n")
+                    hsn = hsn_sac.group(1).strip("*_:-. \t\n") if hsn_sac else None
+                    
+                    qty = 1.0
+                    if qty_match:
+                        qty_str = qty_match.group(1).strip("*_:-. \t\n")
+                        qty_clean = re.sub(r'[^\d.]', '', qty_str)
+                        if qty_clean:
+                            try:
+                                qty = float(qty_clean)
+                            except ValueError:
+                                pass
+                                
+                    rate = 0.0
+                    if rate_match:
+                        rate_str = rate_match.group(1).strip("*_:-. \t\n")
+                        rate_clean = re.sub(r'[^\d.]', '', rate_str)
+                        if rate_clean:
+                            try:
+                                rate = float(rate_clean)
+                            except ValueError:
+                                pass
+                                
+                    gst = 0.0
+                    if gst_match:
+                        gst_str = gst_match.group(1).strip("*_:-. \t\n")
+                        gst_clean = re.sub(r'[^\d.]', '', gst_str)
+                        if gst_clean:
+                            try:
+                                gst = float(gst_clean)
+                            except ValueError:
+                                pass
+                                
+                    amt = qty * rate
+                    if amt_match:
+                        amt_str = amt_match.group(1).strip("*_:-. \t\n")
+                        amt_clean = re.sub(r'[^\d.]', '', amt_str)
+                        if amt_clean:
+                            try:
+                                amt = float(amt_clean)
+                            except ValueError:
+                                pass
+
+                    line_items.append({
+                        "product_name": p_name,
+                        "hsn_sac": hsn,
+                        "quantity": qty,
+                        "rate": rate,
+                        "gst_rate": gst,
+                        "amount": amt
+                    })
+        
+        if not line_items:
+            fallback_prod = search_field([r'Product Name:\*\*?\s*([^\n\*]+)'])
+            if fallback_prod:
+                line_items.append({
+                    "product_name": fallback_prod,
+                    "hsn_sac": search_field([r'HSN/SAC:\*\*?\s*([^\n\*]+)']),
+                    "quantity": 1.0,
+                    "rate": parsed.get("total", 0.0),
+                    "gst_rate": 0.0,
+                    "amount": parsed.get("total", 0.0)
+                })
+
+        parsed["line_items"] = line_items
+        return parsed
 
 
 # ---------------------------------------------------------------------------

@@ -81,3 +81,68 @@ def test_scan_nvidia_nim_standalone_fails_without_fallback(mock_post):
         # Verify that the exception propagates and does NOT fall back to PaddleOCR
         with pytest.raises(Exception, match="NIM Connection Timeout"):
             scanner.scan(b"file_bytes", "invoice.png")
+
+@patch("requests.post")
+def test_scan_with_nvidia_nim_fallback(mock_post):
+    with patch.object(settings, "NVIDIA_NIM_API_KEY", "mock_key"), \
+         patch.object(settings, "NVIDIA_NIM_MODEL", "mock_model"):
+        
+        # Test content matching the real-world markdown response that failed
+        failing_markdown = (
+            "The invoice is for a projector screen, with a total amount of 10,847.46 Indian Rupees. "
+            "The invoice number is MC2025-26/7164, and the date is March 27, 2026. The vendor's name is "
+            "Mahaveer Computers, and their GSTIN is 36BFAPM4787A1ZJ. The vendor's address is Flat No 404, "
+            "B-B&B-9, 4th Floor, Millenium Arcade, Khapra, Hyderabad, 3rd Cross Road, Medchal Malkajgiri, "
+            "Telangana, Code : 36.\n\n"
+            "**Invoice Details:**\n\n"
+            "* **Invoice Number:** MC2025-26/7164\n"
+            "* **Date:** 27-Mar-26\n"
+            "* **Vendor Name:** Mahaveer Computers\n"
+            "* **Vendor GSTIN:** 36BFAPM4787A1ZJ\n"
+            "* **Vendor Address:** Flat No 404, B-B&B-9, 4th Floor, Millenium Arcade, Khapra, Hyderabad, "
+            "3rd Cross Road, Medchal Malkajgiri, Telangana, Code : 36\n\n"
+            "**Line Items:**\n\n"
+            "* **Product Name:** Projector Screen\n"
+            "* **HSN/SAC:** 85286900\n"
+            "* **Quantity:** 1 pcs\n"
+            "* **Rate:** 12,800.00\n"
+            "* **GST Rate:** 9%\n"
+            "* **Amount:** 10,847.46\n\n"
+            "**Tax Details:**\n\n"
+            "* **CGST:** 9%\n"
+            "* **SGST:** 9%\n"
+            "* **IGST:** 0%\n\n"
+            "**Total Amount:** 10,847.46"
+        )
+        
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [
+                {
+                    "message": {
+                        "content": failing_markdown
+                    }
+                }
+            ]
+        }
+        mock_post.return_value = mock_response
+
+        scanner = InvoiceScanner()
+        with patch("src.domains.scanning.invoice_scanner._pdf_to_image_bytes", return_value=b"image_bytes"):
+            result = scanner.scan(b"pdf_bytes", "test.pdf")
+
+        assert result["vendor_name"] == "Mahaveer Computers"
+        assert result["vendor_gstin"] == "36BFAPM4787A1ZJ"
+        assert result["vendor_address"].startswith("Flat No 404")
+        assert result["bill_number"] == "MC2025-26/7164"
+        assert result["bill_date"] == "2026-03-27"
+        assert result["total"] == 10847.46
+        assert len(result["line_items"]) == 1
+        assert result["line_items"][0]["product_name"] == "Projector Screen"
+        assert result["line_items"][0]["quantity"] == 1.0
+        assert result["line_items"][0]["rate"] == 12800.00
+        assert result["line_items"][0]["amount"] == 10847.46
+        assert result["line_items"][0]["hsn_sac"] == "85286900"
+        assert result["line_items"][0]["gst_rate"] == 9.0
+
