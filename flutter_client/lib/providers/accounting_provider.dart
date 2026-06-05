@@ -18,7 +18,7 @@ class AccountingProvider extends ChangeNotifier {
   Uri _buildUri(String endpoint) {
     final queryParams = <String, String>{};
     ApiClient.fyParams.forEach((k, v) => queryParams[k] = v);
-    final uri = _buildUri(endpoint);
+    final uri = Uri.parse(endpoint);
     return uri.replace(queryParameters: {...uri.queryParameters, ...queryParams});
   }
 

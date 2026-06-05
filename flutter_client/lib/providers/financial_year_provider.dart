@@ -396,7 +396,18 @@ class FinancialYearProvider extends ChangeNotifier {
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
+        // Clear saved FY preference — the old one is now LOCKED
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove(_prefsKey);
         await _loadYears();
+        // If _loadYears didn't pick the new current FY, find it manually
+        if (_activeYear == null || _activeYear!.status == FYStatus.locked) {
+          _activeYear = _availableYears.firstWhere(
+            (y) => y.isCurrent,
+            orElse: () => _availableYears.isNotEmpty ? _availableYears.first : _activeYear!,
+          );
+          ApiClient.setFYParams(activeDateRangeParams);
+        }
         _isLoading = false;
         notifyListeners();
         return data;
