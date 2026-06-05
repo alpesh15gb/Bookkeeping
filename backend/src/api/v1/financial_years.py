@@ -15,7 +15,7 @@ from src.schemas.accounting_schemas import (
     YearEndDashboardResponse, UnpostedDocument
 )
 from src.api.deps import enforce_permission
-from src.domains.accounting.reports import get_trial_balance, get_profit_loss_report
+from src.domains.accounting.reports import FinancialReportingService
 from src.domains.accounting.services import AccountResolver, update_account_balances
 from src.domains.accounting.roll_forward import carry_forward_balances, carry_forward_inventory
 
@@ -243,8 +243,8 @@ def year_end_dashboard(
     today = date.today()
     computed = _compute_status(fy, today)
 
-    tb = get_trial_balance(db, tenant_id)
-    tb_balanced = abs(tb.total_closing_debits - tb.total_closing_credits) < 0.01
+    tb = FinancialReportingService.get_trial_balance(db, fy.end_date)
+    tb_balanced = tb['is_balanced']
 
     unposted = []
     for model_cls, doc_type, date_field, num_field, amount_field in [
@@ -269,8 +269,8 @@ def year_end_dashboard(
                 amount=getattr(r, amount_field),
             ))
 
-    pnl = get_profit_loss_report(start_date=fy.start_date, end_date=fy.end_date, db=db, tenant_id=tenant_id)
-    net_profit = pnl.net_profit
+    pnl = FinancialReportingService.get_profit_and_loss(db, fy.start_date, fy.end_date)
+    net_profit = pnl['net_profit']
 
     blocking_items = []
     if not tb_balanced:
