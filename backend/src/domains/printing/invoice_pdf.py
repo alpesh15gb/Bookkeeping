@@ -212,7 +212,7 @@ def generate_invoice_pdf(
     title_style = ParagraphStyle(
         'DocTitle',
         parent=styles['Heading1'],
-        fontName='Helvetica-Bold',
+        fontName=FONT_BOLD,
         fontSize=15 * font_multiplier,
         leading=18 * font_multiplier,
         textColor=primary_color,
@@ -222,7 +222,7 @@ def generate_invoice_pdf(
     company_title = ParagraphStyle(
         'CompanyTitle',
         parent=styles['Normal'],
-        fontName='Helvetica-Bold',
+        fontName=FONT_BOLD,
         fontSize=16 * font_multiplier,
         leading=20 * font_multiplier,
         textColor=primary_color if template != "thermal" else colors.black,
@@ -232,7 +232,7 @@ def generate_invoice_pdf(
     normal_style = ParagraphStyle(
         'DocNormal',
         parent=styles['Normal'],
-        fontName='Helvetica',
+        fontName=FONT_NORMAL,
         fontSize=9 * font_multiplier,
         leading=12 * font_multiplier,
         textColor=text_color
@@ -241,7 +241,7 @@ def generate_invoice_pdf(
     bold_style = ParagraphStyle(
         'DocBold',
         parent=styles['Normal'],
-        fontName='Helvetica-Bold',
+        fontName=FONT_BOLD,
         fontSize=9 * font_multiplier,
         leading=12 * font_multiplier,
         textColor=text_color
@@ -268,7 +268,7 @@ def generate_invoice_pdf(
     caption_style = ParagraphStyle(
         'DocCaption',
         parent=styles['Normal'],
-        fontName='Helvetica',
+        fontName=FONT_NORMAL,
         fontSize=8 * font_multiplier,
         leading=10 * font_multiplier,
         textColor=muted_color
@@ -490,7 +490,7 @@ def generate_invoice_pdf(
         tally_border = colors.HexColor('#000000')
         
         # Header banner
-        title_p = Paragraph(f"<b>Tax Invoice</b>", ParagraphStyle('TallyTitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=12, alignment=TA_CENTER, textColor=colors.black))
+        title_p = Paragraph(f"<b>Tax Invoice</b>", ParagraphStyle('TallyTitle', parent=styles['Normal'], fontName=FONT_BOLD, fontSize=12, alignment=TA_CENTER, textColor=colors.black))
         orig_p = Paragraph(f"<font size=8 color='#555555'>ORIGINAL FOR RECIPIENT</font>", ParagraphStyle('OrigR', parent=styles['Normal'], alignment=TA_RIGHT))
         elements.append(Table([[title_p, orig_p]], colWidths=[110*mm, 76*mm], style=[
             ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
@@ -519,10 +519,10 @@ def generate_invoice_pdf(
         meta_table_data = [
             [Paragraph("Invoice No.", ParagraphStyle('MetaH', parent=normal_style, fontSize=7, textColor=colors.HexColor('#555555'))),
              Paragraph("Date", ParagraphStyle('MetaH2', parent=normal_style, fontSize=7, textColor=colors.HexColor('#555555')))],
-            [Paragraph(f"<b>{invoice_number}</b>", ParagraphStyle('MetaVal', parent=normal_style, fontName='Helvetica-Bold', fontSize=9)),
-             Paragraph(f"<b>{issue_date}</b>", ParagraphStyle('MetaVal2', parent=normal_style, fontName='Helvetica-Bold', fontSize=9))],
+            [Paragraph(f"<b>{invoice_number}</b>", ParagraphStyle('MetaVal', parent=normal_style, fontName=FONT_BOLD, fontSize=9)),
+             Paragraph(f"<b>{issue_date}</b>", ParagraphStyle('MetaVal2', parent=normal_style, fontName=FONT_BOLD, fontSize=9))],
             [Paragraph("Place of supply", ParagraphStyle('MetaH3', parent=normal_style, fontSize=7, textColor=colors.HexColor('#555555'))), ""],
-            [Paragraph(f"<b>{formatted_state}</b>", ParagraphStyle('MetaVal3', parent=normal_style, fontName='Helvetica-Bold', fontSize=9)), ""]
+            [Paragraph(f"<b>{formatted_state}</b>", ParagraphStyle('MetaVal3', parent=normal_style, fontName=FONT_BOLD, fontSize=9)), ""]
         ]
         meta_table = Table(meta_table_data, colWidths=[38*mm, 38*mm], style=[
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
