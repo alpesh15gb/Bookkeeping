@@ -7,6 +7,7 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/bills/bill_form_view.dart';
 
 import 'package:flutter_client/core/print_share_helper.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 
 class BillDetailView extends StatefulWidget {
   final String billId;
@@ -98,7 +99,7 @@ class _BillDetailViewState extends State<BillDetailView> {
                                   height: 40,
                                   decoration: BoxDecoration(
                                     color: AppColors.brandNavy,
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(AppRadius.lg),
                                   ),
                                   child: const Icon(
                                     Icons.receipt_long_outlined,
@@ -141,7 +142,7 @@ class _BillDetailViewState extends State<BillDetailView> {
                             const SectionHeader(title: 'ITEMS'),
                             if (_bill!.lines.isEmpty)
                               const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
+                                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
                                 child: Text('No items', style: AppTextStyles.bodySmall),
                               )
                             else
@@ -153,7 +154,7 @@ class _BillDetailViewState extends State<BillDetailView> {
                                 itemBuilder: (context, i) {
                                   final line = _bill!.lines[i];
                                   return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                                     child: Row(
                                       children: [
                                         Expanded(
@@ -164,7 +165,7 @@ class _BillDetailViewState extends State<BillDetailView> {
                                                 line.productName ?? 'Product',
                                                 style: AppTextStyles.bodyMedium,
                                               ),
-                                              const SizedBox(height: 2),
+                                              const SizedBox(height: AppSpacing.xxs),
                                               Text(
                                                 'Qty: ${line.quantity} × ₹${line.rate.toStringAsFixed(2)}',
                                                 style: AppTextStyles.caption,
@@ -221,52 +222,36 @@ class _BillDetailViewState extends State<BillDetailView> {
                       ),
                       const SizedBox(height: 24),
                       if (_bill!.status == 'DRAFT') ...[
-                        ElevatedButton.icon(
+                        ActionButton(
+                          label: 'Finalize & Post Bill',
+                          icon: Icons.lock_outline,
+                          tier: ActionTier.warning,
                           onPressed: _finalizeBill,
-                          icon: const Icon(Icons.lock_outline),
-                          label: const Text('Finalize & Post Bill'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.brandNavy,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
                         ),
                         const SizedBox(height: 12),
-                        OutlinedButton.icon(
+                        ActionButton(
+                          label: 'Delete Draft',
+                          icon: Icons.delete_outline,
+                          tier: ActionTier.dangerous,
                           onPressed: _deleteBill,
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Delete Draft'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: const BorderSide(color: AppColors.error),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
                         ),
                       ],
                       if (_bill!.status == "UNPAID" || _bill!.status == 'PARTIALLY_PAID') ...[
-                        ElevatedButton.icon(
+                        ActionButton(
+                          label: 'Record Payment',
+                          icon: Icons.payment,
+                          tier: ActionTier.safe,
                           onPressed: _showRecordPaymentDialog,
-                          icon: const Icon(Icons.payment),
-                          label: const Text('Record Payment'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green[700],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
                         ),
                         const SizedBox(height: 12),
-                        OutlinedButton.icon(
+                        ActionButton(
+                          label: 'Cancel Bill',
+                          icon: Icons.cancel_outlined,
+                          tier: ActionTier.dangerous,
                           onPressed: _cancelBill,
-                          icon: const Icon(Icons.cancel_outlined),
-                          label: const Text('Cancel Bill'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: const BorderSide(color: AppColors.error),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
                         ),
                       ],
-                      const SizedBox(height: 32),
+                      const SizedBox(height: AppSpacing.xxxl),
                     ],
                   ),
                 ),
@@ -288,9 +273,7 @@ class _BillDetailViewState extends State<BillDetailView> {
         if (success) {
           Navigator.pop(context);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Failed to delete bill'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Failed to delete bill');
         }
       }
     }
@@ -311,9 +294,7 @@ class _BillDetailViewState extends State<BillDetailView> {
         if (success) {
           _fetchDetail();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Failed to finalize bill'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Failed to finalize bill');
         }
       }
     }
@@ -334,9 +315,7 @@ class _BillDetailViewState extends State<BillDetailView> {
         if (success) {
           _fetchDetail();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Failed to cancel bill'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Failed to cancel bill');
         }
       }
     }
@@ -387,7 +366,7 @@ class _BillDetailViewState extends State<BillDetailView> {
                           prefixIcon: Icon(Icons.calendar_today_outlined, size: 16),
                           suffixIcon: Icon(Icons.arrow_drop_down, size: 18),
                         ),
-                        child: Text(formattedDate, style: const TextStyle(fontSize: 14)),
+                        child: Text(formattedDate, style: AppTextStyles.body),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -422,9 +401,7 @@ class _BillDetailViewState extends State<BillDetailView> {
                   onPressed: () async {
                     final amt = double.tryParse(amountCtrl.text) ?? 0.0;
                     if (amt <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a valid amount'), backgroundColor: AppColors.error),
-                      );
+                      AppToast.info(context, 'Please enter a valid amount');
                       return;
                     }
                     Navigator.pop(context);
@@ -456,9 +433,7 @@ class _BillDetailViewState extends State<BillDetailView> {
                       if (success) {
                         _fetchDetail();
                       } else {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(provider.errorMessage ?? 'Failed to record payment'), backgroundColor: AppColors.error),
-                        );
+                        AppToast.error(context, provider.errorMessage ?? 'Failed to record payment');
                       }
                     }
                   },

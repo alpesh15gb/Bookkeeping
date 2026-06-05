@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/accounting_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 
 class AccountFormView extends StatefulWidget {
   final Map<String, dynamic>? editAccount;
@@ -63,23 +64,23 @@ class _AccountFormViewState extends State<AccountFormView> {
               ],
             ),
             const SizedBox(height: 20),
-            TextFormField(
+            AppTextField(
               controller: _nameCtrl,
-              decoration: const InputDecoration(labelText: 'Account Name'),
+              label: 'Account Name',
               validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
             ),
             const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
+            AppDropdown<String>(
               value: _accountType,
-              decoration: const InputDecoration(labelText: 'Account Type'),
+              label: 'Account Type',
               items: _types.map((t) => DropdownMenuItem(value: t, child: Text(t))).toList(),
               onChanged: (v) => _accountType = v,
               validator: (v) => v == null ? 'Select type' : null,
             ),
             const SizedBox(height: 16),
-            TextFormField(
+            AppTextField(
               controller: _codeCtrl,
-              decoration: const InputDecoration(labelText: 'Account Code (optional)'),
+              label: 'Account Code (optional)',
             ),
             const SizedBox(height: 24),
             Row(
@@ -124,9 +125,7 @@ class _AccountFormViewState extends State<AccountFormView> {
     if (success && mounted) {
       widget.onSuccess();
     } else if (mounted && provider.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(provider.errorMessage!), backgroundColor: AppColors.error),
-      );
+      AppToast.error(context, provider.errorMessage!);
     }
   }
 }

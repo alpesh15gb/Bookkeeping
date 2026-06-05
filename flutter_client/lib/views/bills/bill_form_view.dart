@@ -5,6 +5,7 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/bill_provider.dart';
 import 'package:flutter_client/models/bill.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 
 class BillFormView extends StatelessWidget {
   final BillModel? editBill;
@@ -38,10 +39,7 @@ class BillFormView extends StatelessWidget {
               ? await provider.updateBill(editBill!.id, payload)
               : await provider.createBill(payload);
           if (!success && ctx.mounted) {
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-              content: Text(provider.errorMessage ?? 'Failed to save bill'),
-              backgroundColor: AppColors.error,
-            ));
+            AppToast.error(ctx, provider.errorMessage ?? 'Failed to save bill');
           }
           return success;
         },

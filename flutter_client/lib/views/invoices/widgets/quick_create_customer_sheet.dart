@@ -5,6 +5,7 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/models/contact.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
 import 'package:flutter_client/providers/eway_bill_provider.dart';
+import 'package:flutter_client/views/shared/app_components.dart';
 
 // ── GSTIN → State code (first 2 digits) ─────────────────────────────────────
 const Map<String, String> _gstinStateCodeMap = {
@@ -157,18 +158,14 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
   Future<void> _verifyGstin() async {
     final gstin = _gstinCtrl.text.trim().toUpperCase();
     if (gstin.length != 15) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid 15-character GSTIN first'), backgroundColor: AppColors.warning),
-      );
+      AppToast.warning(context, 'Enter a valid 15-character GSTIN first');
       return;
     }
 
     final provider = context.read<EwayBillProvider>();
     final captchaData = await provider.fetchGstCaptcha();
     if (captchaData == null || !mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not fetch captcha from GST portal'), backgroundColor: AppColors.error),
-      );
+      AppToast.error(context, 'Could not fetch captcha from GST portal');
       return;
     }
 
@@ -220,9 +217,7 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
               if (verified != null && ctx.mounted) {
                 Navigator.pop(ctx, verified);
               } else if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Verification failed'), backgroundColor: AppColors.error),
-                );
+                AppToast.error(ctx, 'Verification failed');
               }
             },
             child: const Text('Verify'),
@@ -247,12 +242,7 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
           // Auto-fill PAN from GSTIN verification
         }
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Verified: ${result['legal_name'] ?? gstin}'),
-          backgroundColor: AppColors.success,
-        ),
-      );
+      AppToast.success(context, 'Verified: ${result['legal_name'] ?? gstin}');
     }
   }
 
@@ -305,14 +295,10 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
                 .lastOrNull;
         if (mounted) Navigator.pop(context, created);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              provider.errorMessage ??
-                  'Failed to create ${widget.contactType == 'VENDOR' ? 'vendor' : 'customer'}',
-            ),
-            backgroundColor: AppColors.error,
-          ),
+        AppToast.error(
+          context,
+          provider.errorMessage ??
+              'Failed to create ${widget.contactType == 'VENDOR' ? 'vendor' : 'customer'}',
         );
       }
     }

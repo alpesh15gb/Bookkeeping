@@ -681,6 +681,7 @@ def print_proforma_invoice(
         doc_type="ESTIMATE",
         tenant_id=tenant_id,
         db=db,
+        customer_address=pi.contact.billing_address if pi.contact else None,
     )
 
     return StreamingResponse(

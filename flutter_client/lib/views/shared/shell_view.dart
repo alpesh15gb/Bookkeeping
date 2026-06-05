@@ -490,11 +490,11 @@ class _GroupedNavState extends State<_GroupedNav> {
 
   @override
   Widget build(BuildContext context) {
-    final padH = widget.isMobile ? 8.0 : 10.0;
-    final itemPadV = widget.isMobile ? 12.0 : 10.0;
+    final padH = widget.isMobile ? 8.0 : 9.0;
+    final itemPadV = widget.isMobile ? 11.0 : 9.0;
     final iconSize = widget.isMobile ? 20.0 : 18.0;
     final fontSize = widget.isMobile ? 14.0 : 13.0;
-    final childPadH = widget.isMobile ? 14.0 : 16.0;
+    final childPadH = widget.isMobile ? 14.0 : 14.0;
 
     return ListView.builder(
       padding: EdgeInsets.symmetric(horizontal: padH),
@@ -554,28 +554,34 @@ class _GroupedNavState extends State<_GroupedNav> {
     required double fontSize,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 1),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
           borderRadius: AppRadius.sidebar,
+          hoverColor: Colors.white.withOpacity(0.04),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: itemPadV),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.goldAccent : Colors.transparent,
+              color: isSelected ? const Color(0x1AD4A036) : Colors.transparent,
               borderRadius: AppRadius.sidebar,
+              border: isSelected
+                  ? const Border(
+                      left: BorderSide(color: AppColors.goldAccent, width: 3),
+                    )
+                  : null,
             ),
             child: Row(
               children: [
-                Icon(item.icon, size: iconSize, color: isSelected ? AppColors.brandNavy : AppColors.textWhiteMuted),
+                Icon(item.icon, size: iconSize, color: isSelected ? AppColors.goldAccent : AppColors.textWhiteMuted),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     item.name,
                     style: TextStyle(
-                      color: isSelected ? AppColors.brandNavy : Colors.white,
+                      color: isSelected ? AppColors.goldAccent : Colors.white,
                       fontSize: fontSize,
                       fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
                     ),
@@ -604,7 +610,7 @@ class _GroupedNavState extends State<_GroupedNav> {
     final groupTextColor = hasActiveChild ? AppColors.goldAccent : Colors.white;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
+      padding: const EdgeInsets.only(bottom: 1),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -613,6 +619,7 @@ class _GroupedNavState extends State<_GroupedNav> {
             child: InkWell(
               onTap: onToggle,
               borderRadius: AppRadius.sidebar,
+              hoverColor: Colors.white.withOpacity(0.04),
               child: Padding(
                 padding: EdgeInsets.symmetric(horizontal: 12, vertical: itemPadV - 2),
                 child: Row(
@@ -693,13 +700,13 @@ class _Sidebar extends StatelessWidget {
     final activeTenantId = authProvider.activeTenantId;
 
     return Container(
-      width: 240,
+      width: AdaptiveLayout.sidebarWidth,
       color: AppColors.bgSidebar,
       child: Column(
         children: [
           // Brand Header
           Container(
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: Colors.white12)),
             ),
@@ -742,7 +749,7 @@ class _Sidebar extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
 
           // Navigation
           Expanded(
@@ -755,7 +762,7 @@ class _Sidebar extends StatelessWidget {
 
           // User Footer
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             decoration: const BoxDecoration(
               border: Border(top: BorderSide(color: Colors.white12)),
               color: AppColors.brandNavyDark,
@@ -883,12 +890,12 @@ class _Sidebar extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
                 InkWell(
                   onTap: onLogout,
                   borderRadius: AppRadius.sidebar,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
                       borderRadius: AppRadius.sidebar,
                       border: Border.all(color: Colors.white12),

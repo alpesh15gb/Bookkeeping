@@ -6,6 +6,7 @@ import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/payment_provider.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 
 class PaymentFormView extends StatefulWidget {
   final String mode; // 'receipt' or 'disbursement'
@@ -31,6 +32,7 @@ class _PaymentFormViewState extends State<PaymentFormView> {
   String? _selectedContactId;
   String _paymentMode = 'BANK';
   DateTime _paymentDate = DateTime.now();
+  late TextEditingController _dateCtrl;
   bool _isSubmitting = false;
 
   // Outstanding invoices / bills for allocation
@@ -54,6 +56,7 @@ class _PaymentFormViewState extends State<PaymentFormView> {
   @override
   void initState() {
     super.initState();
+    _dateCtrl = TextEditingController(text: _formattedDate);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<ContactProvider>().fetchContacts();
     });
@@ -64,6 +67,7 @@ class _PaymentFormViewState extends State<PaymentFormView> {
     _amountCtrl.dispose();
     _refCtrl.dispose();
     _notesCtrl.dispose();
+    _dateCtrl.dispose();
     for (final c in _allocCtrl.values) {
       c.dispose();
     }
@@ -125,7 +129,10 @@ class _PaymentFormViewState extends State<PaymentFormView> {
       firstDate: DateTime(2020),
       lastDate: DateTime(2035),
     );
-    if (picked != null) setState(() => _paymentDate = picked);
+    if (picked != null) setState(() {
+      _paymentDate = picked;
+      _dateCtrl.text = _formattedDate;
+    });
   }
 
   String get _formattedDate {
@@ -178,12 +185,10 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     // Contact picker
-                    DropdownButtonFormField<String>(
+                    AppDropdown<String>(
                       value: _selectedContactId,
-                      decoration: InputDecoration(
-                        labelText: _isReceipt ? 'Customer *' : 'Vendor *',
-                        prefixIcon: const Icon(Icons.person_outlined, size: 18),
-                      ),
+                      label: _isReceipt ? 'Customer *' : 'Vendor *',
+                      prefixIcon: Icons.person_outlined,
                       items: contacts
                           .map(
                             (c) => DropdownMenuItem(
@@ -201,15 +206,10 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                     const SizedBox(height: 14),
 
                     // Amount
-                    TextFormField(
+                    AppTextField(
                       controller: _amountCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Total Amount (₹) *',
-                        prefixIcon: Icon(
-                          Icons.currency_rupee_outlined,
-                          size: 18,
-                        ),
-                      ),
+                      label: 'Total Amount (₹) *',
+                      prefixIcon: Icons.currency_rupee_outlined,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
@@ -222,31 +222,17 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                     const SizedBox(height: 14),
 
                     // Payment Date
-                    InkWell(
+                    AppDateField(
+                      controller: _dateCtrl,
+                      label: 'Payment Date *',
                       onTap: _pickDate,
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Payment Date *',
-                          prefixIcon: Icon(
-                            Icons.calendar_today_outlined,
-                            size: 16,
-                          ),
-                          suffixIcon: Icon(Icons.arrow_drop_down, size: 18),
-                        ),
-                        child: Text(
-                          _formattedDate,
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                      ),
                     ),
                     const SizedBox(height: 14),
 
                     // Payment Mode
-                    DropdownButtonFormField<String>(
+                    AppDropdown<String>(
                       value: _paymentMode,
-                      decoration: const InputDecoration(
-                        labelText: 'Payment Mode *',
-                      ),
+                      label: 'Payment Mode *',
                       items: _modes
                           .map(
                             (m) => DropdownMenuItem(
@@ -260,12 +246,10 @@ class _PaymentFormViewState extends State<PaymentFormView> {
                     const SizedBox(height: 14),
 
                     // Reference
-                    TextFormField(
+                    AppTextField(
                       controller: _refCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Reference Number (optional)',
-                        prefixIcon: Icon(Icons.tag_outlined, size: 16),
-                      ),
+                      label: 'Reference Number (optional)',
+                      prefixIcon: Icons.tag_outlined,
                     ),
                     const SizedBox(height: 14),
 
@@ -428,29 +412,15 @@ class _PaymentFormViewState extends State<PaymentFormView> {
 
     if (allocations.isEmpty) {
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            _isReceipt
-                ? 'Select at least one posted invoice allocation.'
-                : 'Select at least one posted bill allocation.',
-          ),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      AppToast.error(context, _isReceipt
+          ? 'Select at least one posted invoice allocation.'
+          : 'Select at least one posted bill allocation.');
       return;
     }
 
     if ((allocatedTotal - paymentAmount).abs() > 0.01) {
       setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Allocated total (${allocatedTotal.toStringAsFixed(2)}) must equal payment amount (${paymentAmount.toStringAsFixed(2)}).',
-          ),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      AppToast.error(context, 'Allocated total (${allocatedTotal.toStringAsFixed(2)}) must equal payment amount (${paymentAmount.toStringAsFixed(2)}).');
       return;
     }
 
@@ -474,12 +444,7 @@ class _PaymentFormViewState extends State<PaymentFormView> {
     if (success && mounted) {
       widget.onSuccess();
     } else if (mounted && provider.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(provider.errorMessage!),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      AppToast.error(context, provider.errorMessage!);
     }
   }
 }

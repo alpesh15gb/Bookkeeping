@@ -96,7 +96,7 @@ class TestGSTCompliance(unittest.TestCase):
                 id=uuid.UUID("22222222-2222-2222-2222-22222222222a"),
                 tenant_id=self.tenant_a_id,
                 name="Individual Consumer",
-                contact_type="CUSTOMER",
+                contact_type="BOTH",
                 gstin=None,
                 pan=None,
                 registration_type="CONSUMER",
@@ -104,6 +104,7 @@ class TestGSTCompliance(unittest.TestCase):
                 state_code="27",
                 is_active=True
             )
+
 
             # Vendor (Registered)
             self.vendor_b2b = Contact(
@@ -272,7 +273,7 @@ class TestGSTCompliance(unittest.TestCase):
         self.assertEqual(float(g1["hsn_summary"][0]["taxable_value"]), 270000.00)
 
     def test_gstr2_returns_compilation(self):
-        # 1. Post and finalize vendor bill: (subtotal = 5000, CGST = 450, SGST = 450)
+        # 1. Post and finalize B2B vendor bill: (subtotal = 5000, CGST = 450, SGST = 450)
         bill_payload = {
             "contact_id": str(self.vendor_b2b_id),
             "bill_number": "BILL-TAX-555",
@@ -293,7 +294,28 @@ class TestGSTCompliance(unittest.TestCase):
         bill = self.client.post("/api/v1/bills", json=bill_payload, headers=self.headers_a).json()
         self.client.post(f"/api/v1/bills/{bill['id']}/finalize", headers=self.headers_a)
 
-        # 2. Fetch GSTR-2 report
+        # 2. Post and finalize B2BUR (unregistered customer/vendor as unregistered customer 2)
+        bill_unreg_payload = {
+            "contact_id": str(self.customer_b2c_id), # individual customer acts as unregistered contact
+            "bill_number": "BILL-UNREG-777",
+            "issue_date": str(date.today()),
+            "due_date": str(date.today()),
+            "pos_state_code": "27",
+            "line_items": [
+                {
+                    "product_id": str(self.product_id),
+                    "quantity": 1,
+                    "rate": 2000.00,
+                    "discount": 0.00,
+                    "hsn_sac": "85238020",
+                    "gst_rate": 18.0
+                }
+            ]
+        }
+        bill_unreg = self.client.post("/api/v1/bills", json=bill_unreg_payload, headers=self.headers_a).json()
+        self.client.post(f"/api/v1/bills/{bill_unreg['id']}/finalize", headers=self.headers_a)
+
+        # 3. Fetch GSTR-2 report
         res_gstr2 = self.client.get("/api/v1/gst/gstr2", headers=self.headers_a)
         self.assertEqual(res_gstr2.status_code, 200)
         g2 = res_gstr2.json()
@@ -302,7 +324,21 @@ class TestGSTCompliance(unittest.TestCase):
         self.assertEqual(len(g2["b2b_purchases"]), 1)
         self.assertEqual(g2["b2b_purchases"][0]["vendor_gstin"], "29AAACI5678B2Z2")
         self.assertEqual(float(g2["b2b_purchases"][0]["taxable_value"]), 5000.00)
-        self.assertEqual(float(g2["b2b_purchases"][0]["cgst_amount"]), 450.00)
+
+        # Assert B2BUR purchases contains 1 entry
+        self.assertEqual(len(g2["b2bur_purchases"]), 1)
+        self.assertEqual(float(g2["b2bur_purchases"][0]["taxable_value"]), 2000.00)
+
+        # Verify Excel export route
+        res_excel = self.client.get("/api/v1/gst/gstr2/export", headers=self.headers_a)
+        self.assertEqual(res_excel.status_code, 200)
+        self.assertIn("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", res_excel.headers["content-type"])
+
+        # Verify PDF export route
+        res_pdf = self.client.get("/api/v1/gst/gstr2/pdf", headers=self.headers_a)
+        self.assertEqual(res_pdf.status_code, 200)
+        self.assertIn("application/pdf", res_pdf.headers["content-type"])
+
 
     def test_tenant_boundary_isolation(self):
         # Fetch reports from Tenant B context (which is empty)

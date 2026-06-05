@@ -1703,6 +1703,7 @@ def print_invoice(
         tenant_id=tenant_id,
         db=db,
         amount_paid=invoice.amount_paid or Decimal("0.00"),
+        customer_address=invoice.contact.billing_address if invoice.contact else None,
     )
 
     return StreamingResponse(
@@ -1770,6 +1771,7 @@ def print_credit_note(
         doc_type="CREDIT NOTE",
         tenant_id=tenant_id,
         db=db,
+        customer_address=cn.invoice.contact.billing_address if (cn.invoice and cn.invoice.contact) else None,
     )
 
     return StreamingResponse(
@@ -1837,6 +1839,7 @@ def print_debit_note(
         doc_type="DEBIT NOTE",
         tenant_id=tenant_id,
         db=db,
+        customer_address=dn.invoice.contact.billing_address if (dn.invoice and dn.invoice.contact) else None,
     )
 
     return StreamingResponse(

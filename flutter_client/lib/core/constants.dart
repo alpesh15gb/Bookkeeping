@@ -4,9 +4,9 @@ import 'package:google_fonts/google_fonts.dart';
 // ─── Color Tokens ───────────────────────────────────────────────
 class AppColors {
   // Brand
-  static const Color brandNavy = Color(0xFF0B1B3D);
-  static const Color brandNavyLight = Color(0xFF16244D);
-  static const Color brandNavyDark = Color(0xFF0A1330);
+  static const Color brandNavy = Color(0xFF0F234A);
+  static const Color brandNavyLight = Color(0xFF1A335C);
+  static const Color brandNavyDark = Color(0xFF0A1A3A);
 
   // Accent
   static const Color goldAccent = Color(0xFFDCA035);
@@ -14,14 +14,14 @@ class AppColors {
   static const Color goldAccentDark = Color(0xFFB88728);
 
   // Backgrounds
-  static const Color bgLight = Color(0xFFF8F9FC);
+  static const Color bgLight = Color(0xFFF8FAFC);
   static const Color bgSurface = Color(0xFFFFFFFF);
-  static const Color bgSidebar = Color(0xFF0F1B3D);
-  static const Color bgSidebarHover = Color(0xFF1A2D54);
+  static const Color bgSidebar = Color(0xFF0F234A);
+  static const Color bgSidebarHover = Color(0xFF1A335C);
   static const Color bgSidebarActive = Color(0xFFD4A036);
 
   // Borders
-  static const Color border = Color(0xFFE2E5ED);
+  static const Color border = Color(0xFFE5E7EB);
   static const Color borderLight = Color(0xFFF0F2F7);
   static const Color borderInput = Color(0xFFD1D5DC);
 
@@ -33,12 +33,12 @@ class AppColors {
   static const Color textWhiteMuted = Color(0xFFB0B8CC);
 
   // Status
-  static const Color success = Color(0xFF0F973D);
-  static const Color successBg = Color(0xFFE9F7EE);
-  static const Color error = Color(0xFFD92D20);
-  static const Color errorBg = Color(0xFFFDF2F2);
-  static const Color warning = Color(0xFFDC6803);
-  static const Color warningBg = Color(0xFFFFFAEB);
+  static const Color success = Color(0xFF16A34A);
+  static const Color successBg = Color(0xFFF0FDF4);
+  static const Color error = Color(0xFFDC2626);
+  static const Color errorBg = Color(0xFFFEF2F2);
+  static const Color warning = Color(0xFFD97706);
+  static const Color warningBg = Color(0xFFFFFBEB);
   static const Color info = Color(0xFF175CD3);
   static const Color infoBg = Color(0xFFEFF6FF);
 
@@ -55,32 +55,32 @@ class AppColors {
   static const Color typeBothBg = Color(0xFFF3E5F5);
   static const Color typeDraft = Color(0xFF9CA1AB);
   static const Color typeDraftBg = Color(0xFFF2F2F4);
-  static const Color typePaid = Color(0xFF0F973D);
-  static const Color typePaidBg = Color(0xFFE9F7EE);
-  static const Color typePending = Color(0xFFDC6803);
-  static const Color typePendingBg = Color(0xFFFFFAEB);
+  static const Color typePaid = Color(0xFF16A34A);
+  static const Color typePaidBg = Color(0xFFF0FDF4);
+  static const Color typePending = Color(0xFFD97706);
+  static const Color typePendingBg = Color(0xFFFFFBEB);
 
   // Document status colors (accessibility-safe — no red/green dominance)
   static const Color statusDraft = Color(0xFF9CA1AB);
   static const Color statusDraftBg = Color(0xFFF2F2F4);
   static const Color statusPosted = Color(0xFF175CD3);
   static const Color statusPostedBg = Color(0xFFEFF6FF);
-  static const Color statusPartiallyPaid = Color(0xFFDC6803);
-  static const Color statusPartiallyPaidBg = Color(0xFFFFFAEB);
-  static const Color statusPaid = Color(0xFF067647);
-  static const Color statusPaidBg = Color(0xFFECFDF3);
-  static const Color statusCancelled = Color(0xFFD92D20);
-  static const Color statusCancelledBg = Color(0xFFFEF3F2);
-  static const Color statusOverdue = Color(0xFFB42318);
-  static const Color statusOverdueBg = Color(0xFFFFF0EE);
+  static const Color statusPartiallyPaid = Color(0xFFD97706);
+  static const Color statusPartiallyPaidBg = Color(0xFFFFFBEB);
+  static const Color statusPaid = Color(0xFF16A34A);
+  static const Color statusPaidBg = Color(0xFFF0FDF4);
+  static const Color statusCancelled = Color(0xFFDC2626);
+  static const Color statusCancelledBg = Color(0xFFFEF2F2);
+  static const Color statusOverdue = Color(0xFFDC2626);
+  static const Color statusOverdueBg = Color(0xFFFEF2F2);
 
   // Action tier colors
-  static const Color actionSafe = Color(0xFF067647);
-  static const Color actionSafeBg = Color(0xFFECFDF3);
-  static const Color actionWarning = Color(0xFFDC6803);
-  static const Color actionWarningBg = Color(0xFFFFFAEB);
-  static const Color actionDangerous = Color(0xFFD92D20);
-  static const Color actionDangerousBg = Color(0xFFFEF3F2);
+  static const Color actionSafe = Color(0xFF16A34A);
+  static const Color actionSafeBg = Color(0xFFF0FDF4);
+  static const Color actionWarning = Color(0xFFD97706);
+  static const Color actionWarningBg = Color(0xFFFFFBEB);
+  static const Color actionDangerous = Color(0xFFDC2626);
+  static const Color actionDangerousBg = Color(0xFFFEF2F2);
 
   // Immutable / locked
   static const Color immutableBg = Color(0xFFF9F9FB);
@@ -140,7 +140,9 @@ class AmountFormat {
 class AppSpacing {
   static const double xxs = 2;
   static const double xs = 4;
+  static const double s = 6;
   static const double sm = 8;
+  static const double n = 10;
   static const double md = 12;
   static const double lg = 16;
   static const double xl = 20;
@@ -151,8 +153,8 @@ class AppSpacing {
 
   static const EdgeInsets pagePadding = EdgeInsets.all(24);
   static const EdgeInsets pagePaddingMobile = EdgeInsets.all(16);
-  static const EdgeInsets cardPadding = EdgeInsets.all(20);
-  static const EdgeInsets cardPaddingMobile = EdgeInsets.all(16);
+  static const EdgeInsets cardPadding = EdgeInsets.all(16);
+  static const EdgeInsets cardPaddingMobile = EdgeInsets.all(12);
   static const EdgeInsets inputPadding =
       EdgeInsets.symmetric(horizontal: 14, vertical: 13);
   static const EdgeInsets inputPaddingCompact =
@@ -226,7 +228,7 @@ class AppTextStyles {
   // Display
   static const TextStyle display = TextStyle(
     fontSize: 28,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w600,
     letterSpacing: -0.5,
     height: 1.2,
   );
@@ -234,13 +236,13 @@ class AppTextStyles {
   // Headings
   static const TextStyle h1 = TextStyle(
     fontSize: 22,
-    fontWeight: FontWeight.w700,
+    fontWeight: FontWeight.w600,
     letterSpacing: -0.3,
     height: 1.25,
   );
 
   static const TextStyle h2 = TextStyle(
-    fontSize: 18,
+    fontSize: 20,
     fontWeight: FontWeight.w600,
     height: 1.3,
   );
@@ -269,6 +271,22 @@ class AppTextStyles {
     fontWeight: FontWeight.w400,
     color: AppColors.textSecondary,
     height: 1.45,
+  );
+
+  // Party names (500 weight for better readability)
+  static const TextStyle partyName = TextStyle(
+    fontSize: 13,
+    fontWeight: FontWeight.w500,
+    color: AppColors.textPrimary,
+    height: 1.3,
+  );
+
+  // Date text (smaller, lighter)
+  static const TextStyle dateText = TextStyle(
+    fontSize: 10,
+    fontWeight: FontWeight.w400,
+    color: AppColors.textMuted,
+    height: 1.3,
   );
 
   // Labels

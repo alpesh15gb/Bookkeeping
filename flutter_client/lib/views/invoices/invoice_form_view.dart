@@ -5,6 +5,7 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/invoice_provider.dart';
 import 'package:flutter_client/models/invoice.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
+import 'package:flutter_client/views/shared/app_components.dart';
 
 class InvoiceFormView extends StatelessWidget {
   final InvoiceModel? editInvoice;
@@ -35,10 +36,7 @@ class InvoiceFormView extends StatelessWidget {
               ? await provider.updateInvoice(editInvoice!.id, payload)
               : await provider.createInvoice(payload);
           if (!success && ctx.mounted) {
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-              content: Text(provider.errorMessage ?? 'Failed to save invoice'),
-              backgroundColor: AppColors.error,
-            ));
+            AppToast.error(ctx, provider.errorMessage ?? 'Failed to save invoice');
           }
           return success;
         },

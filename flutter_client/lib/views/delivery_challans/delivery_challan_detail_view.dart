@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/delivery_challan_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/delivery_challans/delivery_challan_form_view.dart';
 import 'package:flutter_client/views/invoices/invoice_form_view.dart';
@@ -59,7 +60,7 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Container(width: 40, height: 40, decoration: BoxDecoration(color: const Color(0xFFE57C00).withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.local_shipping_rounded, size: 20, color: Color(0xFFE57C00))),
+                    Container(width: 40, height: 40, decoration: BoxDecoration(color: AppColors.typeGoods.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.local_shipping_rounded, size: 20, color: AppColors.typeGoods)),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('DELIVERY CHALLAN', style: AppTextStyles.labelSmall), Text(c['challan_number'] ?? 'N/A', style: AppTextStyles.h2)])),
                   ]),
@@ -96,7 +97,7 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
                 final ok = await AppConfirmDialog.show(context, title: 'Issue?', message: 'Issue this delivery challan?');
                 if (ok == true) {
                   final success = await context.read<DeliveryChallanProvider>().issueChallan(widget.challanId);
-                  if (success) { _fetch(); } else if (mounted) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.read<DeliveryChallanProvider>().errorMessage ?? 'Failed'), backgroundColor: AppColors.error)); }
+                  if (success) { _fetch(); } else if (mounted) { AppToast.error(context, context.read<DeliveryChallanProvider>().errorMessage ?? 'Failed'); }
                 }
               }),
             if (status == 'ISSUED' || status == 'DRAFT') ...[
@@ -136,7 +137,7 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
                 );
               }),
             ],
-            const SizedBox(height: 32),
+            const SizedBox(height: AppSpacing.xxxl),
           ],
         ),
       ),

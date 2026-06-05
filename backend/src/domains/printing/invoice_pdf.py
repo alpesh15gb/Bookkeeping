@@ -1,7 +1,8 @@
 """Invoice and Document PDF generation using reportlab with multiple templates."""
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Any
 import uuid
+import os
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -10,7 +11,33 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, 
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT, TA_LEFT
 from reportlab.graphics.shapes import Drawing
 from reportlab.graphics.barcode.qr import QrCodeWidget
+from reportlab.pdfbase import pdfmetrics
+from reportlab.pdfbase.ttfonts import TTFont
 import io
+
+# ── Register Inter font (supports ₹ Unicode rupee sign U+20B9) ────────────────
+_FONT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), 'assets', 'fonts')
+_INTER_REG  = os.path.join(_FONT_DIR, 'Inter-Regular.ttf')
+_INTER_BOLD = os.path.join(_FONT_DIR, 'Inter-Bold.ttf')
+_INTER_MED  = os.path.join(_FONT_DIR, 'Inter-Medium.ttf')
+
+_INTER_LOADED = False
+try:
+    if os.path.exists(_INTER_REG) and os.path.exists(_INTER_BOLD):
+        pdfmetrics.registerFont(TTFont('Inter',     _INTER_REG))
+        pdfmetrics.registerFont(TTFont('Inter-Bold', _INTER_BOLD))
+        if os.path.exists(_INTER_MED):
+            pdfmetrics.registerFont(TTFont('Inter-Medium', _INTER_MED))
+        from reportlab.lib.fonts import addMapping
+        addMapping('Inter', 0, 0, 'Inter')
+        addMapping('Inter', 1, 0, 'Inter-Bold')
+        _INTER_LOADED = True
+except Exception as _e:
+    pass  # fall back to Helvetica if font files missing
+
+FONT_NORMAL = 'Inter'      if _INTER_LOADED else 'Helvetica'
+FONT_BOLD   = 'Inter-Bold' if _INTER_LOADED else 'Helvetica-Bold'
+RUPEE       = '\u20b9'     if _INTER_LOADED else 'Rs.'  # ₹ or Rs.
 
 def generate_invoice_pdf(
     invoice_number: str,
@@ -31,13 +58,30 @@ def generate_invoice_pdf(
     tenant_id: Optional[uuid.UUID] = None,
     db = None,
     amount_paid: Decimal = Decimal("0.00"),
+    customer_address: Optional[Any] = None,
+    company_address: Optional[Any] = None,
 ) -> bytes:
     buffer = io.BytesIO()
+
+    def _fmt_addr(addr):
+        if not addr:
+            return ""
+        if isinstance(addr, str):
+            return addr
+        if isinstance(addr, dict):
+            parts = [
+                addr.get("street"),
+                addr.get("city"),
+                f"{addr.get('state')} - {addr.get('pincode')}" if addr.get("pincode") else addr.get("state"),
+                addr.get("country")
+            ]
+            return ", ".join([str(p) for p in parts if p])
+        return str(addr)
     
     # --- Load Company Details from Database ---
     company_gstin = None
     company_pan = None
-    company_address = None
+    company_address_db = None
     company_phone = None
     company_email = None
     company_website = None
@@ -60,7 +104,7 @@ def generate_invoice_pdf(
         if setting:
             origin_state_code = setting.origin_state_code
             extra = setting.extra_settings or {}
-            company_address = extra.get("company_address")
+            company_address_db = extra.get("company_address")
             company_phone = extra.get("company_phone")
             company_email = extra.get("company_email")
             company_website = extra.get("company_website")
@@ -83,7 +127,8 @@ def generate_invoice_pdf(
             bank_branch = bank.branch_name
 
     # Clean fallbacks for rendering
-    company_address = company_address or ""
+    company_address = _fmt_addr(company_address or company_address_db)
+    customer_address = _fmt_addr(customer_address)
     company_phone = company_phone or ""
     company_email = company_email or ""
     company_website = company_website or ""
@@ -243,6 +288,8 @@ def generate_invoice_pdf(
         elements.append(Paragraph(f"No: {invoice_number}", normal_style))
         elements.append(Paragraph(f"Date: {issue_date}", normal_style))
         elements.append(Paragraph(f"Client: {customer_name}", normal_style))
+        if customer_address:
+            elements.append(Paragraph(f"Address: {customer_address}", normal_style))
         if customer_gstin:
             elements.append(Paragraph(f"GSTIN: {customer_gstin}", normal_style))
         elements.append(Spacer(1, 2*mm))
@@ -345,8 +392,11 @@ def generate_invoice_pdf(
         billing_box = [
             [Paragraph("<b>Billed to:</b>", bold_style)],
             [Paragraph(f"<b>{customer_name}</b>", normal_style)],
-            [Paragraph(f"GSTIN: {customer_gstin or 'Unregistered'}", normal_style)]
         ]
+        if customer_address:
+            billing_box.append([Paragraph(customer_address, normal_style)])
+        billing_box.append([Paragraph(f"GSTIN: {customer_gstin or 'Unregistered'}", normal_style)])
+
         billing_table = Table(billing_box, colWidths=[186*mm], style=[
             ('BOX', (0,0), (-1,-1), 0.5, border_color),
             ('PADDING', (0,0), (-1,-1), 6),
@@ -395,7 +445,7 @@ def generate_invoice_pdf(
         if has_payments:
             totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
             totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
-        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[
+        totals_table = Table(totals_col, colWidths=[38*mm, 32*mm], style=[
             ('PADDING', (0,0), (-1,-1), 2),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE')
         ])
@@ -404,7 +454,7 @@ def generate_invoice_pdf(
             [Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]
         ]
         
-        summary_table = Table(summary_row, colWidths=[80*mm, 31*mm, 75*mm], style=[
+        summary_table = Table(summary_row, colWidths=[78*mm, 32*mm, 76*mm], style=[
             ('BOX', (0,0), (-1,-1), 0.5, border_color),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('PADDING', (0,0), (-1,-1), 6),
@@ -449,8 +499,9 @@ def generate_invoice_pdf(
         elements.append(header_grid)
         
         # Billing & Shipping info side-by-side
-        bill_to_p = Paragraph(f"<b>Consignee (Ship To):</b><br/>{customer_name}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style)
-        ship_to_p = Paragraph(f"<b>Buyer (Bill To):</b><br/>{customer_name}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style)
+        cust_addr_str = f"<br/>{customer_address}" if customer_address else ""
+        bill_to_p = Paragraph(f"<b>Consignee (Ship To):</b><br/>{customer_name}{cust_addr_str}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style)
+        ship_to_p = Paragraph(f"<b>Buyer (Bill To):</b><br/>{customer_name}{cust_addr_str}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style)
         
         party_grid = Table([[bill_to_p, ship_to_p]], colWidths=[93*mm, 93*mm], style=[
             ('BOX', (0,0), (-1,-1), 1, tally_border),
@@ -521,7 +572,7 @@ def generate_invoice_pdf(
                 Paragraph(f"{tot_tax:.2f}", normal_style),
             ])
             
-        gst_analysis_table = Table(gst_analysis_rows, colWidths=[26*mm, 35*mm, 45*mm, 45*mm, 35*mm], style=[
+        gst_analysis_table = Table(gst_analysis_rows, colWidths=[24*mm, 36*mm, 48*mm, 48*mm, 30*mm], style=[
             ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F1F5F9')),
             ('BOX', (0,0), (-1,-1), 1, tally_border),
             ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
@@ -537,9 +588,12 @@ def generate_invoice_pdf(
             [Paragraph("Total IGST:", normal_style), Paragraph(f"Rs. {igst:.2f}", right_style)],
             [Paragraph("<b>Grand Total:</b>", bold_style), Paragraph(f"<b>Rs. {total:.2f}</b>", bold_right)],
         ]
-        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
+        if has_payments:
+            totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
+            totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
+        totals_table = Table(totals_col, colWidths=[38*mm, 32*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
         
-        bottom_summary_grid = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[80*mm, 31*mm, 75*mm], style=[
+        bottom_summary_grid = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[78*mm, 32*mm, 76*mm], style=[
             ('BOX', (0,0), (-1,-1), 1, tally_border),
             ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -585,7 +639,7 @@ def generate_invoice_pdf(
         # Metadata and party info in grid
         meta_grid_data = [
             [Paragraph(f"<b>Invoice No:</b> {invoice_number}", normal_style), Paragraph(f"<b>Billed To:</b> {customer_name}", normal_style)],
-            [Paragraph(f"<b>Date:</b> {issue_date}", normal_style), Paragraph(f"<b>Address:</b> {company_address}", normal_style)],
+            [Paragraph(f"<b>Date:</b> {issue_date}", normal_style), Paragraph(f"<b>Address:</b> {customer_address or 'N/A'}", normal_style)],
             [Paragraph(f"<b>Due Date:</b> {due_date}", normal_style), Paragraph(f"<b>GSTIN:</b> {customer_gstin or 'Unregistered'}", normal_style)],
         ]
         elements.append(Table(meta_grid_data, colWidths=[93*mm, 93*mm], style=[
@@ -635,9 +689,12 @@ def generate_invoice_pdf(
             [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
             [Paragraph("<b>Grand Total:</b>", bold_style), Paragraph(f"<b>Rs. {total:.2f}</b>", bold_right)],
         ]
-        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
+        if has_payments:
+            totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
+            totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
+        totals_table = Table(totals_col, colWidths=[38*mm, 32*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
         
-        summary_table = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[80*mm, 31*mm, 75*mm], style=[
+        summary_table = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[78*mm, 32*mm, 76*mm], style=[
             ('BOX', (0,0), (-1,-1), 1, classic_primary),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('PADDING', (0,0), (-1,-1), 6)
@@ -659,7 +716,11 @@ def generate_invoice_pdf(
         sleek_accent = colors.HexColor('#DCA035')
         
         # Elegant header banner
-        header_p = Paragraph(f"<b><font size=16 color='white'>{company_name.upper()}</font></b><br/><font size=9 color='white'>GSTIN: {company_gstin or 'N/A'}</font>", normal_style)
+        co_banner = f"<b><font size=16 color='white'>{company_name.upper()}</font></b><br/>"
+        if company_address:
+            co_banner += f"<font size=9 color='white'>{company_address}</font><br/>"
+        co_banner += f"<font size=9 color='white'>GSTIN: {company_gstin or 'N/A'}</font>"
+        header_p = Paragraph(co_banner, normal_style)
         title_p = Paragraph(f"<b><font size=16 color='white'>{doc_type.upper()}</font></b><br/><font size=11 color='white'>#{invoice_number}</font>", ParagraphStyle('SleekTitle', parent=styles['Normal'], alignment=TA_RIGHT))
         
         banner_table = Table([[header_p, title_p]], colWidths=[100*mm, 86*mm], style=[
@@ -672,7 +733,8 @@ def generate_invoice_pdf(
         
         # Metadata
         meta_left = f"<b>Date:</b> {issue_date}<br/><b>Due Date:</b> {due_date}<br/><b>Place of Supply:</b> {origin_state_code or 'N/A'}"
-        meta_right = f"<b>Billed To:</b><br/>{customer_name}<br/>GSTIN: {customer_gstin or 'Unregistered'}"
+        addr_str = f"<br/>{customer_address}" if customer_address else ""
+        meta_right = f"<b>Billed To:</b><br/>{customer_name}{addr_str}<br/>GSTIN: {customer_gstin or 'Unregistered'}"
         
         meta_table = Table([[Paragraph(meta_left, normal_style), Paragraph(meta_right, normal_style)]], colWidths=[93*mm, 93*mm], style=[
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -721,12 +783,15 @@ def generate_invoice_pdf(
             [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
             [Paragraph("<font size=11><b>Amount Due:</b></font>", bold_style), Paragraph(f"<font size=11><b>Rs. {total:.2f}</b></font>", bold_right)],
         ]
-        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[
+        if has_payments:
+            totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
+            totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
+        totals_table = Table(totals_col, colWidths=[38*mm, 32*mm], style=[
             ('PADDING', (0,0), (-1,-1), 2),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE')
         ])
         
-        summary_table = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[80*mm, 31*mm, 75*mm], style=[
+        summary_table = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[78*mm, 32*mm, 76*mm], style=[
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('PADDING', (0,0), (-1,-1), 6)
         ])
@@ -749,9 +814,12 @@ def generate_invoice_pdf(
         elements.append(Spacer(1, 4*mm))
 
         # Simple meta
+        cust_str = f"Customer: {customer_name}"
+        if customer_address:
+            cust_str += f"<br/>{customer_address}"
         meta = [
             [Paragraph(f"<b>{doc_type}:</b> {invoice_number}", bold_style), Paragraph(f"Date: {issue_date}", normal_style)],
-            [Paragraph(f"Customer: {customer_name}", normal_style), Paragraph(f"Due: {due_date}", normal_style)],
+            [Paragraph(cust_str, normal_style), Paragraph(f"Due: {due_date}", normal_style)],
         ]
         if customer_gstin:
             meta.append([Paragraph(f"GSTIN: {customer_gstin}", normal_style), ""])
@@ -804,14 +872,17 @@ def generate_invoice_pdf(
         ]))
         elements.append(Spacer(1, 2*mm))
         elements.append(Paragraph(company_name, company_title))
+        if company_address:
+            elements.append(Paragraph(company_address, center_style))
         if company_gstin:
             elements.append(Paragraph(f"GSTIN: {company_gstin}", center_style))
         elements.append(Spacer(1, 4*mm))
 
         # Two-column info
+        cust_addr_str = f"<br/>{customer_address}" if customer_address else ""
         info_row = [
             [
-                Paragraph(f"<b>Billed To</b><br/>{customer_name}<br/>{customer_gstin or 'Unregistered'}", normal_style),
+                Paragraph(f"<b>Billed To</b><br/>{customer_name}{cust_addr_str}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style),
                 Paragraph(f"<b>{doc_type}</b><br/>No: {invoice_number}<br/>Date: {issue_date}<br/>Due: {due_date}", normal_style),
             ]
         ]
@@ -879,9 +950,10 @@ def generate_invoice_pdf(
         elements.append(Spacer(1, 2*mm))
 
         # Double column meta details
+        cust_addr_str = f"<br/>{customer_address}" if customer_address else ""
         metadata_row = [
             [
-                Paragraph(f"<b>Bill To:</b><br/>{customer_name}<br/>GSTIN: {customer_gstin or 'N/A'}", normal_style),
+                Paragraph(f"<b>Bill To:</b><br/>{customer_name}{cust_addr_str}<br/>GSTIN: {customer_gstin or 'N/A'}", normal_style),
                 Paragraph(f"<b>Company Details:</b><br/>GSTIN: {company_gstin or 'N/A'}<br/>PAN: {company_pan or 'N/A'}<br/>{company_address}", normal_style)
             ]
         ]
@@ -931,14 +1003,14 @@ def generate_invoice_pdf(
         if has_payments:
             totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
             totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
-        totals_table = Table(totals_col, colWidths=[40*mm, 35*mm], style=[
+        totals_table = Table(totals_col, colWidths=[38*mm, 32*mm], style=[
             ('PADDING', (0,0), (-1,-1), 2),
         ])
 
         summary_row = [
             [Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]
         ]
-        summary_table = Table(summary_row, colWidths=[80*mm, 31*mm, 75*mm], style=[
+        summary_table = Table(summary_row, colWidths=[78*mm, 32*mm, 76*mm], style=[
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('PADDING', (0,0), (-1,-1), 6),
         ])
@@ -951,7 +1023,6 @@ def generate_invoice_pdf(
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
         ])
         elements.append(bottom_table)
-
     doc.build(elements)
     return buffer.getvalue()
 
@@ -1684,4 +1755,111 @@ def generate_gstr3b_pdf(data, company_name: str, start: str, end: str) -> bytes:
 
     doc.build(elements)
     return buffer.getvalue()
+
+
+def generate_gstr2_pdf(data, company_name: str, start: str, end: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=12*mm, rightMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    primary_color = colors.HexColor('#0F1B3D')
+    text_color = colors.HexColor('#1E293B')
+    border_color = colors.HexColor('#94A3B8')
+    table_header_bg = colors.HexColor('#E2E8F0')
+
+    title_style = ParagraphStyle('G2Title', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, leading=22, textColor=primary_color, alignment=TA_CENTER)
+    subtitle_style = ParagraphStyle('G2Subtitle', parent=styles['Normal'], fontName='Helvetica', fontSize=10, textColor=colors.HexColor('#475569'), alignment=TA_CENTER)
+    bold_style = ParagraphStyle('G2Bold', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8, leading=10, textColor=text_color)
+    normal_style = ParagraphStyle('G2Normal', parent=styles['Normal'], fontName='Helvetica', fontSize=8, leading=10, textColor=text_color)
+    right_style = ParagraphStyle('G2Right', parent=normal_style, alignment=TA_RIGHT)
+    right_bold_style = ParagraphStyle('G2RightBold', parent=bold_style, alignment=TA_RIGHT)
+
+    elements.append(Paragraph(company_name, title_style))
+    elements.append(Paragraph(f"GSTR-2 Inward Supplies (Purchases) Summary ({start} to {end})", subtitle_style))
+    elements.append(Spacer(1, 6*mm))
+
+    summary_table = [
+        [Paragraph("<b>Particulars</b>", bold_style), Paragraph("<b>Taxable Value (₹)</b>", right_bold_style), Paragraph("<b>CGST (₹)</b>", right_bold_style), Paragraph("<b>SGST (₹)</b>", right_bold_style), Paragraph("<b>IGST (₹)</b>", right_bold_style), Paragraph("<b>Cess (₹)</b>", right_bold_style)]
+    ]
+
+    # B2B registered vendor purchases
+    b2b = data.get("b2b_purchases", [])
+    b2b_taxable = sum(float(x.get("taxable_value", 0)) for x in b2b)
+    b2b_cgst = sum(float(x.get("cgst_amount", 0)) for x in b2b)
+    b2b_sgst = sum(float(x.get("sgst_amount", 0)) for x in b2b)
+    b2b_igst = sum(float(x.get("igst_amount", 0)) for x in b2b)
+    b2b_cess = sum(float(x.get("cess_amount", 0)) for x in b2b)
+
+    summary_table.append([
+        Paragraph("B2B Inward Registered Supplies", normal_style),
+        Paragraph(f"{b2b_taxable:,.2f}", right_style),
+        Paragraph(f"{b2b_cgst:,.2f}", right_style),
+        Paragraph(f"{b2b_sgst:,.2f}", right_style),
+        Paragraph(f"{b2b_igst:,.2f}", right_style),
+        Paragraph(f"{b2b_cess:,.2f}", right_style)
+    ])
+
+    # B2BUR unregistered reverse charge
+    b2bur = data.get("b2bur_purchases", [])
+    b2bur_taxable = sum(float(x.get("taxable_value", 0)) for x in b2bur)
+    b2bur_cgst = sum(float(x.get("cgst_amount", 0)) for x in b2bur)
+    b2bur_sgst = sum(float(x.get("sgst_amount", 0)) for x in b2bur)
+    b2bur_igst = sum(float(x.get("igst_amount", 0)) for x in b2bur)
+    b2bur_cess = sum(float(x.get("cess_amount", 0)) for x in b2bur)
+
+    summary_table.append([
+        Paragraph("B2BUR Unregistered Reverse Charge", normal_style),
+        Paragraph(f"{b2bur_taxable:,.2f}", right_style),
+        Paragraph(f"{b2bur_cgst:,.2f}", right_style),
+        Paragraph(f"{b2bur_sgst:,.2f}", right_style),
+        Paragraph(f"{b2bur_igst:,.2f}", right_style),
+        Paragraph(f"{b2bur_cess:,.2f}", right_style)
+    ])
+
+    # Notes registered & unregistered
+    cdnr = data.get("cdnr_purchases", [])
+    cdnur = data.get("cdnur_purchases", [])
+    notes_taxable = sum(float(x.get("taxable_value", 0)) * (-1 if x.get("note_type") == "CREDIT" else 1) for x in cdnr + cdnur)
+    notes_cgst = sum(float(x.get("cgst_amount", 0)) * (-1 if x.get("note_type") == "CREDIT" else 1) for x in cdnr + cdnur)
+    notes_sgst = sum(float(x.get("sgst_amount", 0)) * (-1 if x.get("note_type") == "CREDIT" else 1) for x in cdnr + cdnur)
+    notes_igst = sum(float(x.get("igst_amount", 0)) * (-1 if x.get("note_type") == "CREDIT" else 1) for x in cdnr + cdnur)
+    notes_cess = sum(float(x.get("cess_amount", 0)) * (-1 if x.get("note_type") == "CREDIT" else 1) for x in cdnr + cdnur)
+
+    summary_table.append([
+        Paragraph("Debit / Credit Notes (Net Adjustment)", normal_style),
+        Paragraph(f"{notes_taxable:,.2f}", right_style),
+        Paragraph(f"{notes_cgst:,.2f}", right_style),
+        Paragraph(f"{notes_sgst:,.2f}", right_style),
+        Paragraph(f"{notes_igst:,.2f}", right_style),
+        Paragraph(f"{notes_cess:,.2f}", right_style)
+    ])
+
+    # Grand Totals
+    tot_taxable = b2b_taxable + b2bur_taxable + notes_taxable
+    tot_cgst = b2b_cgst + b2bur_cgst + notes_cgst
+    tot_sgst = b2b_sgst + b2bur_sgst + notes_sgst
+    tot_igst = b2b_igst + b2bur_igst + notes_igst
+    tot_cess = b2b_cess + b2bur_cess + notes_cess
+
+    summary_table.append([
+        Paragraph("<b>Total Eligible Inward Supplies</b>", bold_style),
+        Paragraph(f"<b>{tot_taxable:,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{tot_cgst:,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{tot_sgst:,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{tot_igst:,.2f}</b>", right_bold_style),
+        Paragraph(f"<b>{tot_cess:,.2f}</b>", right_bold_style)
+    ])
+
+    elements.append(Table(summary_table, colWidths=[56*mm, 26*mm, 26*mm, 26*mm, 26*mm, 26*mm], style=[
+        ('BACKGROUND', (0,0), (-1,0), table_header_bg),
+        ('LINEBELOW', (0,0), (-1,0), 1.2, primary_color),
+        ('LINEBELOW', (0,1), (-1,-2), 0.5, border_color),
+        ('LINEABOVE', (0,-1), (-1,-1), 1.2, primary_color),
+        ('PADDING', (0,0), (-1,-1), 4),
+    ]))
+
+    doc.build(elements)
+    return buffer.getvalue()
+
 

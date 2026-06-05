@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/expense_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/expenses/expense_form_view.dart';
 import 'package:flutter_client/views/expenses/expense_detail_view.dart';
@@ -84,9 +85,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
         if (ok) successCount++;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$successCount of ${_selectedIds.length} expenses cancelled')),
-        );
+        AppToast.info(context, '$successCount of ${_selectedIds.length} expenses cancelled');
       }
       _clearSelection();
       provider.fetchExpenses(page: provider.currentPage);
@@ -123,9 +122,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
       if (success) {
         provider.fetchExpenses(page: provider.currentPage);
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Delete failed'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Delete failed');
       }
     }
   }
@@ -236,28 +233,19 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                                     if (!_isSelectionMode)
                                                       Row(
                                                         children: [
-                                                          OutlinedButton.icon(
-                                                            onPressed: () => _showForm(expense: exp),
-                                                            icon: const Icon(Icons.edit_outlined, size: 14),
-                                                            label: const Text('Edit'),
-                                                            style: OutlinedButton.styleFrom(
-                                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                              textStyle: AppTextStyles.buttonSmall,
-                                                              side: const BorderSide(color: AppColors.borderInput),
-                                                            ),
-                                                          ),
-                                                          const SizedBox(width: 8),
-                                                          OutlinedButton.icon(
-                                                            onPressed: () => _deleteExpense(exp['id']),
-                                                            icon: const Icon(Icons.delete_outlined, size: 14),
-                                                            label: const Text('Delete'),
-                                                            style: OutlinedButton.styleFrom(
-                                                              foregroundColor: AppColors.error,
-                                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                              textStyle: AppTextStyles.buttonSmall,
-                                                              side: BorderSide(color: AppColors.error.withOpacity(0.3)),
-                                                            ),
-                                                          ),
+                                                           ActionButton(
+                                                             label: 'Edit',
+                                                             icon: Icons.edit_outlined,
+                                                             tier: ActionTier.safe,
+                                                             onPressed: () => _showForm(expense: exp),
+                                                           ),
+                                                           const SizedBox(width: 8),
+                                                           ActionButton(
+                                                             label: 'Delete',
+                                                             icon: Icons.delete_outlined,
+                                                             tier: ActionTier.dangerous,
+                                                             onPressed: () => _deleteExpense(exp['id']),
+                                                           ),
                                                         ],
                                                       ),
                                                   ],
@@ -325,39 +313,26 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                         style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
                                       ),
                                       const Spacer(),
-                                      OutlinedButton.icon(
-                                        onPressed: _clearSelection,
-                                        icon: const Icon(Icons.close, size: 14),
-                                        label: const Text('Clear'),
-                                        style: OutlinedButton.styleFrom(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                          textStyle: AppTextStyles.buttonSmall,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      OutlinedButton.icon(
-                                        onPressed: _bulkCancel,
-                                        icon: const Icon(Icons.cancel_outlined, size: 14),
-                                        label: const Text('Cancel'),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppColors.error,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                          textStyle: AppTextStyles.buttonSmall,
-                                          side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      OutlinedButton.icon(
-                                        onPressed: _bulkDelete,
-                                        icon: const Icon(Icons.delete_outline, size: 14),
-                                        label: const Text('Delete'),
-                                        style: OutlinedButton.styleFrom(
-                                          foregroundColor: AppColors.error,
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                          textStyle: AppTextStyles.buttonSmall,
-                                          side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                                        ),
-                                      ),
+                                       ActionButton(
+                                         label: 'Clear',
+                                         icon: Icons.close,
+                                         tier: ActionTier.safe,
+                                         onPressed: _clearSelection,
+                                       ),
+                                       const SizedBox(width: 8),
+                                       ActionButton(
+                                         label: 'Cancel',
+                                         icon: Icons.cancel_outlined,
+                                         tier: ActionTier.dangerous,
+                                         onPressed: _bulkCancel,
+                                       ),
+                                       const SizedBox(width: 8),
+                                       ActionButton(
+                                         label: 'Delete',
+                                         icon: Icons.delete_outline,
+                                         tier: ActionTier.dangerous,
+                                         onPressed: _bulkDelete,
+                                       ),
                                     ],
                                   ),
                                 ),

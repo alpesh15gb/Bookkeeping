@@ -932,6 +932,7 @@ def print_bill(
         tenant_id=tenant_id,
         db=db,
         amount_paid=bill.amount_paid or Decimal("0.00"),
+        customer_address=bill.contact.billing_address if bill.contact else None,
     )
 
     return StreamingResponse(

@@ -15,13 +15,11 @@ class EwayBillListView extends StatefulWidget {
 
 class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  int _currentTab = 0;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
-    _tabController.addListener(() { if (mounted) setState(() {}); });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<EwayBillProvider>().fetchEwayBills();
     });
@@ -33,6 +31,13 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
     super.dispose();
   }
 
+  void _showForm() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const EwayBillFormView()),
+    ).then((_) => context.read<EwayBillProvider>().fetchEwayBills());
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
@@ -40,9 +45,9 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: _tabController.index == 0
+      floatingActionButton: _tabController.index == 0 && isMobile
           ? FloatingActionButton(
-              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const EwayBillFormView())).then((_) => provider.fetchEwayBills()),
+              onPressed: _showForm,
               child: const Icon(Icons.add),
             )
           : null,
@@ -50,11 +55,31 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
         preferredSize: const Size.fromHeight(48),
         child: Container(
           color: AppColors.bgSurface,
-          child: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'E-Way Bills'),
-              Tab(text: 'E-Invoices'),
+          child: Row(
+            children: [
+              Expanded(
+                child: TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(text: 'E-Way Bills'),
+                    Tab(text: 'E-Invoices'),
+                  ],
+                ),
+              ),
+              if (!isMobile && _tabController.index == 0)
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child:                     ElevatedButton.icon(
+                    onPressed: _showForm,
+                    icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
+                    label: const Text('New E-Way Bill', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brandNavy,
+                      foregroundColor: AppColors.textWhite,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -62,14 +87,14 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildEwayBillList(context, provider),
+          _buildEwayBillList(context, provider, isMobile),
           _buildEinvoiceList(context),
         ],
       ),
     );
   }
 
-  Widget _buildEwayBillList(BuildContext context, EwayBillProvider provider) {
+  Widget _buildEwayBillList(BuildContext context, EwayBillProvider provider, bool isMobile) {
     if (provider.isLoading && provider.ewayBills.isEmpty) {
       return const LoadingState(message: 'Loading e-way bills...');
     }
@@ -87,33 +112,22 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
                 ),
               ],
             )
-          : ListView.builder(
-              padding: AppSpacing.pagePadding,
+          : ListView.separated(
+              padding: EdgeInsets.only(
+                left: isMobile ? 12 : 20,
+                right: isMobile ? 12 : 20,
+                top: 8,
+                bottom: isMobile ? 80 : 20,
+              ),
               itemCount: provider.ewayBills.length,
+              separatorBuilder: (context, _) => const SizedBox(height: 6),
               itemBuilder: (context, i) {
                 final ewb = provider.ewayBills[i];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  decoration: BoxDecoration(
-                    color: AppColors.bgSurface,
-                    borderRadius: AppRadius.card,
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                    leading: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: AppColors.brandNavy.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.local_shipping_outlined, size: 18, color: AppColors.brandNavy),
-                    ),
-                    title: Text(ewb['eway_bill_number'] ?? ewb['id'] ?? 'N/A', style: AppTextStyles.h3),
-                    subtitle: Text(ewb['invoice_number'] ?? 'N/A', style: AppTextStyles.caption),
-                    trailing: StatusBadge(label: ewb['status'] ?? 'PENDING'),
-                  ),
+                return CompactDocumentCard(
+                  docNumber: ewb['eway_bill_number'] ?? ewb['id']?.toString() ?? 'N/A',
+                  partyName: ewb['invoice_number'] ?? '',
+                  amount: 0,
+                  status: ewb['status'] ?? 'PENDING',
                 );
               },
             ),

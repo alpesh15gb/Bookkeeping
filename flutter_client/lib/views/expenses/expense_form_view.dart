@@ -4,6 +4,7 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/providers/accounting_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class ExpenseFormView extends StatefulWidget {
@@ -123,9 +124,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
               Navigator.pop(context);
               final success = await context.read<DocumentProvider>().createExpenseCategory(name);
               if (success && mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Category created'), backgroundColor: AppColors.success),
-                );
+                AppToast.success(context, 'Category created');
               }
             },
             child: const Text('SAVE'),
@@ -138,9 +137,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
     if (_categoryId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please select an expense category'), backgroundColor: AppColors.error),
-      );
+      AppToast.error(context, 'Please select an expense category');
       return;
     }
 
@@ -167,17 +164,10 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
     if (mounted) {
       setState(() => _isSaving = false);
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(widget.editExpense != null ? 'Expense updated' : 'Expense recorded'),
-            backgroundColor: AppColors.success,
-          ),
-        );
+        AppToast.success(context, widget.editExpense != null ? 'Expense updated' : 'Expense recorded');
         Navigator.pop(context, true);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Failed to save expense'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Failed to save expense');
       }
     }
   }
@@ -226,12 +216,10 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                   Row(
                     children: [
                       Expanded(
-                        child: DropdownButtonFormField<String>(
+                        child: AppDropdown<String>(
                           value: _categoryId,
-                          decoration: const InputDecoration(
-                            labelText: 'Category *',
-                            prefixIcon: Icon(Icons.category_outlined, size: 18),
-                          ),
+                          label: 'Category *',
+                          prefixIcon: Icons.category_outlined,
                           items: categories.map((c) {
                             return DropdownMenuItem<String>(
                               value: c['id']?.toString(),
@@ -251,12 +239,10 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
+                  AppDropdown<String>(
                     value: _bankAccountId,
-                    decoration: const InputDecoration(
-                      labelText: 'Paid From (Bank/Cash Account)',
-                      prefixIcon: Icon(Icons.account_balance_wallet_outlined, size: 18),
-                    ),
+                    label: 'Paid From (Bank/Cash Account)',
+                    prefixIcon: Icons.account_balance_wallet_outlined,
                     items: [
                       const DropdownMenuItem<String>(
                         value: null,
@@ -272,13 +258,9 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                     onChanged: (val) => setState(() => _bankAccountId = val),
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
+                  AppDateField(
                     controller: _dateCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Expense Date *',
-                      prefixIcon: Icon(Icons.calendar_today_outlined, size: 16),
-                    ),
-                    readOnly: true,
+                    label: 'Expense Date *',
                     onTap: _pickDate,
                     validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                   ),
@@ -292,13 +274,11 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
               title: 'AMOUNT & TAX',
               child: Column(
                 children: [
-                  TextFormField(
+                  AppTextField(
                     controller: _amountCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Amount (₹) *',
-                      prefixIcon: Icon(Icons.attach_money_outlined, size: 18),
-                    ),
+                    label: 'Amount (₹) *',
+                    prefixIcon: Icons.attach_money_outlined,
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Amount required';
                       final amt = double.tryParse(v);
@@ -307,12 +287,10 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  DropdownButtonFormField<double>(
+                  AppDropdown<double>(
                     value: _gstRate,
-                    decoration: const InputDecoration(
-                      labelText: 'GST Rate (%)',
-                      prefixIcon: Icon(Icons.percent, size: 16),
-                    ),
+                    label: 'GST Rate (%)',
+                    prefixIcon: Icons.percent,
                     items: const [
                       DropdownMenuItem(value: 0.0, child: Text('0%')),
                       DropdownMenuItem(value: 5.0, child: Text('5%')),
@@ -361,12 +339,10 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
               title: 'ADDITIONAL INFORMATION',
               child: Column(
                 children: [
-                  TextFormField(
+                  AppTextField(
                     controller: _vendorCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Vendor Name',
-                      prefixIcon: Icon(Icons.store_outlined, size: 18),
-                    ),
+                    label: 'Vendor Name',
+                    prefixIcon: Icons.store_outlined,
                   ),
                   const SizedBox(height: 16),
                   TextFormField(

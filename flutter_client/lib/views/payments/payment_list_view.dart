@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/payment_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/payments/payment_form_view.dart';
 
@@ -57,9 +58,7 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
       final provider = context.read<PaymentProvider>();
       final success = await provider.cancelReceipt(id);
       if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Cancel failed'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
       }
     }
   }
@@ -70,9 +69,7 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
       final provider = context.read<PaymentProvider>();
       final success = await provider.cancelDisbursement(id);
       if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Cancel failed'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
       }
     }
   }
@@ -166,18 +163,13 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(r.referenceNumber!, style: AppTextStyles.caption),
                         ),
-                      if (r.status != 'CANCELLED')
-                        OutlinedButton.icon(
-                          onPressed: () => _cancelReceipt(r.id),
-                          icon: const Icon(Icons.cancel_outlined, size: 14),
-                          label: const Text('Cancel'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            textStyle: AppTextStyles.buttonSmall,
-                            side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                          ),
-                        ),
+                       if (r.status != 'CANCELLED')
+                         ActionButton(
+                           label: 'Cancel',
+                           icon: Icons.cancel_outlined,
+                           tier: ActionTier.dangerous,
+                           onPressed: () => _cancelReceipt(r.id),
+                         ),
                     ],
                   ),
                 ],
@@ -240,18 +232,13 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
                           padding: const EdgeInsets.only(right: 8),
                           child: Text(d.referenceNumber!, style: AppTextStyles.caption),
                         ),
-                      if (d.status != 'CANCELLED')
-                        OutlinedButton.icon(
-                          onPressed: () => _cancelDisbursement(d.id),
-                          icon: const Icon(Icons.cancel_outlined, size: 14),
-                          label: const Text('Cancel'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            textStyle: AppTextStyles.buttonSmall,
-                            side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                          ),
-                        ),
+                       if (d.status != 'CANCELLED')
+                         ActionButton(
+                           label: 'Cancel',
+                           icon: Icons.cancel_outlined,
+                           tier: ActionTier.dangerous,
+                           onPressed: () => _cancelDisbursement(d.id),
+                         ),
                     ],
                   ),
                 ],

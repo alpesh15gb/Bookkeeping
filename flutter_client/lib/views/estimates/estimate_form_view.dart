@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
 
 class EstimateFormView extends StatelessWidget {
@@ -32,10 +33,7 @@ class EstimateFormView extends StatelessWidget {
               ? await provider.updateEstimate(editEstimate!['id'], payload)
               : await provider.createEstimate(payload);
           if (!success && ctx.mounted) {
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-              content: Text(provider.errorMessage ?? 'Failed to save estimate'),
-              backgroundColor: AppColors.error,
-            ));
+            AppToast.error(ctx, provider.errorMessage ?? 'Failed to save estimate');
           }
           return success;
         },

@@ -16,6 +16,8 @@ class AdaptiveLayout extends StatelessWidget {
   static bool isDesktop(BuildContext context) =>
       MediaQuery.of(context).size.width >= 768;
 
+  static const double sidebarWidth = 210;
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(

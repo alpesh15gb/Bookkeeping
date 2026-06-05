@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/delivery_challan_provider.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
 
 class DeliveryChallanFormView extends StatelessWidget {
@@ -32,10 +33,7 @@ class DeliveryChallanFormView extends StatelessWidget {
               ? await provider.updateChallan(challan!['id'], payload)
               : await provider.createChallan(payload);
           if (!success && ctx.mounted) {
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-              content: Text(provider.errorMessage ?? 'Failed to save challan'),
-              backgroundColor: AppColors.error,
-            ));
+            AppToast.error(ctx, provider.errorMessage ?? 'Failed to save challan');
           }
           return success;
         },

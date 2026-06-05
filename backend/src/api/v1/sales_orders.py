@@ -498,6 +498,7 @@ def print_sales_order(
         doc_type="SALES ORDER",
         tenant_id=tenant_id,
         db=db,
+        customer_address=so.contact.billing_address if so.contact else None,
     )
 
     return StreamingResponse(

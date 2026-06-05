@@ -111,6 +111,7 @@ def generate_invoice_pdf(invoice_id: str) -> str:
                 doc_type="INVOICE",
                 tenant_id=invoice.tenant_id,
                 db=db,
+                customer_address=invoice.contact.billing_address if invoice.contact else None,
             )
             # Upload to S3 if configured
             if settings.S3_BUCKET:

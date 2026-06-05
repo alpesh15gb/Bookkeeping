@@ -33,6 +33,7 @@ from src.schemas.report_schemas import (
     OutstandingAPResponse,
     PartyStatementResponse,
 )
+from src.schemas.gst_schemas import GSTR2Response
 
 router = APIRouter(prefix="/reports", tags=["Reports & Analytics"])
 
@@ -83,6 +84,26 @@ def get_gstr1(
 
 
 @router.get(
+    "/gst/gstr2",
+    response_model=GSTR2Response,
+    summary="GSTR-2 Inward Supplies",
+    description=(
+        "Compiles GSTR-2 inward purchase data for the given period. "
+        "Splits purchases into B2B (registered), B2BUR (reverse charge unregistered), "
+        "and HSN-wise summary tables."
+    ),
+)
+def get_gstr2(
+    start_date: date = Query(..., description="Period start, e.g. 2025-04-01"),
+    end_date: date = Query(..., description="Period end, e.g. 2025-06-30"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.api.v1.gst import get_gstr2_report
+    return get_gstr2_report(start_date=start_date, end_date=end_date, db=db, tenant_id=tenant_id)
+
+
+@router.get(
     "/gst/gstr3b",
     response_model=GSTR3BResponse,
     summary="GSTR-3B Monthly Summary",
@@ -98,6 +119,7 @@ def get_gstr3b(
     tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
 ):
     return GSTR3BService.get(db, tenant_id, start_date, end_date)
+
 
 
 # ---------------------------------------------------------------------------

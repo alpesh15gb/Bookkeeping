@@ -23,9 +23,24 @@ class _DeliveryChallanListViewState extends State<DeliveryChallanListView> {
     });
   }
 
+  void _showForm() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DeliveryChallanFormView()),
+    ).then((_) => context.read<DeliveryChallanProvider>().fetchChallans());
+  }
+
+  void _showDetail(dynamic dc) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => DeliveryChallanDetailView(challanId: dc['id'])),
+    ).then((_) => context.read<DeliveryChallanProvider>().fetchChallans());
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<DeliveryChallanProvider>();
+    final isMobile = AdaptiveLayout.isMobile(context);
 
     if (provider.isLoading && provider.challans.isEmpty) {
       return const LoadingState(message: 'Loading delivery challans...');
@@ -33,54 +48,72 @@ class _DeliveryChallanListViewState extends State<DeliveryChallanListView> {
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const DeliveryChallanFormView())).then((_) => provider.fetchChallans()),
-        child: const Icon(Icons.add),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => provider.fetchChallans(),
-        child: provider.challans.isEmpty
-            ? ListView(
-                children: const [
-                  SizedBox(height: 120),
-                  EmptyState(
-                    icon: Icons.local_shipping_rounded,
-                    title: 'No Delivery Challans',
-                    subtitle: 'Create delivery challans for goods dispatched from finalized sales orders',
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              onPressed: _showForm,
+              child: const Icon(Icons.add),
+            )
+          : null,
+      body: Column(
+        children: [
+          if (!isMobile)
+            Container(
+              color: AppColors.bgSurface,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              child: Row(
+                children: [
+                  Text('Delivery Challans', style: AppTextStyles.h2),
+                  const Spacer(),
+                  ElevatedButton.icon(
+                    onPressed: _showForm,
+                    icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
+                    label: const Text('New Challan', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brandNavy,
+                      foregroundColor: AppColors.textWhite,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    ),
                   ),
                 ],
-              )
-            : ListView.builder(
-                padding: AppSpacing.pagePadding,
-                itemCount: provider.challans.length,
-                itemBuilder: (context, i) {
-                  final dc = provider.challans[i];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSurface,
-                      borderRadius: AppRadius.card,
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: ListTile(
-                      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DeliveryChallanDetailView(challanId: dc['id']))).then((_) => provider.fetchChallans()),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      leading: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFE57C00).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.local_shipping_rounded, size: 18, color: Color(0xFFE57C00)),
-                      ),
-                      title: Text(dc['challan_number'] ?? 'N/A', style: AppTextStyles.h3),
-                      subtitle: Text(dc['customer_name'] ?? dc['contact_name'] ?? '', style: AppTextStyles.caption),
-                      trailing: StatusBadge(label: dc['status'] ?? 'DRAFT'),
-                    ),
-                  );
-                },
               ),
+            ),
+          Expanded(
+            child: provider.challans.isEmpty
+                ? ListView(
+                    children: const [
+                      SizedBox(height: 120),
+                      EmptyState(
+                        icon: Icons.local_shipping_rounded,
+                        title: 'No Delivery Challans',
+                        subtitle: 'Create delivery challans for goods dispatched from finalized sales orders',
+                      ),
+                    ],
+                  )
+                : RefreshIndicator(
+                    onRefresh: () async => provider.fetchChallans(),
+                    child: ListView.separated(
+                      padding: EdgeInsets.only(
+                        left: isMobile ? 12 : 20,
+                        right: isMobile ? 12 : 20,
+                        top: 8,
+                        bottom: isMobile ? 80 : 20,
+                      ),
+                      itemCount: provider.challans.length,
+                      separatorBuilder: (context, _) => const SizedBox(height: 6),
+                      itemBuilder: (context, i) {
+                        final dc = provider.challans[i];
+                        return CompactDocumentCard(
+                          docNumber: dc['challan_number'] ?? 'N/A',
+                          partyName: dc['customer_name'] ?? dc['contact_name'] ?? '',
+                          amount: 0,
+                          status: dc['status'] ?? 'DRAFT',
+                          onTap: () => _showDetail(dc),
+                        );
+                      },
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }

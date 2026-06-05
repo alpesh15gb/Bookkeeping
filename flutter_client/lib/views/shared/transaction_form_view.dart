@@ -1180,7 +1180,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         children: [
           if (_hasRecoveredDraft)
             Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.only(bottom: 8),
               child: AppDraftIndicator(onRecover: _recoverDraft),
             ),
           
@@ -1196,16 +1196,16 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildPartiesRow(isDesktop),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       _buildDocInfoCard(isDesktop),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       _buildLineItemsSection(isDesktop),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       _buildAttachmentsAndNotesCard(),
                     ],
                   ),
                 ),
-                const SizedBox(width: 24),
+                const SizedBox(width: 16),
                 // Right Column: Summary Panels
                 Expanded(
                   flex: 2,
@@ -1213,7 +1213,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       _buildTaxBreakdownCard(),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       _buildTotalSummaryCard(),
                     ],
                   ),
@@ -1226,19 +1226,19 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildPartiesRow(isDesktop),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _buildDocInfoCard(isDesktop),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _buildLineItemsSection(isDesktop),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _buildTaxBreakdownCard(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _buildTotalSummaryCard(),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 _buildAttachmentsAndNotesCard(),
               ],
             ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 24),
         ],
       ),
     );
@@ -1292,7 +1292,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         isSaving: _isSaving,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.all(16),
         child: bodyContent,
       ),
     );
@@ -1301,8 +1301,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   Widget _buildDocInfoCard(bool isDesktop) {
     final headerRow = Row(
       children: [
-        const Icon(Icons.description_outlined, size: 18, color: AppColors.brandNavy),
-        const SizedBox(width: 8),
+        const Icon(Icons.description_outlined, size: 14, color: AppColors.brandNavy),
+        const SizedBox(width: 6),
         Text('DOCUMENT DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
         const Spacer(),
         Row(
@@ -1320,7 +1320,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                 }
               },
             ),
-            const Text('GST Inclusive', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            const Text('GST Inclusive', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
           ],
         ),
       ],
@@ -1335,7 +1335,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           hintText: _nextNumberPlaceholder ?? 'Auto-generated',
         ),
       ),
-      const SizedBox(width: 16),
+      const SizedBox(width: 12),
       Expanded(
         child: AppDateField(
           controller: _issueDateCtrl,
@@ -1343,11 +1343,11 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           onTap: () => _pickDate(_issueDateCtrl),
         ),
       ),
-      const SizedBox(width: 16),
+      const SizedBox(width: 12),
       Expanded(
         child: AppDropdown<String>(
           value: _posStateCode,
-          label: 'Place of Supply (State) *',
+          label: 'Place of Supply *',
           prefixIcon: Icons.map_outlined,
           items: _gstStateNames.entries
               .map(
@@ -1368,12 +1368,12 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     ];
 
     return AppCard(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           headerRow,
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
           if (isDesktop)
             Row(children: fields)
           else
@@ -1382,7 +1382,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               children: fields.where((w) => w is! SizedBox).map((w) {
                 if (w is Expanded) return w.child;
                 return w;
-              }).toList().expand((w) => [w, const SizedBox(height: 12)]).toList()..removeLast(),
+              }).toList().expand((w) => [w, const SizedBox(height: 8)]).toList()..removeLast(),
             ),
         ],
       ),
@@ -1408,7 +1408,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           onTap: _openContactSearch,
         ),
         if (widget.config.hasShippingAddress) ...[
-          const SizedBox(height: 12),
+          const SizedBox(height: 6),
           Row(
             children: [
               Checkbox(
@@ -1428,8 +1428,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                 },
               ),
               const Text(
-                'Shipping Address same as Billing Address',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                'Shipping same as billing',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
               ),
             ],
           ),
@@ -1439,20 +1439,20 @@ class _TransactionFormViewState extends State<TransactionFormView> {
 
     final shipToWidget = widget.config.hasShippingAddress && !_shipToSameAsBilling
         ? Padding(
-            padding: const EdgeInsets.only(top: 12),
+            padding: const EdgeInsets.only(top: 8),
             child: AppCard(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.all(12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.local_shipping_outlined, color: AppColors.brandNavy, size: 18),
-                      const SizedBox(width: 8),
+                      const Icon(Icons.local_shipping_outlined, color: AppColors.brandNavy, size: 14),
+                      const SizedBox(width: 6),
                       Text('SHIPPING DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
                     ],
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 10),
                   TextFormField(
                     controller: _shippingAddrCtrl,
                     maxLines: 2,
@@ -1521,144 +1521,81 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     }
 
     return AppCard(
-      padding: const EdgeInsets.all(0),
+      padding: EdgeInsets.zero,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Navy header row
+          // Navy header row - horizontally scrollable
           Container(
-            color: AppColors.brandNavy,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: const Row(
-              children: [
-                SizedBox(
-                  width: 40,
-                  child: Text(
-                    'S.No',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+            color: AppColors.brandNavyLight,
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: 820,
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 36,
+                      child: Text('S.No', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
                     ),
-                  ),
-                ),
-                Expanded(
-                  flex: 3,
-                  child: Text(
-                    'Product/Service Description *',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 200,
+                      child: Text('Item Description *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
                     ),
-                  ),
-                ),
-                SizedBox(
-                  width: 100,
-                  child: Text(
-                    'HSN/SAC *',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 90,
+                      child: Text('HSN/SAC *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
                     ),
-                  ),
-                ),
-                SizedBox(
-                  width: 80,
-                  child: Text(
-                    'Qty *',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 60,
+                      child: Text('Qty *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                SizedBox(
-                  width: 80,
-                  child: Text(
-                    'Unit',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 60,
+                      child: Text('Unit', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
                     ),
-                  ),
-                ),
-                SizedBox(
-                  width: 100,
-                  child: Text(
-                    'Rate (₹) *',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 90,
+                      child: Text('Rate (₹) *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
                     ),
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-                SizedBox(
-                  width: 90,
-                  child: Text(
-                    'Discount %',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 70,
+                      child: Text('Disc %', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                SizedBox(
-                  width: 110,
-                  child: Text(
-                    'Taxable Value (₹)',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 100,
+                      child: Text('Taxable (₹)', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
                     ),
-                    textAlign: TextAlign.right,
-                  ),
-                ),
-                SizedBox(
-                  width: 90,
-                  child: Text(
-                    'GST Rate %',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 70,
+                      child: Text('GST %', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                ),
-                SizedBox(
-                  width: 110,
-                  child: Text(
-                    'GST Amount (₹)',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
+                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(
+                      width: 100,
+                      child: Text('GST Amt (₹)', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
                     ),
-                    textAlign: TextAlign.right,
-                  ),
+                    const SizedBox(width: AppSpacing.sm),
+                    const SizedBox(width: 36),
+                  ],
                 ),
-                SizedBox(width: 40),
-              ],
+              ),
             ),
           ),
           if (_lines.isEmpty)
             const Padding(
-              padding: EdgeInsets.all(40),
+              padding: EdgeInsets.all(24),
               child: Center(
-                child: Text(
-                  'No items added yet',
-                  style: TextStyle(color: AppColors.textMuted),
-                ),
+                child: Text('No items added yet', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
               ),
             )
           else
@@ -1676,225 +1613,185 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                     ? (lineGross - taxableValue)
                     : (taxableValue * (line.gstRate / 100));
                 return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: const BoxDecoration(
-                    border: Border(bottom: BorderSide(color: AppColors.border)),
-                  ),
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 40,
-                        child: Text(
-                          '${index + 1}',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: GestureDetector(
-                          onTap: () => _openProductSearch(index),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
-                            ),
-                            decoration: BoxDecoration(
-                              border: Border.all(color: AppColors.border),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              line.productName.isNotEmpty
-                                  ? line.productName
-                                  : 'Select product...',
-                              style: TextStyle(
-                                color: line.productName.isNotEmpty
-                                    ? Colors.black
-                                    : AppColors.textMuted,
+                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: SizedBox(
+                      width: 820,
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 36,
+                            child: Text('${index + 1}', style: AppTextStyles.bodyMedium),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 200,
+                            child: GestureDetector(
+                              onTap: () => _openProductSearch(index),
+                              child: Container(
+                                padding: AppSpacing.inputPaddingCompact,
+                                decoration: BoxDecoration(
+                                  border: Border.all(color: AppColors.border),
+                                  borderRadius: AppRadius.input,
+                                ),
+                                child: Text(
+                                  line.productName.isNotEmpty ? line.productName : 'Select product...',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: line.productName.isNotEmpty ? AppColors.textPrimary : AppColors.textMuted,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: line.hsnCtrl,
-                          onChanged: (v) => line.hsnSac = v,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.all(10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 80,
-                        child: TextFormField(
-                          controller: line.qtyCtrl,
-                          textAlign: TextAlign.center,
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return 'Req';
-                            final qty = double.tryParse(v);
-                            if (qty == null || qty <= 0) return 'Invalid';
-                            return null;
-                          },
-                          onChanged: (v) {
-                            line.quantity = double.tryParse(v) ?? 1;
-                            _triggerPreview();
-                          },
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.all(10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 80,
-                        child: DropdownButtonFormField<String>(
-                          value: line.unit,
-                          isDense: true,
-                          decoration: const InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 6,
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 90,
+                            child: AppTextField(
+                              controller: line.hsnCtrl,
+                              onChanged: (v) => line.hsnSac = v,
+                              compact: true,
                             ),
                           ),
-                          items: const [
-                            DropdownMenuItem(value: 'Nos', child: Text('Nos')),
-                            DropdownMenuItem(value: 'Pcs', child: Text('Pcs')),
-                            DropdownMenuItem(value: 'Box', child: Text('Box')),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) setState(() => line.unit = v);
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 100,
-                        child: TextFormField(
-                          controller: line.rateCtrl,
-                          textAlign: TextAlign.right,
-                          validator: (v) {
-                            if (v == null || v.trim().isEmpty) return 'Req';
-                            final rate = double.tryParse(v);
-                            if (rate == null || rate < 0) return 'Invalid';
-                            return null;
-                          },
-                          onChanged: (v) {
-                            line.rate = double.tryParse(v) ?? 0;
-                            _triggerPreview();
-                          },
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.all(10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 90,
-                        child: TextFormField(
-                          controller: line.discCtrl,
-                          textAlign: TextAlign.center,
-                          validator: (v) {
-                            if (v != null && v.trim().isNotEmpty) {
-                              final disc = double.tryParse(v);
-                              if (disc == null || disc < 0 || disc > 100) return '0-100';
-                            }
-                            return null;
-                          },
-                          onChanged: (v) {
-                            line.discount = double.tryParse(v) ?? 0;
-                            _triggerPreview();
-                          },
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            contentPadding: EdgeInsets.all(10),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 110,
-                        child: Text(
-                          '₹${taxableValue.toStringAsFixed(2)}',
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 90,
-                        child: DropdownButtonFormField<String>(
-                          value: line.gstRate.toStringAsFixed(0),
-                          isDense: true,
-                          decoration: const InputDecoration(
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 4,
-                              vertical: 6,
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 60,
+                            child: AppTextField(
+                              controller: line.qtyCtrl,
+                              textAlign: TextAlign.center,
+                              compact: true,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) return 'Req';
+                                final qty = double.tryParse(v);
+                                if (qty == null || qty <= 0) return 'Invalid';
+                                return null;
+                              },
+                              onChanged: (v) {
+                                line.quantity = double.tryParse(v) ?? 1;
+                                _triggerPreview();
+                              },
                             ),
                           ),
-                          items: const [
-                            DropdownMenuItem(value: '18', child: Text('18%')),
-                            DropdownMenuItem(value: '12', child: Text('12%')),
-                            DropdownMenuItem(value: '5', child: Text('5%')),
-                            DropdownMenuItem(value: '0', child: Text('0%')),
-                          ],
-                          onChanged: (v) {
-                            if (v != null) {
-                              setState(
-                                () => line.gstRate = double.tryParse(v) ?? 18,
-                              );
-                              _triggerPreview();
-                            }
-                          },
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 110,
-                        child: Text(
-                          '₹${gstAmount.toStringAsFixed(2)}',
-                          textAlign: TextAlign.right,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      SizedBox(
-                        width: 40,
-                        child: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: AppColors.error,
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 60,
+                            child: AppDropdown<String>(
+                              value: line.unit,
+                              compact: true,
+                              items: const [
+                                DropdownMenuItem(value: 'Nos', child: Text('Nos')),
+                                DropdownMenuItem(value: 'Pcs', child: Text('Pcs')),
+                                DropdownMenuItem(value: 'Box', child: Text('Box')),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) setState(() => line.unit = v);
+                              },
+                            ),
                           ),
-                          onPressed: () => _removeLine(index),
-                        ),
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 90,
+                            child: AppTextField(
+                              controller: line.rateCtrl,
+                              textAlign: TextAlign.right,
+                              compact: true,
+                              validator: (v) {
+                                if (v == null || v.trim().isEmpty) return 'Req';
+                                final rate = double.tryParse(v);
+                                if (rate == null || rate < 0) return 'Invalid';
+                                return null;
+                              },
+                              onChanged: (v) {
+                                line.rate = double.tryParse(v) ?? 0;
+                                _triggerPreview();
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 70,
+                            child: AppTextField(
+                              controller: line.discCtrl,
+                              textAlign: TextAlign.center,
+                              compact: true,
+                              validator: (v) {
+                                if (v != null && v.trim().isNotEmpty) {
+                                  final disc = double.tryParse(v);
+                                  if (disc == null || disc < 0 || disc > 100) return '0-100';
+                                }
+                                return null;
+                              },
+                              onChanged: (v) {
+                                line.discount = double.tryParse(v) ?? 0;
+                                _triggerPreview();
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              '₹${taxableValue.toStringAsFixed(2)}',
+                              textAlign: TextAlign.right,
+                              style: AppTextStyles.amount,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 70,
+                            child: AppDropdown<String>(
+                              value: line.gstRate.toStringAsFixed(0),
+                              compact: true,
+                              items: const [
+                                DropdownMenuItem(value: '18', child: Text('18%')),
+                                DropdownMenuItem(value: '12', child: Text('12%')),
+                                DropdownMenuItem(value: '5', child: Text('5%')),
+                                DropdownMenuItem(value: '0', child: Text('0%')),
+                              ],
+                              onChanged: (v) {
+                                if (v != null) {
+                                  setState(() => line.gstRate = double.tryParse(v) ?? 18);
+                                  _triggerPreview();
+                                }
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 100,
+                            child: Text(
+                              '₹${gstAmount.toStringAsFixed(2)}',
+                              textAlign: TextAlign.right,
+                              style: AppTextStyles.amount,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(
+                            width: 36,
+                            child: IconButton(
+                              icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
+                              onPressed: () => _removeLine(index),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 );
               },
             ),
           Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                ElevatedButton.icon(
-                  onPressed: _addEmptyLine,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Add Row'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.brandNavy,
-                    foregroundColor: Colors.white,
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
+            child: ActionButton(
+              label: 'Add Row',
+              icon: Icons.add,
+              tier: ActionTier.safe,
+              onPressed: _addEmptyLine,
             ),
           ),
         ],
@@ -1917,22 +1814,20 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         AppCard(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
                 'Total Amount in Words',
-                style: AppTextStyles.labelSmall.copyWith(
-                  color: AppColors.textMuted,
-                ),
+                style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               Text(
                 _total > 0
                     ? 'Rupees ${_convertToWords(_total)} Only'
                     : 'Zero Rupees Only',
-                style: AppTextStyles.bodyMedium.copyWith(
+                style: AppTextStyles.bodySmall.copyWith(
                   fontWeight: FontWeight.w600,
                   color: AppColors.brandNavy,
                 ),
@@ -1940,16 +1835,18 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             ],
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
         AppCard(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: TextField(
             controller: _notesCtrl,
             maxLines: 2,
+            style: const TextStyle(fontSize: 13),
             decoration: const InputDecoration(
               labelText: 'Notes (Optional)',
               border: InputBorder.none,
               hintText: 'Enter notes...',
+              isDense: true,
             ),
           ),
         ),
@@ -1969,53 +1866,54 @@ class _TransactionFormViewState extends State<TransactionFormView> {
 
   Widget _buildTotalSummaryCard() {
     return AppCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SummaryRow('Total Taxable Value', _subtotal),
+          _SummaryRow('Taxable Value', _subtotal),
           if (_discountTotal.abs() > 0.001)
             _SummaryRow('Discount', -_discountTotal, color: AppColors.success),
           _SummaryRow(
-            'Total Tax Amount',
+            'Tax',
             _cgst + _sgst + _igst + _utgst + _cess,
           ),
           if (_roundOff.abs() > 0.001) _SummaryRow('Round Off', _roundOff),
-          const Divider(),
-          const SizedBox(height: 8),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 6),
+            child: Divider(height: 1),
+          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text(
-                'Total Invoice Amount',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                'Total',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
               ),
               Text(
                 '₹${_total.toStringAsFixed(2)}',
                 style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
                   color: AppColors.brandNavy,
                 ),
               ),
             ],
           ),
           if (_amountPaid > 0) ...[
-            const SizedBox(height: 8),
-            _SummaryRow('Amount Paid', _amountPaid, color: AppColors.success),
             const SizedBox(height: 4),
+            _SummaryRow('Paid', _amountPaid, color: AppColors.success),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Text(
                   'Balance Due',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.error),
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.error),
                 ),
                 Text(
                   '₹${(_total - _amountPaid).clamp(0, double.infinity).toStringAsFixed(2)}',
                   style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
                     color: AppColors.error,
                   ),
                 ),
@@ -2075,14 +1973,14 @@ class _SummaryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
+      padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label, style: AppTextStyles.bodySmall),
+          Text(label, style: AppTextStyles.caption),
           Text(
             '₹${value.toStringAsFixed(2)}',
-            style: AppTextStyles.numeric.copyWith(color: color),
+            style: AppTextStyles.numeric.copyWith(fontSize: 12, color: color),
           ),
         ],
       ),
@@ -2119,7 +2017,7 @@ class _LineItemCardState extends State<_LineItemCard> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: AppColors.bgSurface,
         borderRadius: AppRadius.card,
@@ -2222,7 +2120,7 @@ class _LineItemCardState extends State<_LineItemCard> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
+            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -2291,7 +2189,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Row(
                   children: [
                     _SmallField(
@@ -2302,7 +2200,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                         widget.onChanged();
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     _SmallField(
                       label: 'Rate (₹)',
                       ctrl: line.rateCtrl,
@@ -2312,7 +2210,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                         widget.onChanged();
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     _SmallField(
                       label: 'Disc %',
                       ctrl: line.discCtrl,
@@ -2321,7 +2219,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                         widget.onChanged();
                       },
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 6),
                     _SmallField(
                       label: 'GST %',
                       ctrl: line.gstCtrl,
@@ -2333,7 +2231,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                   ],
                 ),
                 if (_showDetails) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       Expanded(
@@ -2345,13 +2243,13 @@ class _LineItemCardState extends State<_LineItemCard> {
                             labelText: 'HSN / SAC',
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
+                              horizontal: 8,
+                              vertical: 8,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                       Expanded(
                         flex: 2,
                         child: TextField(
@@ -2361,8 +2259,8 @@ class _LineItemCardState extends State<_LineItemCard> {
                             labelText: 'Item Description',
                             isDense: true,
                             contentPadding: EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 10,
+                              horizontal: 8,
+                              vertical: 8,
                             ),
                           ),
                         ),
@@ -2370,7 +2268,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                     ],
                   ),
                 ],
-                const SizedBox(height: 10),
+                const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Container(
@@ -2440,20 +2338,20 @@ class _SmallField extends StatelessWidget {
           Text(
             label,
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 9,
               fontWeight: FontWeight.w500,
               color: AppColors.textMuted,
             ),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 2),
           TextField(
             controller: ctrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             onChanged: onChanged,
             decoration: const InputDecoration(
               isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+              contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
               border: OutlineInputBorder(),
             ),
           ),

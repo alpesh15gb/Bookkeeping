@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/document_status.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/empty_state.dart';
 
 export 'package:flutter_client/views/shared/empty_state.dart';
+export 'package:flutter_client/views/shared/toast.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 // STATUS BADGE
@@ -78,22 +80,55 @@ class StatusBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = color ?? AppColors.textMuted;
     final bg = backgroundColor ?? AppColors.typeDraftBg;
+
+    IconData? iconData;
+    switch (label.toUpperCase()) {
+      case 'PAID':
+      case 'SYNCED':
+      case 'SAVED':
+        iconData = Icons.check_circle_outline;
+        break;
+      case 'PARTIALLY_PAID':
+      case 'PARTIAL':
+        iconData = Icons.warning_amber_outlined;
+        break;
+      case 'OVERDUE':
+      case 'CANCELLED':
+        iconData = Icons.cancel_outlined;
+        break;
+      case 'DRAFT':
+        iconData = Icons.edit_outlined;
+        break;
+      case 'SENT':
+        iconData = Icons.send_outlined;
+        break;
+    }
+
     return Semantics(
       label: 'Status: $label',
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: AppRadius.badge,
         ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: c,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0.3,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (iconData != null) ...[
+              Icon(iconData, size: 11, color: c),
+              const SizedBox(width: 3),
+            ],
+            Text(
+              label.toUpperCase(),
+              style: TextStyle(
+                color: c,
+                fontSize: 10,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.2,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1101,84 +1136,91 @@ class AppPartySelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
+      padding: const EdgeInsets.all(12),
       onTap: onTap,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: AppTextStyles.label.copyWith(color: AppColors.brandNavy),
-              ),
-              const Icon(Icons.keyboard_arrow_right, color: AppColors.textMuted),
-            ],
-          ),
-          const SizedBox(height: 12),
           if (partyName != null && partyName!.isNotEmpty) ...[
-            Text(
-              partyName!,
-              style: AppTextStyles.h2.copyWith(color: AppColors.brandNavy),
+            Row(
+              children: [
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: const BoxDecoration(
+                    color: AppColors.brandNavy,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    partyName!,
+                    style: AppTextStyles.h3.copyWith(color: AppColors.brandNavy),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                if (gstin != null && gstin!.isNotEmpty)
+                  Text(gstin!, style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600)),
+                if (gstin != null && gstin!.isNotEmpty && state != null && state!.isNotEmpty)
+                  Text('  |  ', style: AppTextStyles.caption),
+                if (state != null && state!.isNotEmpty)
+                  Text(state!, style: AppTextStyles.caption),
+              ],
             ),
             const SizedBox(height: 8),
             Row(
               children: [
-                if (gstin != null && gstin!.isNotEmpty) ...[
-                  Text('GSTIN: $gstin', style: AppTextStyles.bodySmall),
-                  const SizedBox(width: 12),
+                _CompactMetric(label: 'Outstanding', value: AmountFormat.format(outstanding)),
+                const SizedBox(width: 16),
+                _CompactMetric(label: 'Credit', value: AmountFormat.format(creditLimit)),
+                if (lastTransaction != null) ...[
+                  const SizedBox(width: 16),
+                  _CompactMetric(label: 'Last Txn', value: lastTransaction!),
                 ],
-                if (state != null && state!.isNotEmpty)
-                  Text('State: $state', style: AppTextStyles.bodySmall),
-              ],
-            ),
-            const Divider(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Outstanding', style: AppTextStyles.labelSmall),
-                    const SizedBox(height: 4),
-                    AmountText(value: outstanding, compact: true, rightAlign: false),
-                  ],
-                ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Credit Limit', style: AppTextStyles.labelSmall),
-                    const SizedBox(height: 4),
-                    AmountText(value: creditLimit, compact: true, rightAlign: false),
-                  ],
-                ),
-                if (lastTransaction != null)
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('Last Trans', style: AppTextStyles.labelSmall),
-                      const SizedBox(height: 4),
-                      Text(lastTransaction!, style: AppTextStyles.numeric),
-                    ],
-                  ),
               ],
             ),
           ] else
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
+              padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
                 children: [
-                  const Icon(Icons.person_add_alt_1_outlined, color: AppColors.textMuted),
-                  const SizedBox(width: 12),
+                  const Icon(Icons.person_add_alt_1_outlined, size: 16, color: AppColors.textMuted),
+                  const SizedBox(width: 8),
                   Text(
-                    'Select $label *',
-                    style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+                    'Select $label',
+                    style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
                   ),
+                  const Spacer(),
+                  const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
                 ],
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+class _CompactMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  const _CompactMetric({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Text(label, style: AppTextStyles.caption),
+        const SizedBox(width: 4),
+        Text(value, style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+      ],
     );
   }
 }
@@ -1302,9 +1344,9 @@ class AppBottomTotalBar extends StatelessWidget {
           OutlinedButton(
             onPressed: isSaving ? null : onSaveDraft,
             style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             ),
-            child: const Text('Save Draft'),
+            child: const Text('Save Draft', style: TextStyle(fontSize: 12)),
           ),
           const SizedBox(width: 8),
         ],
@@ -1312,17 +1354,18 @@ class AppBottomTotalBar extends StatelessWidget {
           onPressed: isSaving ? null : onSave,
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.brandNavy,
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            foregroundColor: AppColors.textWhite,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
           ),
           child: isSaving
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Text('Save & Post'),
+              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Save', style: TextStyle(fontSize: 12)),
         ),
       ],
     );
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 16 : 24, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 10),
       decoration: BoxDecoration(
         color: AppColors.bgSurface,
         border: const Border(top: BorderSide(color: AppColors.border)),
@@ -1336,28 +1379,31 @@ class AppBottomTotalBar extends StatelessWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Total Amount', style: AppTextStyles.label),
+                      const Text('Total', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
                       AppAmountWidget(value: total, large: true),
                     ],
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       if (onSaveDraft != null)
                         Expanded(
                           child: OutlinedButton(
                             onPressed: isSaving ? null : onSaveDraft,
-                            child: const Text('Draft'),
+                            child: const Text('Draft', style: TextStyle(fontSize: 12)),
                           ),
                         ),
                       if (onSaveDraft != null) const SizedBox(width: 8),
                       Expanded(
                         child: ElevatedButton(
                           onPressed: isSaving ? null : onSave,
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.brandNavy),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.brandNavy,
+                            foregroundColor: AppColors.textWhite,
+                          ),
                           child: isSaving
                               ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Text('Save'),
+                              : const Text('Save', style: TextStyle(fontSize: 12)),
                         ),
                       ),
                     ],
@@ -1500,22 +1546,35 @@ class AppDraftIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      color: AppColors.warningBg,
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppColors.warningBg,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        border: Border.all(color: AppColors.warning.withValues(alpha: 0.2)),
+      ),
       child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.warning_amber_rounded, color: AppColors.warning),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Unsaved changes from a previous session detected.',
-              style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600),
-            ),
+          const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
+          const SizedBox(width: 6),
+          const Text(
+            'Draft available',
+            style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600, fontSize: 12),
           ),
-          ElevatedButton(
-            onPressed: onRecover,
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.warning),
-            child: const Text('Recover Draft'),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: onRecover,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: AppColors.warning,
+                borderRadius: BorderRadius.circular(AppRadius.xs),
+              ),
+              child: const Text(
+                'Recover',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 11),
+              ),
+            ),
           ),
         ],
       ),
@@ -1529,7 +1588,7 @@ class AppDraftIndicator extends StatelessWidget {
 
 class AppTextField extends StatelessWidget {
   final TextEditingController? controller;
-  final String label;
+  final String? label;
   final String? hintText;
   final IconData? prefixIcon;
   final String? Function(String?)? validator;
@@ -1537,11 +1596,13 @@ class AppTextField extends StatelessWidget {
   final bool readOnly;
   final VoidCallback? onTap;
   final TextInputType? keyboardType;
+  final TextAlign textAlign;
+  final bool compact;
 
   const AppTextField({
     super.key,
     this.controller,
-    required this.label,
+    this.label,
     this.hintText,
     this.prefixIcon,
     this.validator,
@@ -1549,6 +1610,8 @@ class AppTextField extends StatelessWidget {
     this.readOnly = false,
     this.onTap,
     this.keyboardType,
+    this.textAlign = TextAlign.start,
+    this.compact = false,
   });
 
   @override
@@ -1560,11 +1623,18 @@ class AppTextField extends StatelessWidget {
       readOnly: readOnly,
       onTap: onTap,
       keyboardType: keyboardType,
+      textAlign: textAlign,
+      style: compact ? const TextStyle(fontSize: 13) : null,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: compact ? null : label,
         hintText: hintText,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon, size: 16) : null,
         floatingLabelBehavior: FloatingLabelBehavior.always,
+        isDense: compact,
+        contentPadding: compact
+            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 8)
+            : null,
+        border: compact ? const OutlineInputBorder() : null,
       ),
     );
   }
@@ -1572,20 +1642,22 @@ class AppTextField extends StatelessWidget {
 
 class AppDropdown<T> extends StatelessWidget {
   final T? value;
-  final String label;
+  final String? label;
   final IconData? prefixIcon;
   final List<DropdownMenuItem<T>> items;
   final ValueChanged<T?> onChanged;
   final String? Function(T?)? validator;
+  final bool compact;
 
   const AppDropdown({
     super.key,
     this.value,
-    required this.label,
+    this.label,
     this.prefixIcon,
     required this.items,
     required this.onChanged,
     this.validator,
+    this.compact = false,
   });
 
   @override
@@ -1593,10 +1665,16 @@ class AppDropdown<T> extends StatelessWidget {
     return DropdownButtonFormField<T>(
       value: value,
       validator: validator,
+      isDense: compact,
       decoration: InputDecoration(
-        labelText: label,
+        labelText: compact ? null : label,
         prefixIcon: prefixIcon != null ? Icon(prefixIcon, size: 16) : null,
         floatingLabelBehavior: FloatingLabelBehavior.always,
+        isDense: compact,
+        contentPadding: compact
+            ? const EdgeInsets.symmetric(horizontal: 8, vertical: 6)
+            : null,
+        border: compact ? const OutlineInputBorder() : null,
       ),
       items: items,
       onChanged: onChanged,
@@ -1749,22 +1827,40 @@ class AppTaxSummary extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             'TAX BREAKDOWN',
-            style: AppTextStyles.labelSmall.copyWith(
-              color: AppColors.brandNavy,
-            ),
+            style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy),
           ),
-          const SizedBox(height: 12),
-          SummaryRow(label: 'CGST Amount', value: AmountFormat.format(cgst)),
-          SummaryRow(label: 'SGST Amount', value: AmountFormat.format(sgst)),
-          SummaryRow(label: 'IGST Amount', value: AmountFormat.format(igst)),
-          if (utgst.abs() > 0.001) SummaryRow(label: 'UTGST Amount', value: AmountFormat.format(utgst)),
-          if (cess.abs() > 0.001) SummaryRow(label: 'Cess Amount', value: AmountFormat.format(cess)),
+          const SizedBox(height: 8),
+          _CompactSummaryRow(label: 'CGST', value: AmountFormat.format(cgst)),
+          _CompactSummaryRow(label: 'SGST', value: AmountFormat.format(sgst)),
+          _CompactSummaryRow(label: 'IGST', value: AmountFormat.format(igst)),
+          if (utgst.abs() > 0.001) _CompactSummaryRow(label: 'UTGST', value: AmountFormat.format(utgst)),
+          if (cess.abs() > 0.001) _CompactSummaryRow(label: 'Cess', value: AmountFormat.format(cess)),
+        ],
+      ),
+    );
+  }
+}
+
+class _CompactSummaryRow extends StatelessWidget {
+  final String label;
+  final String value;
+  const _CompactSummaryRow({required this.label, required this.value});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: AppTextStyles.caption),
+          Text(value, style: AppTextStyles.numeric.copyWith(fontSize: 12)),
         ],
       ),
     );
@@ -1862,4 +1958,440 @@ class _ActionButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// COMPACT DOCUMENT CARD
+// ═══════════════════════════════════════════════════════════════════
+
+class CompactDocumentCard extends StatefulWidget {
+  final String docNumber;
+  final String? partyName;
+  final String? date;
+  final num amount;
+  final String status;
+  final String? balanceLabel;
+  final num? balanceAmount;
+  final bool isSelected;
+  final bool isSelectionMode;
+  final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
+  final List<Widget>? actions;
+  final List<Widget>? hoverActions;
+
+  const CompactDocumentCard({
+    super.key,
+    required this.docNumber,
+    this.partyName,
+    this.date,
+    required this.amount,
+    required this.status,
+    this.balanceLabel,
+    this.balanceAmount,
+    this.isSelected = false,
+    this.isSelectionMode = false,
+    this.onTap,
+    this.onLongPress,
+    this.actions,
+    this.hoverActions,
+  });
+
+  @override
+  State<CompactDocumentCard> createState() => _CompactDocumentCardState();
+}
+
+class _CompactDocumentCardState extends State<CompactDocumentCard> {
+  bool _isHovered = false;
+  static final _dateFormatter = DateFormat('d MMM yyyy');
+
+  String _formatDate(String? raw) {
+    if (raw == null || raw.isEmpty) return '';
+    try {
+      final dt = DateTime.parse(raw);
+      return _dateFormatter.format(dt);
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: GestureDetector(
+        onLongPress: widget.onLongPress,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(vertical: 0.5),
+          decoration: BoxDecoration(
+            color: _isHovered ? AppColors.bgLight : AppColors.bgSurface,
+            borderRadius: AppRadius.card,
+            border: Border.all(
+              color: widget.isSelected ? AppColors.brandNavy : (_isHovered ? AppColors.border : AppColors.borderLight),
+              width: widget.isSelected ? 1.5 : 0.5,
+            ),
+            boxShadow: _isHovered
+                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))]
+                : null,
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            children: [
+              if (widget.isSelectionMode)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: Icon(
+                    widget.isSelected ? Icons.check_circle : Icons.circle_outlined,
+                    size: 18,
+                    color: widget.isSelected ? AppColors.brandNavy : AppColors.textMuted,
+                  ),
+                ),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // Left: doc number + party
+                    Expanded(
+                      flex: 4,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '#${widget.docNumber}${widget.date != null && widget.date!.isNotEmpty ? ' • ${_formatDate(widget.date)}' : ''}',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textMuted,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          if (widget.partyName != null && widget.partyName!.isNotEmpty)
+                            Text(
+                              widget.partyName!,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.textPrimary,
+                                height: 1.2,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    // Right: amount + balance (visually dominant)
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            AmountFormat.format(widget.amount),
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textPrimary,
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                              letterSpacing: 0.1,
+                              height: 1.2,
+                            ),
+                          ),
+                          if (widget.balanceLabel != null && widget.balanceAmount != null && widget.balanceAmount! > 0)
+                            Text(
+                              '${widget.balanceLabel!.toUpperCase()} ${AmountFormat.format(widget.balanceAmount!)}',
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.error,
+                                fontFeatures: const [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          if (widget.balanceLabel != null && (widget.balanceAmount == null || widget.balanceAmount! <= 0))
+                            Text(
+                              widget.balanceLabel!.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.success,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    // Status badge
+                    StatusBadge(label: widget.status),
+                    // Hover actions
+                    if (_isHovered && widget.hoverActions != null && widget.hoverActions!.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      ...widget.hoverActions!,
+                    ],
+                    // Actions
+                    if (widget.actions != null && widget.actions!.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      ...widget.actions!,
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SUMMARY STATS BAR
+// ═══════════════════════════════════════════════════════════════════
+
+class SummaryStatsBar extends StatelessWidget {
+  final List<SummaryStat> stats;
+
+  const SummaryStatsBar({super.key, required this.stats});
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 4),
+      color: AppColors.bgSurface,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: stats.map((s) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 16),
+              child: Row(
+                children: [
+                  if (s.color != null) ...[
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(color: s.color, shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 4),
+                  ],
+                  Text(
+                    s.label,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    '${s.count}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      color: s.color ?? AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+class SummaryStat {
+  final String label;
+  final int count;
+  final Color? color;
+
+  const SummaryStat({required this.label, required this.count, this.color});
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// FILTER CHIP WITH COUNT
+// ═══════════════════════════════════════════════════════════════════
+
+class FilterChipWithCount extends StatelessWidget {
+  final String label;
+  final int count;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const FilterChipWithCount({
+    super.key,
+    required this.label,
+    required this.count,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.brandNavy : AppColors.bgSurface,
+          borderRadius: AppRadius.badge,
+          border: Border.all(
+            color: isSelected ? AppColors.brandNavy : AppColors.border,
+            width: 0.5,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                color: isSelected ? Colors.white : AppColors.textSecondary,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? Colors.white.withValues(alpha: 0.2)
+                    : AppColors.brandNavyLight.withValues(alpha: 0.3),
+                borderRadius: AppRadius.badge,
+              ),
+              child: Text(
+                '$count',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w600,
+                  color: isSelected ? Colors.white : AppColors.brandNavy,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// AMOUNT SUMMARY CARDS
+// ═══════════════════════════════════════════════════════════════════
+
+class AmountSummaryCards extends StatelessWidget {
+  final List<AmountSummaryCardData> cards;
+
+  const AmountSummaryCards({super.key, required this.cards});
+
+  @override
+  Widget build(BuildContext context) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    final padH = isMobile ? 12.0 : 20.0;
+
+    // Build rows of 2
+    final rows = <Widget>[];
+    for (var i = 0; i < cards.length; i += 2) {
+      final left = cards[i];
+      final right = i + 1 < cards.length ? cards[i + 1] : null;
+      rows.add(
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: _buildCell(left, isMobile)),
+              if (right != null)
+                Container(
+                  width: 1,
+                  margin: const EdgeInsets.symmetric(vertical: 4),
+                  color: AppColors.borderLight,
+                ),
+              if (right != null) Expanded(child: _buildCell(right, isMobile)),
+            ],
+          ),
+        ),
+      );
+      if (i + 2 < cards.length) {
+        rows.add(
+          Divider(
+            color: AppColors.borderLight,
+            height: 1,
+            indent: padH,
+            endIndent: padH,
+          ),
+        );
+      }
+    }
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: padH, vertical: 6),
+      color: AppColors.bgSurface,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Top border
+          Divider(color: AppColors.border, height: 1),
+          const SizedBox(height: 4),
+          ...rows,
+          const SizedBox(height: 4),
+          // Bottom border
+          Divider(color: AppColors.border, height: 1),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCell(AmountSummaryCardData card, bool isMobile) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            card.label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textMuted,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            card.value,
+            style: TextStyle(
+              fontSize: isMobile ? 16 : 18,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              color: card.color,
+              height: 1.2,
+              letterSpacing: 0.1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AmountSummaryCardData {
+  final String label;
+  final String value;
+  final Color color;
+
+  const AmountSummaryCardData({
+    required this.label,
+    required this.value,
+    required this.color,
+  });
 }

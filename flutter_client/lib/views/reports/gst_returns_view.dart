@@ -20,14 +20,18 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
 
   bool _isLoading = false;
   Map<String, dynamic>? _gstr1Data;
+  Map<String, dynamic>? _gstr2Data;
   Map<String, dynamic>? _gstr3bData;
   String? _error;
 
   Future<void> _downloadPdf() async {
     final token = ApiClient.accessToken ?? '';
     final tenantId = ApiClient.tenantId ?? '';
-    final isGstr1 = _tabController.index == 0;
-    final path = isGstr1 ? '/gst/gstr1/pdf' : '/gst/gstr3b/pdf';
+    final path = _tabController.index == 0
+        ? '/gst/gstr1/pdf'
+        : _tabController.index == 1
+            ? '/gst/gstr2/pdf'
+            : '/gst/gstr3b/pdf';
     final url = Uri.parse(
       '${ApiClient.baseUrl}$path'
       '?start_date=${_startCtrl.text}'
@@ -42,8 +46,11 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
   Future<void> _downloadExcel() async {
     final token = ApiClient.accessToken ?? '';
     final tenantId = ApiClient.tenantId ?? '';
-    final isGstr1 = _tabController.index == 0;
-    final path = isGstr1 ? '/gst/gstr1/export' : '/gst/gstr3b/export';
+    final path = _tabController.index == 0
+        ? '/gst/gstr1/export'
+        : _tabController.index == 1
+            ? '/gst/gstr2/export'
+            : '/gst/gstr3b/export';
     final url = Uri.parse(
       '${ApiClient.baseUrl}$path'
       '?start_date=${_startCtrl.text}'
@@ -59,7 +66,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _tabController = TabController(length: 3, vsync: this);
 
     final now = DateTime.now();
     int year = now.year;
@@ -122,15 +129,17 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
     final provider = context.read<AccountingProvider>();
     final results = await Future.wait([
       provider.fetchGstr1(start, end),
+      provider.fetchGstr2(start, end),
       provider.fetchGstr3b(start, end),
     ]);
 
     if (mounted) {
       setState(() {
         _gstr1Data = results[0];
-        _gstr3bData = results[1];
+        _gstr2Data = results[1];
+        _gstr3bData = results[2];
         _isLoading = false;
-        if (_gstr1Data == null && _gstr3bData == null) {
+        if (_gstr1Data == null && _gstr2Data == null && _gstr3bData == null) {
           _error = 'Failed to load GST report data';
         }
       });
@@ -144,7 +153,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
       appBar: AppBar(
         title: const Text('GST Returns'),
         actions: [
-          if (_gstr1Data != null || _gstr3bData != null) ...[
+          if (_gstr1Data != null || _gstr2Data != null || _gstr3bData != null) ...[
             IconButton(
               icon: const Icon(Icons.picture_as_pdf_outlined, size: 20),
               tooltip: 'Download PDF',
@@ -201,6 +210,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
                   controller: _tabController,
                   tabs: const [
                     Tab(text: 'GSTR-1 (Sales)'),
+                    Tab(text: 'GSTR-2 (Purchases)'),
                     Tab(text: 'GSTR-3B (Summary)'),
                   ],
                 ),
@@ -217,11 +227,13 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
                   controller: _tabController,
                   children: [
                     _buildGstr1View(),
+                    _buildGstr2View(),
                     _buildGstr3bView(),
                   ],
                 ),
     );
   }
+
 
   Widget _buildGstr1View() {
     if (_gstr1Data == null) return const Center(child: Text('No GSTR-1 data available'));
@@ -289,6 +301,75 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
       ],
     );
   }
+
+  Widget _buildGstr2View() {
+    if (_gstr2Data == null) return const Center(child: Text('No GSTR-2 data available'));
+    final b2b = _gstr2Data!['b2b_purchases'] is List ? _gstr2Data!['b2b_purchases'] as List : [];
+    final b2bur = _gstr2Data!['b2bur_purchases'] is List ? _gstr2Data!['b2bur_purchases'] as List : [];
+    final hsn = _gstr2Data!['hsn_summary'] is List ? _gstr2Data!['hsn_summary'] as List : [];
+
+    return ListView(
+      padding: AppSpacing.pagePadding,
+      children: [
+        // B2B purchases
+        _buildSectionCard(
+          title: 'B2B Inward Supplies (Registered Suppliers)',
+          count: b2b.length,
+          child: b2b.isEmpty
+              ? const Padding(padding: EdgeInsets.all(16), child: Text('No registered supplies', style: AppTextStyles.caption))
+              : Column(
+                  children: b2b.map((item) {
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(item['vendor_name'] ?? 'Vendor', style: AppTextStyles.bodyMedium),
+                      subtitle: Text('GSTIN: ${item['vendor_gstin'] ?? "N/A"}', style: AppTextStyles.caption),
+                      trailing: Text('₹${double.parse((item['taxable_value'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                    );
+                  }).toList(),
+                ),
+        ),
+        const SizedBox(height: 16),
+
+        // B2BUR purchases
+        _buildSectionCard(
+          title: 'B2BUR Inward Supplies (Unregistered Reverse Charge)',
+          count: b2bur.length,
+          child: b2bur.isEmpty
+              ? const Padding(padding: EdgeInsets.all(16), child: Text('No unregistered reverse-charge supplies', style: AppTextStyles.caption))
+              : Column(
+                  children: b2bur.map((item) {
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(item['vendor_name'] ?? 'Vendor', style: AppTextStyles.bodyMedium),
+                      subtitle: Text('POS: ${item['pos_state_code'] ?? "N/A"}', style: AppTextStyles.caption),
+                      trailing: Text('₹${double.parse((item['taxable_value'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                    );
+                  }).toList(),
+                ),
+        ),
+        const SizedBox(height: 16),
+
+        // HSN Summary Section
+        _buildSectionCard(
+          title: 'HSN Wise Inward Summary',
+          count: hsn.length,
+          child: hsn.isEmpty
+              ? const Padding(padding: EdgeInsets.all(16), child: Text('No HSN data', style: AppTextStyles.caption))
+              : Column(
+                  children: hsn.map((item) {
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text('HSN: ${item['hsn_sac'] ?? "N/A"}', style: AppTextStyles.bodyMedium),
+                      subtitle: Text('Qty: ${item['total_quantity'] ?? item['quantity'] ?? 0}', style: AppTextStyles.caption),
+                      trailing: Text('₹${double.parse((item['taxable_value'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                    );
+                  }).toList(),
+                ),
+        ),
+      ],
+    );
+  }
+
 
   Widget _buildGstr3bView() {
     if (_gstr3bData == null) return const Center(child: Text('No GSTR-3B data available'));

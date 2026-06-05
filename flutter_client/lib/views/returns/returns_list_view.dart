@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
 
@@ -49,9 +50,7 @@ class _ReturnsListViewState extends State<ReturnsListView> with SingleTickerProv
       if (success) {
         _fetch();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Cancel failed'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
       }
     }
   }
@@ -161,10 +160,7 @@ class ReturnsFormView extends StatelessWidget {
               ? await provider.createSalesReturn(payload)
               : await provider.createPurchaseReturn(payload);
           if (!success && ctx.mounted) {
-            ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(
-              content: Text(provider.errorMessage ?? 'Failed to save return'),
-              backgroundColor: AppColors.error,
-            ));
+            AppToast.error(ctx, provider.errorMessage ?? 'Failed to save return');
           }
           return success;
         },

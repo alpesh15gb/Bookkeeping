@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/expenses/expense_form_view.dart';
 
@@ -50,9 +51,7 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
         if (success) {
           Navigator.pop(context, true);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Delete failed'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Delete failed');
         }
       }
     }
@@ -73,9 +72,7 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
         if (success) {
           _fetchDetail();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Post failed'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Post failed');
         }
       }
     }
@@ -96,9 +93,7 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
         if (success) {
           Navigator.pop(context, true);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Cancel failed'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
         }
       }
     }
@@ -160,7 +155,7 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
                         height: 40,
                         decoration: BoxDecoration(
                           color: const Color(0xFFE57C00).withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(10),
+                          borderRadius: BorderRadius.circular(AppRadius.lg),
                         ),
                         child: const Icon(
                           Icons.money_off_rounded,
@@ -221,40 +216,28 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
 
             // Cancel / Delete Button based on status
             if (status == 'POSTED')
-              OutlinedButton.icon(
+              ActionButton(
+                label: 'Cancel Expense (Reverse Journal)',
+                icon: Icons.undo,
+                tier: ActionTier.dangerous,
                 onPressed: _cancelExpense,
-                icon: const Icon(Icons.undo),
-                label: const Text('Cancel Expense (Reverse Journal)'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.warning,
-                  side: const BorderSide(color: AppColors.warning),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
               ),
             if (status == 'DRAFT') ...[
-              ElevatedButton.icon(
+              ActionButton(
+                label: 'Post to Ledger',
+                icon: Icons.book_rounded,
+                tier: ActionTier.warning,
                 onPressed: _postExpense,
-                icon: const Icon(Icons.book_rounded),
-                label: const Text('Post to Ledger'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.brandNavy,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
               ),
               const SizedBox(height: 12),
-              OutlinedButton.icon(
+              ActionButton(
+                label: 'Delete Expense Record',
+                icon: Icons.delete_outline,
+                tier: ActionTier.dangerous,
                 onPressed: _deleteExpense,
-                icon: const Icon(Icons.delete_outline),
-                label: const Text('Delete Expense Record'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.error,
-                  side: const BorderSide(color: AppColors.error),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                ),
               ),
             ],
-            const SizedBox(height: 32),
+            const SizedBox(height: AppSpacing.xxxl),
           ],
         ),
       ),

@@ -3,13 +3,14 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/purchase_orders/purchase_order_form_view.dart';
 import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 import 'package:flutter_client/core/print_share_helper.dart';
 
 class OrderListView extends StatefulWidget {
-  final String orderType; // 'purchase' or 'sales'
+  final String orderType;
   const OrderListView({super.key, required this.orderType});
 
   @override
@@ -149,12 +150,7 @@ class _OrderListViewState extends State<OrderListView> {
       if (mounted) Navigator.pop(context);
       if (fullOrder == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Failed to load order details'),
-              backgroundColor: AppColors.error,
-            ),
-          );
+          AppToast.error(context, 'Failed to load order details');
         }
         return;
       }
@@ -186,12 +182,7 @@ class _OrderListViewState extends State<OrderListView> {
       if (success) {
         _fetch();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(provider.errorMessage ?? 'Cancel failed'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
       }
     }
   }
@@ -238,12 +229,7 @@ class _OrderListViewState extends State<OrderListView> {
     if (success) {
       _fetch();
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(provider.errorMessage ?? 'Action failed'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      AppToast.error(context, provider.errorMessage ?? 'Action failed');
     }
   }
 
@@ -271,12 +257,7 @@ class _OrderListViewState extends State<OrderListView> {
 
     if (detail == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to load sales order details'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        AppToast.error(context, 'Failed to load sales order details');
       }
       return;
     }
@@ -316,12 +297,18 @@ class _OrderListViewState extends State<OrderListView> {
       return matchesSearch && matchesStatus;
     }).toList();
 
+    final totalCount = _allOrders.length;
+    final draftCount = _allOrders.where((o) => o['status'] == 'DRAFT').length;
+    final confirmedCount = _allOrders.where((o) => o['status'] == 'CONFIRMED').length;
+
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showPOForm(type: docType),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              onPressed: () => _showPOForm(type: docType),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: Column(
         children: [
           // ── Search + Filter Bar ──
@@ -329,7 +316,7 @@ class _OrderListViewState extends State<OrderListView> {
             color: AppColors.bgSurface,
             padding: EdgeInsets.symmetric(
               horizontal: isMobile ? 12 : 20,
-              vertical: 10,
+              vertical: 8,
             ),
             child: Column(
               children: [
@@ -339,7 +326,7 @@ class _OrderListViewState extends State<OrderListView> {
                       child: TextField(
                         controller: _searchCtrl,
                         decoration: InputDecoration(
-                          hintText: 'Search by order number or party...',
+                          hintText: 'Search orders...',
                           prefixIcon: const Icon(
                             Icons.search_rounded,
                             size: 18,
@@ -355,8 +342,8 @@ class _OrderListViewState extends State<OrderListView> {
                               : null,
                           isDense: true,
                           contentPadding: const EdgeInsets.symmetric(
-                            vertical: 10,
-                            horizontal: 12,
+                            vertical: 8,
+                            horizontal: 10,
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(AppRadius.md),
@@ -376,54 +363,50 @@ class _OrderListViewState extends State<OrderListView> {
                         },
                       ),
                     ),
+                    if (!isMobile) ...[
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => _showPOForm(type: docType),
+                        icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
+                        label: const Text(
+                          'Create Order',
+                          style: TextStyle(fontSize: 12, color: AppColors.textWhite),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandNavy,
+                          foregroundColor: AppColors.textWhite,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 8),
-                // Status filter chips
+                const SizedBox(height: 6),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: _statusOptions
-                        .where((s) {
-                          if (isPurchase && s == 'DELIVERED') return false;
-                          if (!isPurchase && s == 'RECEIVED') return false;
-                          return true;
-                        })
-                        .map((s) {
-                          final isSelected = _statusFilter == s;
-                          return Padding(
-                            padding: const EdgeInsets.only(right: 6),
-                            child: FilterChip(
-                              label: Text(
-                                s == 'ALL' ? 'All' : s.replaceAll('_', ' '),
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: isSelected
-                                      ? FontWeight.w600
-                                      : FontWeight.w400,
-                                  color: isSelected
-                                      ? Colors.white
-                                      : AppColors.textSecondary,
-                                ),
-                              ),
-                              selected: isSelected,
-                              onSelected: (_) {
-                                setState(() => _statusFilter = s);
-                              },
-                              selectedColor: AppColors.brandNavy,
-                              backgroundColor: AppColors.borderLight,
-                              side: BorderSide.none,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                                vertical: 0,
-                              ),
-                              materialTapTargetSize:
-                                  MaterialTapTargetSize.shrinkWrap,
-                              showCheckmark: false,
-                            ),
-                          );
-                        })
-                        .toList(),
+                    children: [
+                      FilterChipWithCount(
+                        label: 'All', count: totalCount,
+                        isSelected: _statusFilter == 'ALL',
+                        onTap: () => setState(() => _statusFilter = 'ALL'),
+                      ),
+                      const SizedBox(width: 6),
+                      FilterChipWithCount(
+                        label: 'Draft', count: draftCount,
+                        isSelected: _statusFilter == 'DRAFT',
+                        onTap: () => setState(() => _statusFilter = 'DRAFT'),
+                      ),
+                      const SizedBox(width: 6),
+                      FilterChipWithCount(
+                        label: 'Confirmed', count: confirmedCount,
+                        isSelected: _statusFilter == 'CONFIRMED',
+                        onTap: () => setState(() => _statusFilter = 'CONFIRMED'),
+                      ),
+                    ],
                   ),
                 ),
               ],
@@ -459,14 +442,14 @@ class _OrderListViewState extends State<OrderListView> {
                           padding: EdgeInsets.only(
                             left: isMobile ? 12 : 20,
                             right: isMobile ? 12 : 20,
-                            top: isMobile ? 12 : 20,
+                            top: 8,
                             bottom: _selectedIds.isNotEmpty
                                 ? 80
                                 : (isMobile ? 12 : 20),
                           ),
                           itemCount: filteredOrders.length,
                           separatorBuilder: (context, _) =>
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 6),
                           itemBuilder: (context, i) {
                             final order = filteredOrders[i];
                             final id = order['id'].toString();
@@ -475,7 +458,27 @@ class _OrderListViewState extends State<OrderListView> {
                                 ? order['po_number']
                                 : order['so_number'];
                             final partyDisplayName = _partyNameFor(order);
-                            return GestureDetector(
+                            final date = order['issue_date'] ??
+                                order['order_date'] ??
+                                order['created_at'] ??
+                                '';
+
+                            return CompactDocumentCard(
+                              docNumber: numVal?.toString() ?? 'ORDER',
+                              partyName: partyDisplayName.isNotEmpty
+                                  ? partyDisplayName
+                                  : null,
+                              date: date?.toString(),
+                              amount:
+                                  double.parse((order['total'] ?? 0).toString()),
+                              status: order['status'] ?? '',
+                              isSelected: isSelected,
+                              isSelectionMode: _isSelectionMode,
+                              onTap: () {
+                                if (_isSelectionMode) {
+                                  _toggleSelection(id);
+                                }
+                              },
                               onLongPress: () {
                                 if (!_isSelectionMode) {
                                   setState(() {
@@ -484,354 +487,107 @@ class _OrderListViewState extends State<OrderListView> {
                                   });
                                 }
                               },
-                              child: AppCard(
-                                onTap: () {
-                                  if (_isSelectionMode) {
-                                    _toggleSelection(id);
-                                  }
-                                },
-                                child: Row(
-                                  children: [
-                                    if (_isSelectionMode)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          right: 12,
+                              actions: _isSelectionMode
+                                  ? null
+                                  : [
+                                      if (order['status'] == 'DRAFT') ...[
+                                        _CompactAction(
+                                          icon: Icons.edit_outlined,
+                                          tooltip: 'Edit',
+                                          onTap: () => _showPOForm(
+                                            order: order,
+                                            type: docType,
+                                          ),
                                         ),
-                                        child: Icon(
-                                          isSelected
-                                              ? Icons.check_circle
-                                              : Icons.circle_outlined,
-                                          size: 22,
-                                          color: isSelected
-                                              ? AppColors.brandNavy
-                                              : AppColors.textMuted,
+                                        _CompactAction(
+                                          icon: Icons.check_circle_outlined,
+                                          tooltip: 'Confirm',
+                                          color: AppColors.warning,
+                                          onTap: () => _transition(
+                                            order['id'],
+                                            docType,
+                                            'confirm',
+                                          ),
+                                        ),
+                                      ],
+                                      if (order['status'] == 'CONFIRMED' &&
+                                          isPurchase)
+                                        _CompactAction(
+                                          icon: Icons.inbox_outlined,
+                                          tooltip: 'Receive',
+                                          onTap: () => _transition(
+                                            order['id'],
+                                            docType,
+                                            'receive',
+                                          ),
+                                        ),
+                                      if (order['status'] == 'CONFIRMED' &&
+                                          !isPurchase)
+                                        _CompactAction(
+                                          icon: Icons.local_shipping_outlined,
+                                          tooltip: 'Deliver',
+                                          onTap: () => _transition(
+                                            order['id'],
+                                            docType,
+                                            'deliver',
+                                          ),
+                                        ),
+                                      if (order['status'] == 'DELIVERED' &&
+                                          !isPurchase)
+                                        _CompactAction(
+                                          icon: Icons.swap_horiz_outlined,
+                                          tooltip: 'Create Invoice',
+                                          onTap: () =>
+                                              _convertSalesOrderToInvoice(
+                                            Map<String, dynamic>.from(order),
+                                          ),
+                                        ),
+                                      if (order['status'] != 'CANCELLED' &&
+                                          order['status'] != 'RECEIVED' &&
+                                          order['status'] != 'DELIVERED')
+                                        _CompactAction(
+                                          icon: Icons.cancel_outlined,
+                                          tooltip: 'Cancel',
+                                          color: AppColors.error,
+                                          onTap: () => _cancelOrder(
+                                            order['id'],
+                                            docType,
+                                          ),
+                                        ),
+                                      Tooltip(
+                                        message: 'Share / Print',
+                                        child: GestureDetector(
+                                          onTap: () {
+                                            PrintShareHelper.showShareSheet(
+                                              context,
+                                              docLabel: isPurchase
+                                                  ? 'Purchase Order'
+                                                  : 'Sales Order',
+                                              docNumber:
+                                                  numVal?.toString() ?? 'N/A',
+                                              docType: isPurchase
+                                                  ? 'purchase-orders'
+                                                  : 'sales-orders',
+                                              docId: order['id'],
+                                            );
+                                          },
+                                          child: Container(
+                                            padding: const EdgeInsets.all(4),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.brandNavy
+                                                  .withValues(alpha: 0.08),
+                                              borderRadius:
+                                                  BorderRadius.circular(4),
+                                            ),
+                                            child: const Icon(
+                                              Icons.share_outlined,
+                                              size: 14,
+                                              color: AppColors.brandNavy,
+                                            ),
+                                          ),
                                         ),
                                       ),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  numVal?.toString() ?? 'ORDER',
-                                                  style: AppTextStyles.h3,
-                                                ),
-                                              ),
-                                              if (order['status'] != null)
-                                                StatusBadge(
-                                                  label: order['status'],
-                                                ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 6),
-                                          Row(
-                                            children: [
-                                              if (partyDisplayName
-                                                  .isNotEmpty) ...[
-                                                Icon(
-                                                  Icons.person_outlined,
-                                                  size: 14,
-                                                  color: AppColors.textMuted,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Text(
-                                                  partyDisplayName,
-                                                  style:
-                                                      AppTextStyles.bodySmall,
-                                                ),
-                                                const SizedBox(width: 16),
-                                              ],
-                                              Icon(
-                                                Icons.calendar_today_outlined,
-                                                size: 14,
-                                                color: AppColors.textMuted,
-                                              ),
-                                              const SizedBox(width: 6),
-                                              Text(
-                                                order['issue_date'] ??
-                                                    order['order_date'] ??
-                                                    order['created_at'] ??
-                                                    '',
-                                                style: AppTextStyles.caption,
-                                              ),
-                                            ],
-                                          ),
-                                          const SizedBox(height: 10),
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Text(
-                                                '₹${double.parse((order['total'] ?? 0).toString()).toStringAsFixed(2)}',
-                                                style:
-                                                    AppTextStyles.numericLarge,
-                                              ),
-                                              if (!_isSelectionMode)
-                                                Row(
-                                                  children: [
-                                                    IconButton(
-                                                      icon: const Icon(
-                                                        Icons.share_outlined,
-                                                        size: 16,
-                                                      ),
-                                                      onPressed: () {
-                                                        PrintShareHelper.showShareSheet(
-                                                          context,
-                                                          docLabel: isPurchase
-                                                              ? 'Purchase Order'
-                                                              : 'Sales Order',
-                                                          docNumber:
-                                                              numVal
-                                                                  ?.toString() ??
-                                                              'N/A',
-                                                          docType: isPurchase
-                                                              ? 'purchase-orders'
-                                                              : 'sales-orders',
-                                                          docId: order['id'],
-                                                        );
-                                                      },
-                                                      tooltip: 'Share / Print',
-                                                    ),
-                                                    const SizedBox(width: 4),
-                                                    if (order['status'] ==
-                                                        'DRAFT') ...[
-                                                      OutlinedButton.icon(
-                                                        onPressed: () =>
-                                                            _showPOForm(
-                                                              order: order,
-                                                              type: docType,
-                                                            ),
-                                                        icon: const Icon(
-                                                          Icons.edit_outlined,
-                                                          size: 14,
-                                                        ),
-                                                        label: const Text(
-                                                          'Edit',
-                                                        ),
-                                                        style: OutlinedButton.styleFrom(
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 6,
-                                                              ),
-                                                          textStyle:
-                                                              AppTextStyles
-                                                                  .buttonSmall,
-                                                          side: const BorderSide(
-                                                            color: AppColors
-                                                                .borderInput,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                      const SizedBox(width: 8),
-                                                      OutlinedButton.icon(
-                                                        onPressed: () =>
-                                                            _transition(
-                                                              order['id'],
-                                                              docType,
-                                                              'confirm',
-                                                            ),
-                                                        icon: const Icon(
-                                                          Icons
-                                                              .check_circle_outlined,
-                                                          size: 14,
-                                                        ),
-                                                        label: const Text(
-                                                          'Confirm',
-                                                        ),
-                                                        style: OutlinedButton.styleFrom(
-                                                          foregroundColor:
-                                                              AppColors.success,
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 6,
-                                                              ),
-                                                          textStyle:
-                                                              AppTextStyles
-                                                                  .buttonSmall,
-                                                          side: BorderSide(
-                                                            color: AppColors
-                                                                .success
-                                                                .withValues(
-                                                                  alpha: 0.3,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                    if (order['status'] ==
-                                                            'CONFIRMED' &&
-                                                        isPurchase) ...[
-                                                      OutlinedButton.icon(
-                                                        onPressed: () =>
-                                                            _transition(
-                                                              order['id'],
-                                                              docType,
-                                                              'receive',
-                                                            ),
-                                                        icon: const Icon(
-                                                          Icons.inbox_outlined,
-                                                          size: 14,
-                                                        ),
-                                                        label: const Text(
-                                                          'Receive',
-                                                        ),
-                                                        style: OutlinedButton.styleFrom(
-                                                          foregroundColor:
-                                                              AppColors.info,
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 6,
-                                                              ),
-                                                          textStyle:
-                                                              AppTextStyles
-                                                                  .buttonSmall,
-                                                          side: BorderSide(
-                                                            color: AppColors
-                                                                .info
-                                                                .withValues(
-                                                                  alpha: 0.3,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                    if (order['status'] ==
-                                                            'CONFIRMED' &&
-                                                        !isPurchase) ...[
-                                                      OutlinedButton.icon(
-                                                        onPressed: () =>
-                                                            _transition(
-                                                              order['id'],
-                                                              docType,
-                                                              'deliver',
-                                                            ),
-                                                        icon: const Icon(
-                                                          Icons
-                                                              .local_shipping_outlined,
-                                                          size: 14,
-                                                        ),
-                                                        label: const Text(
-                                                          'Deliver',
-                                                        ),
-                                                        style: OutlinedButton.styleFrom(
-                                                          foregroundColor:
-                                                              AppColors.info,
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 6,
-                                                              ),
-                                                          textStyle:
-                                                              AppTextStyles
-                                                                  .buttonSmall,
-                                                          side: BorderSide(
-                                                            color: AppColors
-                                                                .info
-                                                                .withValues(
-                                                                  alpha: 0.3,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                    if (order['status'] ==
-                                                            'DELIVERED' &&
-                                                        !isPurchase) ...[
-                                                      OutlinedButton.icon(
-                                                        onPressed: () =>
-                                                            _convertSalesOrderToInvoice(
-                                                              Map<
-                                                                String,
-                                                                dynamic
-                                                              >.from(order),
-                                                            ),
-                                                        icon: const Icon(
-                                                          Icons
-                                                              .swap_horiz_outlined,
-                                                          size: 14,
-                                                        ),
-                                                        label: const Text(
-                                                          'Create Inv.',
-                                                        ),
-                                                        style: OutlinedButton.styleFrom(
-                                                          foregroundColor:
-                                                              AppColors
-                                                                  .brandNavy,
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 6,
-                                                              ),
-                                                          textStyle:
-                                                              AppTextStyles
-                                                                  .buttonSmall,
-                                                          side: BorderSide(
-                                                            color: AppColors
-                                                                .brandNavy
-                                                                .withValues(
-                                                                  alpha: 0.3,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                    if (order['status'] !=
-                                                            'CANCELLED' &&
-                                                        order['status'] !=
-                                                            'RECEIVED' &&
-                                                        order['status'] !=
-                                                            'DELIVERED') ...[
-                                                      const SizedBox(width: 8),
-                                                      OutlinedButton.icon(
-                                                        onPressed: () =>
-                                                            _cancelOrder(
-                                                              order['id'],
-                                                              docType,
-                                                            ),
-                                                        icon: const Icon(
-                                                          Icons.cancel_outlined,
-                                                          size: 14,
-                                                        ),
-                                                        label: const Text(
-                                                          'Cancel',
-                                                        ),
-                                                        style: OutlinedButton.styleFrom(
-                                                          foregroundColor:
-                                                              AppColors.error,
-                                                          padding:
-                                                              const EdgeInsets.symmetric(
-                                                                horizontal: 12,
-                                                                vertical: 6,
-                                                              ),
-                                                          textStyle:
-                                                              AppTextStyles
-                                                                  .buttonSmall,
-                                                          side: BorderSide(
-                                                            color: AppColors
-                                                                .error
-                                                                .withValues(
-                                                                  alpha: 0.3,
-                                                                ),
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ],
-                                                ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
+                                    ],
                             );
                           },
                         ),
@@ -854,7 +610,7 @@ class _OrderListViewState extends State<OrderListView> {
                             ),
                             padding: EdgeInsets.symmetric(
                               horizontal: isMobile ? 12 : 20,
-                              vertical: 12,
+                              vertical: 10,
                             ),
                             child: SafeArea(
                               top: false,
@@ -870,17 +626,16 @@ class _OrderListViewState extends State<OrderListView> {
                                                   filteredOrders.length
                                               ? Icons.check_circle
                                               : Icons.circle_outlined,
-                                          size: 22,
-                                          color:
-                                              _selectedIds.length ==
+                                          size: 20,
+                                          color: _selectedIds.length ==
                                                   filteredOrders.length
                                               ? AppColors.brandNavy
                                               : AppColors.textMuted,
                                         ),
-                                        const SizedBox(width: 8),
+                                        const SizedBox(width: 6),
                                         Text(
-                                          'Select All',
-                                          style: AppTextStyles.bodySmall
+                                          'All',
+                                          style: AppTextStyles.caption
                                               .copyWith(
                                                 fontWeight: FontWeight.w600,
                                               ),
@@ -888,47 +643,24 @@ class _OrderListViewState extends State<OrderListView> {
                                       ],
                                     ),
                                   ),
-                                  const SizedBox(width: 16),
+                                  const SizedBox(width: 12),
                                   Text(
                                     '${_selectedIds.length} selected',
-                                    style: AppTextStyles.bodySmall.copyWith(
-                                      color: AppColors.textSecondary,
-                                    ),
+                                    style: AppTextStyles.caption,
                                   ),
                                   const Spacer(),
-                                  OutlinedButton.icon(
+                                  ActionButton(
+                                    label: 'Clear',
+                                    icon: Icons.close,
+                                    tier: ActionTier.safe,
                                     onPressed: _clearSelection,
-                                    icon: const Icon(Icons.close, size: 14),
-                                    label: const Text('Cancel'),
-                                    style: OutlinedButton.styleFrom(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      textStyle: AppTextStyles.buttonSmall,
-                                    ),
                                   ),
-                                  const SizedBox(width: 8),
-                                  OutlinedButton.icon(
+                                  const SizedBox(width: 6),
+                                  ActionButton(
+                                    label: 'Cancel',
+                                    icon: Icons.cancel_outlined,
+                                    tier: ActionTier.dangerous,
                                     onPressed: _bulkDelete,
-                                    icon: const Icon(
-                                      Icons.cancel_outlined,
-                                      size: 14,
-                                    ),
-                                    label: const Text('Cancel Selected'),
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: AppColors.error,
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      textStyle: AppTextStyles.buttonSmall,
-                                      side: BorderSide(
-                                        color: AppColors.error.withValues(
-                                          alpha: 0.3,
-                                        ),
-                                      ),
-                                    ),
                                   ),
                                 ],
                               ),
@@ -939,6 +671,38 @@ class _OrderListViewState extends State<OrderListView> {
                   ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CompactAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _CompactAction({
+    required this.icon,
+    required this.tooltip,
+    this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: (color ?? AppColors.brandNavy).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Icon(icon, size: 14, color: color ?? AppColors.brandNavy),
+        ),
       ),
     );
   }

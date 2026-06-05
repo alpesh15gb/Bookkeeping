@@ -63,89 +63,125 @@ class _ContactListViewState extends State<ContactListView> {
     final isMobile = AdaptiveLayout.isMobile(context);
     final filtered = _filtered(provider.contacts);
 
+    final totalCount = filtered.length;
+    final customerCount = filtered.where((c) => c.contactType == 'CUSTOMER' || c.contactType == 'BOTH').length;
+    final vendorCount = filtered.where((c) => c.contactType == 'VENDOR' || c.contactType == 'BOTH').length;
+
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showForm(),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              onPressed: () => _showForm(),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: Column(
         children: [
-          // Search + Filter bar
+          // ── Search + Filter bar ──────────────────────────────
           Container(
             color: AppColors.bgSurface,
             padding: EdgeInsets.symmetric(
               horizontal: isMobile ? 12 : 20,
-              vertical: 10,
+              vertical: 8,
             ),
             child: Column(
               children: [
-                TextField(
-                  controller: _searchCtrl,
-                  decoration: InputDecoration(
-                    hintText: 'Search parties by name, phone, GSTIN...',
-                    prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                    suffixIcon: _searchCtrl.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close, size: 16),
-                            onPressed: () {
-                              _searchCtrl.clear();
-                              setState(() {});
-                            },
-                          )
-                        : null,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                      borderSide: const BorderSide(color: AppColors.borderInput),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _searchCtrl,
+                        decoration: InputDecoration(
+                          hintText: 'Search parties...',
+                          prefixIcon: const Icon(Icons.search_rounded, size: 16),
+                          suffixIcon: _searchCtrl.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.close, size: 14),
+                                  onPressed: () {
+                                    _searchCtrl.clear();
+                                    setState(() {});
+                                  },
+                                )
+                              : null,
+                          isDense: true,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 8,
+                            horizontal: 10,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            borderSide: const BorderSide(
+                              color: AppColors.borderInput,
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(AppRadius.md),
+                            borderSide: const BorderSide(
+                              color: AppColors.borderInput,
+                            ),
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
                     ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                      borderSide: const BorderSide(color: AppColors.borderInput),
-                    ),
-                  ),
-                  onChanged: (_) => setState(() {}),
+                    if (!isMobile) ...[
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        height: 34,
+                        child: ElevatedButton.icon(
+                          onPressed: () => _showForm(),
+                          icon: const Icon(Icons.add, size: 14),
+                          label: const Text('Add Party'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 0,
+                            ),
+                            textStyle: AppTextStyles.buttonSmall,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: ['ALL', 'CUSTOMER', 'VENDOR', 'BOTH'].map((t) {
-                      final isSelected = _typeFilter == t;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: FilterChip(
-                          label: Text(
-                            t == 'ALL' ? 'All' : t,
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                              color: isSelected ? Colors.white : AppColors.textSecondary,
-                            ),
-                          ),
-                          selected: isSelected,
-                          onSelected: (_) => setState(() => _typeFilter = t),
-                          selectedColor: AppColors.brandNavy,
-                          backgroundColor: AppColors.borderLight,
-                          side: BorderSide.none,
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          showCheckmark: false,
-                        ),
-                      );
-                    }).toList(),
+                    children: [
+                      FilterChipWithCount(
+                        label: 'All', count: totalCount,
+                        isSelected: _typeFilter == 'ALL',
+                        onTap: () => setState(() => _typeFilter = 'ALL'),
+                      ),
+                      const SizedBox(width: 6),
+                      FilterChipWithCount(
+                        label: 'Customer', count: customerCount,
+                        isSelected: _typeFilter == 'CUSTOMER',
+                        onTap: () => setState(() => _typeFilter = 'CUSTOMER'),
+                      ),
+                      const SizedBox(width: 6),
+                      FilterChipWithCount(
+                        label: 'Vendor', count: vendorCount,
+                        isSelected: _typeFilter == 'VENDOR',
+                        onTap: () => setState(() => _typeFilter = 'VENDOR'),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
 
+          // ── List ─────────────────────────────────────────────
           Expanded(
             child: provider.isLoading && provider.contacts.isEmpty
                 ? const ListSkeleton()
                 : provider.errorMessage != null && provider.contacts.isEmpty
-                    ? ErrorState(message: provider.errorMessage!, onRetry: () => provider.fetchContacts())
+                    ? ErrorState(
+                        message: provider.errorMessage!,
+                        onRetry: () => provider.fetchContacts(),
+                      )
                     : filtered.isEmpty
                         ? RefreshIndicator(
                             onRefresh: () async => provider.fetchContacts(),
@@ -154,10 +190,12 @@ class _ContactListViewState extends State<ContactListView> {
                                 const SizedBox(height: 120),
                                 EmptyState(
                                   icon: Icons.people_outlined,
-                                  title: _searchCtrl.text.isNotEmpty || _typeFilter != 'ALL'
+                                  title: _searchCtrl.text.isNotEmpty ||
+                                          _typeFilter != 'ALL'
                                       ? 'No parties match your search'
                                       : 'No parties yet',
-                                  subtitle: _searchCtrl.text.isNotEmpty || _typeFilter != 'ALL'
+                                  subtitle: _searchCtrl.text.isNotEmpty ||
+                                          _typeFilter != 'ALL'
                                       ? 'Try clearing the filters'
                                       : 'Add your first customer or vendor',
                                   actionLabel: 'Add Party',
@@ -169,94 +207,40 @@ class _ContactListViewState extends State<ContactListView> {
                         : RefreshIndicator(
                             onRefresh: () async => provider.fetchContacts(),
                             child: ListView.separated(
-                                padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-                                itemCount: filtered.length,
-                                separatorBuilder: (context, _) => const SizedBox(height: 10),
-                                itemBuilder: (context, i) {
-                                  final contact = filtered[i];
-                                  return _buildSwipeableContact(
-                                    contact,
-                                    AppCard(
-                                      child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          children: [
-                                            Expanded(
-                                              child: Text(contact.name, style: AppTextStyles.h3),
-                                            ),
-                                            StatusBadge.fromContactType(contact.contactType),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Row(
-                                          children: [
-                                            if (contact.phone != null) ...[
-                                              Icon(Icons.phone_outlined, size: 14, color: AppColors.textMuted),
-                                              const SizedBox(width: 6),
-                                              Text(contact.phone!, style: AppTextStyles.bodySmall),
-                                              const SizedBox(width: 16),
-                                            ],
-                                            if (contact.gstin != null) ...[
-                                              Icon(Icons.pin_outlined, size: 14, color: AppColors.textMuted),
-                                              const SizedBox(width: 6),
-                                              Text(contact.gstin!, style: AppTextStyles.bodySmall),
-                                            ],
-                                          ],
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.end,
-                                          children: [
-                                            OutlinedButton.icon(
-                                              onPressed: () {
-                                                Navigator.push(
-                                                  context,
-                                                  MaterialPageRoute(
-                                                    builder: (_) => const PartyStatementView(),
-                                                  ),
-                                                );
-                                              },
-                                              icon: const Icon(Icons.receipt_long_outlined, size: 14),
-                                              label: const Text('Statement'),
-                                              style: OutlinedButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                textStyle: AppTextStyles.buttonSmall,
-                                                side: const BorderSide(color: AppColors.brandNavy),
-                                                foregroundColor: AppColors.brandNavy,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            OutlinedButton.icon(
-                                              onPressed: () => _showForm(contact: contact),
-                                              icon: const Icon(Icons.edit_outlined, size: 14),
-                                              label: const Text('Edit'),
-                                              style: OutlinedButton.styleFrom(
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                textStyle: AppTextStyles.buttonSmall,
-                                                side: const BorderSide(color: AppColors.borderInput),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            OutlinedButton.icon(
-                                              onPressed: () => _deleteSingleContact(contact),
-                                              icon: const Icon(Icons.delete_outlined, size: 14),
-                                              label: const Text('Delete'),
-                                              style: OutlinedButton.styleFrom(
-                                                foregroundColor: AppColors.error,
-                                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                textStyle: AppTextStyles.buttonSmall,
-                                                side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  );
-                                },
+                              padding: EdgeInsets.fromLTRB(
+                                isMobile ? 12 : 20,
+                                8,
+                                isMobile ? 12 : 20,
+                                isMobile ? 80 : 20,
                               ),
+                              itemCount: filtered.length,
+                              separatorBuilder: (context, _) =>
+                                  const SizedBox(height: 6),
+                              itemBuilder: (context, i) {
+                                final contact = filtered[i];
+                                return _buildSwipeableContact(
+                                  contact,
+                                  _CompactContactCard(
+                                    contact: contact,
+                                    onEdit: () =>
+                                        _showForm(contact: contact),
+                                    onDelete: () =>
+                                        _deleteSingleContact(contact),
+                                    onStatement: () {
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              PartyStatementView(
+                                                initialContact: contact,
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
                           ),
           ),
         ],
@@ -275,7 +259,9 @@ class _ContactListViewState extends State<ContactListView> {
           children: [
             Icon(Icons.phone, color: Colors.white),
             SizedBox(width: 8),
-            Text('Call / WhatsApp', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text('Call / WhatsApp',
+                style: TextStyle(
+                    color: Colors.white, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -288,10 +274,14 @@ class _ContactListViewState extends State<ContactListView> {
           children: [
             Text(
               _swipeProgress > 0.70 ? 'Delete Party' : 'Statement',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                  color: Colors.white, fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
-            Icon(_swipeProgress > 0.70 ? Icons.delete : Icons.receipt_long, color: Colors.white),
+            Icon(
+              _swipeProgress > 0.70 ? Icons.delete : Icons.receipt_long,
+              color: Colors.white,
+            ),
           ],
         ),
       ),
@@ -306,7 +296,10 @@ class _ContactListViewState extends State<ContactListView> {
             _showContactActionSheet(contact);
           } else {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('No phone number available for this contact')),
+              const SnackBar(
+                content:
+                    Text('No phone number available for this contact'),
+              ),
             );
           }
           return false;
@@ -315,7 +308,8 @@ class _ContactListViewState extends State<ContactListView> {
             final confirm = await AppConfirmDialog.show(
               context,
               title: 'Delete Party?',
-              message: 'Are you sure you want to delete ${contact.name}? This action can be undone.',
+              message:
+                  'Are you sure you want to delete ${contact.name}? This action can be undone.',
             );
             if (confirm == true) {
               _deleteSingleContact(contact);
@@ -326,7 +320,8 @@ class _ContactListViewState extends State<ContactListView> {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => PartyStatementView(initialContact: contact),
+                builder: (_) =>
+                    PartyStatementView(initialContact: contact),
               ),
             );
             return false;
@@ -342,7 +337,9 @@ class _ContactListViewState extends State<ContactListView> {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.lg)),
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppRadius.lg),
+        ),
       ),
       builder: (context) {
         return SafeArea(
@@ -351,10 +348,14 @@ class _ContactListViewState extends State<ContactListView> {
             children: [
               Padding(
                 padding: const EdgeInsets.all(16.0),
-                child: Text('Contact ${contact.name}', style: AppTextStyles.h3),
+                child: Text(
+                  'Contact ${contact.name}',
+                  style: AppTextStyles.h3,
+                ),
               ),
               ListTile(
-                leading: const Icon(Icons.phone, color: AppColors.brandNavy),
+                leading: const Icon(Icons.phone,
+                    color: AppColors.brandNavy),
                 title: const Text('Call'),
                 subtitle: Text(contact.phone!),
                 onTap: () {
@@ -364,7 +365,8 @@ class _ContactListViewState extends State<ContactListView> {
                 },
               ),
               ListTile(
-                leading: const Icon(Icons.chat_bubble_outline, color: Colors.green),
+                leading: const Icon(Icons.chat_bubble_outline,
+                    color: Colors.green),
                 title: const Text('WhatsApp'),
                 subtitle: Text(contact.phone!),
                 onTap: () {
@@ -426,10 +428,130 @@ class _ContactListViewState extends State<ContactListView> {
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(provider.errorMessage ?? 'Delete failed'),
+          content:
+              Text(provider.errorMessage ?? 'Delete failed'),
           backgroundColor: AppColors.error,
         ),
       );
     }
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Compact contact card
+// ═══════════════════════════════════════════════════════════════════
+
+class _CompactContactCard extends StatelessWidget {
+  final ContactModel contact;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final VoidCallback onStatement;
+
+  const _CompactContactCard({
+    required this.contact,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onStatement,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Row 1: name + type badge + icon actions
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  contact.name,
+                  style: AppTextStyles.h3.copyWith(fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 6),
+              StatusBadge.fromContactType(contact.contactType),
+              const SizedBox(width: 4),
+              _iconBtn(
+                icon: Icons.receipt_long_outlined,
+                tooltip: 'Statement',
+                color: AppColors.brandNavy,
+                onTap: onStatement,
+              ),
+              _iconBtn(
+                icon: Icons.edit_outlined,
+                tooltip: 'Edit',
+                onTap: onEdit,
+              ),
+              _iconBtn(
+                icon: Icons.delete_outline,
+                tooltip: 'Delete',
+                color: AppColors.error,
+                onTap: onDelete,
+              ),
+            ],
+          ),
+
+          // Row 2: phone + GSTIN on a single line
+          if (contact.phone != null || contact.gstin != null) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                if (contact.phone != null) ...[
+                  Icon(Icons.phone_outlined,
+                      size: 12, color: AppColors.textMuted),
+                  const SizedBox(width: 4),
+                  Text(contact.phone!,
+                      style: AppTextStyles.caption.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500)),
+                ],
+                if (contact.phone != null &&
+                    contact.gstin != null)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 6),
+                    child: Container(
+                      width: 1,
+                      height: 10,
+                      color: AppColors.borderInput,
+                    ),
+                  ),
+                if (contact.gstin != null) ...[
+                  Icon(Icons.pin_outlined,
+                      size: 12, color: AppColors.textMuted),
+                  const SizedBox(width: 4),
+                  Text(contact.gstin!,
+                      style: AppTextStyles.caption.copyWith(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500)),
+                ],
+              ],
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _iconBtn({
+    required IconData icon,
+    required String tooltip,
+    Color? color,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.xs),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Icon(icon, size: 16, color: color ?? AppColors.textSecondary),
+        ),
+      ),
+    );
   }
 }

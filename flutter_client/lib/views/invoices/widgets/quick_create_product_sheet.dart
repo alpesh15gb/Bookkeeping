@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/models/product.dart';
 import 'package:flutter_client/providers/product_provider.dart';
+import 'package:flutter_client/views/shared/app_components.dart';
 
 /// Shows a bottom sheet to quickly create a product/service.
 /// Returns the created [ProductModel] on success, or null if cancelled.
@@ -88,12 +89,7 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                 .lastOrNull;
         if (mounted) Navigator.pop(context, created);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(provider.errorMessage ?? 'Failed to create product'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Failed to create product');
       }
     }
   }

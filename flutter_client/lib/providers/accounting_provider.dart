@@ -270,6 +270,21 @@ class AccountingProvider extends ChangeNotifier {
     return null;
   }
 
+  Future<Map<String, dynamic>?> fetchGstr2(String start, String end) async {
+    try {
+      final response = await _client.get(
+        Uri.parse(
+          '${ApiClient.baseUrl}/reports/gst/gstr2?start_date=$start&end_date=$end',
+        ),
+      );
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
+      }
+    } catch (_) {}
+    return null;
+  }
+
   Future<Map<String, dynamic>?> fetchGstr3b(String start, String end) async {
     try {
       final response = await _client.get(

@@ -6,6 +6,7 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/credit_notes/credit_debit_note_form_view.dart';
 import 'package:flutter_client/views/credit_notes/credit_debit_note_detail_view.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 
 class CreditNoteListView extends StatefulWidget {
   const CreditNoteListView({super.key});
@@ -70,9 +71,7 @@ class _CreditNoteListViewState extends State<CreditNoteListView> with SingleTick
       if (success) {
         _fetch();
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Cancel failed'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
       }
     }
   }
@@ -85,25 +84,51 @@ class _CreditNoteListViewState extends State<CreditNoteListView> with SingleTick
 
   @override
   Widget build(BuildContext context) {
+    final isMobile = AdaptiveLayout.isMobile(context);
+
     return Scaffold(
       backgroundColor: AppColors.bgLight,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(48),
         child: Container(
           color: AppColors.bgSurface,
-          child: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'Credit Notes'),
-              Tab(text: 'Debit Notes'),
+          child: Row(
+            children: [
+              Expanded(
+                child: TabBar(
+                  controller: _tabController,
+                  labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  labelStyle: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
+                  unselectedLabelStyle: AppTextStyles.caption,
+                  indicatorWeight: 2,
+                  tabs: const [
+                    Tab(text: 'Credit Notes'),
+                    Tab(text: 'Debit Notes'),
+                  ],
+                ),
+              ),
+              if (!isMobile)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: TextButton.icon(
+                    onPressed: () => _showForm(isCredit: _tabController.index == 0),
+                    icon: const Icon(Icons.add, size: 16),
+                    label: Text(
+                      _tabController.index == 0 ? 'Create Credit Note' : 'Create Debit Note',
+                      style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showForm(isCredit: _tabController.index == 0),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              onPressed: () => _showForm(isCredit: _tabController.index == 0),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: _isLoading
           ? const LoadingState(message: 'Loading notes...')
           : TabBarView(
@@ -117,7 +142,6 @@ class _CreditNoteListViewState extends State<CreditNoteListView> with SingleTick
   }
 
   Widget _buildList(List<dynamic> list, String type, bool isCredit) {
-    final isMobile = AdaptiveLayout.isMobile(context);
     if (list.isEmpty) {
       return EmptyState(
         icon: Icons.compare_arrows_outlined,
@@ -127,78 +151,94 @@ class _CreditNoteListViewState extends State<CreditNoteListView> with SingleTick
         onAction: () => _showForm(isCredit: isCredit),
       );
     }
-    return ListView.separated(
-      padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-      itemCount: list.length,
-      separatorBuilder: (context, _) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        final note = list[i];
-        final numVal = type == 'Credit Note' ? note['credit_note_number'] : note['debit_note_number'];
-        return AppCard(
-          onTap: () => _showDetail(note['id'], isCredit),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text(numVal?.toString() ?? 'NOTE', style: AppTextStyles.h3)),
-                  if (note['status'] != null) StatusBadge(label: note['status']),
+
+    num totalAmount = 0;
+    for (final n in list) {
+      totalAmount += double.tryParse((n['total'] ?? 0).toString()) ?? 0;
+    }
+
+    String formatAmt(num v) {
+      if (v >= 100000) return '₹${(v / 100000).toStringAsFixed(1)}L';
+      if (v >= 1000) return '₹${(v / 1000).toStringAsFixed(1)}K';
+      return '₹${v.toStringAsFixed(0)}';
+    }
+
+    return Column(
+      children: [
+        AmountSummaryCards(cards: [
+          AmountSummaryCardData(label: 'Total', value: formatAmt(totalAmount), color: AppColors.brandNavy),
+          AmountSummaryCardData(label: 'Count', value: '${list.length}', color: AppColors.info),
+        ]),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.only(top: 8, left: 12, right: 12, bottom: 80),
+            itemCount: list.length,
+            separatorBuilder: (context, _) => const SizedBox(height: 6),
+            itemBuilder: (context, i) {
+              final note = list[i];
+              final numVal = (isCredit ? note['credit_note_number'] : note['debit_note_number'])?.toString() ?? 'NOTE';
+              final total = double.tryParse((note['total'] ?? 0).toString()) ?? 0;
+              final status = note['status']?.toString() ?? 'DRAFT';
+
+              return CompactDocumentCard(
+                docNumber: numVal,
+                partyName: note['invoice_number'] != null ? 'Inv: ${note['invoice_number']}' : null,
+                date: note['issue_date'],
+                amount: total,
+                status: status,
+                onTap: () => _showDetail(note['id'], isCredit),
+                actions: [
+                  if (status == 'DRAFT')
+                    _CompactAction(
+                      icon: Icons.edit_outlined,
+                      tooltip: 'Edit',
+                      onTap: () => _showForm(note: note, isCredit: isCredit),
+                    ),
+                  if (status != 'CANCELLED')
+                    _CompactAction(
+                      icon: Icons.cancel_outlined,
+                      tooltip: 'Cancel',
+                      color: AppColors.error,
+                      onTap: () => _cancelNote(note['id'], isCredit),
+                    ),
                 ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textMuted),
-                  const SizedBox(width: 6),
-                  Text(note['issue_date'] ?? '', style: AppTextStyles.caption),
-                  if (note['invoice_number'] != null) ...[
-                    const SizedBox(width: 16),
-                    Icon(Icons.description_outlined, size: 14, color: AppColors.textMuted),
-                    const SizedBox(width: 6),
-                    Text('Inv: ${note['invoice_number']}', style: AppTextStyles.bodySmall),
-                  ],
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('₹${double.parse((note['total'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numericLarge),
-                  Row(
-                    children: [
-                      if (note['status'] == 'DRAFT') ...[
-                        OutlinedButton.icon(
-                          onPressed: () => _showForm(note: note, isCredit: isCredit),
-                          icon: const Icon(Icons.edit_outlined, size: 14),
-                          label: const Text('Edit'),
-                          style: OutlinedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            textStyle: AppTextStyles.buttonSmall,
-                            side: const BorderSide(color: AppColors.borderInput),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                      ],
-                      if (note['status'] != 'CANCELLED')
-                        OutlinedButton.icon(
-                          onPressed: () => _cancelNote(note['id'], isCredit),
-                          icon: const Icon(Icons.cancel_outlined, size: 14),
-                          label: const Text('Cancel'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            textStyle: AppTextStyles.buttonSmall,
-                            side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
+              );
+            },
           ),
-        );
-      },
+        ),
+      ],
+    );
+  }
+}
+
+class _CompactAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _CompactAction({
+    required this.icon,
+    required this.tooltip,
+    this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: (color ?? AppColors.brandNavy).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Icon(icon, size: 14, color: color ?? AppColors.brandNavy),
+        ),
+      ),
     );
   }
 }

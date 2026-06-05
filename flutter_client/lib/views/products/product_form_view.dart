@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/product_provider.dart';
+import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/models/product.dart';
 
 class ProductFormView extends StatefulWidget {
@@ -101,12 +103,7 @@ class _ProductFormViewState extends State<ProductFormView> {
       if (success && mounted) {
         Navigator.pop(context);
       } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(provider.errorMessage ?? 'Operation failed'),
-            backgroundColor: AppColors.error,
-          ),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Operation failed');
       }
     }
   }
@@ -190,11 +187,9 @@ class _ProductFormViewState extends State<ProductFormView> {
                       const SizedBox(height: 20),
 
                       // Name
-                      TextFormField(
+                      AppTextField(
                         controller: _nameController,
-                        decoration: const InputDecoration(
-                          labelText: 'Product / Service Name *',
-                        ),
+                        label: 'Product / Service Name *',
                         validator: (v) => (v == null || v.isEmpty)
                             ? 'Name is required'
                             : null,
@@ -205,20 +200,16 @@ class _ProductFormViewState extends State<ProductFormView> {
                       Row(
                         children: [
                           Expanded(
-                            child: TextFormField(
+                            child: AppTextField(
                               controller: _skuController,
-                              decoration: const InputDecoration(
-                                labelText: 'SKU',
-                              ),
+                              label: 'SKU',
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: TextFormField(
+                            child: AppTextField(
                               controller: _hsnController,
-                              decoration: const InputDecoration(
-                                labelText: 'HSN/SAC *',
-                              ),
+                              label: 'HSN/SAC *',
                               validator: (v) {
                                 final value = v?.trim() ?? '';
                                 if (value.isEmpty) return 'Required';
@@ -236,23 +227,19 @@ class _ProductFormViewState extends State<ProductFormView> {
                       Row(
                         children: [
                           Expanded(
-                            child: TextFormField(
+                            child: AppTextField(
                               controller: _uomController,
-                              decoration: const InputDecoration(
-                                labelText: 'Unit (UOM) *',
-                                hintText: 'e.g. PCS, BOX',
-                              ),
+                              label: 'Unit (UOM) *',
+                              hintText: 'e.g. PCS, BOX',
                               validator: (v) =>
                                   (v == null || v.isEmpty) ? 'Required' : null,
                             ),
                           ),
                           const SizedBox(width: 12),
                           Expanded(
-                            child: TextFormField(
+                            child: AppTextField(
                               controller: _gstRateController,
-                              decoration: const InputDecoration(
-                                labelText: 'GST Rate (%) *',
-                              ),
+                              label: 'GST Rate (%) *',
                               keyboardType: TextInputType.number,
                               validator: (v) =>
                                   (v == null || double.tryParse(v) == null)
@@ -305,21 +292,17 @@ class _ProductFormViewState extends State<ProductFormView> {
                         Row(
                           children: [
                             Expanded(
-                              child: TextFormField(
+                              child: AppTextField(
                                 controller: _stockController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Opening Stock',
-                                ),
+                                label: 'Opening Stock',
                                 keyboardType: TextInputType.number,
                               ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: TextFormField(
+                              child: AppTextField(
                                 controller: _reorderController,
-                                decoration: const InputDecoration(
-                                  labelText: 'Reorder Level',
-                                ),
+                                label: 'Reorder Level',
                                 keyboardType: TextInputType.number,
                               ),
                             ),

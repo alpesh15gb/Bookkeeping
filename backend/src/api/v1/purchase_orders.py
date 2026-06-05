@@ -498,6 +498,7 @@ def print_purchase_order(
         doc_type="PURCHASE ORDER",
         tenant_id=tenant_id,
         db=db,
+        customer_address=po.contact.billing_address if po.contact else None,
     )
 
     return StreamingResponse(

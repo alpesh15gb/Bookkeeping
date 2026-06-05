@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/estimates/estimate_form_view.dart';
 
 import 'package:flutter_client/core/print_share_helper.dart';
@@ -99,7 +100,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                                   height: 40,
                                   decoration: BoxDecoration(
                                     color: AppColors.brandNavy,
-                                    borderRadius: BorderRadius.circular(10),
+                                    borderRadius: BorderRadius.circular(AppRadius.lg),
                                   ),
                                   child: const Icon(
                                     Icons.request_quote_outlined,
@@ -142,7 +143,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                             const SectionHeader(title: 'ITEMS'),
                             if (_estimate!['lines'] == null || (_estimate!['lines'] is List ? (_estimate!['lines'] as List).isEmpty : true))
                               const Padding(
-                                padding: EdgeInsets.symmetric(vertical: 16),
+                                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
                                 child: Text('No items', style: AppTextStyles.bodySmall),
                               )
                             else
@@ -158,7 +159,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                                   final total = double.tryParse((line['total'] ?? 0).toString()) ?? 0;
 
                                   return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: 6),
+                                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
                                     child: Row(
                                       children: [
                                         Expanded(
@@ -169,7 +170,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                                                 line['description'] ?? line['product_name'] ?? 'Item',
                                                 style: AppTextStyles.bodyMedium,
                                               ),
-                                              const SizedBox(height: 2),
+                                              const SizedBox(height: AppSpacing.xxs),
                                               Text(
                                                 'Qty: $quantity × ₹${rate.toStringAsFixed(2)}',
                                                 style: AppTextStyles.caption,
@@ -215,52 +216,36 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                       ),
                       const SizedBox(height: 24),
                       if (status == 'DRAFT') ...[
-                        ElevatedButton.icon(
+                        ActionButton(
+                          label: 'Issue Estimate',
+                          icon: Icons.send_outlined,
+                          tier: ActionTier.warning,
                           onPressed: _issueEstimate,
-                          icon: const Icon(Icons.send_outlined),
-                          label: const Text('Issue Estimate'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.brandNavy,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
                         ),
                         const SizedBox(height: 12),
-                        OutlinedButton.icon(
+                        ActionButton(
+                          label: 'Delete Draft',
+                          icon: Icons.delete_outline,
+                          tier: ActionTier.dangerous,
                           onPressed: _deleteEstimate,
-                          icon: const Icon(Icons.delete_outline),
-                          label: const Text('Delete Draft'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: const BorderSide(color: AppColors.error),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
                         ),
                       ],
                       if (status == 'ISSUED') ...[
-                        ElevatedButton.icon(
+                        ActionButton(
+                          label: 'Convert to Sales Invoice',
+                          icon: Icons.transform_outlined,
+                          tier: ActionTier.safe,
                           onPressed: _convertToInvoice,
-                          icon: const Icon(Icons.transform_outlined),
-                          label: const Text('Convert to Sales Invoice'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green[700],
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
                         ),
                         const SizedBox(height: 12),
-                        OutlinedButton.icon(
+                        ActionButton(
+                          label: 'Cancel Estimate',
+                          icon: Icons.cancel_outlined,
+                          tier: ActionTier.dangerous,
                           onPressed: _cancelEstimate,
-                          icon: const Icon(Icons.cancel_outlined),
-                          label: const Text('Cancel Estimate'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: AppColors.error,
-                            side: const BorderSide(color: AppColors.error),
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
                         ),
                       ],
-                      const SizedBox(height: 32),
+                      const SizedBox(height: AppSpacing.xxxl),
                     ],
                   ),
                 ),
@@ -282,9 +267,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
         if (success) {
           Navigator.pop(context);
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Failed to delete estimate'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Failed to delete estimate');
         }
       }
     }
@@ -305,9 +288,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
         if (success) {
           _fetchDetail();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Failed to issue estimate'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Failed to issue estimate');
         }
       }
     }
@@ -326,14 +307,10 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
       if (mounted) {
         setState(() => _isLoading = false);
         if (success) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Successfully converted to Sales Invoice!'), backgroundColor: Colors.green),
-          );
+          AppToast.success(context, 'Successfully converted to Sales Invoice!');
           _fetchDetail();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Failed to convert estimate'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Failed to convert estimate');
         }
       }
     }
@@ -354,9 +331,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
         if (success) {
           _fetchDetail();
         } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(provider.errorMessage ?? 'Failed to cancel estimate'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, provider.errorMessage ?? 'Failed to cancel estimate');
         }
       }
     }

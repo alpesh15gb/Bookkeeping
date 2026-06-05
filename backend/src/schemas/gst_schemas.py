@@ -95,6 +95,55 @@ class GSTR2B2BLine(SchemaBase):
     cess_amount: Decimal
     total_value: Decimal
 
+# GSTR-2 B2BUR Purchases (Reverse Charge Unregistered Vendors)
+class GSTR2B2BURLine(SchemaBase):
+    vendor_name: str
+    bill_number: str
+    bill_date: date
+    pos_state_code: str
+    taxable_value: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    utgst_amount: Decimal
+    cess_amount: Decimal
+    total_value: Decimal
+
+# GSTR-2 Credit/Debit Notes (Purchases Correction)
+class GSTR2NoteLine(SchemaBase):
+    note_number: str
+    note_date: date
+    note_type: str  # 'CREDIT' or 'DEBIT'
+    bill_number: Optional[str] = None
+    vendor_gstin: Optional[str] = None
+    reason: Optional[str] = None
+    taxable_value: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    utgst_amount: Decimal
+    cess_amount: Decimal
+    total_value: Decimal
+
+# GSTR-2 Inward HSN Summary
+class GSTR2HSNLine(SchemaBase):
+    hsn_sac: str
+    description: str
+    uom: str
+    total_quantity: Decimal
+    total_value: Decimal
+    taxable_value: Decimal
+    cgst_amount: Decimal
+    sgst_amount: Decimal
+    igst_amount: Decimal
+    utgst_amount: Decimal
+    cess_amount: Decimal
+
 # GSTR-2 Complete Report Response
 class GSTR2Response(SchemaBase):
     b2b_purchases: List[GSTR2B2BLine]
+    b2bur_purchases: List[GSTR2B2BURLine]
+    cdnr_purchases: List[GSTR2NoteLine]
+    cdnur_purchases: List[GSTR2NoteLine]
+    hsn_summary: List[GSTR2HSNLine]
+

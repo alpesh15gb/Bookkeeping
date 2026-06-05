@@ -110,9 +110,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
         if (ok) successCount++;
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$successCount of ${_selectedIds.length} invoices cancelled')),
-        );
+        AppToast.info(context, '$successCount of ${_selectedIds.length} invoices cancelled');
       }
       _clearSelection();
       _fetch();
@@ -136,9 +134,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
         } catch (_) {}
       }
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$successCount of ${_selectedIds.length} emails queued')),
-        );
+        AppToast.info(context, '$successCount of ${_selectedIds.length} emails queued');
       }
       _clearSelection();
     }
@@ -156,9 +152,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       if (mounted) Navigator.pop(context);
       if (fullInvoice == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to load invoice details'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, 'Failed to load invoice details');
         }
         return;
       }
@@ -192,11 +186,29 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       final provider = context.read<InvoiceProvider>();
       final success = await provider.cancelInvoice(invoice.id);
       if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Cancel failed'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
       }
     }
+  }
+
+  void _printInvoice(InvoiceModel invoice) {
+    PrintShareHelper.showShareSheet(
+      context,
+      docLabel: 'Invoice',
+      docNumber: invoice.invoiceNumber,
+      docType: 'invoices',
+      docId: invoice.id,
+    );
+  }
+
+  void _shareInvoice(InvoiceModel invoice) {
+    PrintShareHelper.showShareSheet(
+      context,
+      docLabel: 'Invoice',
+      docNumber: invoice.invoiceNumber,
+      docType: 'invoices',
+      docId: invoice.id,
+    );
   }
 
   void _exportGstr1() async {
@@ -213,9 +225,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       if (kIsWeb) {
         triggerWebDownload(fileName, bytes);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('GSTR-1 downloaded: $fileName')),
-          );
+          AppToast.info(context, 'GSTR-1 downloaded: $fileName');
         }
       } else {
         final savePath = await FilePicker.platform.saveFile(
@@ -226,29 +236,69 @@ class _InvoiceListViewState extends State<InvoiceListView> {
           bytes: Uint8List.fromList(bytes),
         );
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(savePath == null ? 'Export cancelled' : 'GSTR-1 saved to $savePath')),
-          );
+          AppToast.success(context, savePath == null ? 'Export cancelled' : 'GSTR-1 saved to $savePath');
         }
       }
     } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Export failed'), backgroundColor: AppColors.error),
-      );
+      AppToast.error(context, 'Export failed');
     }
+  }
+
+  String _balanceLabel(InvoiceModel invoice) {
+    final paid = invoice.amountPaid;
+    if (paid <= 0) return 'Unpaid';
+    if (paid >= invoice.total) return 'Paid';
+    return 'Partial';
+  }
+
+  num _balanceAmount(InvoiceModel invoice) {
+    return invoice.total - invoice.amountPaid;
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<InvoiceProvider>();
     final isMobile = AdaptiveLayout.isMobile(context);
+    final invoices = provider.invoices;
+
+    // Compute stats
+    final totalCount = invoices.length;
+    final draftCount = invoices.where((i) => i.status == 'DRAFT').length;
+    final sentCount = invoices.where((i) => i.status == 'SENT').length;
+    final paidCount = invoices.where((i) => i.status == 'PAID').length;
+    final partialCount = invoices.where((i) => i.status == 'PARTIALLY_PAID').length;
+    final cancelledCount = invoices.where((i) => i.status == 'CANCELLED').length;
+
+    // Compute amounts
+    num totalAmount = 0;
+    num collectedAmount = 0;
+    num outstandingAmount = 0;
+    num overdueAmount = 0;
+    for (final inv in invoices) {
+      totalAmount += inv.total;
+      collectedAmount += inv.amountPaid;
+      final balance = inv.total - inv.amountPaid;
+      if (balance > 0) {
+        outstandingAmount += balance;
+        if (inv.status == 'PARTIALLY_PAID') overdueAmount += balance;
+      }
+    }
+    final avgInvoice = totalCount > 0 ? totalAmount / totalCount : 0;
+
+    String formatAmt(num v) {
+      if (v >= 100000) return '₹${(v / 100000).toStringAsFixed(1)}L';
+      if (v >= 1000) return '₹${(v / 1000).toStringAsFixed(1)}K';
+      return '₹${v.toStringAsFixed(0)}';
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showForm(),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              onPressed: () => _showForm(),
+              child: const Icon(Icons.add),
+            )
+          : null,
       body: Column(
         children: [
           // ── Search + Filter Bar ──
@@ -256,17 +306,18 @@ class _InvoiceListViewState extends State<InvoiceListView> {
             color: AppColors.bgSurface,
             padding: EdgeInsets.symmetric(
               horizontal: isMobile ? 12 : 20,
-              vertical: 10,
+              vertical: 8,
             ),
             child: Column(
               children: [
                 Row(
                   children: [
                     Expanded(
+                      flex: 5,
                       child: TextField(
                         controller: _searchCtrl,
                         decoration: InputDecoration(
-                          hintText: 'Search by invoice number or party...',
+                          hintText: 'Search invoices...',
                           prefixIcon: const Icon(Icons.search_rounded, size: 18),
                           suffixIcon: _searchCtrl.text.isNotEmpty
                               ? IconButton(
@@ -278,7 +329,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                 )
                               : null,
                           isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                          contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(AppRadius.md),
                             borderSide: const BorderSide(color: AppColors.borderInput),
@@ -291,69 +342,110 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                         onSubmitted: (_) => _fetch(),
                         onChanged: (v) {
                           if (v.isEmpty) _fetch();
-                          setState(() {}); // update suffix icon
+                          setState(() {});
                         },
                       ),
                     ),
-                    const SizedBox(width: 8),
-                    Tooltip(
-                      message: 'Export GSTR-1',
-                      child: IconButton(
-                        icon: const Icon(Icons.download_rounded, size: 20),
-                        onPressed: _exportGstr1,
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppColors.borderLight,
-                          padding: const EdgeInsets.all(8),
+                    if (!isMobile) ...[
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: 'Export GSTR-1',
+                        child: IconButton(
+                          icon: const Icon(Icons.download_rounded, size: 18),
+                          onPressed: _exportGstr1,
+                          style: IconButton.styleFrom(
+                            backgroundColor: AppColors.borderLight,
+                            padding: const EdgeInsets.all(6),
+                          ),
                         ),
                       ),
-                    ),
+                      const SizedBox(width: 8),
+                      ElevatedButton.icon(
+                        onPressed: () => _showForm(),
+                        icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
+                        label: const Text('Create Invoice', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.brandNavy,
+                          foregroundColor: AppColors.textWhite,
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        ),
+                      ),
+                    ],
                   ],
                 ),
-                const SizedBox(height: 8),
-                // Status filter chips
+                const SizedBox(height: 4),
                 SingleChildScrollView(
                   scrollDirection: Axis.horizontal,
                   child: Row(
-                    children: _statusOptions.map((s) {
-                      final isSelected = _statusFilter == s;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 6),
-                        child: FilterChip(
-                          label: Text(
-                            s == 'ALL' ? 'All' : s.replaceAll('_', ' '),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-                              color: isSelected ? Colors.white : AppColors.textSecondary,
-                            ),
-                          ),
-                          selected: isSelected,
-                          onSelected: (_) {
-                            setState(() => _statusFilter = s);
-                            _fetch();
-                          },
-                          selectedColor: AppColors.brandNavy,
-                          backgroundColor: AppColors.borderLight,
-                          side: BorderSide.none,
-                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 0),
-                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                          showCheckmark: false,
-                        ),
-                      );
-                    }).toList(),
+                    children: [
+                      FilterChipWithCount(
+                        label: 'All',
+                        count: totalCount,
+                        isSelected: _statusFilter == 'ALL',
+                        onTap: () { setState(() => _statusFilter = 'ALL'); _fetch(); },
+                      ),
+                      const SizedBox(width: 4),
+                      FilterChipWithCount(
+                        label: 'Draft',
+                        count: draftCount,
+                        isSelected: _statusFilter == 'DRAFT',
+                        onTap: () { setState(() => _statusFilter = 'DRAFT'); _fetch(); },
+                      ),
+                      const SizedBox(width: 4),
+                      FilterChipWithCount(
+                        label: 'Sent',
+                        count: sentCount,
+                        isSelected: _statusFilter == 'SENT',
+                        onTap: () { setState(() => _statusFilter = 'SENT'); _fetch(); },
+                      ),
+                      const SizedBox(width: 4),
+                      FilterChipWithCount(
+                        label: 'Paid',
+                        count: paidCount,
+                        isSelected: _statusFilter == 'PAID',
+                        onTap: () { setState(() => _statusFilter = 'PAID'); _fetch(); },
+                      ),
+                      const SizedBox(width: 4),
+                      FilterChipWithCount(
+                        label: 'Partial',
+                        count: partialCount,
+                        isSelected: _statusFilter == 'PARTIALLY_PAID',
+                        onTap: () { setState(() => _statusFilter = 'PARTIALLY_PAID'); _fetch(); },
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
 
+          // ── Insights Strip ──
+          if (invoices.isNotEmpty)
+            AmountSummaryCards(cards: [
+              AmountSummaryCardData(label: 'Total Sales', value: formatAmt(totalAmount), color: AppColors.brandNavy),
+              AmountSummaryCardData(label: 'Collected', value: formatAmt(collectedAmount), color: AppColors.success),
+              AmountSummaryCardData(label: 'Outstanding', value: formatAmt(outstandingAmount), color: AppColors.warning),
+              AmountSummaryCardData(label: 'Overdue', value: formatAmt(overdueAmount), color: AppColors.error),
+              AmountSummaryCardData(label: 'Avg Invoice', value: formatAmt(avgInvoice), color: AppColors.textSecondary),
+            ]),
+
+          // ── Summary Stats ──
+          if (invoices.isNotEmpty)
+            SummaryStatsBar(stats: [
+              SummaryStat(label: 'Total', count: totalCount, color: AppColors.brandNavy),
+              SummaryStat(label: 'Draft', count: draftCount, color: AppColors.textMuted),
+              SummaryStat(label: 'Sent', count: sentCount, color: AppColors.info),
+              SummaryStat(label: 'Paid', count: paidCount, color: AppColors.success),
+              SummaryStat(label: 'Partial', count: partialCount, color: AppColors.warning),
+            ]),
+
           // ── List Body ──
           Expanded(
-            child: provider.isLoading && provider.invoices.isEmpty
+            child: provider.isLoading && invoices.isEmpty
                 ? const ListSkeleton()
-                : provider.errorMessage != null && provider.invoices.isEmpty
+                : provider.errorMessage != null && invoices.isEmpty
                     ? ErrorState(message: provider.errorMessage!, onRetry: _fetch)
-                    : provider.invoices.isEmpty
+                    : invoices.isEmpty
                         ? EmptyState(
                             icon: Icons.description_outlined,
                             title: 'No invoices found',
@@ -371,18 +463,37 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                   padding: EdgeInsets.only(
                                     left: isMobile ? 12 : 20,
                                     right: isMobile ? 12 : 20,
-                                    top: isMobile ? 12 : 20,
+                                    top: 8,
                                     bottom: _selectedIds.isNotEmpty ? 80 : (isMobile ? 12 : 20),
                                   ),
-                                  itemCount: provider.invoices.length,
-                                  separatorBuilder: (context, _) => const SizedBox(height: 10),
+                                  itemCount: invoices.length,
+                                  separatorBuilder: (context, _) => const SizedBox(height: 6),
                                   itemBuilder: (context, i) {
-                                    final invoice = provider.invoices[i];
+                                    final invoice = invoices[i];
                                     final id = invoice.id.toString();
                                     final isSelected = _selectedIds.contains(id);
+                                    final partyName = invoice.contactName ?? invoice.contact?.name ?? '';
+                                    final bal = _balanceAmount(invoice);
+
                                     return _buildSwipeableInvoice(
                                       invoice,
-                                      GestureDetector(
+                                      CompactDocumentCard(
+                                        docNumber: invoice.invoiceNumber,
+                                        partyName: partyName.isNotEmpty ? partyName : null,
+                                        date: invoice.issueDate,
+                                        amount: invoice.total,
+                                        status: invoice.status,
+                                        balanceLabel: _balanceLabel(invoice),
+                                        balanceAmount: bal > 0 ? bal : null,
+                                        isSelected: isSelected,
+                                        isSelectionMode: _isSelectionMode,
+                                        onTap: () {
+                                          if (_isSelectionMode) {
+                                            _toggleSelection(id);
+                                          } else {
+                                            _showDetail(invoice.id);
+                                          }
+                                        },
                                         onLongPress: () {
                                           if (!_isSelectionMode) {
                                             setState(() {
@@ -391,101 +502,42 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                             });
                                           }
                                         },
-                                        child: AppCard(
-                                          onTap: () {
-                                            if (_isSelectionMode) {
-                                              _toggleSelection(id);
-                                            } else {
-                                              _showDetail(invoice.id);
-                                            }
-                                          },
-                                          child: Row(
-                                            children: [
-                                              if (_isSelectionMode)
-                                                Padding(
-                                                  padding: const EdgeInsets.only(right: 12),
-                                                  child: Icon(
-                                                    isSelected ? Icons.check_circle : Icons.circle_outlined,
-                                                    size: 22,
-                                                    color: isSelected ? AppColors.brandNavy : AppColors.textMuted,
+                                        actions: _isSelectionMode
+                                            ? null
+                                            : [
+                                                if (invoice.status == 'DRAFT')
+                                                  _CompactAction(
+                                                    icon: Icons.edit_outlined,
+                                                    tooltip: 'Edit',
+                                                    onTap: () => _showForm(invoice: invoice),
                                                   ),
+                                                if (invoice.status == 'SENT' || invoice.status == 'PARTIALLY_PAID')
+                                                  _CompactAction(
+                                                    icon: Icons.cancel_outlined,
+                                                    tooltip: 'Cancel',
+                                                    color: AppColors.error,
+                                                    onTap: () => _cancelInvoice(invoice),
+                                                  ),
+                                              ],
+                                        hoverActions: _isSelectionMode
+                                            ? null
+                                            : [
+                                                _CompactAction(
+                                                  icon: Icons.edit_outlined,
+                                                  tooltip: 'Edit',
+                                                  onTap: () => _showForm(invoice: invoice),
                                                 ),
-                                              Expanded(
-                                                child: Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
-                                                      children: [
-                                                        Expanded(
-                                                          child: Text(invoice.invoiceNumber, style: AppTextStyles.h3),
-                                                        ),
-                                                        StatusBadge.fromInvoiceStatus(invoice.status),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 8),
-                                                    Row(
-                                                      children: [
-                                                        Icon(Icons.person_outlined, size: 14, color: AppColors.textMuted),
-                                                        const SizedBox(width: 6),
-                                                         Text(invoice.contactName ?? invoice.contact?.name ?? 'N/A', style: AppTextStyles.bodySmall),
-                                                        const SizedBox(width: 16),
-                                                        Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textMuted),
-                                                        const SizedBox(width: 6),
-                                                        Text(invoice.issueDate, style: AppTextStyles.caption),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 12),
-                                                    Row(
-                                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                      children: [
-                                                        Column(
-                                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                                          children: [
-                                                            Text('₹${invoice.total.toStringAsFixed(2)}', style: AppTextStyles.numericLarge),
-                                                            if (invoice.amountPaid > 0)
-                                                              Text(
-                                                                'Paid: ₹${invoice.amountPaid.toStringAsFixed(2)}',
-                                                                style: AppTextStyles.caption.copyWith(color: AppColors.success),
-                                                              ),
-                                                          ],
-                                                        ),
-                                                        if (!_isSelectionMode)
-                                                          Row(
-                                                            children: [
-                                                              OutlinedButton.icon(
-                                                                onPressed: () => _showForm(invoice: invoice),
-                                                                icon: const Icon(Icons.edit_outlined, size: 14),
-                                                                label: const Text('Edit'),
-                                                                style: OutlinedButton.styleFrom(
-                                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                                  textStyle: AppTextStyles.buttonSmall,
-                                                                  side: const BorderSide(color: AppColors.borderInput),
-                                                                ),
-                                                              ),
-                                                              if (invoice.status == 'SENT' || invoice.status == 'PARTIALLY_PAID') ...[
-                                                                const SizedBox(width: 8),
-                                                                OutlinedButton.icon(
-                                                                  onPressed: () => _cancelInvoice(invoice),
-                                                                  icon: const Icon(Icons.cancel_outlined, size: 14),
-                                                                  label: const Text('Cancel'),
-                                                                  style: OutlinedButton.styleFrom(
-                                                                    foregroundColor: AppColors.error,
-                                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                                    textStyle: AppTextStyles.buttonSmall,
-                                                                    side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                                                                  ),
-                                                                ),
-                                                              ],
-                                                            ],
-                                                          ),
-                                                      ],
-                                                    ),
-                                                  ],
+                                                _CompactAction(
+                                                  icon: Icons.print_outlined,
+                                                  tooltip: 'Print',
+                                                  onTap: () => _printInvoice(invoice),
                                                 ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                                _CompactAction(
+                                                  icon: Icons.share_outlined,
+                                                  tooltip: 'Share',
+                                                  onTap: () => _shareInvoice(invoice),
+                                                ),
+                                              ],
                                       ),
                                     );
                                   },
@@ -509,7 +561,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                     ),
                                     padding: EdgeInsets.symmetric(
                                       horizontal: isMobile ? 12 : 20,
-                                      vertical: 12,
+                                      vertical: 10,
                                     ),
                                     child: SafeArea(
                                       top: false,
@@ -521,70 +573,54 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                               mainAxisSize: MainAxisSize.min,
                                               children: [
                                                 Icon(
-                                                  _selectedIds.length == provider.invoices.length
+                                                  _selectedIds.length == invoices.length
                                                       ? Icons.check_circle
                                                       : Icons.circle_outlined,
-                                                  size: 22,
-                                                  color: _selectedIds.length == provider.invoices.length
+                                                  size: 20,
+                                                  color: _selectedIds.length == invoices.length
                                                       ? AppColors.brandNavy
                                                       : AppColors.textMuted,
                                                 ),
-                                                const SizedBox(width: 8),
+                                                const SizedBox(width: 4),
                                                 Text(
-                                                  'Select All',
-                                                  style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
+                                                  'All',
+                                                  style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
                                                 ),
                                               ],
                                             ),
                                           ),
-                                          const SizedBox(width: 16),
+                                          const SizedBox(width: 12),
                                           Text(
                                             '${_selectedIds.length} selected',
-                                            style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                                            style: AppTextStyles.caption,
                                           ),
                                           const Spacer(),
-                                          OutlinedButton.icon(
+                                          ActionButton(
+                                            label: 'Clear',
+                                            icon: Icons.close,
+                                            tier: ActionTier.safe,
                                             onPressed: _clearSelection,
-                                            icon: const Icon(Icons.close, size: 14),
-                                            label: const Text('Clear'),
-                                            style: OutlinedButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                              textStyle: AppTextStyles.buttonSmall,
-                                            ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          OutlinedButton.icon(
+                                          const SizedBox(width: 4),
+                                          ActionButton(
+                                            label: 'Cancel',
+                                            icon: Icons.cancel_outlined,
+                                            tier: ActionTier.dangerous,
                                             onPressed: _bulkCancel,
-                                            icon: const Icon(Icons.cancel_outlined, size: 14),
-                                            label: const Text('Cancel'),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.error,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                              textStyle: AppTextStyles.buttonSmall,
-                                              side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                                            ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          OutlinedButton.icon(
+                                          const SizedBox(width: 4),
+                                          ActionButton(
+                                            label: 'Email',
+                                            icon: Icons.email_outlined,
+                                            tier: ActionTier.safe,
                                             onPressed: _bulkEmail,
-                                            icon: const Icon(Icons.email_outlined, size: 14),
-                                            label: const Text('Email'),
-                                            style: OutlinedButton.styleFrom(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                              textStyle: AppTextStyles.buttonSmall,
-                                            ),
                                           ),
-                                          const SizedBox(width: 8),
-                                          OutlinedButton.icon(
+                                          const SizedBox(width: 4),
+                                          ActionButton(
+                                            label: 'Delete',
+                                            icon: Icons.delete_outline,
+                                            tier: ActionTier.dangerous,
                                             onPressed: _bulkDelete,
-                                            icon: const Icon(Icons.delete_outline, size: 14),
-                                            label: const Text('Delete'),
-                                            style: OutlinedButton.styleFrom(
-                                              foregroundColor: AppColors.error,
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                              textStyle: AppTextStyles.buttonSmall,
-                                              side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                                            ),
                                           ),
                                         ],
                                       ),
@@ -675,9 +711,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
   void _showRecordPaymentDialog(InvoiceModel invoice) {
     final remaining = invoice.total - invoice.amountPaid;
     if (remaining <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invoice is already fully paid')),
-      );
+      AppToast.error(context, 'Invoice is already fully paid');
       return;
     }
     final amountCtrl = TextEditingController(text: remaining.toStringAsFixed(2));
@@ -758,9 +792,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                   onPressed: () async {
                     final amt = double.tryParse(amountCtrl.text) ?? 0.0;
                     if (amt <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a valid amount'), backgroundColor: AppColors.error),
-                      );
+                      AppToast.info(context, 'Please enter a valid amount');
                       return;
                     }
                     Navigator.pop(context);
@@ -792,9 +824,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                         _fetch();
                       } else {
                         HapticHelper.error();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(provider.errorMessage ?? 'Failed to record payment'), backgroundColor: AppColors.error),
-                        );
+                        AppToast.error(context, provider.errorMessage ?? 'Failed to record payment');
                       }
                     }
                   },
@@ -815,37 +845,39 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       HapticHelper.delete();
       _fetch();
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 8),
-          backgroundColor: AppColors.brandNavy,
-          content: Text('Invoice ${invoice.invoiceNumber} deleted'),
-          action: SnackBarAction(
-            label: 'UNDO',
-            textColor: AppColors.goldAccent,
-            onPressed: () async {
-              final payload = invoice.toJson();
-              payload.remove('id');
-              payload.remove('status');
-              payload.remove('irn');
-              payload.remove('qr_code');
-              if (payload['lines'] != null) {
-                payload['line_items'] = (payload['lines'] as List).map((l) {
-                  final m = Map<String, dynamic>.from(l);
-                  return m;
-                }).toList();
-                payload.remove('lines');
-              }
-              final ok = await provider.createInvoice(payload);
-              if (ok) {
-                HapticHelper.success();
-                _fetch();
-              }
-            },
-          ),
-        ),
-      );
+      AppToast.info(context, 'Invoice ${invoice.invoiceNumber} deleted');
     }
   }
 }
 
+class _CompactAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _CompactAction({
+    required this.icon,
+    required this.tooltip,
+    this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: (color ?? AppColors.brandNavy).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Icon(icon, size: 14, color: color ?? AppColors.brandNavy),
+        ),
+      ),
+    );
+  }
+}

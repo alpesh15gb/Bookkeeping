@@ -10,6 +10,7 @@ import 'package:flutter_client/views/bills/bill_detail_view.dart';
 import 'package:flutter_client/utils/haptic_helper.dart';
 import 'package:flutter_client/core/print_share_helper.dart';
 import 'package:flutter_client/views/shared/skeleton_loading.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 
 class BillListView extends StatefulWidget {
   const BillListView({super.key});
@@ -19,6 +20,7 @@ class BillListView extends StatefulWidget {
 }
 
 class _BillListViewState extends State<BillListView> {
+  final _searchCtrl = TextEditingController();
   Set<String> _selectedIds = {};
   bool _isSelectionMode = false;
   double _swipeProgress = 0.0;
@@ -29,6 +31,12 @@ class _BillListViewState extends State<BillListView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<BillProvider>().fetchBills();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _toggleSelection(String id) {
@@ -92,9 +100,7 @@ class _BillListViewState extends State<BillListView> {
       }
       HapticHelper.medium();
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$successCount of ${_selectedIds.length} bills cancelled')),
-        );
+        AppToast.info(context, '$successCount of ${_selectedIds.length} bills cancelled');
       }
       _clearSelection();
       provider.fetchBills();
@@ -113,9 +119,7 @@ class _BillListViewState extends State<BillListView> {
       if (mounted) Navigator.pop(context);
       if (fullBill == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to load bill details'), backgroundColor: AppColors.error),
-          );
+          AppToast.error(context, 'Failed to load bill details');
         }
         return;
       }
@@ -136,279 +140,305 @@ class _BillListViewState extends State<BillListView> {
   }
 
   Future<void> _cancelBill(String id) async {
-    final confirm = await AppConfirmDialog.show(context, title: 'Cancel Bill?', message: 'Cancel this vendor bill?');
+    final confirm = await AppConfirmDialog.show(
+      context,
+      title: 'Cancel Bill?',
+      message: 'Cancel this vendor bill?',
+    );
     if (confirm == true) {
       final provider = context.read<BillProvider>();
       final success = await provider.cancelBill(id);
       if (!success && mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Cancel failed'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
       }
     }
+  }
+
+  String _balanceLabel(BillModel bill) {
+    final paid = bill.amountPaid;
+    if (paid <= 0) return 'Unpaid';
+    if (paid >= bill.total) return 'Paid';
+    return 'Partial';
+  }
+
+  num _balanceAmount(BillModel bill) {
+    return bill.total - bill.amountPaid;
   }
 
   @override
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
     final billProvider = context.watch<BillProvider>();
+    final bills = billProvider.bills;
 
-    if (billProvider.isLoading && billProvider.bills.isEmpty) {
-      return const Scaffold(
-        backgroundColor: AppColors.bgLight,
-        body: ListSkeleton(),
-      );
+    final draftCount = bills.where((b) => b.status == 'DRAFT').length;
+    final paidCount = bills.where((b) => b.status == 'PAID').length;
+    final partialCount = bills.where((b) => b.status == 'PARTIALLY_PAID').length;
+    final totalCount = bills.length;
+
+    num totalAmount = 0;
+    num paidAmount = 0;
+    num outstandingAmount = 0;
+    for (final b in bills) {
+      totalAmount += b.total;
+      paidAmount += b.amountPaid;
+      final bal = b.total - b.amountPaid;
+      if (bal > 0) outstandingAmount += bal;
     }
-    if (billProvider.errorMessage != null && billProvider.bills.isEmpty) {
-      return ErrorState(
-        message: billProvider.errorMessage!,
-        onRetry: () => context.read<BillProvider>().fetchBills(),
-      );
+
+    String formatAmt(num v) {
+      if (v >= 100000) return '₹${(v / 100000).toStringAsFixed(1)}L';
+      if (v >= 1000) return '₹${(v / 1000).toStringAsFixed(1)}K';
+      return '₹${v.toStringAsFixed(0)}';
     }
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showForm(),
-        child: const Icon(Icons.add),
-      ),
-      body: billProvider.bills.isEmpty
-          ? RefreshIndicator(
-              onRefresh: () async => context.read<BillProvider>().fetchBills(),
-              child: ListView(
-                children: [
-                  const SizedBox(height: 120),
-                  EmptyState(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'No vendor bills yet',
-                    subtitle: 'Vendor bills will appear here once added',
-                    actionLabel: 'Add Bill',
-                    onAction: () => _showForm(),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              onPressed: () => _showForm(),
+              child: const Icon(Icons.add),
+            )
+          : null,
+      body: Column(
+        children: [
+          Container(
+            color: AppColors.bgSurface,
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 12 : 20,
+              vertical: 8,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchCtrl,
+                    decoration: InputDecoration(
+                      hintText: 'Search bills...',
+                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                      suffixIcon: _searchCtrl.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.close, size: 16),
+                              onPressed: () {
+                                _searchCtrl.clear();
+                                setState(() {});
+                              },
+                            )
+                          : null,
+                      isDense: true,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        borderSide: const BorderSide(color: AppColors.borderInput),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(AppRadius.md),
+                        borderSide: const BorderSide(color: AppColors.borderInput),
+                      ),
+                    ),
+                    onSubmitted: (_) => setState(() {}),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                ),
+                if (!isMobile) ...[
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: () => _showForm(),
+                    icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
+                    label: const Text('Create Bill', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brandNavy,
+                      foregroundColor: AppColors.textWhite,
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    ),
                   ),
                 ],
-              ),
-            )
-          : Stack(
-              children: [
-                RefreshIndicator(
-                  onRefresh: () async => context.read<BillProvider>().fetchBills(),
-                  child: ListView.separated(
-                    padding: EdgeInsets.only(
-                      left: isMobile ? 12 : 20,
-                      right: isMobile ? 12 : 20,
-                      top: isMobile ? 12 : 20,
-                      bottom: _selectedIds.isNotEmpty ? 80 : (isMobile ? 12 : 20),
-                    ),
-                    itemCount: billProvider.bills.length,
-                    separatorBuilder: (context, _) => const SizedBox(height: 10),
-                    itemBuilder: (context, i) {
-                      final bill = billProvider.bills[i];
-                      final id = bill.id.toString();
-                      final isSelected = _selectedIds.contains(id);
-                      return _buildSwipeableBill(
-                        bill,
-                        GestureDetector(
-                          onLongPress: () {
-                            if (!_isSelectionMode) {
-                              setState(() {
-                                _isSelectionMode = true;
-                                _selectedIds.add(id);
-                              });
-                            }
-                          },
-                          child: AppCard(
-                            onTap: () {
-                              if (_isSelectionMode) {
-                                _toggleSelection(id);
-                              } else {
-                                _showDetail(bill.id);
-                              }
-                            },
-                            child: Row(
+              ],
+            ),
+          ),
+
+          if (bills.isNotEmpty)
+            AmountSummaryCards(cards: [
+              AmountSummaryCardData(label: 'Total', value: formatAmt(totalAmount), color: AppColors.brandNavy),
+              AmountSummaryCardData(label: 'Paid', value: formatAmt(paidAmount), color: AppColors.success),
+              AmountSummaryCardData(label: 'Outstanding', value: formatAmt(outstandingAmount), color: AppColors.warning),
+            ]),
+
+          if (bills.isNotEmpty)
+            SummaryStatsBar(stats: [
+              SummaryStat(label: 'Total', count: totalCount, color: AppColors.brandNavy),
+              SummaryStat(label: 'Draft', count: draftCount, color: AppColors.textMuted),
+              SummaryStat(label: 'Paid', count: paidCount, color: AppColors.success),
+              SummaryStat(label: 'Partial', count: partialCount, color: AppColors.warning),
+            ]),
+
+          Expanded(
+            child: billProvider.isLoading && bills.isEmpty
+                ? const ListSkeleton()
+                : billProvider.errorMessage != null && bills.isEmpty
+                    ? ErrorState(
+                        message: billProvider.errorMessage!,
+                        onRetry: () => context.read<BillProvider>().fetchBills(),
+                      )
+                    : bills.isEmpty
+                        ? EmptyState(
+                            icon: Icons.receipt_long_outlined,
+                            title: 'No vendor bills yet',
+                            subtitle: 'Vendor bills will appear here once added',
+                            actionLabel: 'Add Bill',
+                            onAction: () => _showForm(),
+                          )
+                        : RefreshIndicator(
+                            onRefresh: () async => context.read<BillProvider>().fetchBills(),
+                            child: Stack(
                               children: [
-                                if (_isSelectionMode)
-                                  Padding(
-                                    padding: const EdgeInsets.only(right: 12),
-                                    child: Icon(
-                                      isSelected ? Icons.check_circle : Icons.circle_outlined,
-                                      size: 22,
-                                      color: isSelected ? AppColors.brandNavy : AppColors.textMuted,
+                                ListView.separated(
+                                  padding: EdgeInsets.only(
+                                    left: isMobile ? 12 : 20,
+                                    right: isMobile ? 12 : 20,
+                                    top: 8,
+                                    bottom: _selectedIds.isNotEmpty ? 80 : (isMobile ? 12 : 20),
+                                  ),
+                                  itemCount: bills.length,
+                                  separatorBuilder: (context, _) => const SizedBox(height: 6),
+                                  itemBuilder: (context, i) {
+                                    final bill = bills[i];
+                                    final id = bill.id.toString();
+                                    final isSelected = _selectedIds.contains(id);
+                                    final partyName = bill.contact?.name ?? '';
+                                    final bal = _balanceAmount(bill);
+
+                                    return _buildSwipeableBill(
+                                      bill,
+                                      CompactDocumentCard(
+                                        docNumber: bill.billNumber,
+                                        partyName: partyName.isNotEmpty ? partyName : null,
+                                        date: bill.billDate,
+                                        amount: bill.total,
+                                        status: bill.status,
+                                        balanceLabel: _balanceLabel(bill),
+                                        balanceAmount: bal > 0 ? bal : null,
+                                        isSelected: isSelected,
+                                        isSelectionMode: _isSelectionMode,
+                                        onTap: () {
+                                          if (_isSelectionMode) {
+                                            _toggleSelection(id);
+                                          } else {
+                                            _showDetail(bill.id);
+                                          }
+                                        },
+                                        onLongPress: () {
+                                          if (!_isSelectionMode) {
+                                            setState(() {
+                                              _isSelectionMode = true;
+                                              _selectedIds.add(id);
+                                            });
+                                          }
+                                        },
+                                        actions: _isSelectionMode
+                                            ? null
+                                            : [
+                                                if (bill.status == 'DRAFT')
+                                                  _CompactAction(
+                                                    icon: Icons.edit_outlined,
+                                                    tooltip: 'Edit',
+                                                    onTap: () => _showForm(bill: bill),
+                                                  ),
+                                                if (bill.status != 'CANCELLED')
+                                                  _CompactAction(
+                                                    icon: Icons.cancel_outlined,
+                                                    tooltip: 'Cancel',
+                                                    color: AppColors.error,
+                                                    onTap: () => _cancelBill(bill.id),
+                                                  ),
+                                              ],
+                                      ),
+                                    );
+                                  },
+                                ),
+                                if (_selectedIds.isNotEmpty)
+                                  Positioned(
+                                    left: 0,
+                                    right: 0,
+                                    bottom: 0,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: AppColors.bgSurface,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withValues(alpha: 0.1),
+                                            blurRadius: 8,
+                                            offset: const Offset(0, -2),
+                                          ),
+                                        ],
+                                      ),
+                                      padding: EdgeInsets.symmetric(
+                                        horizontal: isMobile ? 12 : 20,
+                                        vertical: 10,
+                                      ),
+                                      child: SafeArea(
+                                        top: false,
+                                        child: Row(
+                                          children: [
+                                            GestureDetector(
+                                              onTap: _selectAll,
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    _selectedIds.length == bills.length
+                                                        ? Icons.check_circle
+                                                        : Icons.circle_outlined,
+                                                    size: 20,
+                                                    color: _selectedIds.length == bills.length
+                                                        ? AppColors.brandNavy
+                                                        : AppColors.textMuted,
+                                                  ),
+                                                  const SizedBox(width: 6),
+                                                  Text(
+                                                    'All',
+                                                    style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Text(
+                                              '${_selectedIds.length} selected',
+                                              style: AppTextStyles.caption,
+                                            ),
+                                            const Spacer(),
+                                            ActionButton(
+                                              label: 'Clear',
+                                              icon: Icons.close,
+                                              tier: ActionTier.safe,
+                                              onPressed: _clearSelection,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            ActionButton(
+                                              label: 'Cancel',
+                                              icon: Icons.cancel_outlined,
+                                              tier: ActionTier.dangerous,
+                                              onPressed: _bulkCancel,
+                                            ),
+                                            const SizedBox(width: 6),
+                                            ActionButton(
+                                              label: 'Delete',
+                                              icon: Icons.delete_outline,
+                                              tier: ActionTier.dangerous,
+                                              onPressed: _bulkDelete,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(child: Text(bill.billNumber, style: AppTextStyles.h3)),
-                                          StatusBadge(label: bill.status),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Row(
-                                        children: [
-                                          Icon(Icons.person_outlined, size: 14, color: AppColors.textMuted),
-                                          const SizedBox(width: 6),
-                                          Text(bill.contact?.name ?? 'N/A', style: AppTextStyles.bodySmall),
-                                          const SizedBox(width: 16),
-                                          Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textMuted),
-                                          const SizedBox(width: 6),
-                                          Text(bill.billDate, style: AppTextStyles.caption),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Row(
-                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Text('₹${bill.total.toStringAsFixed(2)}', style: AppTextStyles.numericLarge),
-                                          if (!_isSelectionMode)
-                                            Row(
-                                              children: [
-                                                OutlinedButton.icon(
-                                                  onPressed: () => _showDetail(bill.id),
-                                                  icon: const Icon(Icons.remove_red_eye_outlined, size: 14),
-                                                  label: const Text('View'),
-                                                  style: OutlinedButton.styleFrom(
-                                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                    textStyle: AppTextStyles.buttonSmall,
-                                                    side: const BorderSide(color: AppColors.borderInput),
-                                                  ),
-                                                ),
-                                                if (bill.status == 'DRAFT') ...[
-                                                  const SizedBox(width: 8),
-                                                  OutlinedButton.icon(
-                                                    onPressed: () => _showForm(bill: bill),
-                                                    icon: const Icon(Icons.edit_outlined, size: 14),
-                                                    label: const Text('Edit'),
-                                                    style: OutlinedButton.styleFrom(
-                                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                      textStyle: AppTextStyles.buttonSmall,
-                                                      side: const BorderSide(color: AppColors.borderInput),
-                                                    ),
-                                                  ),
-                                                ],
-                                                if (bill.status != 'CANCELLED') ...[
-                                                  const SizedBox(width: 8),
-                                                  OutlinedButton.icon(
-                                                    onPressed: () => _cancelBill(bill.id),
-                                                    icon: const Icon(Icons.cancel_outlined, size: 14),
-                                                    label: const Text('Cancel'),
-                                                    style: OutlinedButton.styleFrom(
-                                                      foregroundColor: AppColors.error,
-                                                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                                      textStyle: AppTextStyles.buttonSmall,
-                                                      side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                                                    ),
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
                               ],
                             ),
                           ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                if (_selectedIds.isNotEmpty)
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: AppColors.bgSurface,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.1),
-                            blurRadius: 8,
-                            offset: const Offset(0, -2),
-                          ),
-                        ],
-                      ),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isMobile ? 12 : 20,
-                        vertical: 12,
-                      ),
-                      child: SafeArea(
-                        top: false,
-                        child: Row(
-                          children: [
-                            GestureDetector(
-                              onTap: _selectAll,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _selectedIds.length == billProvider.bills.length
-                                        ? Icons.check_circle
-                                        : Icons.circle_outlined,
-                                    size: 22,
-                                    color: _selectedIds.length == billProvider.bills.length
-                                        ? AppColors.brandNavy
-                                        : AppColors.textMuted,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    'Select All',
-                                    style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Text(
-                              '${_selectedIds.length} selected',
-                              style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                            ),
-                            const Spacer(),
-                            OutlinedButton.icon(
-                              onPressed: _clearSelection,
-                              icon: const Icon(Icons.close, size: 14),
-                              label: const Text('Clear'),
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                textStyle: AppTextStyles.buttonSmall,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            OutlinedButton.icon(
-                              onPressed: _bulkCancel,
-                              icon: const Icon(Icons.cancel_outlined, size: 14),
-                              label: const Text('Cancel'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.error,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                textStyle: AppTextStyles.buttonSmall,
-                                side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            OutlinedButton.icon(
-                              onPressed: _bulkDelete,
-                              icon: const Icon(Icons.delete_outline, size: 14),
-                              label: const Text('Delete'),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: AppColors.error,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                textStyle: AppTextStyles.buttonSmall,
-                                side: BorderSide(color: AppColors.error.withValues(alpha: 0.3)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-              ],
-            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -486,9 +516,7 @@ class _BillListViewState extends State<BillListView> {
   void _showRecordPaymentDialog(BillModel bill) {
     final remaining = bill.total - bill.amountPaid;
     if (remaining <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Bill is already fully paid')),
-      );
+      AppToast.error(context, 'Bill is already fully paid');
       return;
     }
     final amountCtrl = TextEditingController(text: remaining.toStringAsFixed(2));
@@ -569,9 +597,7 @@ class _BillListViewState extends State<BillListView> {
                   onPressed: () async {
                     final amt = double.tryParse(amountCtrl.text) ?? 0.0;
                     if (amt <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please enter a valid amount'), backgroundColor: AppColors.error),
-                      );
+                      AppToast.error(context, 'Please enter a valid amount');
                       return;
                     }
                     Navigator.pop(context);
@@ -603,9 +629,7 @@ class _BillListViewState extends State<BillListView> {
                         provider.fetchBills();
                       } else {
                         HapticHelper.error();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(provider.errorMessage ?? 'Failed to record payment'), backgroundColor: AppColors.error),
-                        );
+                        AppToast.error(context, provider.errorMessage ?? 'Failed to record payment');
                       }
                     }
                   },
@@ -625,34 +649,39 @@ class _BillListViewState extends State<BillListView> {
     if (success) {
       HapticHelper.delete();
       provider.fetchBills();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          duration: const Duration(seconds: 8),
-          backgroundColor: AppColors.brandNavy,
-          content: Text('Bill ${bill.billNumber} deleted'),
-          action: SnackBarAction(
-            label: 'UNDO',
-            textColor: AppColors.goldAccent,
-            onPressed: () async {
-              final payload = bill.toJson();
-              payload.remove('id');
-              payload.remove('status');
-              if (payload['lines'] != null) {
-                payload['line_items'] = (payload['lines'] as List).map((l) {
-                  return Map<String, dynamic>.from(l);
-                }).toList();
-                payload.remove('lines');
-              }
-              final ok = await provider.createBill(payload);
-              if (ok) {
-                HapticHelper.success();
-                provider.fetchBills();
-              }
-            },
-          ),
-        ),
-      );
+      AppToast.info(context, 'Bill ${bill.billNumber} deleted');
     }
+  }
+}
+
+class _CompactAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color? color;
+  final VoidCallback onTap;
+
+  const _CompactAction({
+    required this.icon,
+    required this.tooltip,
+    this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: (color ?? AppColors.brandNavy).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Icon(icon, size: 14, color: color ?? AppColors.brandNavy),
+        ),
+      ),
+    );
   }
 }

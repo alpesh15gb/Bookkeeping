@@ -11,10 +11,10 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 import re
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import Invoice, Bill, CreditNote, DebitNote, Contact, Tenant, TenantSetting
+from src.infrastructure.database.models import Invoice, Bill, CreditNote, DebitNote, Contact, Tenant, TenantSetting, PurchaseReturn
 from src.schemas.gst_schemas import (
     GSTR1Response, GSTR1B2BLine, GSTR1B2CLine, GSTR1B2CSLine, GSTR1NoteLine, GSTR1HSNLine,
-    GSTR2Response, GSTR2B2BLine
+    GSTR2Response, GSTR2B2BLine, GSTR2B2BURLine, GSTR2NoteLine, GSTR2HSNLine
 )
 from src.domains.company.services import resolve_origin_state_code
 from src.domains.accounting.report_services import GSTR3BService
@@ -296,10 +296,43 @@ def get_gstr2_report(
     bills = q_bill.all()
 
     b2b_purchases = []
+    b2bur_purchases = []
+    hsn_groups = {}
+
     for b in bills:
         contact = b.contact
-        # GSTR-2 maps registered vendor purchases
-        if contact and contact.gstin:
+        is_registered = bool(contact and contact.gstin)
+
+        # HSN Summary aggregation for inward supplies
+        for line in b.lines:
+            hsn = line.hsn_sac or "N/A"
+            product = line.product
+            desc = product.name if product else (line.description or "N/A")
+            uom = product.uom if product else "PCS"
+
+            if hsn not in hsn_groups:
+                hsn_groups[hsn] = {
+                    "description": desc,
+                    "uom": uom,
+                    "total_quantity": Decimal("0.0000"),
+                    "total_value": Decimal("0.0000"),
+                    "taxable_value": Decimal("0.0000"),
+                    "cgst_amount": Decimal("0.0000"),
+                    "sgst_amount": Decimal("0.0000"),
+                    "igst_amount": Decimal("0.0000"),
+                    "utgst_amount": Decimal("0.0000"),
+                    "cess_amount": Decimal("0.0000")
+                }
+            hsn_groups[hsn]["total_quantity"] += line.quantity
+            hsn_groups[hsn]["total_value"] += line.total
+            hsn_groups[hsn]["taxable_value"] += line.subtotal
+            hsn_groups[hsn]["cgst_amount"] += line.cgst_amount
+            hsn_groups[hsn]["sgst_amount"] += line.sgst_amount
+            hsn_groups[hsn]["igst_amount"] += line.igst_amount
+            hsn_groups[hsn]["utgst_amount"] += line.utgst_amount
+            hsn_groups[hsn]["cess_amount"] += line.cess_amount
+
+        if is_registered:
             b2b_purchases.append(
                 GSTR2B2BLine(
                     vendor_name=contact.name,
@@ -316,8 +349,87 @@ def get_gstr2_report(
                     total_value=b.total
                 )
             )
+        else:
+            b2bur_purchases.append(
+                GSTR2B2BURLine(
+                    vendor_name=contact.name if contact else "Unregistered Vendor",
+                    bill_number=b.bill_number,
+                    bill_date=b.issue_date,
+                    pos_state_code=b.pos_state_code,
+                    taxable_value=b.subtotal,
+                    cgst_amount=b.cgst_amount,
+                    sgst_amount=b.sgst_amount,
+                    igst_amount=b.igst_amount,
+                    utgst_amount=b.utgst_amount,
+                    cess_amount=b.cess_amount,
+                    total_value=b.total
+                )
+            )
 
-    return GSTR2Response(b2b_purchases=b2b_purchases)
+    # Fetch finalized Credit/Debit Notes for Purchases (PurchaseReturn returns to vendor)
+    q_pr = db.query(PurchaseReturn).filter(
+        PurchaseReturn.tenant_id == tenant_id,
+        PurchaseReturn.status == "POSTED",
+        PurchaseReturn.deleted_at == None
+    )
+    if start_date:
+        q_pr = q_pr.filter(PurchaseReturn.issue_date >= start_date)
+    if end_date:
+        q_pr = q_pr.filter(PurchaseReturn.issue_date <= end_date)
+    purchase_returns = q_pr.all()
+
+    cdnr_purchases = []
+    cdnur_purchases = []
+
+    for pr in purchase_returns:
+        contact = pr.contact
+        is_registered = bool(contact and contact.gstin)
+
+        # Purchase Return maps to DEBIT note on purchase side
+        note_line = GSTR2NoteLine(
+            note_number=pr.return_number,
+            note_date=pr.issue_date,
+            note_type="DEBIT",
+            bill_number=pr.notes or "", # reference bill if notes holds it
+            vendor_gstin=contact.gstin if is_registered else None,
+            reason="Purchase Return",
+            taxable_value=pr.subtotal,
+            cgst_amount=pr.cgst_amount,
+            sgst_amount=pr.sgst_amount,
+            igst_amount=pr.igst_amount,
+            utgst_amount=pr.utgst_amount,
+            cess_amount=pr.cess_amount,
+            total_value=pr.total
+        )
+        if is_registered:
+            cdnr_purchases.append(note_line)
+        else:
+            cdnur_purchases.append(note_line)
+
+    hsn_summary = [
+        GSTR2HSNLine(
+            hsn_sac=hsn,
+            description=v["description"],
+            uom=v["uom"],
+            total_quantity=v["total_quantity"],
+            total_value=v["total_value"],
+            taxable_value=v["taxable_value"],
+            cgst_amount=v["cgst_amount"],
+            sgst_amount=v["sgst_amount"],
+            igst_amount=v["igst_amount"],
+            utgst_amount=v["utgst_amount"],
+            cess_amount=v["cess_amount"]
+        )
+        for hsn, v in hsn_groups.items()
+    ]
+
+    return GSTR2Response(
+        b2b_purchases=b2b_purchases,
+        b2bur_purchases=b2bur_purchases,
+        cdnr_purchases=cdnr_purchases,
+        cdnur_purchases=cdnur_purchases,
+        hsn_summary=hsn_summary
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -645,6 +757,7 @@ def export_gstr2(
     wb = openpyxl.Workbook()
     wb.remove(wb.active)
 
+    # 1. B2B Sheet
     ws_b2b = wb.create_sheet(title="b2b")
     ws_b2b.append([
         "GSTIN of Supplier", "Supplier Name", "Invoice Number", "Invoice Date", 
@@ -653,16 +766,60 @@ def export_gstr2(
         "Amount of ITC Integrated Tax", "Amount of ITC Central Tax", "Amount of ITC State/UT Tax", "Amount of ITC Cess"
     ])
 
+    # 2. B2BUR Sheet
+    ws_b2bur = wb.create_sheet(title="b2bur")
+    ws_b2bur.append([
+        "Supplier Name", "Invoice Number", "Invoice Date", "Invoice Value", "Place Of Supply",
+        "Rate", "Taxable Value", "Integrated Tax", "Central Tax", "State/UT Tax", "Cess",
+        "ITC Eligibility", "Amount of ITC Integrated Tax", "Amount of ITC Central Tax",
+        "Amount of ITC State/UT Tax", "Amount of ITC Cess"
+    ])
+
+    hsn_groups = {}
+
     for b in bills:
         contact = b.contact
-        if contact and contact.gstin:
-            rate_groups = {}
-            for line in b.lines:
-                rate = float(line.gst_rate)
-                rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
-            
-            for rate, taxable_val in rate_groups.items():
-                tax_multiplier = rate / 100.0
+        is_registered = bool(contact and contact.gstin)
+
+        # HSN Summary aggregation
+        for line in b.lines:
+            hsn = line.hsn_sac or "N/A"
+            product = line.product
+            desc = product.name if product else (line.description or "N/A")
+            uom = product.uom if product else "PCS"
+
+            if hsn not in hsn_groups:
+                hsn_groups[hsn] = {
+                    "description": desc,
+                    "uom": uom,
+                    "total_quantity": 0.0,
+                    "total_value": 0.0,
+                    "taxable_value": 0.0,
+                    "cgst_amount": 0.0,
+                    "sgst_amount": 0.0,
+                    "igst_amount": 0.0,
+                    "cess_amount": 0.0
+                }
+            hsn_groups[hsn]["total_quantity"] += float(line.quantity)
+            hsn_groups[hsn]["total_value"] += float(line.total)
+            hsn_groups[hsn]["taxable_value"] += float(line.subtotal)
+            hsn_groups[hsn]["cgst_amount"] += float(line.cgst_amount)
+            hsn_groups[hsn]["sgst_amount"] += float(line.sgst_amount)
+            hsn_groups[hsn]["igst_amount"] += float(line.igst_amount)
+            hsn_groups[hsn]["cess_amount"] += float(line.cess_amount)
+
+        rate_groups = {}
+        for line in b.lines:
+            rate = float(line.gst_rate)
+            rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+
+        for rate, taxable_val in rate_groups.items():
+            tax_multiplier = rate / 100.0
+            cgst_val = taxable_val * tax_multiplier / 2.0 if b.pos_state_code == origin_state_code else 0.0
+            sgst_val = taxable_val * tax_multiplier / 2.0 if b.pos_state_code == origin_state_code else 0.0
+            igst_val = taxable_val * tax_multiplier if b.pos_state_code != origin_state_code else 0.0
+
+            if is_registered:
                 ws_b2b.append([
                     contact.gstin,
                     contact.name,
@@ -673,24 +830,141 @@ def export_gstr2(
                     "N",
                     rate,
                     taxable_val,
-                    taxable_val * tax_multiplier if b.pos_state_code != origin_state_code else 0.0,
-                    taxable_val * tax_multiplier / 2.0 if b.pos_state_code == origin_state_code else 0.0,
-                    taxable_val * tax_multiplier / 2.0 if b.pos_state_code == origin_state_code else 0.0,
+                    igst_val,
+                    cgst_val,
+                    sgst_val,
                     0.0,
                     "Inputs",
-                    taxable_val * tax_multiplier if b.pos_state_code != origin_state_code else 0.0,
-                    taxable_val * tax_multiplier / 2.0 if b.pos_state_code == origin_state_code else 0.0,
-                    taxable_val * tax_multiplier / 2.0 if b.pos_state_code == origin_state_code else 0.0,
+                    igst_val,
+                    cgst_val,
+                    sgst_val,
+                    0.0
+                ])
+            else:
+                ws_b2bur.append([
+                    contact.name if contact else "Unregistered Vendor",
+                    b.bill_number,
+                    b.issue_date.strftime("%d-%b-%Y") if b.issue_date else "",
+                    float(b.total),
+                    format_pos(b.pos_state_code),
+                    rate,
+                    taxable_val,
+                    igst_val,
+                    cgst_val,
+                    sgst_val,
+                    0.0,
+                    "Inputs",
+                    igst_val,
+                    cgst_val,
+                    sgst_val,
                     0.0
                 ])
 
+    # 3. CDNR Sheet
+    ws_cdnr = wb.create_sheet(title="cdnr")
+    ws_cdnr.append([
+        "GSTIN of Supplier", "Supplier Name", "Note/Refund Voucher Number", "Note/Refund Voucher Date", 
+        "Document Type", "Note Value", "Place Of Supply", "Reason For Recording document", 
+        "Rate", "Taxable Value", "Integrated Tax", "Central Tax", "State/UT Tax", "Cess"
+    ])
+
+    # 4. CDNUR Sheet
+    ws_cdnur = wb.create_sheet(title="cdnur")
+    ws_cdnur.append([
+        "Supplier Name", "Note/Refund Voucher Number", "Note/Refund Voucher Date", 
+        "Document Type", "Note Value", "Place Of Supply", "Reason For Recording document", 
+        "Rate", "Taxable Value", "Integrated Tax", "Central Tax", "State/UT Tax", "Cess"
+    ])
+
+    # Fetch Purchase returns
+    q_pr = db.query(PurchaseReturn).filter(
+        PurchaseReturn.tenant_id == tenant_id,
+        PurchaseReturn.status == "POSTED",
+        PurchaseReturn.deleted_at == None
+    )
+    if start_date:
+        q_pr = q_pr.filter(PurchaseReturn.issue_date >= start_date)
+    if end_date:
+        q_pr = q_pr.filter(PurchaseReturn.issue_date <= end_date)
+    purchase_returns = q_pr.all()
+
+    for pr in purchase_returns:
+        contact = pr.contact
+        is_registered = bool(contact and contact.gstin)
+
+        rate_groups = {}
+        for line in pr.lines:
+            rate = float(line.gst_rate)
+            rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+
+        for rate, taxable_val in rate_groups.items():
+            tax_multiplier = rate / 100.0
+            cgst_val = taxable_val * tax_multiplier / 2.0 if pr.pos_state_code == origin_state_code else 0.0
+            sgst_val = taxable_val * tax_multiplier / 2.0 if pr.pos_state_code == origin_state_code else 0.0
+            igst_val = taxable_val * tax_multiplier if pr.pos_state_code != origin_state_code else 0.0
+
+            if is_registered:
+                ws_cdnr.append([
+                    contact.gstin,
+                    contact.name,
+                    pr.return_number,
+                    pr.issue_date.strftime("%d-%b-%Y") if pr.issue_date else "",
+                    "D", # Debit note (representing a return on purchase side)
+                    float(pr.total),
+                    format_pos(pr.pos_state_code),
+                    pr.notes or "Purchase Return",
+                    rate,
+                    taxable_val,
+                    igst_val,
+                    cgst_val,
+                    sgst_val,
+                    0.0
+                ])
+            else:
+                ws_cdnur.append([
+                    contact.name if contact else "Unregistered Vendor",
+                    pr.return_number,
+                    pr.issue_date.strftime("%d-%b-%Y") if pr.issue_date else "",
+                    "D",
+                    float(pr.total),
+                    format_pos(pr.pos_state_code),
+                    pr.notes or "Purchase Return",
+                    rate,
+                    taxable_val,
+                    igst_val,
+                    cgst_val,
+                    sgst_val,
+                    0.0
+                ])
+
+    # 5. HSN Sheet
+    ws_hsn = wb.create_sheet(title="hsn")
+    ws_hsn.append([
+        "HSN", "Description", "UQC", "Total Quantity", "Total Value", "Taxable Value", 
+        "Integrated Tax Amount", "Central Tax Amount", "State/UT Tax Amount", "Cess Amount"
+    ])
+    for hsn_sac, v in hsn_groups.items():
+        ws_hsn.append([
+            hsn_sac,
+            v["description"],
+            v["uom"],
+            v["total_quantity"],
+            v["total_value"],
+            v["taxable_value"],
+            v["igst_amount"],
+            v["cgst_amount"],
+            v["sgst_amount"],
+            v["cess_amount"]
+        ])
+
     header_fill = PatternFill(start_color="0B1B3D", end_color="0B1B3D", fill_type="solid")
     header_font = Font(name="Arial", size=10, bold=True, color="FFFFFF")
-    for cell in ws_b2b[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws_b2b.row_dimensions[1].height = 24
+    for sheet in wb.worksheets:
+        for cell in sheet[1]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+        sheet.row_dimensions[1].height = 24
 
     stream = BytesIO()
     wb.save(stream)
@@ -702,6 +976,35 @@ def export_gstr2(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
+
+
+@router.get("/gstr2/pdf")
+def get_gstr2_pdf(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+):
+    """Generates and streams an A4 summary PDF for GSTR-2."""
+    from src.domains.printing.invoice_pdf import generate_gstr2_pdf
+    
+    report_dict = get_gstr2_report(start_date=start_date, end_date=end_date, db=db, tenant_id=tenant_id)
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+    
+    pdf_bytes = generate_gstr2_pdf(
+        data=report_dict.model_dump(),
+        company_name=company_name,
+        start=start_date.strftime("%d-%b-%Y") if start_date else "ALL",
+        end=end_date.strftime("%d-%b-%Y") if end_date else "ALL"
+    )
+    
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=GSTR2_Report_{start_date or 'ALL'}_to_{end_date or 'ALL'}.pdf"}
+    )
+
 
 
 @router.get("/gstr3b/export")

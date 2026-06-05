@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/accounting_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class JournalEntryFormView extends StatefulWidget {
@@ -73,9 +74,7 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
 
   void _removeLine(int index) {
     if (_lines.length <= 2) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('A journal entry requires at least 2 lines'), backgroundColor: AppColors.error),
-      );
+      AppToast.error(context, 'A journal entry requires at least 2 lines');
       return;
     }
     setState(() {
@@ -100,28 +99,19 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
     final credits = double.parse(_totalCredits.toStringAsFixed(2));
 
     if (debits != credits) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Journal is out of balance by ₹${(debits - credits).abs().toStringAsFixed(2)}. Debits must equal Credits.'),
-          backgroundColor: AppColors.error,
-        ),
-      );
+      AppToast.error(context, 'Journal is out of balance by ₹${(debits - credits).abs().toStringAsFixed(2)}. Debits must equal Credits.');
       return;
     }
 
     if (debits <= 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Journal total amount must be greater than zero'), backgroundColor: AppColors.error),
-      );
+      AppToast.error(context, 'Journal total amount must be greater than zero');
       return;
     }
 
     // Validation: make sure all lines have accounts selected
     for (int i = 0; i < _lines.length; i++) {
       if (_lines[i].accountId == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Please select an account for line ${i + 1}'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, 'Please select an account for line ${i + 1}');
         return;
       }
     }
@@ -146,14 +136,10 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
     if (mounted) {
       setState(() => _isSaving = false);
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Journal entry posted successfully'), backgroundColor: AppColors.success),
-        );
+        AppToast.success(context, 'Journal entry posted successfully');
         Navigator.pop(context, true);
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(provider.errorMessage ?? 'Failed to post journal entry'), backgroundColor: AppColors.error),
-        );
+        AppToast.error(context, provider.errorMessage ?? 'Failed to post journal entry');
       }
     }
   }
@@ -193,36 +179,28 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextFormField(
+                        child: AppDateField(
                           controller: _dateCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Entry Date *',
-                            prefixIcon: Icon(Icons.calendar_today_outlined, size: 16),
-                          ),
-                          readOnly: true,
+                          label: 'Entry Date *',
                           onTap: _pickDate,
                           validator: (v) => v == null || v.isEmpty ? 'Required' : null,
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: TextFormField(
+                        child: AppTextField(
                           controller: _refCtrl,
-                          decoration: const InputDecoration(
-                            labelText: 'Reference Number (optional)',
-                            prefixIcon: Icon(Icons.tag, size: 16),
-                          ),
+                          label: 'Reference Number (optional)',
+                          prefixIcon: Icons.tag,
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  TextFormField(
+                  AppTextField(
                     controller: _descCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Description / Narration *',
-                      prefixIcon: Icon(Icons.description_outlined, size: 16),
-                    ),
+                    label: 'Description / Narration *',
+                    prefixIcon: Icons.description_outlined,
                     validator: (v) => v == null || v.trim().isEmpty ? 'Required' : null,
                   ),
                 ],
@@ -260,12 +238,10 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
                           // Account Select Dropdown
                           Expanded(
                             flex: 5,
-                            child: DropdownButtonFormField<String>(
+                            child: AppDropdown<String>(
                               value: line.accountId,
-                              decoration: const InputDecoration(
-                                labelText: 'Account',
-                                isDense: true,
-                              ),
+                              label: 'Account',
+                              compact: true,
                               items: accounts.map((a) => DropdownMenuItem<String>(
                                 value: a['id']?.toString(),
                                 child: Text('${a['code'] ?? ""} - ${a['name']}'),
@@ -279,12 +255,10 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
                           // Direction
                           Expanded(
                             flex: 3,
-                            child: DropdownButtonFormField<String>(
+                            child: AppDropdown<String>(
                               value: line.direction,
-                              decoration: const InputDecoration(
-                                labelText: 'Dr/Cr',
-                                isDense: true,
-                              ),
+                              label: 'Dr/Cr',
+                              compact: true,
                               items: const [
                                 DropdownMenuItem(value: 'DEBIT', child: Text('Debit (Dr)')),
                                 DropdownMenuItem(value: 'CREDIT', child: Text('Credit (Cr)')),
@@ -301,13 +275,11 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
                           // Amount
                           Expanded(
                             flex: 3,
-                            child: TextFormField(
+                            child: AppTextField(
                               controller: line.amountCtrl,
                               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                              decoration: const InputDecoration(
-                                labelText: 'Amount',
-                                isDense: true,
-                              ),
+                              label: 'Amount',
+                              compact: true,
                               onChanged: (_) => setState(() {}),
                               validator: (v) {
                                 if (v == null || v.isEmpty) return 'Amt';
