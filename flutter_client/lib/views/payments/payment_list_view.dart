@@ -123,12 +123,24 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
         subtitle: 'Customer payments will appear here',
       );
     }
+    num totalAmount = 0;
+    for (final r in provider.receipts) {
+      totalAmount += r.amount;
+    }
     return ListView.separated(
       padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-      itemCount: provider.receipts.length,
+      itemCount: provider.receipts.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
-        final r = provider.receipts[i];
+        if (i == 0) {
+          return HeroSummaryCard(
+            title: 'Total Receipts',
+            amount: totalAmount,
+            subtitle: '${provider.receipts.length} payments received',
+            icon: Icons.payments_outlined,
+          );
+        }
+        final r = provider.receipts[i - 1];
         return AppCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,12 +204,24 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
         subtitle: 'Vendor payments will appear here',
       );
     }
+    num totalAmount = 0;
+    for (final d in provider.disbursements) {
+      totalAmount += d.amount;
+    }
     return ListView.separated(
       padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-      itemCount: provider.disbursements.length,
+      itemCount: provider.disbursements.length + 1,
       separatorBuilder: (_, __) => const SizedBox(height: 10),
       itemBuilder: (context, i) {
-        final d = provider.disbursements[i];
+        if (i == 0) {
+          return HeroSummaryCard(
+            title: 'Total Disbursements',
+            amount: totalAmount,
+            subtitle: '${provider.disbursements.length} payments made',
+            icon: Icons.money_off_outlined,
+          );
+        }
+        final d = provider.disbursements[i - 1];
         return AppCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

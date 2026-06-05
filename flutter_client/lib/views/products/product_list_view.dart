@@ -1,10 +1,12 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/product_provider.dart';
 import 'package:flutter_client/models/product.dart';
 import 'package:flutter_client/views/products/product_form_view.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/app_components.dart' show StatusBadge, ErrorState, SummaryStatsBar, SummaryStat, FilterChipWithCount, AppConfirmDialog, AppToast, LoadingState;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
@@ -84,45 +86,29 @@ class _ProductListViewState extends State<ProductListView> {
                   children: [
                     Expanded(
                       flex: 5,
-                      child: TextField(
+                      child: AppInput(
                         controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Search items...',
-                          prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                          suffixIcon: _searchCtrl.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close, size: 16),
-                                  onPressed: () {
-                                    _searchCtrl.clear();
-                                    setState(() {});
-                                  },
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(color: AppColors.borderInput),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(color: AppColors.borderInput),
-                          ),
-                        ),
+                        hint: 'Search items...',
+                        prefix: const Icon(Icons.search_rounded, size: 18),
+                        suffix: _searchCtrl.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close, size: 16),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
                         onChanged: (_) => setState(() {}),
                       ),
                     ),
                     if (!isMobile) ...[
                       const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => _showForm(),
-                        icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
-                        label: const Text('Add Item', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandNavy,
-                          foregroundColor: AppColors.textWhite,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        ),
+                      AppButton(
+                        label: 'Add Item',
+                        icon: Icons.add,
+                        isPrimary: true,
+                        onTap: () => _showForm(),
                       ),
                     ],
                   ],
@@ -171,7 +157,7 @@ class _ProductListViewState extends State<ProductListView> {
                 : provider.errorMessage != null && provider.products.isEmpty
                     ? ErrorState(message: provider.errorMessage!, onRetry: () => provider.fetchProducts())
                     : filtered.isEmpty
-                        ? EmptyState(
+                        ? AppEmptyState(
                             icon: Icons.inventory_2_outlined,
                             title: _searchCtrl.text.isNotEmpty || _typeFilter != 'ALL'
                                 ? 'No products match your search'
@@ -194,107 +180,73 @@ class _ProductListViewState extends State<ProductListView> {
                             itemBuilder: (context, i) {
                               final product = filtered[i];
                               return AppCard(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                                onTap: () => _showForm(product: product),
-                                child: Row(
-                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                padding: const EdgeInsets.all(16),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    // Left: name + metadata
-                                    Expanded(
-                                      flex: 5,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  product.name,
-                                                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textPrimary),
-                                                  overflow: TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                              const SizedBox(width: 8),
-                                              StatusBadge.fromProductType(product.productType),
-                                            ],
+                                    // Top row: Name + badge + actions
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            product.name,
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textPrimary,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          const SizedBox(height: 3),
-                                          Row(
-                                            children: [
-                                              Text(
-                                                product.hsnSac.isNotEmpty ? 'HSN: ${product.hsnSac}' : '',
-                                                style: AppTextStyles.caption,
-                                              ),
-                                              if (product.sku != null && product.sku!.isNotEmpty) ...[
-                                                const SizedBox(width: 12),
-                                                Text(
-                                                  'SKU: ${product.sku}',
-                                                  style: AppTextStyles.caption,
-                                                ),
-                                              ],
-                                            ],
-                                          ),
-                                        ],
+                                        ),
+                                        const SizedBox(width: 8),
+                                        StatusBadge.fromProductType(product.productType),
+                                        const SizedBox(width: 4),
+                                        IconButton(
+                                          icon: const Icon(Icons.share_outlined, size: 16, color: AppColors.textMuted),
+                                          tooltip: 'Edit',
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                          onPressed: () => _showForm(product: product),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    // Subtitle: HSN/SKU
+                                    Text(
+                                      _buildSubtitle(product),
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textSecondary,
                                       ),
                                     ),
-                                    // Right: price + GST + stock
-                                    Expanded(
-                                      flex: 3,
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.end,
-                                        children: [
-                                          Text(
-                                            AmountFormat.format(product.salesPrice),
-                                            style: AppTextStyles.amountLarge.copyWith(fontSize: 15),
+                                    const SizedBox(height: 12),
+                                    // Bottom row: 3 metrics
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: _ProductMetric(
+                                            label: 'Sale Price',
+                                            value: AmountFormat.format(product.salesPrice),
                                           ),
-                                          const SizedBox(height: 2),
-                                          Row(
-                                            mainAxisAlignment: MainAxisAlignment.end,
-                                            children: [
-                                              Text(
-                                                '${product.gstRate.toStringAsFixed(0)}% GST',
-                                                style: AppTextStyles.caption,
-                                              ),
-                                              const SizedBox(width: 8),
-                                              Text(
-                                                '${product.currentStock} ${product.uom}',
-                                                style: AppTextStyles.caption.copyWith(
-                                                  fontWeight: FontWeight.w600,
-                                                  color: product.currentStock > 0
-                                                      ? AppColors.textPrimary
-                                                      : AppColors.error,
-                                                ),
-                                              ),
-                                            ],
+                                        ),
+                                        Expanded(
+                                          child: _ProductMetric(
+                                            label: 'Purchase Price',
+                                            value: AmountFormat.format(product.purchasePrice),
                                           ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    // Actions
-                                    _CompactAction(
-                                      icon: Icons.edit_outlined,
-                                      tooltip: 'Edit',
-                                      onTap: () => _showForm(product: product),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    _CompactAction(
-                                      icon: Icons.delete_outline,
-                                      tooltip: 'Delete',
-                                      color: AppColors.error,
-                                      onTap: () async {
-                                        final confirm = await AppConfirmDialog.show(
-                                          context,
-                                          title: 'Delete Product?',
-                                          message: 'Are you sure you want to delete ${product.name}?',
-                                        );
-                                        if (confirm == true) {
-                                          final success = await provider.deleteProduct(product.id);
-                                          if (!success && mounted) {
-                                            AppToast.error(context, provider.errorMessage ?? 'Delete failed');
-                                          }
-                                        }
-                                      },
+                                        ),
+                                        Expanded(
+                                          child: _ProductMetric(
+                                            label: 'In Stock',
+                                            value: '${product.currentStock} ${product.uom}',
+                                            valueColor: product.currentStock < 0
+                                                ? AppColors.error
+                                                : product.currentStock == 0
+                                                    ? AppColors.warning
+                                                    : AppColors.textPrimary,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
@@ -306,36 +258,55 @@ class _ProductListViewState extends State<ProductListView> {
       ),
     );
   }
+
+  String _buildSubtitle(ProductModel product) {
+    final parts = <String>[];
+    if (product.hsnSac.isNotEmpty) {
+      parts.add('HSN: ${product.hsnSac}');
+    }
+    if (product.sku != null && product.sku!.isNotEmpty) {
+      parts.add('SKU: ${product.sku}');
+    }
+    return parts.join(' | ');
+  }
 }
 
-class _CompactAction extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final Color? color;
-  final VoidCallback onTap;
+class _ProductMetric extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
 
-  const _CompactAction({
-    required this.icon,
-    required this.tooltip,
-    this.color,
-    required this.onTap,
+  const _ProductMetric({
+    required this.label,
+    required this.value,
+    this.valueColor,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: (color ?? AppColors.brandNavy).withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(4),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w500,
+            color: AppColors.textMuted,
+            letterSpacing: 0.3,
           ),
-          child: Icon(icon, size: 14, color: color ?? AppColors.brandNavy),
         ),
-      ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: valueColor ?? AppColors.textPrimary,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
     );
   }
 }

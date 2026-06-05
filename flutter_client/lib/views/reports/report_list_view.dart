@@ -19,17 +19,23 @@ class ReportListView extends StatefulWidget {
 }
 
 class _ReportListViewState extends State<ReportListView> {
-  final _reports = [
+  final _transactionReports = [
     {'icon': Icons.summarize_outlined, 'title': 'Trial Balance', 'subtitle': 'Sum of all account balances', 'view': const TrialBalanceView()},
     {'icon': Icons.account_balance_outlined, 'title': 'Balance Sheet', 'subtitle': 'Assets, liabilities & equity', 'view': const BalanceSheetView()},
     {'icon': Icons.trending_up_outlined, 'title': 'Profit & Loss', 'subtitle': 'Revenue and expenses', 'view': const ProfitLossView()},
+    {'icon': Icons.account_balance_wallet_outlined, 'title': 'Cash Flow', 'subtitle': 'Operating, investing & financing flows', 'view': const CashFlowView()},
+    {'icon': Icons.description_outlined, 'title': 'Day Book', 'subtitle': 'All transactions for a day', 'view': null},
+  ];
+
+  final _complianceReports = [
     {'icon': Icons.receipt_long_outlined, 'title': 'GST Returns', 'subtitle': 'GSTR-1, GSTR-3B & more', 'view': const GstReturnsView()},
+  ];
+
+  final _partyReports = [
     {'icon': Icons.bar_chart_outlined, 'title': 'Aging Report', 'subtitle': 'Outstanding receivables/payables', 'view': const AgingReportView()},
     {'icon': Icons.receipt_long_outlined, 'title': 'Party Statement', 'subtitle': 'Ledger & summary for a specific party', 'view': const PartyStatementView()},
-    {'icon': Icons.account_balance_wallet_outlined, 'title': 'Cash Flow', 'subtitle': 'Operating, investing & financing flows', 'view': const CashFlowView()},
     {'icon': Icons.arrow_circle_up_outlined, 'title': 'Outstanding Receivables', 'subtitle': 'Who owes you money', 'view': const OutstandingReceivablesView()},
     {'icon': Icons.arrow_circle_down_outlined, 'title': 'Outstanding Payables', 'subtitle': 'Who you owe money to', 'view': const OutstandingPayablesView()},
-    {'icon': Icons.description_outlined, 'title': 'Day Book', 'subtitle': 'All transactions for a day', 'view': null},
   ];
 
   void _onReportTap(Map<String, dynamic> r) {
@@ -57,6 +63,19 @@ class _ReportListViewState extends State<ReportListView> {
     );
   }
 
+  Widget _buildSection(String title, List<Map<String, dynamic>> reports) {
+    if (reports.isEmpty) return const SizedBox.shrink();
+    return SectionedCard(
+      title: title,
+      children: reports.map((r) => SettingsListTile(
+        icon: r['icon'] as IconData,
+        title: r['title'] as String,
+        subtitle: r['subtitle'] as String,
+        onTap: () => _onReportTap(r),
+      )).toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
@@ -70,40 +89,15 @@ class _ReportListViewState extends State<ReportListView> {
           child: Center(child: Text('Reports', style: AppTextStyles.h3)),
         ),
       ),
-      body: ListView.separated(
+      body: ListView(
         padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-        itemCount: _reports.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 10),
-        itemBuilder: (context, i) {
-          final r = _reports[i];
-          return AppCard(
-            onTap: () => _onReportTap(r),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.brandNavy.withValues(alpha: 0.08),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(r['icon'] as IconData, color: AppColors.brandNavy, size: 22),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(r['title'] as String, style: AppTextStyles.h3),
-                      const SizedBox(height: 2),
-                      Text(r['subtitle'] as String, style: AppTextStyles.caption),
-                    ],
-                  ),
-                ),
-                const Icon(Icons.chevron_right, color: AppColors.textMuted, size: 20),
-              ],
-            ),
-          );
-        },
+        children: [
+          _buildSection('Transaction', _transactionReports),
+          const SizedBox(height: 12),
+          _buildSection('Compliance', _complianceReports),
+          const SizedBox(height: 12),
+          _buildSection('Party', _partyReports),
+        ],
       ),
     );
   }

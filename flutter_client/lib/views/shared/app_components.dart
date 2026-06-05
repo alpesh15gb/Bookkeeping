@@ -7,6 +7,7 @@ import 'package:flutter_client/views/shared/empty_state.dart';
 
 export 'package:flutter_client/views/shared/empty_state.dart';
 export 'package:flutter_client/views/shared/toast.dart';
+export 'package:flutter_client/views/shared/design_system.dart';
 
 // ═══════════════════════════════════════════════════════════════════
 // STATUS BADGE
@@ -107,25 +108,25 @@ class StatusBadge extends StatelessWidget {
     return Semantics(
       label: 'Status: $label',
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: AppRadius.badge,
+          borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (iconData != null) ...[
-              Icon(iconData, size: 11, color: c),
-              const SizedBox(width: 3),
+              Icon(iconData, size: 12, color: c),
+              const SizedBox(width: 4),
             ],
             Text(
               label.toUpperCase(),
               style: TextStyle(
                 color: c,
-                fontSize: 10,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
-                letterSpacing: 0.2,
+                letterSpacing: 0.3,
               ),
             ),
           ],
@@ -1443,7 +1444,7 @@ class AppSearchBar extends StatelessWidget {
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hintText,
-        prefixIcon: const Icon(Icons.search, size: 20),
+        prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.brandNavy),
         suffixIcon: onClear != null
             ? IconButton(
                 icon: const Icon(Icons.clear, size: 18),
@@ -1453,9 +1454,18 @@ class AppSearchBar extends StatelessWidget {
         filled: true,
         fillColor: AppColors.bgSurface,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppRadius.md),
+          borderRadius: BorderRadius.circular(AppRadius.lg),
           borderSide: const BorderSide(color: AppColors.border),
         ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          borderSide: const BorderSide(color: AppColors.border),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(AppRadius.lg),
+          borderSide: const BorderSide(color: AppColors.brandNavy, width: 1.5),
+        ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }
@@ -2022,78 +2032,82 @@ class _CompactDocumentCardState extends State<CompactDocumentCard> {
       child: GestureDetector(
         onLongPress: widget.onLongPress,
         onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 120),
-          margin: const EdgeInsets.symmetric(vertical: 0.5),
-          decoration: BoxDecoration(
-            color: _isHovered ? AppColors.bgLight : AppColors.bgSurface,
-            borderRadius: AppRadius.card,
-            border: Border.all(
-              color: widget.isSelected ? AppColors.brandNavy : (_isHovered ? AppColors.border : AppColors.borderLight),
-              width: widget.isSelected ? 1.5 : 0.5,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 120),
+            margin: const EdgeInsets.symmetric(vertical: 3),
+            decoration: BoxDecoration(
+              color: _isHovered ? AppColors.bgLight : AppColors.bgSurface,
+              borderRadius: AppRadius.card,
+              border: Border.all(
+                color: widget.isSelected ? AppColors.brandNavy : (_isHovered ? AppColors.border : AppColors.borderLight),
+                width: widget.isSelected ? 1.5 : 1,
+              ),
+              boxShadow: _isHovered
+                  ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))]
+                  : [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 6, offset: const Offset(0, 2))],
             ),
-            boxShadow: _isHovered
-                ? [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8, offset: const Offset(0, 2))]
-                : null,
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          child: Row(
-            children: [
-              if (widget.isSelectionMode)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: Icon(
-                    widget.isSelected ? Icons.check_circle : Icons.circle_outlined,
-                    size: 18,
-                    color: widget.isSelected ? AppColors.brandNavy : AppColors.textMuted,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (widget.isSelectionMode)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 12, top: 4),
+                    child: Icon(
+                      widget.isSelected ? Icons.check_circle : Icons.circle_outlined,
+                      size: 20,
+                      color: widget.isSelected ? AppColors.brandNavy : AppColors.textMuted,
+                    ),
                   ),
-                ),
-              Expanded(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    // Left: doc number + party
-                    Expanded(
-                      flex: 4,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Top row: Party name + status
+                      Row(
+                        children: [
+                          if (widget.partyName != null && widget.partyName!.isNotEmpty)
+                            Expanded(
+                              child: Text(
+                                widget.partyName!,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                  height: 1.3,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          const SizedBox(width: 8),
+                          StatusBadge(label: widget.status),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // Middle row: Doc number + date
+                      Row(
                         children: [
                           Text(
                             '#${widget.docNumber}${widget.date != null && widget.date!.isNotEmpty ? ' • ${_formatDate(widget.date)}' : ''}',
                             style: TextStyle(
-                              fontSize: 10,
+                              fontSize: 11,
                               fontWeight: FontWeight.w500,
                               color: AppColors.textMuted,
                               letterSpacing: 0.2,
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          if (widget.partyName != null && widget.partyName!.isNotEmpty)
-                            Text(
-                              widget.partyName!,
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textPrimary,
-                                height: 1.2,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
                         ],
                       ),
-                    ),
-                    // Right: amount + balance (visually dominant)
-                    Expanded(
-                      flex: 3,
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                      const SizedBox(height: 8),
+                      // Bottom row: Amount left, balance + actions right
+                      Row(
                         crossAxisAlignment: CrossAxisAlignment.end,
                         children: [
+                          // Amount
                           Text(
                             AmountFormat.format(widget.amount),
                             style: TextStyle(
-                              fontSize: 18,
+                              fontSize: 20,
                               fontWeight: FontWeight.w700,
                               color: AppColors.textPrimary,
                               fontFeatures: const [FontFeature.tabularFigures()],
@@ -2101,47 +2115,57 @@ class _CompactDocumentCardState extends State<CompactDocumentCard> {
                               height: 1.2,
                             ),
                           ),
-                          if (widget.balanceLabel != null && widget.balanceAmount != null && widget.balanceAmount! > 0)
-                            Text(
-                              '${widget.balanceLabel!.toUpperCase()} ${AmountFormat.format(widget.balanceAmount!)}',
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.error,
-                                fontFeatures: const [FontFeature.tabularFigures()],
-                              ),
+                          const Spacer(),
+                          // Balance
+                          if (widget.balanceLabel != null)
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                if (widget.balanceAmount != null && widget.balanceAmount! > 0)
+                                  Text(
+                                    '${widget.balanceLabel!.toUpperCase()} ${AmountFormat.format(widget.balanceAmount!)}',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.error,
+                                      fontFeatures: const [FontFeature.tabularFigures()],
+                                    ),
+                                  ),
+                                if (widget.balanceAmount == null || widget.balanceAmount! <= 0)
+                                  Text(
+                                    widget.balanceLabel!.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.success,
+                                    ),
+                                  ),
+                              ],
                             ),
-                          if (widget.balanceLabel != null && (widget.balanceAmount == null || widget.balanceAmount! <= 0))
-                            Text(
-                              widget.balanceLabel!.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.success,
-                              ),
+                          // Hover actions
+                          if (_isHovered && widget.hoverActions != null && widget.hoverActions!.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: widget.hoverActions!,
                             ),
+                          ],
+                          // Actions
+                          if (widget.actions != null && widget.actions!.isNotEmpty) ...[
+                            const SizedBox(width: 8),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: widget.actions!,
+                            ),
+                          ],
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 6),
-                    // Status badge
-                    StatusBadge(label: widget.status),
-                    // Hover actions
-                    if (_isHovered && widget.hoverActions != null && widget.hoverActions!.isNotEmpty) ...[
-                      const SizedBox(width: 4),
-                      ...widget.hoverActions!,
                     ],
-                    // Actions
-                    if (widget.actions != null && widget.actions!.isNotEmpty) ...[
-                      const SizedBox(width: 4),
-                      ...widget.actions!,
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
-        ),
       ),
     );
   }
@@ -2394,4 +2418,268 @@ class AmountSummaryCardData {
     required this.value,
     required this.color,
   });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// HERO SUMMARY CARD (for list screens)
+// ═══════════════════════════════════════════════════════════════════
+
+class HeroSummaryCard extends StatelessWidget {
+  final String title;
+  final num amount;
+  final Color? amountColor;
+  final String? subtitle;
+  final IconData? icon;
+
+  const HeroSummaryCard({
+    super.key,
+    required this.title,
+    required this.amount,
+    this.amountColor,
+    this.subtitle,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 16, color: AppColors.textMuted),
+                const SizedBox(width: 8),
+              ],
+              Text(
+                title.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.5,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            AmountFormat.format(amount),
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: amountColor ?? AppColors.textPrimary,
+              fontFeatures: const [FontFeature.tabularFigures()],
+              letterSpacing: 0.1,
+              height: 1.2,
+            ),
+          ),
+          if (subtitle != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle!,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// BOTTOM ACTION BAR (for mobile)
+// ═══════════════════════════════════════════════════════════════════
+
+class BottomActionBar extends StatelessWidget {
+  final List<Widget> children;
+  final EdgeInsets padding;
+
+  const BottomActionBar({
+    super.key,
+    required this.children,
+    this.padding = const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        border: const Border(top: BorderSide(color: AppColors.border)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 8,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        child: Row(
+          children: children.map((w) => Expanded(child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: w,
+          ))).toList(),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SETTINGS LIST TILE (for grouped settings screens)
+// ═══════════════════════════════════════════════════════════════════
+
+class SettingsListTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? subtitle;
+  final VoidCallback? onTap;
+  final Widget? trailing;
+  final bool showNewBadge;
+  final Color? iconColor;
+
+  const SettingsListTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.subtitle,
+    this.onTap,
+    this.trailing,
+    this.showNewBadge = false,
+    this.iconColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: (iconColor ?? AppColors.brandNavy).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  icon,
+                  size: 18,
+                  color: iconColor ?? AppColors.brandNavy,
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        if (showNewBadge) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.error,
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'NEW',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (subtitle != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        subtitle!,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              if (trailing != null)
+                trailing!
+              else if (onTap != null)
+                const Icon(Icons.chevron_right, size: 20, color: AppColors.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// SECTIONED CARD (for grouped lists like Reports, Settings)
+// ═══════════════════════════════════════════════════════════════════
+
+class SectionedCard extends StatelessWidget {
+  final String? title;
+  final List<Widget> children;
+  final EdgeInsets padding;
+
+  const SectionedCard({
+    super.key,
+    this.title,
+    required this.children,
+    this.padding = const EdgeInsets.symmetric(vertical: 8),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      padding: padding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+              child: Text(
+                title!.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textMuted,
+                  letterSpacing: 0.8,
+                ),
+              ),
+            ),
+          ...children,
+        ],
+      ),
+    );
+  }
 }

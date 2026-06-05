@@ -39,6 +39,18 @@ FONT_NORMAL = 'Inter'      if _INTER_LOADED else 'Helvetica'
 FONT_BOLD   = 'Inter-Bold' if _INTER_LOADED else 'Helvetica-Bold'
 RUPEE       = '\u20b9'     if _INTER_LOADED else 'Rs.'  # ₹ or Rs.
 
+STATE_CODES = {
+    "01": "Jammu & Kashmir", "02": "Himachal Pradesh", "03": "Punjab", "04": "Chandigarh",
+    "05": "Uttarakhand", "06": "Haryana", "07": "Delhi", "08": "Rajasthan", "09": "Uttar Pradesh",
+    "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur",
+    "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal",
+    "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
+    "25": "Daman & Diu", "26": "Dadra & Nagar Haveli", "27": "Maharashtra", "28": "Andhra Pradesh",
+    "29": "Karnataka", "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu",
+    "34": "Puducherry", "35": "Andaman & Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh (New)",
+    "38": "Ladakh", "97": "Other Territory"
+}
+
 def generate_invoice_pdf(
     invoice_number: str,
     issue_date,
@@ -472,76 +484,188 @@ def generate_invoice_pdf(
             ('PADDING', (0,0), (-1,-1), 0),
         ])
         elements.append(bottom_table)
-
-    # Render A4 Tally GST Layout (Format 2 - Tata Motors Style Boxy Layout)
+     # Render A4 Tally GST Layout (Format 2 - Tata Motors Style Boxy Layout)
     elif template == "tally_gst":
-        tally_primary = colors.HexColor('#0F1B3D')
-        tally_border = colors.HexColor('#475569')
+        tally_primary = colors.HexColor('#000000')
+        tally_border = colors.HexColor('#000000')
         
         # Header banner
-        title_p = Paragraph(f"<b>TAX INVOICE</b>", ParagraphStyle('TallyTitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=12, alignment=TA_CENTER, textColor=tally_primary))
-        elements.append(Table([[title_p]], colWidths=[186*mm], style=[
-            ('BOX', (0,0), (-1,-1), 1, tally_border),
-            ('PADDING', (0,0), (-1,-1), 3),
-            ('BACKGROUND', (0,0), (-1,-1), colors.HexColor('#E2E8F0'))
+        title_p = Paragraph(f"<b>Tax Invoice</b>", ParagraphStyle('TallyTitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=12, alignment=TA_CENTER, textColor=colors.black))
+        orig_p = Paragraph(f"<font size=8 color='#555555'>ORIGINAL FOR RECIPIENT</font>", ParagraphStyle('OrigR', parent=styles['Normal'], alignment=TA_RIGHT))
+        elements.append(Table([[title_p, orig_p]], colWidths=[110*mm, 76*mm], style=[
+            ('VALIGN', (0,0), (-1,-1), 'BOTTOM'),
+            ('PADDING', (0,0), (-1,-1), 2)
         ]))
+        elements.append(Spacer(1, 1*mm))
         
-        # Header main grid
-        company_p = Paragraph(f"<b>{company_name}</b><br/>{company_address}<br/>GSTIN: {company_gstin or 'N/A'}<br/>PAN: {company_pan or 'N/A'}<br/>Mobile: {company_phone} | Email: {company_email}", normal_style)
-        invoice_meta_p = Paragraph(f"<b>Invoice No:</b> {invoice_number}<br/><b>Date:</b> {issue_date}<br/><b>Due Date:</b> {due_date}<br/><b>Place of Supply:</b> {origin_state_code or 'N/A'}", normal_style)
+        # Header main grid (Left: Company Name, logo placeholder, address, GSTIN, State. Right: Invoice No, Date, POS)
+        state_code_str = origin_state_code or (company_gstin[:2] if company_gstin and len(company_gstin) >= 2 and company_gstin[:2].isdigit() else "36")
+        state_name = STATE_CODES.get(state_code_str, "Telangana")
+        formatted_state = f"{state_code_str}-{state_name}"
+
+        co_str = f"<b><font size=12>{company_name}</font></b><br/>"
+        if company_address:
+            co_str += f"<font size=8>{company_address}</font><br/>"
+        if company_phone:
+            co_str += f"<font size=8>Phone no.: {company_phone}</font><br/>"
+        if company_email:
+            co_str += f"<font size=8>Email: {company_email}</font><br/>"
+        if company_gstin:
+            co_str += f"<font size=8>GSTIN: {company_gstin}</font><br/>"
+        co_str += f"<font size=8>State: {formatted_state}</font>"
         
-        header_grid = Table([[company_p, invoice_meta_p]], colWidths=[110*mm, 76*mm], style=[
+        company_p = Paragraph(co_str, normal_style)
+        
+        meta_table_data = [
+            [Paragraph("Invoice No.", ParagraphStyle('MetaH', parent=normal_style, fontSize=7, textColor=colors.HexColor('#555555'))),
+             Paragraph("Date", ParagraphStyle('MetaH2', parent=normal_style, fontSize=7, textColor=colors.HexColor('#555555')))],
+            [Paragraph(f"<b>{invoice_number}</b>", ParagraphStyle('MetaVal', parent=normal_style, fontName='Helvetica-Bold', fontSize=9)),
+             Paragraph(f"<b>{issue_date}</b>", ParagraphStyle('MetaVal2', parent=normal_style, fontName='Helvetica-Bold', fontSize=9))],
+            [Paragraph("Place of supply", ParagraphStyle('MetaH3', parent=normal_style, fontSize=7, textColor=colors.HexColor('#555555'))), ""],
+            [Paragraph(f"<b>{formatted_state}</b>", ParagraphStyle('MetaVal3', parent=normal_style, fontName='Helvetica-Bold', fontSize=9)), ""]
+        ]
+        meta_table = Table(meta_table_data, colWidths=[38*mm, 38*mm], style=[
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+            ('PADDING', (0,0), (-1,-1), 3),
+            ('SPAN', (0,2), (1,2)),
+            ('SPAN', (0,3), (1,3)),
+            ('LINEBELOW', (0,1), (1,1), 0.5, tally_border),
+            ('LINEBELOW', (0,3), (1,3), 0.5, tally_border),
+            ('LINEAFTER', (0,0), (0,1), 0.5, tally_border),
+        ])
+        
+        header_grid = Table([[company_p, meta_table]], colWidths=[110*mm, 76*mm], style=[
             ('BOX', (0,0), (-1,-1), 1, tally_border),
             ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('PADDING', (0,0), (-1,-1), 6)
+            ('PADDING', (0,0), (-1,-1), 4)
         ])
         elements.append(header_grid)
         
-        # Billing & Shipping info side-by-side
-        cust_addr_str = f"<br/>{customer_address}" if customer_address else ""
-        bill_to_p = Paragraph(f"<b>Consignee (Ship To):</b><br/>{customer_name}{cust_addr_str}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style)
-        ship_to_p = Paragraph(f"<b>Buyer (Bill To):</b><br/>{customer_name}{cust_addr_str}<br/>GSTIN: {customer_gstin or 'Unregistered'}", normal_style)
+        # Billing details box (Bill To)
+        bill_to_str = f"Bill To<br/><b>{customer_name}</b><br/>"
+        if customer_address:
+            bill_to_str += f"{customer_address}<br/>"
+        if customer_gstin:
+            bill_to_str += f"GSTIN : {customer_gstin}<br/>"
         
-        party_grid = Table([[bill_to_p, ship_to_p]], colWidths=[93*mm, 93*mm], style=[
+        cust_state_code = customer_gstin[:2] if customer_gstin and len(customer_gstin) >= 2 and customer_gstin[:2].isdigit() else "36"
+        cust_state_name = STATE_CODES.get(cust_state_code, "Telangana")
+        formatted_cust_state = f"{cust_state_code}-{cust_state_name}"
+        bill_to_str += f"State: {formatted_cust_state}"
+        
+        bill_to_table = Table([[Paragraph(bill_to_str, normal_style)]], colWidths=[186*mm], style=[
             ('BOX', (0,0), (-1,-1), 1, tally_border),
-            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('PADDING', (0,0), (-1,-1), 6)
+            ('PADDING', (0,0), (-1,-1), 5)
         ])
-        elements.append(party_grid)
-
-        # Items Table (Tally style columns: S.No., Description, HSN/SAC, GST Rate, Qty, Rate, Amount)
-        table_headers = ['S.No.', 'Description of Goods', 'HSN/SAC', 'GST Rate', 'Qty', 'Rate', 'Amount']
-        grid_data = [[Paragraph(f"<b>{h}</b>", bold_style) for h in table_headers]]
-        for i, item in enumerate(items, 1):
+        elements.append(bill_to_table)
+        
+        # Items Table (Columns: #, Item name, HSN/SAC, Quantity, Price/Unit, GST, Amount)
+        table_headers = [
+            Paragraph("<b>#</b>", ParagraphStyle('ColH', parent=bold_style, fontSize=8)),
+            Paragraph("<b>Item name</b>", ParagraphStyle('ColH2', parent=bold_style, fontSize=8)),
+            Paragraph("<b>HSN/SAC</b>", ParagraphStyle('ColH3', parent=bold_style, fontSize=8)),
+            Paragraph("<b>Quantity</b>", ParagraphStyle('ColH4', parent=bold_style, fontSize=8, alignment=TA_RIGHT)),
+            Paragraph("<b>Price/ Unit</b>", ParagraphStyle('ColH5', parent=bold_style, fontSize=8, alignment=TA_RIGHT)),
+            Paragraph("<b>GST</b>", ParagraphStyle('ColH6', parent=bold_style, fontSize=8, alignment=TA_RIGHT)),
+            Paragraph("<b>Amount</b>", ParagraphStyle('ColH7', parent=bold_style, fontSize=8, alignment=TA_RIGHT))
+        ]
+        grid_data = [table_headers]
+        
+        tot_qty = 0.0
+        tot_gst_tax = 0.0
+        for idx, item in enumerate(items, 1):
             desc = item.get('description') or item.get('product_name') or 'N/A'
             hsn = item.get('hsn_sac') or ''
-            gst_r = f"{item.get('gst_rate', 0):.0f}%"
             qty = float(item.get('quantity', 0))
+            tot_qty += qty
             rate = float(item.get('rate', 0))
             amt = float(item.get('total', item.get('amount', 0)))
+            
+            # calculate tax amount for display
+            gst_rate = float(item.get('gst_rate', 0))
+            cgst_amt = float(item.get('cgst_amount', 0))
+            sgst_amt = float(item.get('sgst_amount', 0))
+            igst_amt = float(item.get('igst_amount', 0))
+            tax_amt = cgst_amt + sgst_amt + igst_amt
+            tot_gst_tax += tax_amt
+            
             grid_data.append([
-                Paragraph(str(i), normal_style),
+                Paragraph(str(idx), normal_style),
                 Paragraph(desc, normal_style),
                 Paragraph(hsn, normal_style),
-                Paragraph(gst_r, normal_style),
-                Paragraph(f"{qty:.0f}", normal_style),
-                Paragraph(f"{rate:.2f}", normal_style),
-                Paragraph(f"{amt:.2f}", normal_style)
+                Paragraph(f"{qty:.0f}", right_style),
+                Paragraph(f"{RUPEE} {rate:,.2f}", right_style),
+                Paragraph(f"{RUPEE} {tax_amt:,.2f} ({gst_rate:.0f}%)", right_style),
+                Paragraph(f"{RUPEE} {amt:,.2f}", right_style)
             ])
             
-        items_table = Table(grid_data, colWidths=[12*mm, 84*mm, 20*mm, 18*mm, 16*mm, 18*mm, 18*mm], style=[
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F8FAFC')),
+        # Add empty rows to match height if list is short
+        target_rows = 4
+        if len(items) < target_rows:
+            for _ in range(target_rows - len(items)):
+                grid_data.append([Paragraph("", normal_style), Paragraph("", normal_style), Paragraph("", normal_style), Paragraph("", normal_style), Paragraph("", normal_style), Paragraph("", normal_style), Paragraph("", normal_style)])
+                
+        # Total line in table
+        grid_data.append([
+            Paragraph("", bold_style),
+            Paragraph("<b>Total</b>", bold_style),
+            Paragraph("", bold_style),
+            Paragraph(f"<b>{tot_qty:.0f}</b>", bold_right),
+            Paragraph("", bold_style),
+            Paragraph(f"<b>{RUPEE} {tot_gst_tax:,.2f}</b>", bold_right),
+            Paragraph(f"<b>{RUPEE} {float(total):,.2f}</b>", bold_right)
+        ])
+        
+        items_table = Table(grid_data, colWidths=[10*mm, 68*mm, 20*mm, 20*mm, 22*mm, 24*mm, 22*mm], style=[
             ('BOX', (0,0), (-1,-1), 1, tally_border),
-            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-            ('PADDING', (0,0), (-1,-1), 4),
+            ('PADDING', (0,0), (-1,-1), 3),
+            ('LINEBELOW', (0,0), (-1,0), 1, tally_border),
+            ('LINEABOVE', (0,-1), (-1,-1), 1, tally_border),
         ])
         elements.append(items_table)
         
-        # Totals and GST analysis
-        # 1. Summarize GST by HSN/SAC
+        # Invoice Amount in words and Amount summaries
+        # Convert total to words or use a default string
+        try:
+            from src.common.utils import num2words
+        except ImportError:
+            num2words = lambda n: ""
+        try:
+            words_str = f"<b>Invoice Amount in Words</b><br/>{num2words(int(total)).title()} Rupees Only"
+        except Exception:
+            words_str = "<b>Invoice Amount in Words</b><br/>Amount calculated"
+            
+        amounts_col = [
+            [Paragraph("Sub Total", normal_style), Paragraph(f"{RUPEE} {float(subtotal):,.2f}", right_style)],
+            [Paragraph("Round off", normal_style), Paragraph(f"{RUPEE} {float(round_off):,.2f}", right_style)],
+            [Paragraph("<b>Total</b>", bold_style), Paragraph(f"<b>{RUPEE} {float(total):,.2f}</b>", bold_right)],
+            [Paragraph("Received", normal_style), Paragraph(f"{RUPEE} {float(amount_paid):,.2f}", right_style)],
+            [Paragraph("Balance", bold_style), Paragraph(f"<b>{RUPEE} {float(balance_due):,.2f}</b>", bold_right)]
+        ]
+        amounts_table = Table(amounts_col, colWidths=[38*mm, 32*mm], style=[
+            ('PADDING', (0,0), (-1,-1), 2),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('LINEBELOW', (0,0), (-1,-2), 0.5, colors.HexColor('#E2E8F0')),
+            ('LINEABOVE', (0,-1), (-1,-1), 0.5, tally_border)
+        ])
+        
+        summary_grid = Table([
+            [Paragraph(words_str, normal_style), amounts_table],
+            [Paragraph(f"Payment mode<br/><b>Credit</b>", normal_style), ""]
+        ], colWidths=[116*mm, 70*mm], style=[
+            ('BOX', (0,0), (-1,-1), 1, tally_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
+            ('SPAN', (0,0), (0,0)),
+            ('SPAN', (1,0), (1,1)),
+            ('PADDING', (0,0), (-1,-1), 4),
+            ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ])
+        elements.append(summary_grid)
+        
+        # GST Tax Analysis Breakdown (Double Columns CGST/SGST/IGST breakdown)
         hsn_summary = {}
         for item in items:
             hsn = item.get('hsn_sac') or 'N/A'
@@ -559,62 +683,63 @@ def generate_invoice_pdf(
             hsn_summary[hsn]['cgst'] += cgst_amt
             hsn_summary[hsn]['sgst'] += sgst_amt
             hsn_summary[hsn]['igst'] += igst_amt
-
-        gst_analysis_headers = ['HSN/SAC', 'Taxable Value', 'Central Tax (Rate/Amt)', 'State Tax (Rate/Amt)', 'Total Tax']
-        gst_analysis_rows = [[Paragraph(f"<b>{h}</b>", bold_style) for h in gst_analysis_headers]]
+            
+            gst_analysis_headers = [
+            [Paragraph("<b>HSN/ SAC</b>", bold_style), Paragraph("<b>Taxable amount</b>", bold_style), Paragraph("<b>CGST</b>", bold_style), "", Paragraph("<b>SGST</b>", bold_style), "", Paragraph("<b>Total Tax Amount</b>", bold_style)],
+            ["", "", Paragraph("Rate", normal_style), Paragraph("Amount", normal_style), Paragraph("Rate", normal_style), Paragraph("Amount", normal_style), ""]
+        ]
+        
         for hsn, val in hsn_summary.items():
             tot_tax = val['cgst'] + val['sgst'] + val['igst']
-            gst_analysis_rows.append([
+            gst_analysis_headers.append([
                 Paragraph(hsn, normal_style),
-                Paragraph(f"{val['taxable']:.2f}", normal_style),
-                Paragraph(f"{val['cgst_rate']:.0f}% / {val['cgst']:.2f}", normal_style),
-                Paragraph(f"{val['sgst_rate']:.0f}% / {val['sgst']:.2f}", normal_style),
-                Paragraph(f"{tot_tax:.2f}", normal_style),
+                Paragraph(f"{RUPEE} {val['taxable']:,.2f}", right_style),
+                Paragraph(f"{val['cgst_rate']:.0f}%", right_style),
+                Paragraph(f"{RUPEE} {val['cgst']:,.2f}", right_style),
+                Paragraph(f"{val['sgst_rate']:.0f}%", right_style),
+                Paragraph(f"{RUPEE} {val['sgst']:,.2f}", right_style),
+                Paragraph(f"{RUPEE} {tot_tax:,.2f}", right_style),
             ])
             
-        gst_analysis_table = Table(gst_analysis_rows, colWidths=[24*mm, 36*mm, 48*mm, 48*mm, 30*mm], style=[
-            ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#F1F5F9')),
-            ('BOX', (0,0), (-1,-1), 1, tally_border),
-            ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
-            ('PADDING', (0,0), (-1,-1), 4),
+        gst_analysis_headers.append([
+            Paragraph("<b>Total</b>", bold_style),
+            Paragraph(f"<b>{RUPEE} {float(subtotal):,.2f}</b>", bold_right),
+            "",
+            Paragraph(f"<b>{RUPEE} {float(cgst):,.2f}</b>", bold_right),
+            "",
+            Paragraph(f"<b>{RUPEE} {float(sgst):,.2f}</b>", bold_right),
+            Paragraph(f"<b>{RUPEE} {float(cgst + sgst):,.2f}</b>", bold_right)
         ])
         
-        # Bank & Summary layout
-        bank_details_str = f"<b>Bank Details:</b><br/>Bank: {bank_name or 'N/A'}<br/>A/c No: {bank_account_no or 'N/A'}<br/>IFSC: {bank_ifsc or 'N/A'}<br/>Branch: {bank_branch or 'N/A'}"
-        totals_col = [
-            [Paragraph("Taxable Amount:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
-            [Paragraph("Total CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)],
-            [Paragraph("Total SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
-            [Paragraph("Total IGST:", normal_style), Paragraph(f"Rs. {igst:.2f}", right_style)],
-            [Paragraph("<b>Grand Total:</b>", bold_style), Paragraph(f"<b>Rs. {total:.2f}</b>", bold_right)],
-        ]
-        if has_payments:
-            totals_col.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
-            totals_col.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
-        totals_table = Table(totals_col, colWidths=[38*mm, 32*mm], style=[('PADDING', (0,0), (-1,-1), 2)])
+        gst_analysis_table = Table(gst_analysis_headers, colWidths=[30*mm, 34*mm, 18*mm, 24*mm, 18*mm, 24*mm, 38*mm], style=[
+            ('BOX', (0,0), (-1,-1), 1, tally_border),
+            ('INNERGRID', (0,0), (-1,-1), 0.5, colors.HexColor('#CCCCCC')),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ('SPAN', (0,0), (0,1)),
+            ('SPAN', (1,0), (1,1)),
+            ('SPAN', (2,0), (3,0)),
+            ('SPAN', (4,0), (5,0)),
+            ('SPAN', (6,0), (6,1)),
+            ('PADDING', (0,0), (-1,-1), 3),
+        ])
+        elements.append(Spacer(1, 1*mm))
+        elements.append(gst_analysis_table)
         
-        bottom_summary_grid = Table([[Paragraph(bank_details_str, normal_style), qr_drawing, totals_table]], colWidths=[78*mm, 32*mm, 76*mm], style=[
+        # Bank Details, Terms & Conditions, Authorized Signatory Block
+        bank_details_str = f"<b>Bank Details</b><br/>Name : {bank_name or 'N/A'}<br/>Account No. : {bank_account_no or 'N/A'}<br/>IFSC code : {bank_ifsc or 'N/A'}<br/>Account holder's name : {company_name}"
+        terms_str = f"<b>Terms and conditions</b><br/>{terms or 'Thanks for doing business with us!'}"
+        sign_block = f"For : {company_name}<br/><br/><br/><br/><b>Authorized Signatory</b>"
+        
+        bottom_grid = Table([
+            [Paragraph(bank_details_str, normal_style), Paragraph(terms_str, normal_style), Paragraph(sign_block, center_style)]
+        ], colWidths=[66*mm, 56*mm, 64*mm], style=[
             ('BOX', (0,0), (-1,-1), 1, tally_border),
             ('INNERGRID', (0,0), (-1,-1), 0.5, tally_border),
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
             ('PADDING', (0,0), (-1,-1), 6)
         ])
-        
-        elements.append(Spacer(1, 2*mm))
-        elements.append(Paragraph("<b>GST Tax Analysis Breakdown</b>", bold_style))
         elements.append(Spacer(1, 1*mm))
-        elements.append(gst_analysis_table)
-        elements.append(Spacer(1, 2*mm))
-        elements.append(bottom_summary_grid)
-        
-        elements.append(Spacer(1, 2*mm))
-        terms_str = f"<b>Terms & Conditions:</b><br/>{terms or 'Goods once sold will not be taken back.'}"
-        sign_block = f"<br/>for <b>{company_name}</b><br/><br/><br/>Authorised Signatory"
-        bottom_table = Table([[Paragraph(terms_str, caption_style), Paragraph(sign_block, center_style)]], colWidths=[120*mm, 66*mm], style=[
-            ('VALIGN', (0,0), (-1,-1), 'TOP'),
-            ('PADDING', (0,0), (-1,-1), 0),
-        ])
-        elements.append(bottom_table)
+        elements.append(bottom_grid)
 
     # Render A4 Classic Blue Grid Layout (Format 3 - JOT Style with continuous vertical lines)
     elif template == "classic_blue":

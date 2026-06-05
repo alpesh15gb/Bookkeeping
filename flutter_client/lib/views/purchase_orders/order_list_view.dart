@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/app_components.dart' hide AppCard, AppEmptyState;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/purchase_orders/purchase_order_form_view.dart';
@@ -323,63 +324,29 @@ class _OrderListViewState extends State<OrderListView> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
+                      child: AppInput(
                         controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Search orders...',
-                          prefixIcon: const Icon(
-                            Icons.search_rounded,
-                            size: 18,
-                          ),
-                          suffixIcon: _searchCtrl.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close, size: 16),
-                                  onPressed: () {
-                                    _searchCtrl.clear();
-                                    setState(() {});
-                                  },
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 10,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(
-                              color: AppColors.borderInput,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(
-                              color: AppColors.borderInput,
-                            ),
-                          ),
-                        ),
-                        onChanged: (v) {
-                          setState(() {});
-                        },
+                        hint: 'Search orders...',
+                        prefix: const Icon(Icons.search_rounded, size: 18),
+                        suffix: _searchCtrl.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close, size: 16),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
+                        onChanged: (v) => setState(() {}),
                       ),
                     ),
                     if (!isMobile) ...[
                       const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => _showPOForm(type: docType),
-                        icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
-                        label: const Text(
-                          'Create Order',
-                          style: TextStyle(fontSize: 12, color: AppColors.textWhite),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandNavy,
-                          foregroundColor: AppColors.textWhite,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                        ),
+                      AppButton(
+                        label: 'Create Order',
+                        icon: Icons.add,
+                        isPrimary: true,
+                        onTap: () => _showPOForm(type: docType),
                       ),
                     ],
                   ],
@@ -413,6 +380,21 @@ class _OrderListViewState extends State<OrderListView> {
             ),
           ),
 
+          // ── Hero Summary Card ──
+          if (!_isLoading && _allOrders.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 20,
+                vertical: 8,
+              ),
+              child: HeroSummaryCard(
+                title: isPurchase ? 'Total Purchase Orders' : 'Total Sales Orders',
+                amount: totalCount,
+                subtitle: '$draftCount draft · $confirmedCount confirmed',
+                icon: Icons.receipt_long_outlined,
+              ),
+            ),
+
           // ── List Body ──
           Expanded(
             child: _isLoading && _allOrders.isEmpty
@@ -423,7 +405,7 @@ class _OrderListViewState extends State<OrderListView> {
                     ),
                   )
                 : filteredOrders.isEmpty
-                ? EmptyState(
+                ? AppEmptyState(
                     icon: Icons.shopping_cart_outlined,
                     title:
                         'No ${isPurchase ? 'purchase' : 'sales'} orders found',
@@ -438,7 +420,7 @@ class _OrderListViewState extends State<OrderListView> {
                     children: [
                       RefreshIndicator(
                         onRefresh: () async => _fetch(),
-                        child: ListView.separated(
+                        child: ListView.builder(
                           padding: EdgeInsets.only(
                             left: isMobile ? 12 : 20,
                             right: isMobile ? 12 : 20,
@@ -448,8 +430,6 @@ class _OrderListViewState extends State<OrderListView> {
                                 : (isMobile ? 12 : 20),
                           ),
                           itemCount: filteredOrders.length,
-                          separatorBuilder: (context, _) =>
-                              const SizedBox(height: 6),
                           itemBuilder: (context, i) {
                             final order = filteredOrders[i];
                             final id = order['id'].toString();
@@ -463,22 +443,109 @@ class _OrderListViewState extends State<OrderListView> {
                                 order['created_at'] ??
                                 '';
 
-                            return CompactDocumentCard(
-                              docNumber: numVal?.toString() ?? 'ORDER',
-                              partyName: partyDisplayName.isNotEmpty
-                                  ? partyDisplayName
-                                  : null,
-                              date: date?.toString(),
-                              amount:
-                                  double.parse((order['total'] ?? 0).toString()),
-                              status: order['status'] ?? '',
-                              isSelected: isSelected,
-                              isSelectionMode: _isSelectionMode,
-                              onTap: () {
-                                if (_isSelectionMode) {
-                                  _toggleSelection(id);
-                                }
-                              },
+                            final itemActions = _isSelectionMode
+                                ? <Widget>[]
+                                : [
+                                    if (order['status'] == 'DRAFT') ...[
+                                      _CompactAction(
+                                        icon: Icons.edit_outlined,
+                                        tooltip: 'Edit',
+                                        onTap: () => _showPOForm(
+                                          order: order,
+                                          type: docType,
+                                        ),
+                                      ),
+                                      _CompactAction(
+                                        icon: Icons.check_circle_outlined,
+                                        tooltip: 'Confirm',
+                                        color: AppColors.warning,
+                                        onTap: () => _transition(
+                                          order['id'],
+                                          docType,
+                                          'confirm',
+                                        ),
+                                      ),
+                                    ],
+                                    if (order['status'] == 'CONFIRMED' &&
+                                        isPurchase)
+                                      _CompactAction(
+                                        icon: Icons.inbox_outlined,
+                                        tooltip: 'Receive',
+                                        onTap: () => _transition(
+                                          order['id'],
+                                          docType,
+                                          'receive',
+                                        ),
+                                      ),
+                                    if (order['status'] == 'CONFIRMED' &&
+                                        !isPurchase)
+                                      _CompactAction(
+                                        icon: Icons.local_shipping_outlined,
+                                        tooltip: 'Deliver',
+                                        onTap: () => _transition(
+                                          order['id'],
+                                          docType,
+                                          'deliver',
+                                        ),
+                                      ),
+                                    if (order['status'] == 'DELIVERED' &&
+                                        !isPurchase)
+                                      _CompactAction(
+                                        icon: Icons.swap_horiz_outlined,
+                                        tooltip: 'Create Invoice',
+                                        onTap: () =>
+                                            _convertSalesOrderToInvoice(
+                                          Map<String, dynamic>.from(order),
+                                        ),
+                                      ),
+                                    if (order['status'] != 'CANCELLED' &&
+                                        order['status'] != 'RECEIVED' &&
+                                        order['status'] != 'DELIVERED')
+                                      _CompactAction(
+                                        icon: Icons.cancel_outlined,
+                                        tooltip: 'Cancel',
+                                        color: AppColors.error,
+                                        onTap: () => _cancelOrder(
+                                          order['id'],
+                                          docType,
+                                        ),
+                                      ),
+                                    Tooltip(
+                                      message: 'Share / Print',
+                                      child: GestureDetector(
+                                        onTap: () {
+                                          PrintShareHelper.showShareSheet(
+                                            context,
+                                            docLabel: isPurchase
+                                                ? 'Purchase Order'
+                                                : 'Sales Order',
+                                            docNumber:
+                                                numVal?.toString() ?? 'N/A',
+                                            docType: isPurchase
+                                                ? 'purchase-orders'
+                                                : 'sales-orders',
+                                            docId: order['id'],
+                                          );
+                                        },
+                                        child: Container(
+                                          padding: const EdgeInsets.all(4),
+                                          decoration: BoxDecoration(
+                                            color: AppColors.brandNavy
+                                                .withValues(alpha: 0.08),
+                                            borderRadius:
+                                                BorderRadius.circular(4),
+                                          ),
+                                          child: const Icon(
+                                            Icons.share_outlined,
+                                            size: 14,
+                                            color: AppColors.brandNavy,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ];
+
+                            return GestureDetector(
                               onLongPress: () {
                                 if (!_isSelectionMode) {
                                   setState(() {
@@ -487,107 +554,66 @@ class _OrderListViewState extends State<OrderListView> {
                                   });
                                 }
                               },
-                              actions: _isSelectionMode
-                                  ? null
-                                  : [
-                                      if (order['status'] == 'DRAFT') ...[
-                                        _CompactAction(
-                                          icon: Icons.edit_outlined,
-                                          tooltip: 'Edit',
-                                          onTap: () => _showPOForm(
-                                            order: order,
-                                            type: docType,
-                                          ),
+                              child: Row(
+                                children: [
+                                  if (_isSelectionMode)
+                                    GestureDetector(
+                                      onTap: () => _toggleSelection(id),
+                                      child: Padding(
+                                        padding: const EdgeInsets.only(
+                                          left: 14,
+                                          right: 8,
                                         ),
-                                        _CompactAction(
-                                          icon: Icons.check_circle_outlined,
-                                          tooltip: 'Confirm',
-                                          color: AppColors.warning,
-                                          onTap: () => _transition(
-                                            order['id'],
-                                            docType,
-                                            'confirm',
-                                          ),
-                                        ),
-                                      ],
-                                      if (order['status'] == 'CONFIRMED' &&
-                                          isPurchase)
-                                        _CompactAction(
-                                          icon: Icons.inbox_outlined,
-                                          tooltip: 'Receive',
-                                          onTap: () => _transition(
-                                            order['id'],
-                                            docType,
-                                            'receive',
-                                          ),
-                                        ),
-                                      if (order['status'] == 'CONFIRMED' &&
-                                          !isPurchase)
-                                        _CompactAction(
-                                          icon: Icons.local_shipping_outlined,
-                                          tooltip: 'Deliver',
-                                          onTap: () => _transition(
-                                            order['id'],
-                                            docType,
-                                            'deliver',
-                                          ),
-                                        ),
-                                      if (order['status'] == 'DELIVERED' &&
-                                          !isPurchase)
-                                        _CompactAction(
-                                          icon: Icons.swap_horiz_outlined,
-                                          tooltip: 'Create Invoice',
-                                          onTap: () =>
-                                              _convertSalesOrderToInvoice(
-                                            Map<String, dynamic>.from(order),
-                                          ),
-                                        ),
-                                      if (order['status'] != 'CANCELLED' &&
-                                          order['status'] != 'RECEIVED' &&
-                                          order['status'] != 'DELIVERED')
-                                        _CompactAction(
-                                          icon: Icons.cancel_outlined,
-                                          tooltip: 'Cancel',
-                                          color: AppColors.error,
-                                          onTap: () => _cancelOrder(
-                                            order['id'],
-                                            docType,
-                                          ),
-                                        ),
-                                      Tooltip(
-                                        message: 'Share / Print',
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            PrintShareHelper.showShareSheet(
-                                              context,
-                                              docLabel: isPurchase
-                                                  ? 'Purchase Order'
-                                                  : 'Sales Order',
-                                              docNumber:
-                                                  numVal?.toString() ?? 'N/A',
-                                              docType: isPurchase
-                                                  ? 'purchase-orders'
-                                                  : 'sales-orders',
-                                              docId: order['id'],
-                                            );
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.brandNavy
-                                                  .withValues(alpha: 0.08),
-                                              borderRadius:
-                                                  BorderRadius.circular(4),
-                                            ),
-                                            child: const Icon(
-                                              Icons.share_outlined,
-                                              size: 14,
-                                              color: AppColors.brandNavy,
-                                            ),
-                                          ),
+                                        child: Icon(
+                                          isSelected
+                                              ? Icons.check_circle
+                                              : Icons.circle_outlined,
+                                          size: 20,
+                                          color: isSelected
+                                              ? AppColors.brandNavy
+                                              : AppColors.textMuted,
                                         ),
                                       ),
-                                    ],
+                                    ),
+                                  Expanded(
+                                    child: AppListTile(
+                                      leadingText: _isSelectionMode
+                                          ? null
+                                          : (numVal?.toString() ?? 'ORDER'),
+                                      title: partyDisplayName.isNotEmpty
+                                          ? partyDisplayName
+                                          : (numVal?.toString() ?? 'ORDER'),
+                                      subtitle: _isSelectionMode
+                                          ? null
+                                          : '${AppDate.format(date?.toString())} \u00b7 ${order['status']}',
+                                      trailingWidget: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          AppAmount(
+                                            amount: double.parse(
+                                              (order['total'] ?? 0).toString(),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          StatusBadge(
+                                            label: order['status'] ?? '',
+                                          ),
+                                          if (itemActions.isNotEmpty) ...[
+                                            const SizedBox(width: 8),
+                                            ...itemActions,
+                                          ],
+                                        ],
+                                      ),
+                                      isSelected: isSelected,
+                                      onTap: () {
+                                        if (_isSelectionMode) {
+                                          _toggleSelection(id);
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
                             );
                           },
                         ),
@@ -597,72 +623,66 @@ class _OrderListViewState extends State<OrderListView> {
                           left: 0,
                           right: 0,
                           bottom: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: AppColors.bgSurface,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.1),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, -2),
-                                ),
-                              ],
-                            ),
+                          child: Padding(
                             padding: EdgeInsets.symmetric(
                               horizontal: isMobile ? 12 : 20,
-                              vertical: 10,
+                              vertical: 8,
                             ),
-                            child: SafeArea(
-                              top: false,
-                              child: Row(
-                                children: [
-                                  GestureDetector(
-                                    onTap: () => _selectAll(filteredOrders),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          _selectedIds.length ==
-                                                  filteredOrders.length
-                                              ? Icons.check_circle
-                                              : Icons.circle_outlined,
-                                          size: 20,
-                                          color: _selectedIds.length ==
-                                                  filteredOrders.length
-                                              ? AppColors.brandNavy
-                                              : AppColors.textMuted,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          'All',
-                                          style: AppTextStyles.caption
-                                              .copyWith(
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                        ),
-                                      ],
+                            child: AppCard(
+                              child: SafeArea(
+                                top: false,
+                                child: Row(
+                                  children: [
+                                    GestureDetector(
+                                      onTap: () => _selectAll(filteredOrders),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(
+                                            _selectedIds.length ==
+                                                    filteredOrders.length
+                                                ? Icons.check_circle
+                                                : Icons.circle_outlined,
+                                            size: 20,
+                                            color: _selectedIds.length ==
+                                                    filteredOrders.length
+                                                ? AppColors.brandNavy
+                                                : AppColors.textMuted,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'All',
+                                            style: AppTextStyles.caption
+                                                .copyWith(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Text(
-                                    '${_selectedIds.length} selected',
-                                    style: AppTextStyles.caption,
-                                  ),
-                                  const Spacer(),
-                                  ActionButton(
-                                    label: 'Clear',
-                                    icon: Icons.close,
-                                    tier: ActionTier.safe,
-                                    onPressed: _clearSelection,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  ActionButton(
-                                    label: 'Cancel',
-                                    icon: Icons.cancel_outlined,
-                                    tier: ActionTier.dangerous,
-                                    onPressed: _bulkDelete,
-                                  ),
-                                ],
+                                    const SizedBox(width: 12),
+                                    Text(
+                                      '${_selectedIds.length} selected',
+                                      style: AppTextStyles.caption,
+                                    ),
+                                    const Spacer(),
+                                    AppButton(
+                                      label: 'Clear',
+                                      icon: Icons.close,
+                                      isSmall: true,
+                                      onTap: _clearSelection,
+                                    ),
+                                    const SizedBox(width: 6),
+                                    AppButton(
+                                      label: 'Cancel',
+                                      icon: Icons.cancel_outlined,
+                                      isSmall: true,
+                                      color: AppColors.error,
+                                      textColor: AppColors.textWhite,
+                                      onTap: _bulkDelete,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),

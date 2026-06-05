@@ -234,13 +234,20 @@ class _EstimateListViewState extends State<EstimateListView> {
             ),
           ),
 
-          // ── Amount Summary ──
+          // ── Hero Summary Card ──
           if (_estimates.isNotEmpty)
-            AmountSummaryCards(cards: [
-              AmountSummaryCardData(label: 'Total Value', value: formatAmt(totalAmount), color: AppColors.brandNavy),
-              AmountSummaryCardData(label: 'Accepted', value: '$acceptedCount', color: AppColors.success),
-              AmountSummaryCardData(label: 'Draft', value: '$draftCount', color: AppColors.textMuted),
-            ]),
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 20,
+                vertical: 8,
+              ),
+              child: HeroSummaryCard(
+                title: 'Total Estimates',
+                amount: totalAmount,
+                subtitle: '$acceptedCount accepted · $draftCount draft',
+                icon: Icons.request_quote_outlined,
+              ),
+            ),
 
           // ── Summary Stats ──
           if (_estimates.isNotEmpty)

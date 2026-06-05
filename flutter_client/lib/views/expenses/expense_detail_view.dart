@@ -5,6 +5,7 @@ import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
+import 'package:flutter_client/views/shared/design_system.dart' as ds;
 import 'package:flutter_client/views/expenses/expense_form_view.dart';
 
 class ExpenseDetailView extends StatefulWidget {
@@ -144,7 +145,7 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             // Header Card
-            AppCard(
+            ds.AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -181,33 +182,39 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
                   const SizedBox(height: 16),
                   const Divider(),
                   const SizedBox(height: 8),
-                  InfoRow(label: 'Category', value: _expense!['category_name'] ?? 'N/A'),
-                  InfoRow(label: 'Expense Date', value: _expense!['expense_date'] ?? 'N/A'),
-                  InfoRow(label: 'Vendor', value: _expense!['vendor_name'] ?? 'N/A'),
-                  InfoRow(label: 'Description', value: _expense!['description'] ?? 'N/A'),
+                  ds.AppInfoRow(label: 'Category', value: _expense!['category_name'] ?? 'N/A'),
+                  ds.AppInfoRow(label: 'Expense Date', value: ds.AppDate.format(_expense!['expense_date'])),
+                  ds.AppInfoRow(label: 'Vendor', value: _expense!['vendor_name'] ?? 'N/A'),
+                  ds.AppInfoRow(label: 'Description', value: _expense!['description'] ?? 'N/A'),
                 ],
               ),
             ),
             const SizedBox(height: 16),
 
             // Tax Summary Card
-            AppCard(
+            ds.AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SectionHeader(title: 'AMOUNT & TAX SUMMARY'),
-                  SummaryRow(label: 'Subtotal', value: '₹${amount.toStringAsFixed(2)}'),
-                  SummaryRow(label: 'CGST', value: '₹${cgst.toStringAsFixed(2)}'),
-                  SummaryRow(label: 'SGST', value: '₹${sgst.toStringAsFixed(2)}'),
-                  SummaryRow(label: 'IGST', value: '₹${igst.toStringAsFixed(2)}'),
-                  if (cess > 0) SummaryRow(label: 'Cess', value: '₹${cess.toStringAsFixed(2)}'),
-                  SummaryRow(label: 'Round Off', value: '₹${roundOff.toStringAsFixed(2)}'),
-                  const Divider(),
-                  SummaryRow(
-                    label: 'Total Paid',
-                    value: '₹${total.toStringAsFixed(2)}',
-                    isBold: true,
-                    valueColor: AppColors.brandNavy,
+                  ds.AppSection(
+                    title: 'Amount & Tax Summary',
+                    child: Column(
+                      children: [
+                        ds.AppInfoRow(label: 'Subtotal', value: AmountFormat.format(amount)),
+                        ds.AppInfoRow(label: 'CGST', value: AmountFormat.format(cgst)),
+                        ds.AppInfoRow(label: 'SGST', value: AmountFormat.format(sgst)),
+                        ds.AppInfoRow(label: 'IGST', value: AmountFormat.format(igst)),
+                        if (cess > 0) ds.AppInfoRow(label: 'Cess', value: AmountFormat.format(cess)),
+                        ds.AppInfoRow(label: 'Round Off', value: AmountFormat.format(roundOff)),
+                        const Divider(),
+                        ds.AppInfoRow(
+                          label: 'Total Paid',
+                          value: AmountFormat.format(total),
+                          isBold: true,
+                          valueColor: AppColors.brandNavy,
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -216,25 +223,27 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
 
             // Cancel / Delete Button based on status
             if (status == 'POSTED')
-              ActionButton(
+              ds.AppButton(
                 label: 'Cancel Expense (Reverse Journal)',
                 icon: Icons.undo,
-                tier: ActionTier.dangerous,
-                onPressed: _cancelExpense,
+                color: AppColors.error,
+                textColor: AppColors.textWhite,
+                onTap: _cancelExpense,
               ),
             if (status == 'DRAFT') ...[
-              ActionButton(
+              ds.AppButton(
                 label: 'Post to Ledger',
                 icon: Icons.book_rounded,
-                tier: ActionTier.warning,
-                onPressed: _postExpense,
+                isPrimary: true,
+                onTap: _postExpense,
               ),
               const SizedBox(height: 12),
-              ActionButton(
+              ds.AppButton(
                 label: 'Delete Expense Record',
                 icon: Icons.delete_outline,
-                tier: ActionTier.dangerous,
-                onPressed: _deleteExpense,
+                color: AppColors.error,
+                textColor: AppColors.textWhite,
+                onTap: _deleteExpense,
               ),
             ],
             const SizedBox(height: AppSpacing.xxxl),

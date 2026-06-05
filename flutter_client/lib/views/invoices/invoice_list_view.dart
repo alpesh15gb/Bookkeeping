@@ -151,21 +151,15 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       fullInvoice = await context.read<InvoiceProvider>().fetchInvoiceDetail(invoice.id);
       if (mounted) Navigator.pop(context);
       if (fullInvoice == null) {
-        if (mounted) {
-          AppToast.error(context, 'Failed to load invoice details');
-        }
+        if (mounted) AppToast.error(context, 'Failed to load invoice details');
         return;
       }
     }
     if (mounted) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => InvoiceFormView(editInvoice: fullInvoice),
-        ),
-      ).then((_) {
-        if (mounted) _fetch();
-      });
+        MaterialPageRoute(builder: (_) => InvoiceFormView(editInvoice: fullInvoice)),
+      ).then((_) => _fetch());
     }
   }
 
@@ -174,74 +168,6 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       context,
       MaterialPageRoute(builder: (_) => InvoiceDetailView(invoiceId: id)),
     ).then((_) => _fetch());
-  }
-
-  Future<void> _cancelInvoice(InvoiceModel invoice) async {
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Cancel Invoice?',
-      message: 'Cancel ${invoice.invoiceNumber}? This will reverse ledger entries.',
-    );
-    if (confirm == true) {
-      final provider = context.read<InvoiceProvider>();
-      final success = await provider.cancelInvoice(invoice.id);
-      if (!success && mounted) {
-        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
-      }
-    }
-  }
-
-  void _printInvoice(InvoiceModel invoice) {
-    PrintShareHelper.showShareSheet(
-      context,
-      docLabel: 'Invoice',
-      docNumber: invoice.invoiceNumber,
-      docType: 'invoices',
-      docId: invoice.id,
-    );
-  }
-
-  void _shareInvoice(InvoiceModel invoice) {
-    PrintShareHelper.showShareSheet(
-      context,
-      docLabel: 'Invoice',
-      docNumber: invoice.invoiceNumber,
-      docType: 'invoices',
-      docId: invoice.id,
-    );
-  }
-
-  void _exportGstr1() async {
-    final response = await ApiClient().get(
-      Uri.parse('${ApiClient.baseUrl}/gst/gstr1/export'),
-    );
-    if (response.statusCode == 200 && mounted) {
-      final data = jsonDecode(response.body);
-      final json = const JsonEncoder.withIndent('  ').convert(data);
-      final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final fileName = 'gstr1_export_$timestamp.json';
-      final bytes = utf8.encode(json);
-
-      if (kIsWeb) {
-        triggerWebDownload(fileName, bytes);
-        if (mounted) {
-          AppToast.info(context, 'GSTR-1 downloaded: $fileName');
-        }
-      } else {
-        final savePath = await FilePicker.platform.saveFile(
-          dialogTitle: 'Save GSTR-1 Export',
-          fileName: fileName,
-          type: FileType.custom,
-          allowedExtensions: ['json'],
-          bytes: Uint8List.fromList(bytes),
-        );
-        if (mounted) {
-          AppToast.success(context, savePath == null ? 'Export cancelled' : 'GSTR-1 saved to $savePath');
-        }
-      }
-    } else if (mounted) {
-      AppToast.error(context, 'Export failed');
-    }
   }
 
   String _balanceLabel(InvoiceModel invoice) {
@@ -302,8 +228,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       body: Column(
         children: [
           // ── Search + Filter Bar ──
-          Container(
-            color: AppColors.bgSurface,
+          AppCard(
             padding: EdgeInsets.symmetric(
               horizontal: isMobile ? 12 : 20,
               vertical: 8,
@@ -314,31 +239,19 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                   children: [
                     Expanded(
                       flex: 5,
-                      child: TextField(
+                      child: AppInput(
                         controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Search invoices...',
-                          prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                          suffixIcon: _searchCtrl.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close, size: 16),
-                                  onPressed: () {
-                                    _searchCtrl.clear();
-                                    _fetch();
-                                  },
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(color: AppColors.borderInput),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(color: AppColors.borderInput),
-                          ),
-                        ),
+                        hint: 'Search invoices...',
+                        prefix: const Icon(Icons.search_rounded, size: 18),
+                        suffix: _searchCtrl.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close, size: 16),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  _fetch();
+                                },
+                              )
+                            : null,
                         onSubmitted: (_) => _fetch(),
                         onChanged: (v) {
                           if (v.isEmpty) _fetch();
@@ -360,15 +273,11 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                         ),
                       ),
                       const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => _showForm(),
-                        icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
-                        label: const Text('Create Invoice', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandNavy,
-                          foregroundColor: AppColors.textWhite,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        ),
+                      AppButton(
+                        label: 'Create Invoice',
+                        icon: Icons.add,
+                        isPrimary: true,
+                        onTap: () => _showForm(),
                       ),
                     ],
                   ],
@@ -419,15 +328,20 @@ class _InvoiceListViewState extends State<InvoiceListView> {
             ),
           ),
 
-          // ── Insights Strip ──
+          // ── Hero Summary Card ──
           if (invoices.isNotEmpty)
-            AmountSummaryCards(cards: [
-              AmountSummaryCardData(label: 'Total Sales', value: formatAmt(totalAmount), color: AppColors.brandNavy),
-              AmountSummaryCardData(label: 'Collected', value: formatAmt(collectedAmount), color: AppColors.success),
-              AmountSummaryCardData(label: 'Outstanding', value: formatAmt(outstandingAmount), color: AppColors.warning),
-              AmountSummaryCardData(label: 'Overdue', value: formatAmt(overdueAmount), color: AppColors.error),
-              AmountSummaryCardData(label: 'Avg Invoice', value: formatAmt(avgInvoice), color: AppColors.textSecondary),
-            ]),
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 20,
+                vertical: 8,
+              ),
+              child: HeroSummaryCard(
+                title: 'Total Sales',
+                amount: totalAmount,
+                subtitle: '${AmountFormat.format(collectedAmount)} collected · ${AmountFormat.format(outstandingAmount)} outstanding',
+                icon: Icons.receipt_long_outlined,
+              ),
+            ),
 
           // ── Summary Stats ──
           if (invoices.isNotEmpty)
@@ -446,7 +360,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                 : provider.errorMessage != null && invoices.isEmpty
                     ? ErrorState(message: provider.errorMessage!, onRetry: _fetch)
                     : invoices.isEmpty
-                        ? EmptyState(
+                        ? AppEmptyState(
                             icon: Icons.description_outlined,
                             title: 'No invoices found',
                             subtitle: _statusFilter != 'ALL' || _searchCtrl.text.isNotEmpty
@@ -463,11 +377,11 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                   padding: EdgeInsets.only(
                                     left: isMobile ? 12 : 20,
                                     right: isMobile ? 12 : 20,
-                                    top: 8,
-                                    bottom: _selectedIds.isNotEmpty ? 80 : (isMobile ? 12 : 20),
+                                    top: 4,
+                                    bottom: _selectedIds.isNotEmpty ? 80 : (isMobile ? 80 : 20),
                                   ),
                                   itemCount: invoices.length,
-                                  separatorBuilder: (context, _) => const SizedBox(height: 6),
+                                  separatorBuilder: (context, _) => const SizedBox(height: 4),
                                   itemBuilder: (context, i) {
                                     final invoice = invoices[i];
                                     final id = invoice.id.toString();
@@ -595,32 +509,34 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                             style: AppTextStyles.caption,
                                           ),
                                           const Spacer(),
-                                          ActionButton(
+                                          AppButton(
                                             label: 'Clear',
                                             icon: Icons.close,
-                                            tier: ActionTier.safe,
-                                            onPressed: _clearSelection,
+                                            onTap: _clearSelection,
+                                            isSmall: true,
                                           ),
                                           const SizedBox(width: 4),
-                                          ActionButton(
+                                          AppButton(
                                             label: 'Cancel',
                                             icon: Icons.cancel_outlined,
-                                            tier: ActionTier.dangerous,
-                                            onPressed: _bulkCancel,
+                                            onTap: _bulkCancel,
+                                            color: AppColors.error,
+                                            isSmall: true,
                                           ),
                                           const SizedBox(width: 4),
-                                          ActionButton(
+                                          AppButton(
                                             label: 'Email',
                                             icon: Icons.email_outlined,
-                                            tier: ActionTier.safe,
-                                            onPressed: _bulkEmail,
+                                            onTap: _bulkEmail,
+                                            isSmall: true,
                                           ),
                                           const SizedBox(width: 4),
-                                          ActionButton(
+                                          AppButton(
                                             label: 'Delete',
                                             icon: Icons.delete_outline,
-                                            tier: ActionTier.dangerous,
-                                            onPressed: _bulkDelete,
+                                            onTap: _bulkDelete,
+                                            color: AppColors.error,
+                                            isSmall: true,
                                           ),
                                         ],
                                       ),
@@ -724,8 +640,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            final formattedDate =
-                '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
+            final formattedDate = '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
             return AlertDialog(
               title: Text('Record Payment for ${invoice.invoiceNumber}'),
               content: SingleChildScrollView(
@@ -771,9 +686,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                         DropdownMenuItem(value: 'POS', child: Text('Card / POS')),
                         DropdownMenuItem(value: 'OTHER', child: Text('Other')),
                       ],
-                      onChanged: (val) {
-                        if (val != null) setDialogState(() => mode = val);
-                      },
+                      onChanged: (val) { if (val != null) setDialogState(() => mode = val); },
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -784,10 +697,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                 ),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('CANCEL'),
-                ),
+                TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
                 TextButton(
                   onPressed: () async {
                     final amt = double.tryParse(amountCtrl.text) ?? 0.0;
@@ -796,9 +706,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                       return;
                     }
                     Navigator.pop(context);
-
-                    final formattedPayDate =
-                        '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
+                    final formattedPayDate = '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
                     final randSeq = 1000 + (DateTime.now().millisecondsSinceEpoch % 9000);
                     final payload = {
                       'contact_id': invoice.contactId,
@@ -808,14 +716,8 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                       'amount': amt,
                       if (refCtrl.text.isNotEmpty) 'reference_number': refCtrl.text,
                       'description': 'Payment for invoice ${invoice.invoiceNumber}',
-                      'allocations': [
-                        {
-                          'invoice_id': invoice.id,
-                          'amount': amt,
-                        }
-                      ]
+                      'allocations': [{'invoice_id': invoice.id, 'amount': amt}]
                     };
-
                     final provider = context.read<InvoiceProvider>();
                     final success = await provider.recordPayment(invoice.id, payload);
                     if (mounted) {
@@ -844,8 +746,70 @@ class _InvoiceListViewState extends State<InvoiceListView> {
     if (success) {
       HapticHelper.delete();
       _fetch();
-
       AppToast.info(context, 'Invoice ${invoice.invoiceNumber} deleted');
+    }
+  }
+
+  Future<void> _cancelInvoice(InvoiceModel invoice) async {
+    final confirm = await AppConfirmDialog.show(
+      context,
+      title: 'Cancel Invoice?',
+      message: 'Cancel ${invoice.invoiceNumber}? This will reverse ledger entries.',
+    );
+    if (confirm == true) {
+      final provider = context.read<InvoiceProvider>();
+      final success = await provider.cancelInvoice(invoice.id);
+      if (!success && mounted) {
+        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
+      }
+    }
+  }
+
+  void _printInvoice(InvoiceModel invoice) {
+    PrintShareHelper.showShareSheet(
+      context,
+      docLabel: 'Invoice',
+      docNumber: invoice.invoiceNumber,
+      docType: 'invoices',
+      docId: invoice.id,
+    );
+  }
+
+  void _shareInvoice(InvoiceModel invoice) {
+    PrintShareHelper.showShareSheet(
+      context,
+      docLabel: 'Invoice',
+      docNumber: invoice.invoiceNumber,
+      docType: 'invoices',
+      docId: invoice.id,
+    );
+  }
+
+  void _exportGstr1() async {
+    final response = await ApiClient().get(
+      Uri.parse('${ApiClient.baseUrl}/gst/gstr1/export'),
+    );
+    if (response.statusCode == 200 && mounted) {
+      final data = jsonDecode(response.body);
+      final json = const JsonEncoder.withIndent('  ').convert(data);
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'gstr1_export_$timestamp.json';
+      final bytes = utf8.encode(json);
+      if (kIsWeb) {
+        triggerWebDownload(fileName, bytes);
+        AppToast.info(context, 'GSTR-1 downloaded: $fileName');
+      } else {
+        final savePath = await FilePicker.platform.saveFile(
+          dialogTitle: 'Save GSTR-1 Export',
+          fileName: fileName,
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+          bytes: Uint8List.fromList(bytes),
+        );
+        AppToast.success(context, savePath == null ? 'Export cancelled' : 'GSTR-1 saved to $savePath');
+      }
+    } else if (mounted) {
+      AppToast.error(context, 'Export failed');
     }
   }
 }

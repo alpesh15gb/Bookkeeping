@@ -5,13 +5,10 @@ import 'package:flutter_client/providers/bill_provider.dart';
 import 'package:flutter_client/models/bill.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/bills/bill_form_view.dart';
-
 import 'package:flutter_client/core/print_share_helper.dart';
-import 'package:flutter_client/views/shared/toast.dart';
 
 class BillDetailView extends StatefulWidget {
   final String billId;
-
   const BillDetailView({super.key, required this.billId});
 
   @override
@@ -30,420 +27,188 @@ class _BillDetailViewState extends State<BillDetailView> {
 
   void _fetchDetail() async {
     final detail = await context.read<BillProvider>().fetchBillDetail(widget.billId);
-    if (mounted) {
-      setState(() {
-        _bill = detail;
-        _isLoading = false;
-      });
+    if (mounted) setState(() { _bill = detail; _isLoading = false; });
+  }
+
+  void _share() {
+    PrintShareHelper.showShareSheet(
+      context,
+      docLabel: 'Bill',
+      docNumber: _bill!.billNumber,
+      docType: 'bills',
+      docId: _bill!.id,
+    );
+  }
+
+  void _edit() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => BillFormView(editBill: _bill)),
+    ).then((_) => _fetchDetail());
+  }
+
+  void _delete() async {
+    final confirm = await AppConfirmDialog.show(context, title: 'Delete Draft Bill?', message: 'Are you sure?');
+    if (confirm == true) {
+      final provider = context.read<BillProvider>();
+      final success = await provider.deleteBill(widget.billId);
+      if (success && mounted) Navigator.pop(context);
     }
+  }
+
+  void _finalize() async {
+    final confirm = await AppConfirmDialog.show(context, title: 'Finalize Bill?', message: 'This will lock the bill.');
+    if (confirm == true) {
+      final provider = context.read<BillProvider>();
+      final success = await provider.finalizeBill(widget.billId);
+      if (success && mounted) _fetchDetail();
+    }
+  }
+
+  void _cancel() async {
+    final confirm = await AppConfirmDialog.show(context, title: 'Cancel Bill?', message: 'This will post reversals.');
+    if (confirm == true) {
+      final provider = context.read<BillProvider>();
+      final success = await provider.cancelBill(widget.billId);
+      if (success && mounted) _fetchDetail();
+    }
+  }
+
+  void _recordPayment() {
+    final remaining = _bill!.total - _bill!.amountPaid;
+    if (remaining <= 0) {
+      AppToast.error(context, 'Bill is already fully paid');
+      return;
+    }
+    AppToast.info(context, 'Payment dialog would open here');
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.bgLight,
-      appBar: AppBar(
-        title: Text(_bill?.billNumber ?? 'Bill Detail'),
-        actions: [
-          if (_bill != null) ...[
-            IconButton(
-              icon: const Icon(Icons.share_outlined),
-              onPressed: () {
-                PrintShareHelper.showShareSheet(
-                  context,
-                  docLabel: 'Bill',
-                  docNumber: _bill!.billNumber,
-                  docType: 'bills',
-                  docId: _bill!.id,
-                );
-              },
-              tooltip: 'Share / Export',
-            ),
-            if (_bill!.status == 'DRAFT')
-              IconButton(
-                icon: const Icon(Icons.edit_outlined),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => BillFormView(editBill: _bill),
-                    ),
-                  ).then((_) => _fetchDetail());
-                },
-                tooltip: 'Edit bill',
-              ),
-            const SizedBox(width: 8),
-            StatusBadge(label: _bill!.status),
-            const SizedBox(width: 16),
-          ],
-        ],
+    final bill = _bill;
+    final contact = bill?.contact;
+
+    return DocumentPreviewScreen(
+      appBarTitle: 'Vendor Bill',
+      appBarActions: [
+        IconButton(icon: const Icon(Icons.share_outlined, size: 18), onPressed: _share, tooltip: 'Share'),
+      ],
+      isLoading: _isLoading,
+      errorMessage: bill == null && !_isLoading ? 'Bill not found.' : null,
+      onRetry: _fetchDetail,
+      hero: DocumentHero(
+        docNumber: bill?.billNumber ?? 'BILL',
+        docType: 'Vendor Bill',
+        amount: bill?.total ?? 0,
+        status: bill?.status ?? 'DRAFT',
+        issueDate: bill?.billDate,
+        dueDate: bill?.dueDate,
       ),
-      body: _isLoading
-          ? const LoadingState(message: 'Loading vendor bill...')
-          : _bill == null
-              ? const ErrorState(message: 'Vendor bill details not found.')
-              : SingleChildScrollView(
-                  padding: AppSpacing.pagePadding,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Header Card
-                      AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  width: 40,
-                                  height: 40,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.brandNavy,
-                                    borderRadius: BorderRadius.circular(AppRadius.lg),
-                                  ),
-                                  child: const Icon(
-                                    Icons.receipt_long_outlined,
-                                    size: 20,
-                                    color: AppColors.goldAccent,
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text('VENDOR BILL', style: AppTextStyles.labelSmall),
-                                      Text(
-                                        _bill!.billNumber,
-                                        style: AppTextStyles.h2,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                StatusBadge(label: _bill!.status),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-                            const Divider(),
-                            const SizedBox(height: 8),
-                            InfoRow(label: 'Vendor', value: _bill!.contact?.name ?? 'N/A'),
-                            InfoRow(label: 'Bill Date', value: _bill!.billDate),
-                            InfoRow(label: 'Due Date', value: _bill!.dueDate),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+      sections: [
+        // ── Customer ──
+        CustomerCard(
+          name: contact?.name ?? 'Vendor',
+          gstin: contact?.gstin,
+          phone: contact?.phone,
+          email: contact?.email,
+          state: contact?.stateCode,
+          outstandingBalance: (bill?.total ?? 0) - (bill?.amountPaid ?? 0),
+        ),
+        const SizedBox(height: 16),
 
-                      // Line Items Card
-                      AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SectionHeader(title: 'ITEMS'),
-                            if (_bill!.lines.isEmpty)
-                              const Padding(
-                                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                                child: Text('No items', style: AppTextStyles.bodySmall),
-                              )
-                            else
-                              ListView.separated(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                itemCount: _bill!.lines.length,
-                                separatorBuilder: (context, _) => const Divider(),
-                                itemBuilder: (context, i) {
-                                  final line = _bill!.lines[i];
-                                  return Padding(
-                                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(
-                                                line.productName ?? 'Product',
-                                                style: AppTextStyles.bodyMedium,
-                                              ),
-                                              const SizedBox(height: AppSpacing.xxs),
-                                              Text(
-                                                'Qty: ${line.quantity} × ₹${line.rate.toStringAsFixed(2)}',
-                                                style: AppTextStyles.caption,
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                        Text(
-                                          '₹${line.total.toStringAsFixed(2)}',
-                                          style: AppTextStyles.numeric,
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
+        // ── Items ──
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Items'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              bill?.lines.isEmpty == true
+                  ? Text('No items', style: AppTextStyles.bodySmall)
+                  : ItemTable(
+                      items: bill!.lines.map((l) => ItemTableRow(
+                        name: l.productName ?? 'Product',
+                        qty: l.quantity.toStringAsFixed(0),
+                        rate: AmountFormat.format(l.rate),
+                        amount: AmountFormat.format(l.total),
+                        hsn: l.hsnSac.isNotEmpty ? l.hsnSac : null,
+                        gstRate: l.gstRate > 0 ? l.gstRate : null,
+                      )).toList(),
+                    ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
 
-                      // Summary Card
-                      AppCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SectionHeader(title: 'TAX & TOTAL SUMMARY'),
-                            SummaryRow(label: 'Subtotal', value: '₹${_bill!.subtotal.toStringAsFixed(2)}'),
-                            SummaryRow(label: 'Discount Total', value: '₹${_bill!.discountTotal.toStringAsFixed(2)}'),
-                            SummaryRow(label: 'CGST', value: '₹${_bill!.cgstAmount.toStringAsFixed(2)}'),
-                            SummaryRow(label: 'SGST', value: '₹${_bill!.sgstAmount.toStringAsFixed(2)}'),
-                            SummaryRow(label: 'IGST', value: '₹${_bill!.igstAmount.toStringAsFixed(2)}'),
-                            SummaryRow(label: 'Round Off', value: '₹${_bill!.roundOff.toStringAsFixed(2)}'),
-                            const Divider(),
-                            SummaryRow(
-                              label: 'Total Amount',
-                              value: '₹${_bill!.total.toStringAsFixed(2)}',
-                              isBold: true,
-                              valueColor: AppColors.brandNavy,
-                            ),
-                            SummaryRow(
-                              label: 'Amount Paid',
-                              value: '₹${_bill!.amountPaid.toStringAsFixed(2)}',
-                              valueColor: Colors.green[700],
-                            ),
-                            SummaryRow(
-                              label: 'Remaining Balance',
-                              value: '₹${(_bill!.total - _bill!.amountPaid).toStringAsFixed(2)}',
-                              isBold: true,
-                              valueColor: (_bill!.total - _bill!.amountPaid) > 0 ? AppColors.error : Colors.green[700],
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-                      if (_bill!.status == 'DRAFT') ...[
-                        ActionButton(
-                          label: 'Finalize & Post Bill',
-                          icon: Icons.lock_outline,
-                          tier: ActionTier.warning,
-                          onPressed: _finalizeBill,
-                        ),
-                        const SizedBox(height: 12),
-                        ActionButton(
-                          label: 'Delete Draft',
-                          icon: Icons.delete_outline,
-                          tier: ActionTier.dangerous,
-                          onPressed: _deleteBill,
-                        ),
-                      ],
-                      if (_bill!.status == "UNPAID" || _bill!.status == 'PARTIALLY_PAID') ...[
-                        ActionButton(
-                          label: 'Record Payment',
-                          icon: Icons.payment,
-                          tier: ActionTier.safe,
-                          onPressed: _showRecordPaymentDialog,
-                        ),
-                        const SizedBox(height: 12),
-                        ActionButton(
-                          label: 'Cancel Bill',
-                          icon: Icons.cancel_outlined,
-                          tier: ActionTier.dangerous,
-                          onPressed: _cancelBill,
-                        ),
-                      ],
-                      const SizedBox(height: AppSpacing.xxxl),
-                    ],
+        // ── Tax Summary ──
+        TaxSummaryHero(
+          subtotal: bill?.subtotal ?? 0,
+          cgst: (bill?.cgstAmount ?? 0) > 0 ? bill?.cgstAmount : null,
+          sgst: (bill?.sgstAmount ?? 0) > 0 ? bill?.sgstAmount : null,
+          igst: (bill?.igstAmount ?? 0) > 0 ? bill?.igstAmount : null,
+          roundOff: (bill?.roundOff ?? 0) != 0 ? bill?.roundOff : null,
+          total: bill?.total ?? 0,
+        ),
+        const SizedBox(height: 16),
+
+        // ── Payment Status ──
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Payment'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              AppInfoRow(label: 'Amount Paid', value: AmountFormat.format(bill?.amountPaid ?? 0)),
+              AppInfoRow(label: 'Balance', value: AmountFormat.format((bill?.total ?? 0) - (bill?.amountPaid ?? 0))),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Timeline ──
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Activity'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              AppTimeline(items: [
+                AppTimelineItem(
+                  title: 'Bill Created',
+                  date: AppDate.format(bill?.billDate),
+                  color: AppColors.brandNavy,
+                ),
+                if ((bill?.amountPaid ?? 0) > 0)
+                  AppTimelineItem(
+                    title: 'Payment Recorded',
+                    subtitle: AmountFormat.format(bill!.amountPaid),
+                    color: AppColors.goldAccent,
                   ),
-                ),
-    );
-  }
-
-  void _deleteBill() async {
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Delete Draft Bill?',
-      message: 'Are you sure you want to permanently delete this draft bill?',
-    );
-    if (confirm == true) {
-      setState(() => _isLoading = true);
-      final provider = context.read<BillProvider>();
-      final success = await provider.deleteBill(widget.billId);
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (success) {
-          Navigator.pop(context);
-        } else {
-          AppToast.error(context, provider.errorMessage ?? 'Failed to delete bill');
-        }
-      }
-    }
-  }
-
-  void _finalizeBill() async {
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Finalize Bill?',
-      message: 'This will lock the bill and generate journal entries. You cannot edit it after finalizing.',
-    );
-    if (confirm == true) {
-      setState(() => _isLoading = true);
-      final provider = context.read<BillProvider>();
-      final success = await provider.finalizeBill(widget.billId);
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (success) {
-          _fetchDetail();
-        } else {
-          AppToast.error(context, provider.errorMessage ?? 'Failed to finalize bill');
-        }
-      }
-    }
-  }
-
-  void _cancelBill() async {
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Cancel Vendor Bill?',
-      message: 'Are you sure you want to cancel this bill? This will post reversals.',
-    );
-    if (confirm == true) {
-      setState(() => _isLoading = true);
-      final provider = context.read<BillProvider>();
-      final success = await provider.cancelBill(widget.billId);
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (success) {
-          _fetchDetail();
-        } else {
-          AppToast.error(context, provider.errorMessage ?? 'Failed to cancel bill');
-        }
-      }
-    }
-  }
-
-  void _showRecordPaymentDialog() {
-    final remaining = _bill!.total - _bill!.amountPaid;
-    final amountCtrl = TextEditingController(text: remaining.toStringAsFixed(2));
-    final refCtrl = TextEditingController();
-    String mode = 'BANK'; // Match regex: CASH, BANK, UPI, POS, OTHER
-    DateTime payDate = DateTime.now();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final formattedDate =
-                '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
-            return AlertDialog(
-              title: const Text('Record Payment'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: amountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Amount (₹)',
-                        prefixIcon: Icon(Icons.currency_rupee_outlined, size: 16),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: payDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2035),
-                        );
-                        if (picked != null) setDialogState(() => payDate = picked);
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Payment Date',
-                          prefixIcon: Icon(Icons.calendar_today_outlined, size: 16),
-                          suffixIcon: Icon(Icons.arrow_drop_down, size: 18),
-                        ),
-                        child: Text(formattedDate, style: AppTextStyles.body),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: mode,
-                      decoration: const InputDecoration(labelText: 'Payment Mode'),
-                      items: const [
-                        DropdownMenuItem(value: 'BANK', child: Text('Bank')),
-                        DropdownMenuItem(value: 'CASH', child: Text('Cash')),
-                        DropdownMenuItem(value: 'UPI', child: Text('UPI')),
-                        DropdownMenuItem(value: 'POS', child: Text('POS')),
-                        DropdownMenuItem(value: 'OTHER', child: Text('Other')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setDialogState(() => mode = val);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: refCtrl,
-                      decoration: const InputDecoration(labelText: 'Reference Number (e.g. Txn ID)'),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('CANCEL'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    final amt = double.tryParse(amountCtrl.text) ?? 0.0;
-                    if (amt <= 0) {
-                      AppToast.info(context, 'Please enter a valid amount');
-                      return;
-                    }
-                    Navigator.pop(context);
-                    setState(() => _isLoading = true);
-
-                    final formattedPayDate =
-                        '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
-                    final randSeq = 1000 + (DateTime.now().millisecondsSinceEpoch % 9000);
-                    final payload = {
-                      'contact_id': _bill!.contactId,
-                      'payment_number': 'PMT/${payDate.year}-${(payDate.year + 1) % 100}/$randSeq',
-                      'payment_date': formattedPayDate,
-                      'payment_mode': mode,
-                      'amount': amt,
-                      if (refCtrl.text.isNotEmpty) 'reference_number': refCtrl.text,
-                      'description': 'Payment for vendor bill ${_bill!.billNumber}',
-                      'allocations': [
-                        {
-                          'bill_id': widget.billId,
-                          'amount': amt,
-                        }
-                      ]
-                    };
-
-                    final provider = context.read<BillProvider>();
-                    final success = await provider.recordPayment(widget.billId, payload);
-                    if (mounted) {
-                      setState(() => _isLoading = false);
-                      if (success) {
-                        _fetchDetail();
-                      } else {
-                        AppToast.error(context, provider.errorMessage ?? 'Failed to record payment');
-                      }
-                    }
-                  },
-                  child: const Text('SAVE'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+              ]),
+            ],
+          ),
+        ),
+      ],
+      actions: [
+        AppButton(label: 'Edit', icon: Icons.edit_outlined, onTap: _edit, isPrimary: true),
+        const SizedBox(height: 8),
+        AppButton(label: 'Share', icon: Icons.share_outlined, onTap: _share),
+        const SizedBox(height: 8),
+        AppButton(label: 'Print', icon: Icons.print_outlined, onTap: _share),
+        const SizedBox(height: 16),
+        const Divider(height: 1),
+        const SizedBox(height: 16),
+        if (bill?.status == 'DRAFT') ...[
+          AppButton(label: 'Finalize', icon: Icons.lock_outline, onTap: _finalize, isPrimary: true),
+          const SizedBox(height: 8),
+          AppButton(label: 'Delete', icon: Icons.delete_outline, onTap: _delete, color: AppColors.error),
+        ],
+        if (bill?.status == 'UNPAID' || bill?.status == 'PARTIALLY_PAID') ...[
+          AppButton(label: 'Record Payment', icon: Icons.payment, onTap: _recordPayment, isPrimary: true),
+          const SizedBox(height: 8),
+          AppButton(label: 'Cancel Bill', icon: Icons.cancel_outlined, onTap: _cancel, color: AppColors.error),
+        ],
+      ],
     );
   }
 }

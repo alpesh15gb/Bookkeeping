@@ -2,15 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/delivery_challan_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:flutter_client/views/shared/toast.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
+import 'package:flutter_client/views/shared/app_components.dart' hide AppCard;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/delivery_challans/delivery_challan_form_view.dart';
 import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 
 class DeliveryChallanDetailView extends StatefulWidget {
   final String challanId;
-
   const DeliveryChallanDetailView({super.key, required this.challanId});
 
   @override
@@ -32,115 +30,166 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
     if (mounted) setState(() { _challan = detail; _isLoading = false; });
   }
 
+  void _edit() {
+    Navigator.push(context, MaterialPageRoute(builder: (_) => DeliveryChallanFormView(challan: _challan))).then((_) => _fetch());
+  }
+
+  void _issue() async {
+    final ok = await AppConfirmDialog.show(context, title: 'Issue?', message: 'Issue this delivery challan?');
+    if (ok == true) {
+      final success = await context.read<DeliveryChallanProvider>().issueChallan(widget.challanId);
+      if (success) _fetch();
+    }
+  }
+
+  void _cancel() async {
+    final ok = await AppConfirmDialog.show(context, title: 'Cancel?', message: 'Cancel this challan?');
+    if (ok == true) {
+      final success = await context.read<DeliveryChallanProvider>().cancelChallan(widget.challanId);
+      if (success) _fetch();
+    }
+  }
+
+  void _convertToInvoice() {
+    final c = _challan!;
+    final lines = (c['lines'] is List ? c['lines'] as List : []);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => InvoiceFormView(initialData: {
+          'contact_id': c['contact_id'],
+          'contact_name': c['contact_name'] ?? c['customer_name'],
+          'reference_number': c['challan_number'],
+          'pos_state_code': c['pos_state_code'],
+          'lines': lines.map((l) => {
+            'product_id': l['product_id'],
+            'product_name': l['product_name'],
+            'quantity': l['quantity'],
+            'rate': l['rate'] ?? 0,
+            'discount': l['discount'] ?? 0,
+            'hsn_sac': l['hsn_sac'] ?? '',
+            'gst_rate': l['gst_rate'] ?? 0,
+          }).toList(),
+        }),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: LoadingState(message: 'Loading...'));
-    if (_challan == null) return const Scaffold(body: ErrorState(message: 'Challan not found'));
+    final c = _challan;
+    final status = c?['status'] ?? 'DRAFT';
+    final issueDate = AppDate.format(c?['issued_date']?.toString()) ?? AppDate.format(c?['issue_date']?.toString()) ?? 'N/A';
+    final lines = (c?['lines'] is List ? c!['lines'] as List : []);
 
-    final c = _challan!;
-    final status = c['status'] ?? 'DRAFT';
-
-    return Scaffold(
-      backgroundColor: AppColors.bgLight,
-      appBar: AppBar(
-        title: Text(c['challan_number'] ?? 'Challan Detail'),
-        actions: [
-          if (status == 'DRAFT')
-            IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DeliveryChallanFormView(challan: c))).then((_) => _fetch()), tooltip: 'Edit'),
-          StatusBadge(label: status),
-          const SizedBox(width: 16),
-        ],
+    return DocumentPreviewScreen(
+      appBarTitle: 'Delivery Challan',
+      appBarActions: [
+        if (status == 'DRAFT')
+          IconButton(icon: const Icon(Icons.edit_outlined, size: 18), onPressed: _edit, tooltip: 'Edit'),
+      ],
+      isLoading: _isLoading,
+      errorMessage: c == null && !_isLoading ? 'Challan not found.' : null,
+      onRetry: _fetch,
+      hero: DocumentHero(
+        docNumber: c?['challan_number']?.toString() ?? 'CHALLAN',
+        docType: 'Delivery Challan',
+        amount: 0, // No amount for delivery challan
+        status: status,
+        issueDate: c?['issue_date']?.toString(),
       ),
-      body: SingleChildScrollView(
-        padding: AppSpacing.pagePadding,
-        child: Column(
-          children: [
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(children: [
-                    Container(width: 40, height: 40, decoration: BoxDecoration(color: AppColors.typeGoods.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.local_shipping_rounded, size: 20, color: AppColors.typeGoods)),
-                    const SizedBox(width: 12),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('DELIVERY CHALLAN', style: AppTextStyles.labelSmall), Text(c['challan_number'] ?? 'N/A', style: AppTextStyles.h2)])),
-                  ]),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  InfoRow(label: 'Customer', value: c['contact_name'] ?? c['customer_name'] ?? 'N/A'),
-                  InfoRow(label: 'Issue Date', value: c['issued_date'] ?? c['issue_date'] ?? 'N/A'),
-                  InfoRow(label: 'Notes', value: c['notes'] ?? '-'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionHeader(title: 'ITEMS DISPATCHED'),
-                  ...((c['lines'] is List ? c['lines'] as List : [])).map((l) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: Text(l['product_name'] ?? 'N/A', style: AppTextStyles.bodySmall)),
-                        Text('${l['quantity']} ${l['uom'] ?? 'nos'}', style: AppTextStyles.caption),
-                      ],
-                    ),
-                  )),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-            if (status == 'DRAFT')
-              ActionButton(label: 'Issue Challan', tier: ActionTier.safe, onPressed: () async {
-                final ok = await AppConfirmDialog.show(context, title: 'Issue?', message: 'Issue this delivery challan?');
-                if (ok == true) {
-                  final success = await context.read<DeliveryChallanProvider>().issueChallan(widget.challanId);
-                  if (success) { _fetch(); } else if (mounted) { AppToast.error(context, context.read<DeliveryChallanProvider>().errorMessage ?? 'Failed'); }
-                }
-              }),
-            if (status == 'ISSUED' || status == 'DRAFT') ...[
-              const SizedBox(height: 12),
-              ActionButton(label: 'Cancel Challan', tier: ActionTier.dangerous, onPressed: () async {
-                final ok = await AppConfirmDialog.show(context, title: 'Cancel?', message: 'Cancel this challan?');
-                if (ok == true) {
-                  final success = await context.read<DeliveryChallanProvider>().cancelChallan(widget.challanId);
-                  if (success) { _fetch(); }
-                }
-              }),
-            ],
-            if (status == 'ISSUED') ...[
-              const SizedBox(height: 12),
-              ActionButton(label: 'Convert to Invoice', tier: ActionTier.safe, onPressed: () {
-                // Navigate to invoice form with pre-filled data from challan
-                final lines = (c['lines'] is List ? c['lines'] as List : []);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => InvoiceFormView(initialData: {
-                      'contact_id': c['contact_id'],
-                      'contact_name': c['contact_name'] ?? c['customer_name'],
-                      'reference_number': c['challan_number'],
-                      'pos_state_code': c['pos_state_code'],
-                      'lines': lines.map((l) => {
-                        'product_id': l['product_id'],
-                        'product_name': l['product_name'],
-                        'quantity': l['quantity'],
-                        'rate': l['rate'] ?? 0,
-                        'discount': l['discount'] ?? 0,
-                        'hsn_sac': l['hsn_sac'] ?? '',
-                        'gst_rate': l['gst_rate'] ?? 0,
-                      }).toList(),
-                    }),
-                  ),
-                );
-              }),
-            ],
-            const SizedBox(height: AppSpacing.xxxl),
-          ],
+      sections: [
+        // ── Status Progression ──
+        StatusProgression(
+          states: const ['DRAFT', 'ISSUED', 'DELIVERED'],
+          currentState: status,
+          stateLabels: const {
+            'DRAFT': 'Draft',
+            'ISSUED': 'Issued',
+            'DELIVERED': 'Delivered',
+          },
         ),
-      ),
+        const SizedBox(height: 16),
+
+        // ── Customer ──
+        CustomerCard(
+          name: c?['contact_name']?.toString() ?? c?['customer_name']?.toString() ?? 'Customer',
+        ),
+        const SizedBox(height: 16),
+
+        // ── Items Dispatched ──
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Items Dispatched'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              lines.isEmpty
+                  ? Text('No items', style: AppTextStyles.bodySmall)
+                  : ItemTable(
+                      items: lines.map((l) => ItemTableRow(
+                        name: l['product_name'] ?? 'N/A',
+                        qty: '${l['quantity']} ${l['uom'] ?? 'nos'}',
+                        rate: '-',
+                        amount: '-',
+                      )).toList(),
+                    ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Notes ──
+        if (c?['notes'] != null && c!['notes'].toString().isNotEmpty)
+          AppCard(
+            child: AppSection(
+              title: 'Notes',
+              child: Text(c['notes'].toString(), style: AppTextStyles.bodySmall),
+            ),
+          ),
+
+        // ── Timeline ──
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Activity'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              AppTimeline(items: [
+                AppTimelineItem(
+                  title: 'Challan Created',
+                  date: issueDate,
+                  color: AppColors.brandNavy,
+                ),
+                if (status == 'ISSUED')
+                  AppTimelineItem(
+                    title: 'Challan Issued',
+                    color: AppColors.info,
+                  ),
+                if (status == 'DELIVERED')
+                  AppTimelineItem(
+                    title: 'Delivered',
+                    color: AppColors.success,
+                  ),
+              ]),
+            ],
+          ),
+        ),
+      ],
+      actions: [
+        if (status == 'DRAFT') ...[
+          AppButton(label: 'Edit', icon: Icons.edit_outlined, onTap: _edit, isPrimary: true),
+          const SizedBox(height: 8),
+          AppButton(label: 'Issue Challan', icon: Icons.check_circle_outlined, onTap: _issue, isPrimary: true),
+          const SizedBox(height: 8),
+          AppButton(label: 'Delete', icon: Icons.delete_outline, onTap: _cancel, color: AppColors.error),
+        ],
+        if (status == 'ISSUED') ...[
+          AppButton(label: 'Convert to Invoice', icon: Icons.swap_horiz_outlined, onTap: _convertToInvoice, isPrimary: true),
+          const SizedBox(height: 8),
+          AppButton(label: 'Cancel Challan', icon: Icons.cancel_outlined, onTap: _cancel, color: AppColors.error),
+        ],
+      ],
     );
   }
 }

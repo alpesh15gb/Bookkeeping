@@ -5,6 +5,7 @@ import 'package:flutter_client/providers/expense_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
+import 'package:flutter_client/views/shared/design_system.dart' as ds;
 import 'package:flutter_client/views/expenses/expense_form_view.dart';
 import 'package:flutter_client/views/expenses/expense_detail_view.dart';
 import 'package:flutter_client/views/shared/pagination_controls.dart';
@@ -140,11 +141,29 @@ class _ExpenseListViewState extends State<ExpenseListView> {
       ),
       body: Column(
         children: [
+          if (provider.items.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 8),
+              child: Builder(
+                builder: (_) {
+                  num totalAmount = 0;
+                  for (final e in provider.items) {
+                    totalAmount += double.tryParse((e['amount'] ?? 0).toString()) ?? 0;
+                  }
+                  return HeroSummaryCard(
+                    title: 'Total Expenses',
+                    amount: totalAmount,
+                    subtitle: '${provider.items.length} expenses recorded',
+                    icon: Icons.money_off_outlined,
+                  );
+                },
+              ),
+            ),
           Expanded(
             child: provider.isLoading && provider.items.isEmpty
                 ? const LoadingState(message: 'Loading expenses...')
                 : provider.items.isEmpty
-                    ? EmptyState(
+                    ? ds.AppEmptyState(
                         icon: Icons.money_off_outlined,
                         title: 'No expenses recorded',
                         subtitle: 'Expenses you record will appear here',
@@ -168,6 +187,9 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                 final exp = provider.items[i];
                                 final id = exp['id'].toString();
                                 final isSelected = _selectedIds.contains(id);
+                                final category = exp['category_name'] ?? exp['category']?['name'] ?? 'N/A';
+                                final amount = double.tryParse((exp['amount'] ?? 0).toString()) ?? 0.0;
+
                                 return GestureDetector(
                                   onLongPress: () {
                                     if (!_isSelectionMode) {
@@ -177,84 +199,55 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                       });
                                     }
                                   },
-                                  child: AppCard(
-                                    onTap: () {
-                                      if (_isSelectionMode) {
-                                        _toggleSelection(id);
-                                      } else {
-                                        _showDetail(exp['id']);
-                                      }
-                                    },
-                                    child: Semantics(
-                                      label: 'Expense ${exp['expense_number'] ?? 'EXPENSE'}, ${exp['status'] ?? 'POSTED'}, ${exp['category_name'] ?? exp['category']?['name'] ?? "N/A"}, ${exp['expense_date']}, ₹${double.parse((exp['amount'] ?? 0).toString()).toStringAsFixed(2)}',
-                                      child: Row(
-                                        children: [
-                                          if (_isSelectionMode)
-                                            Padding(
-                                              padding: const EdgeInsets.only(right: 12),
-                                              child: Icon(
-                                                isSelected ? Icons.check_circle : Icons.circle_outlined,
-                                                size: 22,
-                                                color: isSelected ? AppColors.brandNavy : AppColors.textMuted,
-                                              ),
-                                            ),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Row(
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(exp['expense_number'] ?? 'EXPENSE', style: AppTextStyles.h3),
-                                                    ),
-                                                    StatusBadge(label: exp['status'] ?? 'POSTED'),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 6),
-                                                Row(
-                                                  children: [
-                                                    Icon(Icons.category_outlined, size: 14, color: AppColors.textMuted),
-                                                    const SizedBox(width: 6),
-                                                    Text('${exp['category_name'] ?? exp['category']?['name'] ?? "N/A"}', style: AppTextStyles.bodySmall),
-                                                    const SizedBox(width: 16),
-                                                    Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.textMuted),
-                                                    const SizedBox(width: 6),
-                                                    Text('${exp['expense_date']}', style: AppTextStyles.caption),
-                                                  ],
-                                                ),
-                                                const SizedBox(height: 10),
-                                                Row(
-                                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                                  children: [
-                                                    Text(
-                                                      '₹${double.parse((exp['amount'] ?? 0).toString()).toStringAsFixed(2)}',
-                                                      style: AppTextStyles.numericLarge,
-                                                    ),
-                                                    if (!_isSelectionMode)
-                                                      Row(
-                                                        children: [
-                                                           ActionButton(
-                                                             label: 'Edit',
-                                                             icon: Icons.edit_outlined,
-                                                             tier: ActionTier.safe,
-                                                             onPressed: () => _showForm(expense: exp),
-                                                           ),
-                                                           const SizedBox(width: 8),
-                                                           ActionButton(
-                                                             label: 'Delete',
-                                                             icon: Icons.delete_outlined,
-                                                             tier: ActionTier.dangerous,
-                                                             onPressed: () => _deleteExpense(exp['id']),
-                                                           ),
-                                                        ],
-                                                      ),
-                                                  ],
-                                                ),
-                                              ],
+                                  child: Semantics(
+                                    label: 'Expense ${exp['expense_number'] ?? 'EXPENSE'}, ${exp['status'] ?? 'POSTED'}, $category, ${exp['expense_date']}, ₹${amount.toStringAsFixed(2)}',
+                                    child: Row(
+                                      children: [
+                                        if (_isSelectionMode)
+                                          Padding(
+                                            padding: const EdgeInsets.only(right: 12),
+                                            child: Icon(
+                                              isSelected ? Icons.check_circle : Icons.circle_outlined,
+                                              size: 22,
+                                              color: isSelected ? AppColors.brandNavy : AppColors.textMuted,
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        Expanded(
+                                          child: ds.AppListTile(
+                                            leadingText: 'E',
+                                            title: exp['expense_number'] ?? 'EXPENSE',
+                                            subtitle: '$category • ${ds.AppDate.format(exp['expense_date'])}',
+                                            trailingWidget: ds.AppAmount(amount: amount),
+                                            badge: StatusBadge(label: exp['status'] ?? 'POSTED'),
+                                            hoverActions: _isSelectionMode
+                                                ? null
+                                                : [
+                                                    ds.AppButton(
+                                                      label: 'Edit',
+                                                      icon: Icons.edit_outlined,
+                                                      isSmall: true,
+                                                      onTap: () => _showForm(expense: exp),
+                                                    ),
+                                                    ds.AppButton(
+                                                      label: 'Delete',
+                                                      icon: Icons.delete_outline,
+                                                      isSmall: true,
+                                                      color: AppColors.error,
+                                                      textColor: AppColors.textWhite,
+                                                      onTap: () => _deleteExpense(exp['id']),
+                                                    ),
+                                                  ],
+                                            onTap: () {
+                                              if (_isSelectionMode) {
+                                                _toggleSelection(id);
+                                              } else {
+                                                _showDetail(exp['id']);
+                                              }
+                                            },
+                                            isSelected: isSelected,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 );
@@ -313,26 +306,27 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                         style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
                                       ),
                                       const Spacer(),
-                                       ActionButton(
-                                         label: 'Clear',
-                                         icon: Icons.close,
-                                         tier: ActionTier.safe,
-                                         onPressed: _clearSelection,
-                                       ),
-                                       const SizedBox(width: 8),
-                                       ActionButton(
-                                         label: 'Cancel',
-                                         icon: Icons.cancel_outlined,
-                                         tier: ActionTier.dangerous,
-                                         onPressed: _bulkCancel,
-                                       ),
-                                       const SizedBox(width: 8),
-                                       ActionButton(
-                                         label: 'Delete',
-                                         icon: Icons.delete_outline,
-                                         tier: ActionTier.dangerous,
-                                         onPressed: _bulkDelete,
-                                       ),
+                                      ds.AppButton(
+                                        label: 'Clear',
+                                        icon: Icons.close,
+                                        onTap: _clearSelection,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ds.AppButton(
+                                        label: 'Cancel',
+                                        icon: Icons.cancel_outlined,
+                                        color: AppColors.error,
+                                        textColor: AppColors.textWhite,
+                                        onTap: _bulkCancel,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      ds.AppButton(
+                                        label: 'Delete',
+                                        icon: Icons.delete_outline,
+                                        color: AppColors.error,
+                                        textColor: AppColors.textWhite,
+                                        onTap: _bulkDelete,
+                                      ),
                                     ],
                                   ),
                                 ),

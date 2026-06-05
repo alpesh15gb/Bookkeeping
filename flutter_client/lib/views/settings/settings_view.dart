@@ -8,7 +8,8 @@ import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/views/banking/banking_profile_form_view.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/app_components.dart' hide AppCard, AppEmptyState;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/auth/change_password_view.dart';
 
@@ -472,413 +473,287 @@ class _SettingsViewState extends State<SettingsView> {
             : AppSpacing.pagePadding,
         children: [
           // Company Section
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Company Profile', style: AppTextStyles.h3),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        size: 18,
-                        color: AppColors.brandNavy,
-                      ),
-                      onPressed: () =>
-                          _showCompanyProfileDialog(company, settings),
-                      tooltip: 'Edit Company Profile',
-                    ),
-                  ],
+          SectionedCard(
+            title: 'Company Profile',
+            children: [
+              SettingsListTile(
+                icon: Icons.business_outlined,
+                title: 'Legal Name',
+                subtitle: legalName,
+                onTap: () => _showCompanyProfileDialog(company, settings),
+              ),
+              if (tradeName.isNotEmpty && tradeName != legalName)
+                SettingsListTile(
+                  icon: Icons.storefront_outlined,
+                  title: 'Trade Name',
+                  subtitle: tradeName,
+                  onTap: () => _showCompanyProfileDialog(company, settings),
                 ),
-                const SizedBox(height: 12),
-                _settingRow(Icons.business_outlined, 'Legal Name', legalName),
-                if (tradeName.isNotEmpty && tradeName != legalName)
-                  _settingRow(
-                    Icons.storefront_outlined,
-                    'Trade Name',
-                    tradeName,
-                  ),
-                _settingRow(
-                  Icons.location_on_outlined,
-                  'Address',
-                  companyAddress,
-                ),
-                _settingRow(Icons.phone_outlined, 'Phone', companyPhone),
-                _settingRow(Icons.email_outlined, 'Email', companyEmail),
-                _settingRow(Icons.language_outlined, 'Website', companyWebsite),
-              ],
-            ),
+              SettingsListTile(
+                icon: Icons.location_on_outlined,
+                title: 'Address',
+                subtitle: companyAddress,
+                onTap: () => _showCompanyProfileDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.phone_outlined,
+                title: 'Phone',
+                subtitle: companyPhone,
+                onTap: () => _showCompanyProfileDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.email_outlined,
+                title: 'Email',
+                subtitle: companyEmail,
+                onTap: () => _showCompanyProfileDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.language_outlined,
+                title: 'Website',
+                subtitle: companyWebsite,
+                onTap: () => _showCompanyProfileDialog(company, settings),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
 
           // Tax & Compliance Section
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Tax & Compliance', style: AppTextStyles.h3),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        size: 18,
-                        color: AppColors.brandNavy,
-                      ),
-                      onPressed: () =>
-                          _showTaxComplianceDialog(company, settings),
-                      tooltip: 'Edit Tax & Compliance',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _settingRow(Icons.badge_outlined, 'GSTIN', gstin),
-                _settingRow(Icons.numbers_outlined, 'PAN', pan),
-                _settingRow(
-                  Icons.location_city_outlined,
-                  'Origin State Code',
-                  stateCode,
-                ),
-                _settingRow(
-                  Icons.fact_check_outlined,
-                  'GST Enabled',
-                  gstEnabled ? 'Yes' : 'No',
-                  valueColor: gstEnabled
-                      ? AppColors.success
-                      : AppColors.textMuted,
-                ),
-              ],
-            ),
+          SectionedCard(
+            title: 'Tax & Compliance',
+            children: [
+              SettingsListTile(
+                icon: Icons.badge_outlined,
+                title: 'GSTIN',
+                subtitle: gstin,
+                onTap: () => _showTaxComplianceDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.numbers_outlined,
+                title: 'PAN',
+                subtitle: pan,
+                onTap: () => _showTaxComplianceDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.location_city_outlined,
+                title: 'Origin State Code',
+                subtitle: stateCode,
+                onTap: () => _showTaxComplianceDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.fact_check_outlined,
+                title: 'GST Enabled',
+                subtitle: gstEnabled ? 'Yes' : 'No',
+                onTap: () => _showTaxComplianceDialog(company, settings),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
 
           // Bank Details Section
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Bank Details', style: AppTextStyles.h3),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        size: 18,
-                        color: AppColors.brandNavy,
-                      ),
-                      onPressed: () => _openBankProfileForm(primaryBank),
-                      tooltip: primaryBank == null ? 'Add Bank Details' : 'Edit Bank Details',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _settingRow(
-                  Icons.account_balance_outlined,
-                  'Bank Name',
-                  bankName,
-                ),
-                _settingRow(
-                  Icons.payment_outlined,
-                  'Account Number',
-                  bankAccountNo,
-                ),
-                _settingRow(Icons.code_outlined, 'IFSC Code', bankIfsc),
-                _settingRow(Icons.store_outlined, 'Branch Name', bankBranch),
-              ],
-            ),
+          SectionedCard(
+            title: 'Bank Details',
+            children: [
+              SettingsListTile(
+                icon: Icons.account_balance_outlined,
+                title: 'Bank Name',
+                subtitle: bankName,
+                onTap: () => _openBankProfileForm(primaryBank),
+              ),
+              SettingsListTile(
+                icon: Icons.payment_outlined,
+                title: 'Account Number',
+                subtitle: bankAccountNo,
+                onTap: () => _openBankProfileForm(primaryBank),
+              ),
+              SettingsListTile(
+                icon: Icons.code_outlined,
+                title: 'IFSC Code',
+                subtitle: bankIfsc,
+                onTap: () => _openBankProfileForm(primaryBank),
+              ),
+              SettingsListTile(
+                icon: Icons.store_outlined,
+                title: 'Branch Name',
+                subtitle: bankBranch,
+                onTap: () => _openBankProfileForm(primaryBank),
+              ),
+            ],
           ),
           const SizedBox(height: 12),
 
           // Preferences Section
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Preferences', style: AppTextStyles.h3),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.edit_outlined,
-                        size: 18,
-                        color: AppColors.brandNavy,
-                      ),
-                      onPressed: () =>
-                          _showPreferencesDialog(company, settings),
-                      tooltip: 'Edit Preferences',
+          SectionedCard(
+            title: 'Preferences',
+            children: [
+              SettingsListTile(
+                icon: Icons.monetization_on_outlined,
+                title: 'Currency',
+                subtitle: currency,
+                onTap: () => _showPreferencesDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.calendar_month_outlined,
+                title: 'Financial Year',
+                subtitle: DateTime.now().month >= 4
+                    ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}'
+                    : '${(DateTime.now().year - 1)}-${DateTime.now().year.toString().substring(2)}',
+                onTap: () => _showPreferencesDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.picture_as_pdf_outlined,
+                title: 'PDF Template Style',
+                subtitle: pdfTemplate.toString().toUpperCase(),
+                onTap: () => _showPreferencesDialog(company, settings),
+              ),
+              SettingsListTile(
+                icon: Icons.description_outlined,
+                title: 'Terms & Conditions',
+                subtitle: terms,
+                onTap: () => _showPreferencesDialog(company, settings),
+              ),
+              Consumer<ThemeProvider>(
+                builder: (context, themeProvider, _) {
+                  return SettingsListTile(
+                    icon: themeProvider.isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                    title: 'Dark Mode',
+                    subtitle: themeProvider.isDarkMode ? 'Enabled' : 'Disabled',
+                    trailing: Switch(
+                      value: themeProvider.isDarkMode,
+                      onChanged: (_) => themeProvider.toggleTheme(),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                _settingRow(
-                  Icons.monetization_on_outlined,
-                  'Currency',
-                  currency,
-                ),
-                _settingRow(
-                  Icons.calendar_month_outlined,
-                  'Financial Year',
-                  DateTime.now().month >= 4
-                      ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}'
-                      : '${(DateTime.now().year - 1)}-${DateTime.now().year.toString().substring(2)}',
-                ),
-                _settingRow(
-                  Icons.picture_as_pdf_outlined,
-                  'PDF Template Style',
-                  pdfTemplate.toString().toUpperCase(),
-                ),
-                _settingRow(
-                  Icons.description_outlined,
-                  'Terms & Conditions',
-                  terms,
-                ),
-                Consumer<ThemeProvider>(
-                  builder: (context, themeProvider, _) {
-                    return ListTile(
-                      leading: Icon(
-                        themeProvider.isDarkMode
-                            ? Icons.dark_mode
-                            : Icons.light_mode,
-                      ),
-                      title: const Text('Dark Mode'),
-                      trailing: Switch(
-                        value: themeProvider.isDarkMode,
-                        onChanged: (_) => themeProvider.toggleTheme(),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
+                    onTap: () => themeProvider.toggleTheme(),
+                  );
+                },
+              ),
+            ],
           ),
           const SizedBox(height: 12),
 
           // Offline & Sync Section
           AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text('Offline & Sync', style: AppTextStyles.h3),
-                    const Spacer(),
-                    Consumer<SyncManager>(
-                      builder: (context, sync, _) {
-                        if (!sync.isOnline) {
-                          return const Icon(
-                            Icons.cloud_off,
-                            color: AppColors.warning,
-                            size: 18,
-                          );
-                        }
-                        if (sync.pendingCount > 0) {
-                          return Badge(
-                            label: Text('${sync.pendingCount}'),
-                            child: const Icon(
-                              Icons.sync,
-                              color: AppColors.info,
-                              size: 18,
-                            ),
-                          );
-                        }
-                        return const Icon(
-                          Icons.cloud_done,
-                          color: AppColors.success,
-                          size: 18,
-                        );
-                      },
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                Consumer<SyncManager>(
-                  builder: (context, sync, _) {
-                    return Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _settingRow(
-                          Icons.wifi,
-                          'Connection',
-                          sync.isOnline ? 'Online' : 'Offline',
-                          valueColor: sync.isOnline
-                              ? AppColors.success
-                              : AppColors.error,
-                        ),
-                        _settingRow(
-                          Icons.pending_actions,
-                          'Pending Sync Items',
-                          '${sync.pendingCount}',
-                          valueColor: sync.pendingCount > 0
-                              ? AppColors.warning
-                              : AppColors.textMuted,
-                        ),
-                        if (sync.lastSyncMessage != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              sync.lastSyncMessage!,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: AppColors.textMuted,
-                              ),
+            child: AppSection(
+              title: 'Offline & Sync',
+              action: Consumer<SyncManager>(
+                builder: (context, sync, _) {
+                  if (!sync.isOnline) {
+                    return const Icon(Icons.cloud_off, color: AppColors.warning, size: 18);
+                  }
+                  if (sync.pendingCount > 0) {
+                    return Badge(
+                      label: Text('${sync.pendingCount}'),
+                      child: const Icon(Icons.sync, color: AppColors.info, size: 18),
+                    );
+                  }
+                  return const Icon(Icons.cloud_done, color: AppColors.success, size: 18);
+                },
+              ),
+              child: Consumer<SyncManager>(
+                builder: (context, sync, _) {
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SettingsListTile(
+                        icon: Icons.wifi,
+                        title: 'Connection',
+                        subtitle: sync.isOnline ? 'Online' : 'Offline',
+                      ),
+                      SettingsListTile(
+                        icon: Icons.pending_actions,
+                        title: 'Pending Sync Items',
+                        subtitle: '${sync.pendingCount}',
+                      ),
+                      if (sync.lastSyncMessage != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
+                          child: Text(
+                            sync.lastSyncMessage!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
                             ),
                           ),
-                        const SizedBox(height: 12),
-                        Row(
+                        ),
+                      const SizedBox(height: 12),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Row(
                           children: [
                             Expanded(
-                              child: ElevatedButton.icon(
-                                onPressed: sync.isSyncing
-                                    ? null
-                                    : () => sync.fullSync(),
-                                icon: sync.isSyncing
-                                    ? const SizedBox(
-                                        width: 16,
-                                        height: 16,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                        ),
-                                      )
-                                    : const Icon(Icons.sync, size: 18),
-                                label: Text(
-                                  sync.isSyncing ? 'Syncing...' : 'Full Sync',
-                                ),
+                              child: AppButton(
+                                label: sync.isSyncing ? 'Syncing...' : 'Full Sync',
+                                icon: Icons.sync,
+                                isPrimary: true,
+                                isLoading: sync.isSyncing,
+                                onTap: sync.isSyncing ? null : () => sync.fullSync(),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: OutlinedButton.icon(
-                                onPressed:
-                                    sync.isSyncing || sync.pendingCount == 0
+                              child: AppButton(
+                                label: 'Upload Pending',
+                                icon: Icons.cloud_upload,
+                                isPrimary: false,
+                                onTap: sync.isSyncing || sync.pendingCount == 0
                                     ? null
                                     : () => sync.syncPendingActions(),
-                                icon: const Icon(Icons.cloud_upload, size: 18),
-                                label: const Text('Upload Pending'),
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    );
-                  },
-                ),
-              ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  );
+                },
+              ),
             ),
           ),
           const SizedBox(height: 12),
 
           // Numbering Series Section
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Numbering Series', style: AppTextStyles.h3),
-                const SizedBox(height: 12),
-                if (settingsProvider.numberingSeries.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+          SectionedCard(
+            title: 'Numbering Series',
+            children: settingsProvider.numberingSeries.isEmpty
+              ? [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                     child: Text(
                       'No numbering series configured',
-                      style: AppTextStyles.bodySmall,
+                      style: TextStyle(color: AppColors.textMuted),
                     ),
                   ),
-                ...settingsProvider.numberingSeries.map(
-                  (series) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.tag_outlined,
-                          size: 16,
-                          color: AppColors.textMuted,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _getFriendlyDocTypeName(
-                              series['document_type'] ?? 'Unknown',
-                            ),
-                            style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        Text(
-                          '${series['prefix'] ?? ''}${'0' * (series['padding_digits'] ?? 4)}${series['suffix'] ?? ''}',
-                          style: AppTextStyles.caption.copyWith(
-                            fontFamily: 'monospace',
-                            fontSize: 11,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        IconButton(
-                          icon: const Icon(
-                            Icons.edit_outlined,
-                            size: 16,
-                            color: AppColors.brandNavy,
-                          ),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: () => _showEditSeriesDialog(series),
-                          tooltip: 'Edit numbering series',
-                        ),
-                      ],
-                    ),
+                ]
+              : settingsProvider.numberingSeries.map(
+                  (series) => SettingsListTile(
+                    icon: Icons.format_list_numbered_outlined,
+                    title: _getFriendlyDocTypeName(series['document_type'] ?? 'Unknown'),
+                    subtitle: '${series['prefix'] ?? ''}${'0' * (series['padding_digits'] ?? 4)}${series['suffix'] ?? ''}',
+                    onTap: () => _showEditSeriesDialog(series),
                   ),
-                ),
-              ],
-            ),
+                ).toList(),
           ),
           const SizedBox(height: 12),
 
           // Branches Section
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Branches', style: AppTextStyles.h3),
-                const SizedBox(height: 12),
-                if (settingsProvider.branches.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+          SectionedCard(
+            title: 'Branches',
+            children: settingsProvider.branches.isEmpty
+              ? [
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                     child: Text(
                       'No branches configured',
-                      style: AppTextStyles.bodySmall,
+                      style: TextStyle(color: AppColors.textMuted),
                     ),
                   ),
-                ...settingsProvider.branches.map(
-                  (branch) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.business_outlined,
-                          size: 16,
-                          color: AppColors.textMuted,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            branch['name'] ?? 'Unknown',
-                            style: const TextStyle(fontSize: 13),
-                          ),
-                        ),
-                        Text(
-                          branch['gstin'] ?? branch['state_code'] ?? '',
-                          style: AppTextStyles.caption,
-                        ),
-                      ],
-                    ),
+                ]
+              : settingsProvider.branches.map(
+                  (branch) => SettingsListTile(
+                    icon: Icons.location_on_outlined,
+                    title: branch['name'] ?? 'Unknown',
+                    subtitle: branch['gstin'] ?? branch['state_code'] ?? '',
                   ),
-                ),
-              ],
-            ),
+                ).toList(),
           ),
           const SizedBox(height: 24),
 
@@ -888,8 +763,11 @@ class _SettingsViewState extends State<SettingsView> {
               : Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    OutlinedButton.icon(
-                      onPressed: () {
+                    AppButton(
+                      label: 'Change Password',
+                      icon: Icons.lock_outlined,
+                      isPrimary: false,
+                      onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -897,15 +775,15 @@ class _SettingsViewState extends State<SettingsView> {
                           ),
                         );
                       },
-                      icon: const Icon(Icons.lock_outlined, size: 16),
-                      label: const Text('Change Password'),
                     ),
                     const SizedBox(height: 12),
-                    ActionButton(
+                    AppButton(
                       label: 'Purge Company Data',
-                      tier: ActionTier.dangerous,
                       icon: Icons.delete_forever_outlined,
-                      onPressed: _requestPurge,
+                      isPrimary: true,
+                      color: AppColors.error,
+                      textColor: AppColors.textWhite,
+                      onTap: _requestPurge,
                     ),
                   ],
                 ),
@@ -1029,31 +907,6 @@ class _SettingsViewState extends State<SettingsView> {
               }
             },
             child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _settingRow(
-    IconData icon,
-    String label,
-    String value, {
-    Color? valueColor,
-  }) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 7),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: AppColors.textMuted),
-          const SizedBox(width: 12),
-          Expanded(child: Text(label, style: const TextStyle(fontSize: 14))),
-          Text(
-            value,
-            style: AppTextStyles.caption.copyWith(
-              color: valueColor ?? AppColors.textSecondary,
-              fontWeight: FontWeight.w500,
-            ),
           ),
         ],
       ),

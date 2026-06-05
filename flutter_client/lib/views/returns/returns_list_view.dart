@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/app_components.dart' show StatusBadge, AppConfirmDialog, AppToast;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
@@ -95,38 +96,50 @@ class _ReturnsListViewState extends State<ReturnsListView> with SingleTickerProv
   }
 
   Widget _buildList(List<dynamic> items, bool isSales) {
-    if (items.isEmpty) return const EmptyState(icon: Icons.assignment_return_outlined, title: 'No returns found');
+    if (items.isEmpty) return const AppEmptyState(icon: Icons.assignment_return_outlined, title: 'No returns found');
+    num totalAmount = 0;
+    for (final item in items) {
+      totalAmount += double.tryParse((item['total'] ?? 0).toString()) ?? 0;
+    }
     return ListView.builder(
-      itemCount: items.length,
+      padding: const EdgeInsets.only(top: 8, left: 12, right: 12, bottom: 80),
+      itemCount: items.length + 1,
       itemBuilder: (context, index) {
-        final item = items[index];
-        return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: ListTile(
-            leading: CircleAvatar(
-              backgroundColor: isSales ? AppColors.errorBg : AppColors.warningBg,
-              child: Icon(isSales ? Icons.arrow_back : Icons.arrow_forward,
-                color: isSales ? AppColors.error : AppColors.warning, size: 18),
+        if (index == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: HeroSummaryCard(
+              title: isSales ? 'Total Sales Returns' : 'Total Purchase Returns',
+              amount: totalAmount,
+              subtitle: '${items.length} returns',
+              icon: Icons.assignment_return_outlined,
             ),
-            title: Text(item['return_number'] ?? 'N/A'),
-            subtitle: Text('${item['contact_name'] ?? 'N/A'} | ${item['issue_date'] ?? ''}'),
-            trailing: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                StatusBadge(label: item['status'] ?? 'DRAFT'),
-                if (item['status'] == 'POSTED')
-                  IconButton(
-                    icon: const Icon(Icons.cancel_outlined, size: 18, color: AppColors.error),
-                    onPressed: () => _cancelItem(item, isSales),
-                  ),
-              ],
+          );
+        }
+        final item = items[index - 1];
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+          child: AppCard(
+            child: AppListTile(
+              leadingText: (item['return_number'] ?? 'R')[0].toString().toUpperCase(),
+              title: item['return_number'] ?? 'N/A',
+              subtitle: '${item['contact_name'] ?? 'N/A'} | ${AppDate.format(item['issue_date'])}',
+              badge: StatusBadge(label: item['status'] ?? 'DRAFT'),
+              hoverActions: item['status'] == 'POSTED'
+                ? [
+                    IconButton(
+                      icon: const Icon(Icons.cancel_outlined, size: 18, color: AppColors.error),
+                      onPressed: () => _cancelItem(item, isSales),
+                    ),
+                  ]
+                : null,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => ReturnsDetailView(item: item, isSalesReturn: isSales)),
+                ).then((_) => _fetch());
+              },
             ),
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ReturnsDetailView(item: item, isSalesReturn: isSales)),
-              ).then((_) => _fetch());
-            },
           ),
         );
       },
@@ -184,7 +197,7 @@ class ReturnsDetailView extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Card(
+          AppCard(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -192,25 +205,28 @@ class ReturnsDetailView extends StatelessWidget {
                 children: [
                   Text(m['return_number'] ?? 'N/A', style: AppTextStyles.h2),
                   const SizedBox(height: 8),
-                  InfoRow(label: 'Status', value: '${m['status'] ?? 'N/A'}'),
-                  InfoRow(label: 'Issue Date', value: '${m['issue_date'] ?? 'N/A'}'),
-                  InfoRow(label: 'Subtotal', value: '₹${m['subtotal'] ?? 0}'),
-                  InfoRow(label: 'Total', value: '₹${m['total'] ?? 0}'),
-                  if (m['notes'] != null) InfoRow(label: 'Notes', value: '${m['notes']}'),
+                  AppInfoRow(label: 'Status', value: '${m['status'] ?? 'N/A'}'),
+                  AppInfoRow(label: 'Issue Date', value: AppDate.format(m['issue_date'])),
+                  AppInfoRow(label: 'Subtotal', value: AmountFormat.format(m['subtotal'] ?? 0)),
+                  AppInfoRow(label: 'Total', value: AmountFormat.format(m['total'] ?? 0)),
+                  if (m['notes'] != null) AppInfoRow(label: 'Notes', value: '${m['notes']}'),
                 ],
               ),
             ),
           ),
           const SizedBox(height: 16),
-          Text('Line Items', style: AppTextStyles.h3),
-          const SizedBox(height: 8),
-          ...((m['lines'] is List ? m['lines'] as List : [])).whereType<Map<String, dynamic>>().map((l) => Card(
-            child: ListTile(
-              title: Text('${l['product_name'] ?? 'Product'}'),
-              subtitle: Text('Qty: ${l['quantity'] ?? 0} @ ₹${l['rate'] ?? 0}'),
-              trailing: Text('₹${l['total'] ?? 0}'),
+          AppSection(
+            title: 'Line Items',
+            child: Column(
+              children: ((m['lines'] is List ? m['lines'] as List : [])).whereType<Map<String, dynamic>>().map((l) => AppCard(
+                child: AppListTile(
+                  title: '${l['product_name'] ?? 'Product'}',
+                  subtitle: 'Qty: ${l['quantity'] ?? 0} @ ${AmountFormat.format(l['rate'] ?? 0)}',
+                  trailingWidget: AppAmount(amount: (l['total'] ?? 0).toDouble()),
+                ),
+              )).toList(),
             ),
-          )),
+          ),
         ],
       ),
     );

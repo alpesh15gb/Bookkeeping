@@ -2,22 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
+import 'package:flutter_client/views/shared/app_components.dart' hide AppCard;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/credit_notes/credit_debit_note_form_view.dart';
-
 import 'package:flutter_client/core/print_share_helper.dart';
-import 'package:flutter_client/views/shared/toast.dart';
 
 class CreditDebitNoteDetailView extends StatefulWidget {
   final String noteId;
   final bool isCredit;
 
-  const CreditDebitNoteDetailView({
-    super.key,
-    required this.noteId,
-    required this.isCredit,
-  });
+  const CreditDebitNoteDetailView({super.key, required this.noteId, required this.isCredit});
 
   @override
   State<CreditDebitNoteDetailView> createState() => _CreditDebitNoteDetailViewState();
@@ -38,304 +32,200 @@ class _CreditDebitNoteDetailViewState extends State<CreditDebitNoteDetailView> {
     final detail = widget.isCredit
         ? await provider.fetchCreditNoteDetail(widget.noteId)
         : await provider.fetchDebitNoteDetail(widget.noteId);
-
-    if (mounted) {
-      setState(() {
-        _note = detail;
-        _isLoading = false;
-      });
-    }
+    if (mounted) setState(() { _note = detail; _isLoading = false; });
   }
 
-  void _finalizeNote() async {
-    final confirm = await AppConfirmDialog.show(
+  void _share() {
+    final number = widget.isCredit ? _note!['credit_note_number'] : _note!['debit_note_number'];
+    PrintShareHelper.showShareSheet(
       context,
-      title: 'Finalize Note?',
-      message: 'This will lock the note and generate ledger entries. You cannot edit it after finalizing.',
+      docLabel: widget.isCredit ? 'Credit Note' : 'Debit Note',
+      docNumber: number ?? 'N/A',
+      docType: widget.isCredit ? 'invoices/credit-notes' : 'invoices/debit-notes',
+      docId: widget.noteId,
     );
+  }
+
+  void _edit() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => CreditDebitNoteFormView(isCredit: widget.isCredit, editNote: _note)),
+    ).then((updated) { if (updated == true) _fetchDetail(); });
+  }
+
+  void _finalize() async {
+    final confirm = await AppConfirmDialog.show(context, title: 'Finalize Note?', message: 'This will lock the note.');
     if (confirm == true) {
-      setState(() => _isLoading = true);
       final provider = context.read<DocumentProvider>();
       final success = widget.isCredit
           ? await provider.finalizeCreditNote(widget.noteId)
           : await provider.finalizeDebitNote(widget.noteId);
-
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (success) {
-          _fetchDetail();
-        } else {
-          AppToast.error(context, provider.errorMessage ?? 'Failed to finalize');
-        }
-      }
+      if (success && mounted) _fetchDetail();
     }
   }
 
-  void _cancelNote() async {
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Cancel Note?',
-      message: 'Are you sure you want to cancel this note? This will reverse ledger entries.',
-    );
+  void _cancel() async {
+    final confirm = await AppConfirmDialog.show(context, title: 'Cancel Note?', message: 'This will reverse ledger entries.');
     if (confirm == true) {
-      setState(() => _isLoading = true);
       final provider = context.read<DocumentProvider>();
       final success = widget.isCredit
           ? await provider.cancelCreditNote(widget.noteId)
           : await provider.cancelDebitNote(widget.noteId);
+      if (success && mounted) _fetchDetail();
+    }
+  }
 
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (success) {
-          _fetchDetail();
-        } else {
-          AppToast.error(context, provider.errorMessage ?? 'Failed to cancel');
-        }
-      }
+  void _delete() async {
+    final noteType = widget.isCredit ? 'Credit Note' : 'Debit Note';
+    final confirm = await AppConfirmDialog.show(context, title: 'Delete Draft $noteType?', message: 'Are you sure?');
+    if (confirm == true) {
+      final provider = context.read<DocumentProvider>();
+      final success = widget.isCredit
+          ? await provider.deleteCreditNote(widget.noteId)
+          : await provider.deleteDebitNote(widget.noteId);
+      if (success && mounted) Navigator.pop(context);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Scaffold(body: LoadingState(message: 'Loading note details...'));
-    if (_note == null) return const Scaffold(body: ErrorState(message: 'Note details not found.'));
+    final note = _note;
+    final status = note?['status'] ?? 'DRAFT';
+    final number = widget.isCredit
+        ? (note != null ? note['credit_note_number']?.toString() : null)
+        : (note != null ? note['debit_note_number']?.toString() : null);
+    final total = double.tryParse((note?['total'] ?? 0).toString()) ?? 0.0;
+    final lines = note?['lines'] is List ? (note!['lines'] as List) : [];
+    final contactName = note?['contact_name']?.toString();
 
-    final isMobile = AdaptiveLayout.isMobile(context);
-    final number = widget.isCredit ? _note!['credit_note_number'] : _note!['debit_note_number'];
-    final status = _note!['status'] ?? 'DRAFT';
-    final lines = _note!['lines'] is List ? _note!['lines'] as List : [];
-
-    final subtotal = double.tryParse((_note!['subtotal'] ?? 0).toString()) ?? 0.0;
-    final total = double.tryParse((_note!['total'] ?? 0).toString()) ?? 0.0;
-    final cgst = double.tryParse((_note!['cgst_amount'] ?? 0).toString()) ?? 0.0;
-    final sgst = double.tryParse((_note!['sgst_amount'] ?? 0).toString()) ?? 0.0;
-    final igst = double.tryParse((_note!['igst_amount'] ?? 0).toString()) ?? 0.0;
-    final cess = double.tryParse((_note!['cess_amount'] ?? 0).toString()) ?? 0.0;
-    final roundOff = double.tryParse((_note!['round_off'] ?? 0).toString()) ?? 0.0;
-
-    return Scaffold(
-      backgroundColor: AppColors.bgLight,
-      appBar: AppBar(
-        title: Text(number ?? 'Note Details'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share_outlined),
-            onPressed: () {
-              PrintShareHelper.showShareSheet(
-                context,
-                docLabel: widget.isCredit ? 'Credit Note' : 'Debit Note',
-                docNumber: number ?? 'N/A',
-                docType: widget.isCredit ? 'invoices/credit-notes' : 'invoices/debit-notes',
-                docId: widget.noteId,
-              );
-            },
-            tooltip: 'Share / Export',
-          ),
-          if (status == 'DRAFT')
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CreditDebitNoteFormView(isCredit: widget.isCredit, editNote: _note),
-                  ),
-                ).then((updated) {
-                  if (updated == true) _fetchDetail();
-                });
-              },
-              tooltip: 'Edit Note',
-            ),
-          const SizedBox(width: 8),
-          StatusBadge(label: status),
-          const SizedBox(width: 16),
-        ],
+    return DocumentPreviewScreen(
+      appBarTitle: widget.isCredit ? 'Credit Note' : 'Debit Note',
+      appBarActions: [
+        IconButton(icon: const Icon(Icons.share_outlined, size: 18), onPressed: _share, tooltip: 'Share'),
+      ],
+      isLoading: _isLoading,
+      errorMessage: note == null && !_isLoading ? 'Note not found.' : null,
+      onRetry: _fetchDetail,
+      hero: DocumentHero(
+        docNumber: number ?? 'NOTE',
+        docType: widget.isCredit ? 'Credit Note' : 'Debit Note',
+        amount: total,
+        status: status,
+        issueDate: note?['issue_date']?.toString(),
       ),
-      body: SingleChildScrollView(
-        padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header Card
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 40,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: AppColors.brandNavy,
-                          borderRadius: BorderRadius.circular(AppRadius.lg),
-                        ),
-                        child: const Icon(
-                          Icons.compare_arrows_rounded,
-                          size: 20,
-                          color: AppColors.goldAccent,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(widget.isCredit ? 'CREDIT NOTE' : 'DEBIT NOTE', style: AppTextStyles.labelSmall),
-                            Text(
-                              number ?? 'N/A',
-                              style: AppTextStyles.h2,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  InfoRow(label: 'Linked Invoice', value: _note!['invoice_number'] ?? 'Unlinked'),
-                  InfoRow(label: 'Issue Date', value: _note!['issue_date'] ?? 'N/A'),
-                  InfoRow(label: 'Reason', value: _note!['reason'] ?? 'N/A'),
-                  if (_note!['contact_name'] != null)
-                    InfoRow(label: 'Customer/Vendor', value: _note!['contact_name']),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Line Items Card
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionHeader(title: 'ITEMS'),
-                  if (lines.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                      child: Text('No items', style: AppTextStyles.bodySmall),
-                    )
-                  else
-                    ListView.separated(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      itemCount: lines.length,
-                      separatorBuilder: (context, _) => const Divider(),
-                      itemBuilder: (context, i) {
-                        final line = lines[i];
-                        final qty = double.tryParse((line['quantity'] ?? 0).toString()) ?? 0.0;
-                        final rate = double.tryParse((line['rate'] ?? 0).toString()) ?? 0.0;
-                        final amt = double.tryParse((line['subtotal'] ?? 0).toString()) ?? (qty * rate);
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      line['product_name'] ?? 'Product',
-                                      style: AppTextStyles.bodyMedium,
-                                    ),
-                                    const SizedBox(height: AppSpacing.xxs),
-                                    Text(
-                                      'Qty: $qty × ₹${rate.toStringAsFixed(2)}',
-                                      style: AppTextStyles.caption,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Text(
-                                '₹${amt.toStringAsFixed(2)}',
-                                style: AppTextStyles.numeric,
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Summary Card
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionHeader(title: 'TAX & TOTAL SUMMARY'),
-                  SummaryRow(label: 'Subtotal', value: '₹${subtotal.toStringAsFixed(2)}'),
-                  SummaryRow(label: 'CGST', value: '₹${cgst.toStringAsFixed(2)}'),
-                  SummaryRow(label: 'SGST', value: '₹${sgst.toStringAsFixed(2)}'),
-                  if (igst > 0) SummaryRow(label: 'IGST', value: '₹${igst.toStringAsFixed(2)}'),
-                  if (cess > 0) SummaryRow(label: 'Cess', value: '₹${cess.toStringAsFixed(2)}'),
-                  SummaryRow(label: 'Round Off', value: '₹${roundOff.toStringAsFixed(2)}'),
-                  const Divider(),
-                  SummaryRow(
-                    label: 'Total',
-                    value: '₹${total.toStringAsFixed(2)}',
-                    isBold: true,
-                    valueColor: AppColors.brandNavy,
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            if (status == 'DRAFT') ...[
-              ActionButton(
-                label: 'Finalize & Post',
-                icon: Icons.lock_outline,
-                tier: ActionTier.warning,
-                onPressed: _finalizeNote,
-              ),
-              const SizedBox(height: 12),
-              ActionButton(
-                label: 'Delete Draft',
-                icon: Icons.delete_outline,
-                tier: ActionTier.dangerous,
-                onPressed: _deleteNote,
-              ),
-            ],
-            if (status == 'POSTED') ...[
-              ActionButton(
-                label: 'Cancel Note',
-                icon: Icons.cancel_outlined,
-                tier: ActionTier.dangerous,
-                onPressed: _cancelNote,
-              ),
-            ],
-            const SizedBox(height: AppSpacing.xxxl),
-          ],
+      sections: [
+        // ── Status Progression ──
+        StatusProgression(
+          states: const ['DRAFT', 'POSTED', 'CANCELLED'],
+          currentState: status,
+          stateLabels: const {
+            'DRAFT': 'Draft',
+            'POSTED': 'Posted',
+            'CANCELLED': 'Cancelled',
+          },
         ),
-      ),
-    );
-  }
+        const SizedBox(height: 16),
 
-  void _deleteNote() async {
-    final noteType = widget.isCredit ? 'Credit Note' : 'Debit Note';
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Delete Draft $noteType?',
-      message: 'Are you sure you want to permanently delete this draft $noteType?',
-    );
-    if (confirm == true) {
-      setState(() => _isLoading = true);
-      final provider = context.read<DocumentProvider>();
-      final success = widget.isCredit
-          ? await provider.deleteCreditNote(widget.noteId)
-          : await provider.deleteDebitNote(widget.noteId);
+        // ── Context ──
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Context'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              AppInfoRow(label: 'Linked Invoice', value: note?['invoice_number']?.toString() ?? 'Unlinked'),
+              AppInfoRow(label: 'Reason', value: note?['reason']?.toString() ?? 'N/A'),
+              if (contactName != null) AppInfoRow(label: 'Customer / Vendor', value: contactName),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
 
-      if (mounted) {
-        setState(() => _isLoading = false);
-        if (success) {
-          Navigator.pop(context);
-        } else {
-          AppToast.error(context, provider.errorMessage ?? 'Failed to delete $noteType');
-        }
-      }
-    }
+        // ── Items ──
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Items'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              lines.isEmpty
+                  ? Text('No items', style: AppTextStyles.bodySmall)
+                  : ItemTable(
+                      items: lines.map((l) {
+                        final qty = double.tryParse((l['quantity'] ?? 0).toString()) ?? 0.0;
+                        final rate = double.tryParse((l['rate'] ?? 0).toString()) ?? 0.0;
+                        final amt = double.tryParse((l['subtotal'] ?? 0).toString()) ?? (qty * rate);
+                        return ItemTableRow(
+                          name: l['product_name'] ?? 'Product',
+                          qty: qty.toStringAsFixed(0),
+                          rate: AmountFormat.format(rate),
+                          amount: AmountFormat.format(amt),
+                        );
+                      }).toList(),
+                    ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // ── Tax Summary ──
+        TaxSummaryHero(
+          subtotal: double.tryParse((note?['subtotal'] ?? 0).toString()) ?? 0.0,
+          cgst: double.tryParse((note?['cgst_amount'] ?? 0).toString()) ?? 0.0,
+          sgst: double.tryParse((note?['sgst_amount'] ?? 0).toString()) ?? 0.0,
+          igst: double.tryParse((note?['igst_amount'] ?? 0).toString()) ?? 0.0,
+          cess: double.tryParse((note?['cess_amount'] ?? 0).toString()) ?? 0.0,
+          roundOff: double.tryParse((note?['round_off'] ?? 0).toString()) ?? 0.0,
+          total: total,
+        ),
+        const SizedBox(height: 16),
+
+        // ── Timeline ──
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Activity'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+              const SizedBox(height: 12),
+              AppTimeline(items: [
+                AppTimelineItem(
+                  title: '${widget.isCredit ? "Credit" : "Debit"} Note Created',
+                  date: AppDate.format(note?['issue_date']?.toString()),
+                  color: AppColors.warning,
+                ),
+                if (status == 'POSTED')
+                  AppTimelineItem(
+                    title: 'Note Posted',
+                    color: AppColors.success,
+                  ),
+                if (status == 'CANCELLED')
+                  AppTimelineItem(
+                    title: 'Note Cancelled',
+                    color: AppColors.error,
+                  ),
+              ]),
+            ],
+          ),
+        ),
+      ],
+      actions: [
+        AppButton(label: 'Edit', icon: Icons.edit_outlined, onTap: _edit, isPrimary: true),
+        const SizedBox(height: 8),
+        AppButton(label: 'Share', icon: Icons.share_outlined, onTap: _share),
+        const SizedBox(height: 8),
+        AppButton(label: 'Print', icon: Icons.print_outlined, onTap: _share),
+        const SizedBox(height: 16),
+        const Divider(height: 1),
+        const SizedBox(height: 16),
+        if (status == 'DRAFT') ...[
+          AppButton(label: 'Finalize', icon: Icons.lock_outline, onTap: _finalize, isPrimary: true),
+          const SizedBox(height: 8),
+          AppButton(label: 'Delete', icon: Icons.delete_outline, onTap: _delete, color: AppColors.error),
+        ],
+        if (status == 'POSTED') ...[
+          AppButton(label: 'Cancel Note', icon: Icons.cancel_outlined, onTap: _cancel, color: AppColors.error),
+        ],
+      ],
+    );
   }
 }

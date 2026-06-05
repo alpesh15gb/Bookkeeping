@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/inventory_adjustment_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/app_components.dart' show LoadingState, ErrorState, StatusBadge, AppConfirmDialog;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/inventory_adjustments/inventory_adjustment_form_view.dart';
 
@@ -37,6 +38,7 @@ class _InventoryAdjustmentDetailViewState extends State<InventoryAdjustmentDetai
 
     final a = _adj!;
     final status = a['status'] ?? 'DRAFT';
+    final lines = (a['lines'] is List ? a['lines'] as List : []);
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
@@ -64,49 +66,58 @@ class _InventoryAdjustmentDetailViewState extends State<InventoryAdjustmentDetai
                   ]),
                   const SizedBox(height: 16),
                   const Divider(),
-                  InfoRow(label: 'Type', value: a['adjustment_type'] ?? 'N/A'),
-                  InfoRow(label: 'Date', value: a['adjustment_date'] ?? 'N/A'),
-                  InfoRow(label: 'Reason', value: a['reason'] ?? '-'),
+                  AppInfoRow(label: 'Type', value: a['adjustment_type'] ?? 'N/A'),
+                  AppInfoRow(label: 'Date', value: AppDate.format(a['adjustment_date'])),
+                  AppInfoRow(label: 'Reason', value: a['reason'] ?? '-'),
                 ],
               ),
             ),
             const SizedBox(height: 16),
             AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SectionHeader(title: 'ADJUSTMENTS'),
-                  ...((a['lines'] is List ? a['lines'] as List : [])).map((l) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(child: Text(l['product_name'] ?? 'N/A', style: AppTextStyles.bodySmall)),
-                        Text('${l['quantity']} ${l['uom'] ?? 'nos'}', style: AppTextStyles.caption),
-                      ],
+              child: AppSection(
+                title: 'ADJUSTMENTS',
+                child: lines.isEmpty
+                  ? const Text('No adjustments', style: TextStyle(color: AppColors.textMuted))
+                  : AppDataTable(
+                      columns: const ['Product', 'Quantity'],
+                      rows: lines.map((l) => [
+                        Text(l['product_name'] ?? 'N/A', style: const TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                        Text('${l['quantity']} ${l['uom'] ?? 'nos'}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                      ]).toList(),
                     ),
-                  )),
-                ],
               ),
             ),
             const SizedBox(height: 24),
             if (status == 'DRAFT')
-              ActionButton(label: 'Confirm Adjustment', tier: ActionTier.warning, onPressed: () async {
-                final ok = await AppConfirmDialog.show(context, title: 'Confirm?', message: 'Confirm this adjustment? It will update stock levels.');
-                if (ok == true) {
-                  final success = await context.read<InventoryAdjustmentProvider>().confirmAdjustment(widget.adjustmentId);
-                  if (success) { _fetch(); }
-                }
-              }),
+              AppButton(
+                label: 'Confirm Adjustment',
+                icon: Icons.warning_amber_outlined,
+                isPrimary: true,
+                color: AppColors.actionWarning,
+                onTap: () async {
+                  final ok = await AppConfirmDialog.show(context, title: 'Confirm?', message: 'Confirm this adjustment? It will update stock levels.');
+                  if (ok == true) {
+                    final success = await context.read<InventoryAdjustmentProvider>().confirmAdjustment(widget.adjustmentId);
+                    if (success) { _fetch(); }
+                  }
+                },
+              ),
             if (status != 'CANCELLED' && status != 'CONFIRMED') ...[
               const SizedBox(height: 12),
-              ActionButton(label: 'Cancel Adjustment', tier: ActionTier.dangerous, onPressed: () async {
-                final ok = await AppConfirmDialog.show(context, title: 'Cancel?', message: 'Cancel this adjustment?');
-                if (ok == true) {
-                  final success = await context.read<InventoryAdjustmentProvider>().cancelAdjustment(widget.adjustmentId);
-                  if (success) { _fetch(); }
-                }
-              }),
+              AppButton(
+                label: 'Cancel Adjustment',
+                icon: Icons.delete_outline_rounded,
+                isPrimary: true,
+                color: AppColors.actionDangerous,
+                textColor: AppColors.textWhite,
+                onTap: () async {
+                  final ok = await AppConfirmDialog.show(context, title: 'Cancel?', message: 'Cancel this adjustment?');
+                  if (ok == true) {
+                    final success = await context.read<InventoryAdjustmentProvider>().cancelAdjustment(widget.adjustmentId);
+                    if (success) { _fetch(); }
+                  }
+                },
+              ),
             ],
             const SizedBox(height: 32),
           ],

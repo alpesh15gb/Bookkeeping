@@ -5,6 +5,7 @@ import 'package:flutter_client/models/bill.dart';
 import 'package:flutter_client/providers/bill_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
+import 'package:flutter_client/views/shared/design_system.dart' as ds;
 import 'package:flutter_client/views/bills/bill_form_view.dart';
 import 'package:flutter_client/views/bills/bill_detail_view.dart';
 import 'package:flutter_client/utils/haptic_helper.dart';
@@ -211,58 +212,50 @@ class _BillListViewState extends State<BillListView> {
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
+                  child: ds.AppInput(
                     controller: _searchCtrl,
-                    decoration: InputDecoration(
-                      hintText: 'Search bills...',
-                      prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                      suffixIcon: _searchCtrl.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.close, size: 16),
-                              onPressed: () {
-                                _searchCtrl.clear();
-                                setState(() {});
-                              },
-                            )
-                          : null,
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        borderSide: const BorderSide(color: AppColors.borderInput),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(AppRadius.md),
-                        borderSide: const BorderSide(color: AppColors.borderInput),
-                      ),
-                    ),
-                    onSubmitted: (_) => setState(() {}),
+                    hint: 'Search bills...',
+                    prefix: const Icon(Icons.search_rounded, size: 18),
+                    suffix: _searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              setState(() {});
+                            },
+                          )
+                        : null,
                     onChanged: (_) => setState(() {}),
+                    onSubmitted: (_) => setState(() {}),
                   ),
                 ),
                 if (!isMobile) ...[
                   const SizedBox(width: 8),
-                  ElevatedButton.icon(
-                    onPressed: () => _showForm(),
-                    icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
-                    label: const Text('Create Bill', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandNavy,
-                      foregroundColor: AppColors.textWhite,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    ),
+                  ds.AppButton(
+                    label: 'Create Bill',
+                    icon: Icons.add,
+                    isPrimary: true,
+                    onTap: () => _showForm(),
                   ),
                 ],
               ],
             ),
           ),
 
+          // ── Hero Summary Card ──
           if (bills.isNotEmpty)
-            AmountSummaryCards(cards: [
-              AmountSummaryCardData(label: 'Total', value: formatAmt(totalAmount), color: AppColors.brandNavy),
-              AmountSummaryCardData(label: 'Paid', value: formatAmt(paidAmount), color: AppColors.success),
-              AmountSummaryCardData(label: 'Outstanding', value: formatAmt(outstandingAmount), color: AppColors.warning),
-            ]),
+            Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 12 : 20,
+                vertical: 8,
+              ),
+              child: HeroSummaryCard(
+                title: 'Total Bills',
+                amount: totalAmount,
+                subtitle: '${AmountFormat.format(paidAmount)} paid · ${AmountFormat.format(outstandingAmount)} outstanding',
+                icon: Icons.receipt_long_outlined,
+              ),
+            ),
 
           if (bills.isNotEmpty)
             SummaryStatsBar(stats: [
@@ -281,7 +274,7 @@ class _BillListViewState extends State<BillListView> {
                         onRetry: () => context.read<BillProvider>().fetchBills(),
                       )
                     : bills.isEmpty
-                        ? EmptyState(
+                        ? ds.AppEmptyState(
                             icon: Icons.receipt_long_outlined,
                             title: 'No vendor bills yet',
                             subtitle: 'Vendor bills will appear here once added',
@@ -310,23 +303,7 @@ class _BillListViewState extends State<BillListView> {
 
                                     return _buildSwipeableBill(
                                       bill,
-                                      CompactDocumentCard(
-                                        docNumber: bill.billNumber,
-                                        partyName: partyName.isNotEmpty ? partyName : null,
-                                        date: bill.billDate,
-                                        amount: bill.total,
-                                        status: bill.status,
-                                        balanceLabel: _balanceLabel(bill),
-                                        balanceAmount: bal > 0 ? bal : null,
-                                        isSelected: isSelected,
-                                        isSelectionMode: _isSelectionMode,
-                                        onTap: () {
-                                          if (_isSelectionMode) {
-                                            _toggleSelection(id);
-                                          } else {
-                                            _showDetail(bill.id);
-                                          }
-                                        },
+                                      GestureDetector(
                                         onLongPress: () {
                                           if (!_isSelectionMode) {
                                             setState(() {
@@ -335,23 +312,84 @@ class _BillListViewState extends State<BillListView> {
                                             });
                                           }
                                         },
-                                        actions: _isSelectionMode
-                                            ? null
-                                            : [
-                                                if (bill.status == 'DRAFT')
-                                                  _CompactAction(
-                                                    icon: Icons.edit_outlined,
-                                                    tooltip: 'Edit',
-                                                    onTap: () => _showForm(bill: bill),
-                                                  ),
-                                                if (bill.status != 'CANCELLED')
-                                                  _CompactAction(
-                                                    icon: Icons.cancel_outlined,
-                                                    tooltip: 'Cancel',
-                                                    color: AppColors.error,
-                                                    onTap: () => _cancelBill(bill.id),
-                                                  ),
-                                              ],
+                                        child: Row(
+                                          children: [
+                                            if (_isSelectionMode)
+                                              Padding(
+                                                padding: const EdgeInsets.only(right: 8),
+                                                child: Icon(
+                                                  isSelected ? Icons.check_circle : Icons.circle_outlined,
+                                                  size: 20,
+                                                  color: isSelected ? AppColors.brandNavy : AppColors.textMuted,
+                                                ),
+                                              ),
+                                            Expanded(
+                                              child: ds.AppListTile(
+                                                title: partyName.isNotEmpty ? partyName : bill.billNumber,
+                                                subtitle: partyName.isNotEmpty
+                                                    ? '#${bill.billNumber}${bill.billDate != null && bill.billDate!.isNotEmpty ? ' • ${ds.AppDate.format(bill.billDate)}' : ''}'
+                                                    : (bill.billDate != null && bill.billDate!.isNotEmpty ? ds.AppDate.format(bill.billDate) : null),
+                                                trailingWidget: Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  mainAxisSize: MainAxisSize.min,
+                                                  children: [
+                                                    ds.AppAmount(amount: bill.total.toDouble()),
+                                                    const SizedBox(height: 2),
+                                                    if (bal > 0)
+                                                      Text(
+                                                        '${_balanceLabel(bill)} ${AmountFormat.format(bal)}',
+                                                        style: const TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w500,
+                                                          color: AppColors.error,
+                                                          fontFeatures: [FontFeature.tabularFigures()],
+                                                        ),
+                                                      )
+                                                    else
+                                                      Text(
+                                                        _balanceLabel(bill).toUpperCase(),
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          fontWeight: FontWeight.w500,
+                                                          color: _balanceLabel(bill) == 'Paid' ? AppColors.success : AppColors.textMuted,
+                                                          fontFeatures: const [FontFeature.tabularFigures()],
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                                badge: StatusBadge(label: bill.status),
+                                                hoverActions: _isSelectionMode
+                                                    ? null
+                                                    : [
+                                                        if (bill.status == 'DRAFT')
+                                                          ds.AppButton(
+                                                            label: 'Edit',
+                                                            icon: Icons.edit_outlined,
+                                                            isSmall: true,
+                                                            onTap: () => _showForm(bill: bill),
+                                                          ),
+                                                        if (bill.status != 'CANCELLED')
+                                                          ds.AppButton(
+                                                            label: 'Cancel',
+                                                            icon: Icons.cancel_outlined,
+                                                            isSmall: true,
+                                                            color: AppColors.error,
+                                                            textColor: AppColors.textWhite,
+                                                            onTap: () => _cancelBill(bill.id),
+                                                          ),
+                                                      ],
+                                                onTap: () {
+                                                  if (_isSelectionMode) {
+                                                    _toggleSelection(id);
+                                                  } else {
+                                                    _showDetail(bill.id);
+                                                  }
+                                                },
+                                                isSelected: isSelected,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     );
                                   },
@@ -408,25 +446,26 @@ class _BillListViewState extends State<BillListView> {
                                               style: AppTextStyles.caption,
                                             ),
                                             const Spacer(),
-                                            ActionButton(
+                                            ds.AppButton(
                                               label: 'Clear',
                                               icon: Icons.close,
-                                              tier: ActionTier.safe,
-                                              onPressed: _clearSelection,
+                                              onTap: _clearSelection,
                                             ),
                                             const SizedBox(width: 6),
-                                            ActionButton(
+                                            ds.AppButton(
                                               label: 'Cancel',
                                               icon: Icons.cancel_outlined,
-                                              tier: ActionTier.dangerous,
-                                              onPressed: _bulkCancel,
+                                              color: AppColors.error,
+                                              textColor: AppColors.textWhite,
+                                              onTap: _bulkCancel,
                                             ),
                                             const SizedBox(width: 6),
-                                            ActionButton(
+                                            ds.AppButton(
                                               label: 'Delete',
                                               icon: Icons.delete_outline,
-                                              tier: ActionTier.dangerous,
-                                              onPressed: _bulkDelete,
+                                              color: AppColors.error,
+                                              textColor: AppColors.textWhite,
+                                              onTap: _bulkDelete,
                                             ),
                                           ],
                                         ),
@@ -651,37 +690,5 @@ class _BillListViewState extends State<BillListView> {
       provider.fetchBills();
       AppToast.info(context, 'Bill ${bill.billNumber} deleted');
     }
-  }
-}
-
-class _CompactAction extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final Color? color;
-  final VoidCallback onTap;
-
-  const _CompactAction({
-    required this.icon,
-    required this.tooltip,
-    this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: (color ?? AppColors.brandNavy).withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Icon(icon, size: 14, color: color ?? AppColors.brandNavy),
-        ),
-      ),
-    );
   }
 }

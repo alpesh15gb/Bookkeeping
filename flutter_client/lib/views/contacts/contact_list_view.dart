@@ -5,7 +5,8 @@ import 'package:flutter_client/providers/contact_provider.dart';
 import 'package:flutter_client/models/contact.dart';
 import 'package:flutter_client/views/contacts/contact_form_view.dart';
 import 'package:flutter_client/views/reports/party_statement_view.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/app_components.dart' show StatusBadge, ErrorState, FilterChipWithCount, AppConfirmDialog, HeroSummaryCard;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/utils/haptic_helper.dart';
 import 'package:flutter_client/views/shared/skeleton_loading.dart';
@@ -89,57 +90,29 @@ class _ContactListViewState extends State<ContactListView> {
                 Row(
                   children: [
                     Expanded(
-                      child: TextField(
+                      child: AppInput(
                         controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Search parties...',
-                          prefixIcon: const Icon(Icons.search_rounded, size: 16),
-                          suffixIcon: _searchCtrl.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close, size: 14),
-                                  onPressed: () {
-                                    _searchCtrl.clear();
-                                    setState(() {});
-                                  },
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: 8,
-                            horizontal: 10,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(
-                              color: AppColors.borderInput,
-                            ),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(
-                              color: AppColors.borderInput,
-                            ),
-                          ),
-                        ),
+                        hint: 'Search parties...',
+                        prefix: const Icon(Icons.search_rounded, size: 16),
+                        suffix: _searchCtrl.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.close, size: 14),
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() {});
+                                },
+                              )
+                            : null,
                         onChanged: (_) => setState(() {}),
                       ),
                     ),
                     if (!isMobile) ...[
                       const SizedBox(width: 8),
-                      SizedBox(
-                        height: 34,
-                        child: ElevatedButton.icon(
-                          onPressed: () => _showForm(),
-                          icon: const Icon(Icons.add, size: 14),
-                          label: const Text('Add Party'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 0,
-                            ),
-                            textStyle: AppTextStyles.buttonSmall,
-                          ),
-                        ),
+                      AppButton(
+                        label: 'Add Party',
+                        icon: Icons.add,
+                        isPrimary: true,
+                        onTap: () => _showForm(),
                       ),
                     ],
                   ],
@@ -173,6 +146,18 @@ class _ContactListViewState extends State<ContactListView> {
             ),
           ),
 
+          // ── Hero Summary Card ─────────────────────────────────
+          if (provider.contacts.isNotEmpty)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 8),
+              child: HeroSummaryCard(
+                title: 'Total Parties',
+                amount: totalCount,
+                subtitle: '$customerCount customers · $vendorCount vendors',
+                icon: Icons.people_outlined,
+              ),
+            ),
+
           // ── List ─────────────────────────────────────────────
           Expanded(
             child: provider.isLoading && provider.contacts.isEmpty
@@ -188,7 +173,7 @@ class _ContactListViewState extends State<ContactListView> {
                             child: ListView(
                               children: [
                                 const SizedBox(height: 120),
-                                EmptyState(
+                                AppEmptyState(
                                   icon: Icons.people_outlined,
                                   title: _searchCtrl.text.isNotEmpty ||
                                           _typeFilter != 'ALL'
@@ -456,84 +441,51 @@ class _CompactContactCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Row 1: name + type badge + icon actions
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  contact.name,
-                  style: AppTextStyles.h3.copyWith(fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 6),
-              StatusBadge.fromContactType(contact.contactType),
-              const SizedBox(width: 4),
-              _iconBtn(
-                icon: Icons.receipt_long_outlined,
-                tooltip: 'Statement',
-                color: AppColors.brandNavy,
-                onTap: onStatement,
-              ),
-              _iconBtn(
-                icon: Icons.edit_outlined,
-                tooltip: 'Edit',
-                onTap: onEdit,
-              ),
-              _iconBtn(
-                icon: Icons.delete_outline,
-                tooltip: 'Delete',
-                color: AppColors.error,
-                onTap: onDelete,
-              ),
-            ],
-          ),
+    String subtitle = '';
+    if (contact.phone != null && contact.phone!.isNotEmpty) {
+      subtitle = contact.phone!;
+    }
+    if (contact.gstin != null && contact.gstin!.isNotEmpty) {
+      if (subtitle.isNotEmpty) subtitle += ' | ';
+      subtitle += contact.gstin!;
+    }
 
-          // Row 2: phone + GSTIN on a single line
-          if (contact.phone != null || contact.gstin != null) ...[
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                if (contact.phone != null) ...[
-                  Icon(Icons.phone_outlined,
-                      size: 12, color: AppColors.textMuted),
-                  const SizedBox(width: 4),
-                  Text(contact.phone!,
-                      style: AppTextStyles.caption.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500)),
-                ],
-                if (contact.phone != null &&
-                    contact.gstin != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6),
-                    child: Container(
-                      width: 1,
-                      height: 10,
-                      color: AppColors.borderInput,
-                    ),
-                  ),
-                if (contact.gstin != null) ...[
-                  Icon(Icons.pin_outlined,
-                      size: 12, color: AppColors.textMuted),
-                  const SizedBox(width: 4),
-                  Text(contact.gstin!,
-                      style: AppTextStyles.caption.copyWith(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500)),
-                ],
-              ],
-            ),
-          ],
+    return AppCard(
+      padding: EdgeInsets.zero,
+      child: AppListTile(
+        leadingText: _initials(contact.name),
+        title: contact.name,
+        subtitle: subtitle.isNotEmpty ? subtitle : null,
+        badge: StatusBadge.fromContactType(contact.contactType),
+        hoverActions: [
+          _iconBtn(
+            icon: Icons.receipt_long_outlined,
+            tooltip: 'Statement',
+            color: AppColors.brandNavy,
+            onTap: onStatement,
+          ),
+          _iconBtn(
+            icon: Icons.edit_outlined,
+            tooltip: 'Edit',
+            onTap: onEdit,
+          ),
+          _iconBtn(
+            icon: Icons.delete_outline,
+            tooltip: 'Delete',
+            color: AppColors.error,
+            onTap: onDelete,
+          ),
         ],
+        onTap: onEdit,
       ),
     );
+  }
+
+  String _initials(String name) {
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length >= 2) return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    if (parts.isNotEmpty && parts[0].isNotEmpty) return parts[0][0].toUpperCase();
+    return '';
   }
 
   Widget _iconBtn({

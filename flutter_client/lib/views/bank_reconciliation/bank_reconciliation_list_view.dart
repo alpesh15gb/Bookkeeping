@@ -4,7 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/bank_reconciliation_provider.dart';
 import 'package:flutter_client/providers/banking_profile_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/app_components.dart' show LoadingState, ErrorState;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class BankReconciliationListView extends StatefulWidget {
@@ -113,7 +114,7 @@ class _BankReconciliationListViewState extends State<BankReconciliationListView>
             ? ListView(
                 children: const [
                   SizedBox(height: 120),
-                  EmptyState(
+                  AppEmptyState(
                     icon: Icons.account_balance_outlined,
                     title: 'No Bank Statements',
                     subtitle: 'Tap + to upload a bank statement and begin reconciliation',
@@ -125,26 +126,15 @@ class _BankReconciliationListViewState extends State<BankReconciliationListView>
                 itemCount: provider.statements.length,
                 itemBuilder: (context, i) {
                   final stmt = provider.statements[i];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    decoration: BoxDecoration(
-                      color: AppColors.bgSurface,
-                      borderRadius: AppRadius.card,
-                      border: Border.all(color: AppColors.border),
-                    ),
-                    child: ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                      leading: Container(
-                        width: 36, height: 36,
-                        decoration: BoxDecoration(
-                          color: AppColors.brandNavy.withValues(alpha: 0.08),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.account_balance_outlined, size: 18, color: AppColors.brandNavy),
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: AppCard(
+                      child: AppListTile(
+                        leadingText: (stmt['bank_name'] ?? stmt['name'] ?? 'S')[0].toString().toUpperCase(),
+                        title: stmt['bank_name'] ?? stmt['name'] ?? 'Statement ${i + 1}',
+                        subtitle: stmt['account_number'] ?? '',
+                        trailingWidget: AppAmount(amount: (stmt['closing_balance'] ?? 0).toDouble()),
                       ),
-                      title: Text(stmt['bank_name'] ?? stmt['name'] ?? 'Statement ${i + 1}', style: AppTextStyles.h3),
-                      subtitle: Text(stmt['account_number'] ?? '', style: AppTextStyles.caption),
-                      trailing: Text('₹${(stmt['closing_balance'] ?? 0).toString()}', style: AppTextStyles.numeric),
                     ),
                   );
                 },

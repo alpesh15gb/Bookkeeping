@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/eway_bill_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/app_components.dart' hide AppCard, AppEmptyState;
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/einvoice/eway_bill_form_view.dart';
 
@@ -69,15 +70,12 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
               if (!isMobile && _tabController.index == 0)
                 Padding(
                   padding: const EdgeInsets.only(right: 16),
-                  child:                     ElevatedButton.icon(
-                    onPressed: _showForm,
-                    icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
-                    label: const Text('New E-Way Bill', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandNavy,
-                      foregroundColor: AppColors.textWhite,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                    ),
+                  child: AppButton(
+                    label: 'New E-Way Bill',
+                    icon: Icons.add,
+                    isPrimary: true,
+                    isSmall: true,
+                    onTap: _showForm,
                   ),
                 ),
             ],
@@ -105,29 +103,40 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
           ? ListView(
               children: const [
                 SizedBox(height: 120),
-                EmptyState(
+                AppEmptyState(
                   icon: Icons.local_shipping_outlined,
                   title: 'No E-Way Bills',
                   subtitle: 'E-way bills generated from finalized invoices will appear here',
                 ),
               ],
             )
-          : ListView.separated(
+          : ListView.builder(
               padding: EdgeInsets.only(
                 left: isMobile ? 12 : 20,
                 right: isMobile ? 12 : 20,
                 top: 8,
                 bottom: isMobile ? 80 : 20,
               ),
-              itemCount: provider.ewayBills.length,
-              separatorBuilder: (context, _) => const SizedBox(height: 6),
+              itemCount: provider.ewayBills.length + 1,
               itemBuilder: (context, i) {
-                final ewb = provider.ewayBills[i];
-                return CompactDocumentCard(
-                  docNumber: ewb['eway_bill_number'] ?? ewb['id']?.toString() ?? 'N/A',
-                  partyName: ewb['invoice_number'] ?? '',
-                  amount: 0,
-                  status: ewb['status'] ?? 'PENDING',
+                if (i == 0) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: HeroSummaryCard(
+                      title: 'E-Way Bills',
+                      amount: provider.ewayBills.length,
+                      subtitle: '${provider.ewayBills.where((e) => e['status'] == 'ACTIVE').length} active',
+                      icon: Icons.local_shipping_outlined,
+                    ),
+                  );
+                }
+                final ewb = provider.ewayBills[i - 1];
+                return AppListTile(
+                  leadingText: ewb['eway_bill_number'] ?? ewb['id']?.toString() ?? 'N/A',
+                  title: ewb['invoice_number'] ?? '',
+                  subtitle: ewb['status']?.toString() ?? 'PENDING',
+                  badge: StatusBadge(label: ewb['status'] ?? 'PENDING'),
+                  onTap: () {},
                 );
               },
             ),
@@ -138,7 +147,7 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
     return ListView(
       children: const [
         SizedBox(height: 120),
-        EmptyState(
+        AppEmptyState(
           icon: Icons.receipt_long_outlined,
           title: 'E-Invoices',
           subtitle: 'E-invoices generated via the GST portal from finalized invoices will appear here',
