@@ -11,6 +11,15 @@ class CreditNoteProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   List<dynamic> _items = [];
   List<dynamic> get items => _items;
 
@@ -19,7 +28,7 @@ class CreditNoteProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/credit-notes'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/invoices/credit-notes'));
       if (response.statusCode == 200) {
         _items = jsonDecode(response.body);
         _isLoading = false;
@@ -38,7 +47,7 @@ class CreditNoteProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices/credit-notes'),
+        _buildUri('${ApiClient.baseUrl}/invoices/credit-notes'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -55,7 +64,7 @@ class CreditNoteProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> previewCreditNote(Map<String, dynamic> payload) async {
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices/credit-notes/preview'),
+        _buildUri('${ApiClient.baseUrl}/invoices/credit-notes/preview'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -71,7 +80,7 @@ class CreditNoteProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/invoices/credit-notes/$id/finalize'));
+      final response = await _client.post(_buildUri('${ApiClient.baseUrl}/invoices/credit-notes/$id/finalize'));
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
@@ -97,7 +106,7 @@ class CreditNoteProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchCreditNoteDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/credit-notes/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/invoices/credit-notes/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -111,7 +120,7 @@ class CreditNoteProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/debit-notes'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/invoices/debit-notes'));
       if (response.statusCode == 200) {
         _items = jsonDecode(response.body);
         _isLoading = false;
@@ -130,7 +139,7 @@ class CreditNoteProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices/debit-notes'),
+        _buildUri('${ApiClient.baseUrl}/invoices/debit-notes'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -147,7 +156,7 @@ class CreditNoteProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> previewDebitNote(Map<String, dynamic> payload) async {
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices/debit-notes/preview'),
+        _buildUri('${ApiClient.baseUrl}/invoices/debit-notes/preview'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -163,7 +172,7 @@ class CreditNoteProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/invoices/debit-notes/$id/finalize'));
+      final response = await _client.post(_buildUri('${ApiClient.baseUrl}/invoices/debit-notes/$id/finalize'));
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
@@ -189,7 +198,7 @@ class CreditNoteProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchDebitNoteDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/debit-notes/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/invoices/debit-notes/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -200,7 +209,7 @@ class CreditNoteProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchInvoicePdfPayload(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/$id/pdf-payload'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/invoices/$id/pdf-payload'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);

@@ -62,6 +62,13 @@ class DashboardProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String, String>{};
+    ApiClient.fyParams.forEach((k, v) => queryParams[k] = v);
+    final uri = _buildUri(endpoint);
+    return uri.replace(queryParameters: {...uri.queryParameters, ...queryParams});
+  }
+
   Future<void> fetchDashboard() async {
     _isLoading = true;
     _errorMessage = null;
@@ -70,11 +77,11 @@ class DashboardProvider extends ChangeNotifier {
     try {
       // Core endpoints — these must succeed
       final core = await Future.wait([
-        _client.get(Uri.parse('${ApiClient.baseUrl}/sales/summary')),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/expenses')),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/bills')),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/dashboard/metrics')),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/invoices?limit=5')),
+        _client.get(_buildUri('${ApiClient.baseUrl}/sales/summary')),
+        _client.get(_buildUri('${ApiClient.baseUrl}/expenses')),
+        _client.get(_buildUri('${ApiClient.baseUrl}/bills')),
+        _client.get(_buildUri('${ApiClient.baseUrl}/dashboard/metrics')),
+        _client.get(_buildUri('${ApiClient.baseUrl}/invoices?limit=5')),
       ]);
 
       final coreFail = core.any((r) => r.statusCode != 200);
@@ -126,13 +133,13 @@ class DashboardProvider extends ChangeNotifier {
       final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
       final secondary = await Future.wait([
-        _client.get(Uri.parse('${ApiClient.baseUrl}/dashboard/revenue-trend'))
+        _client.get(_buildUri('${ApiClient.baseUrl}/dashboard/revenue-trend'))
             .catchError((_) => http.Response('[]', 500)),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/dashboard/expense-trend'))
+        _client.get(_buildUri('${ApiClient.baseUrl}/dashboard/expense-trend'))
             .catchError((_) => http.Response('[]', 500)),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/accounting/cash-bank-balances'))
+        _client.get(_buildUri('${ApiClient.baseUrl}/accounting/cash-bank-balances'))
             .catchError((_) => http.Response('[]', 500)),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/reports/outstanding/receivables?as_of_date=$dateStr'))
+        _client.get(_buildUri('${ApiClient.baseUrl}/reports/outstanding/receivables?as_of_date=$dateStr'))
             .catchError((_) => http.Response('{}', 500)),
       ]);
 

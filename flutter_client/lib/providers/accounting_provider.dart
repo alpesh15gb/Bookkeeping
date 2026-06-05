@@ -15,6 +15,13 @@ class AccountingProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String, String>{};
+    ApiClient.fyParams.forEach((k, v) => queryParams[k] = v);
+    final uri = _buildUri(endpoint);
+    return uri.replace(queryParameters: {...uri.queryParameters, ...queryParams});
+  }
+
   // Journals
   Future<List<dynamic>> fetchJournals() async {
     _isLoading = true;
@@ -22,7 +29,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/accounting/journals'),
+        _buildUri('${ApiClient.baseUrl}/accounting/journals'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -42,7 +49,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/accounting/journals'),
+        _buildUri('${ApiClient.baseUrl}/accounting/journals'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -67,7 +74,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/accounting/ledger/$accountId'),
+        _buildUri('${ApiClient.baseUrl}/accounting/ledger/$accountId'),
       );
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -87,7 +94,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/accounting/trial-balance'),
+        _buildUri('${ApiClient.baseUrl}/accounting/trial-balance'),
       );
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -107,7 +114,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/accounting/profit-loss'),
+        _buildUri('${ApiClient.baseUrl}/accounting/profit-loss'),
       );
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -127,7 +134,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/accounting/balance-sheet'),
+        _buildUri('${ApiClient.baseUrl}/accounting/balance-sheet'),
       );
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -148,7 +155,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/masters/accounts'),
+        _buildUri('${ApiClient.baseUrl}/masters/accounts'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -169,7 +176,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/masters/accounts'),
+        _buildUri('${ApiClient.baseUrl}/masters/accounts'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -192,7 +199,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/masters/accounts/$id'),
+        _buildUri('${ApiClient.baseUrl}/masters/accounts/$id'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -212,7 +219,7 @@ class AccountingProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchAccountDetail(String id) async {
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/masters/accounts/$id'),
+        _buildUri('${ApiClient.baseUrl}/masters/accounts/$id'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -225,7 +232,7 @@ class AccountingProvider extends ChangeNotifier {
   Future<bool> deleteAccount(String id) async {
     try {
       final response = await _client.delete(
-        Uri.parse('${ApiClient.baseUrl}/masters/accounts/$id'),
+        _buildUri('${ApiClient.baseUrl}/masters/accounts/$id'),
       );
       if (response.statusCode == 204) {
         await fetchAccounts();
@@ -241,7 +248,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/accounting/ledger/$accountId'),
+        _buildUri('${ApiClient.baseUrl}/accounting/ledger/$accountId'),
       );
       if (response.statusCode == 200) {
         _currentLedger = jsonDecode(response.body);
@@ -258,7 +265,7 @@ class AccountingProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchGstr1(String start, String end) async {
     try {
       final response = await _client.get(
-        Uri.parse(
+        _buildUri(
           '${ApiClient.baseUrl}/reports/gst/gstr1?start_date=$start&end_date=$end',
         ),
       );
@@ -273,7 +280,7 @@ class AccountingProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchGstr2(String start, String end) async {
     try {
       final response = await _client.get(
-        Uri.parse(
+        _buildUri(
           '${ApiClient.baseUrl}/reports/gst/gstr2?start_date=$start&end_date=$end',
         ),
       );
@@ -288,7 +295,7 @@ class AccountingProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchGstr3b(String start, String end) async {
     try {
       final response = await _client.get(
-        Uri.parse(
+        _buildUri(
           '${ApiClient.baseUrl}/reports/gst/gstr3b?start_date=$start&end_date=$end',
         ),
       );
@@ -303,7 +310,7 @@ class AccountingProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchReceivablesAging(String asOf) async {
     try {
       final response = await _client.get(
-        Uri.parse(
+        _buildUri(
           '${ApiClient.baseUrl}/reports/aging/receivables?as_of_date=$asOf',
         ),
       );
@@ -318,7 +325,7 @@ class AccountingProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchPayablesAging(String asOf) async {
     try {
       final response = await _client.get(
-        Uri.parse(
+        _buildUri(
           '${ApiClient.baseUrl}/reports/aging/payables?as_of_date=$asOf',
         ),
       );
@@ -340,7 +347,7 @@ class AccountingProvider extends ChangeNotifier {
       if (endDate != null) params.add('end_date=$endDate');
       final query = params.isNotEmpty ? '?${params.join('&')}' : '';
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/reports/analytics/sales$query'),
+        _buildUri('${ApiClient.baseUrl}/reports/analytics/sales$query'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -360,7 +367,7 @@ class AccountingProvider extends ChangeNotifier {
       if (endDate != null) params.add('end_date=$endDate');
       final query = params.isNotEmpty ? '?${params.join('&')}' : '';
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/reports/analytics/purchases$query'),
+        _buildUri('${ApiClient.baseUrl}/reports/analytics/purchases$query'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -376,7 +383,7 @@ class AccountingProvider extends ChangeNotifier {
     try {
       final query = asOfDate != null ? '?as_of_date=$asOfDate' : '';
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/reports/outstanding/receivables$query'),
+        _buildUri('${ApiClient.baseUrl}/reports/outstanding/receivables$query'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -392,7 +399,7 @@ class AccountingProvider extends ChangeNotifier {
     try {
       final query = asOfDate != null ? '?as_of_date=$asOfDate' : '';
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/reports/outstanding/payables$query'),
+        _buildUri('${ApiClient.baseUrl}/reports/outstanding/payables$query'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -412,7 +419,7 @@ class AccountingProvider extends ChangeNotifier {
       final end =
           '${to.year}-${to.month.toString().padLeft(2, '0')}-${to.day.toString().padLeft(2, '0')}';
       final response = await _client.get(
-        Uri.parse(
+        _buildUri(
           '${ApiClient.baseUrl}/reports/cash-flow?start_date=$start&end_date=$end',
         ),
       );
@@ -431,7 +438,7 @@ class AccountingProvider extends ChangeNotifier {
   ) async {
     try {
       final response = await _client.get(
-        Uri.parse(
+        _buildUri(
           '${ApiClient.baseUrl}/reports/party-statement?contact_id=$contactId&start_date=$startDate&end_date=$endDate',
         ),
       );
@@ -449,7 +456,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/accounting/year-end/prepare?closing_date=$closingDate'),
+        _buildUri('${ApiClient.baseUrl}/accounting/year-end/prepare?closing_date=$closingDate'),
       );
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -473,7 +480,7 @@ class AccountingProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/accounting/year-end/close'),
+        _buildUri('${ApiClient.baseUrl}/accounting/year-end/close'),
         body: jsonEncode({'closing_date': closingDate}),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {

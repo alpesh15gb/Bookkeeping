@@ -1519,6 +1519,62 @@ class AccountingPeriod(Base):
 
 
 # ---------------------------------------------------------------------------
+# FINANCIAL YEAR (first-class FY management)
+# ---------------------------------------------------------------------------
+
+class FinancialYear(Base):
+    __tablename__ = "financial_years"
+    __table_args__ = (
+        Index("ix_financial_years_tenant", "tenant_id"),
+        UniqueConstraint("tenant_id", "name", name="uq_financial_years_tenant_name"),
+        CheckConstraint(
+            "status IN ('CURRENT', 'READY_TO_CLOSE', 'LOCKED', 'ARCHIVED')",
+            name="ck_financial_years_status",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    name = Column(String(50), nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    status = Column(String(20), nullable=False, default="CURRENT")
+    is_current = Column(Boolean, nullable=False, default=False)
+    closed_at = Column(DateTime(timezone=True))
+    closed_by = Column(UUID(as_uuid=True))
+    reopened_at = Column(DateTime(timezone=True))
+    reopened_by = Column(UUID(as_uuid=True))
+    reopen_reason = Column(Text)
+    journal_entry_id = Column(UUID(as_uuid=True))
+    transaction_count = Column(Integer, nullable=False, default=0)
+    created_by = Column(UUID(as_uuid=True))
+    switched_by = Column(UUID(as_uuid=True))
+    last_accessed_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+
+# ---------------------------------------------------------------------------
+# FINANCIAL YEAR AUDIT TRAIL
+# ---------------------------------------------------------------------------
+
+class FinancialYearAudit(Base):
+    __tablename__ = "financial_year_audits"
+    __table_args__ = (
+        Index("ix_fy_audits_tenant", "tenant_id"),
+        Index("ix_fy_audits_fy", "financial_year_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    financial_year_id = Column(UUID(as_uuid=True), nullable=False)
+    action = Column(String(50), nullable=False)
+    detail = Column(Text)
+    performed_by = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+
+# ---------------------------------------------------------------------------
 # SALES RETURNS (standalone — customer returns goods without original invoice ref)
 # ---------------------------------------------------------------------------
 
@@ -1665,4 +1721,58 @@ class PurchaseReturnLine(Base):
     total = Column(Numeric(15, 4), nullable=False)
 
     purchase_return = relationship("PurchaseReturn", back_populates="lines")
+    product = relationship("Product")
+
+
+# ---------------------------------------------------------------------------
+# OPENING BALANCE SNAPSHOTS — audit trail for FY roll-forward
+# ---------------------------------------------------------------------------
+
+class OpeningBalanceSnapshot(Base):
+    """Point-in-time snapshot of every permanent account's balance at FY close.
+    Created during roll-forward so we have a full audit trail of what was carried forward."""
+    __tablename__ = "opening_balance_snapshots"
+    __table_args__ = (
+        Index("ix_ob_snapshots_tenant_fy", "tenant_id", "financial_year_id"),
+        Index("ix_ob_snapshots_account", "account_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    financial_year_id = Column(UUID(as_uuid=True), nullable=False)
+    account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"), nullable=False)
+    account_type = Column(String(50), nullable=False)
+    account_name = Column(String(150), nullable=False)
+    account_code = Column(String(50), nullable=False)
+    closing_balance = Column(Numeric(15, 4), nullable=False, default=0)
+    direction = Column(String(6), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+    account = relationship("Account")
+
+
+# ---------------------------------------------------------------------------
+# INVENTORY CARRY FORWARD — audit trail for stock roll-forward
+# ---------------------------------------------------------------------------
+
+class InventoryCarryForward(Base):
+    """Snapshot of every product's stock at FY close.
+    Created during roll-forward so we have a full audit trail of what was carried forward."""
+    __tablename__ = "inventory_carry_forwards"
+    __table_args__ = (
+        Index("ix_icf_tenant_fy", "tenant_id", "financial_year_id"),
+        Index("ix_icf_product", "product_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    financial_year_id = Column(UUID(as_uuid=True), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    product_name = Column(String(150), nullable=False)
+    product_sku = Column(String(50))
+    closing_quantity = Column(Numeric(12, 2), nullable=False, default=0)
+    closing_value = Column(Numeric(15, 4), nullable=False, default=0)
+    unit_rate = Column(Numeric(15, 4), nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
     product = relationship("Product")

@@ -13,12 +13,21 @@ class InventoryAdjustmentProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchAdjustments() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/inventory-adjustments'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/inventory-adjustments'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _adjustments = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -34,7 +43,7 @@ class InventoryAdjustmentProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchAdjustmentDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/inventory-adjustments/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/inventory-adjustments/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -49,7 +58,7 @@ class InventoryAdjustmentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/inventory-adjustments'),
+        _buildUri('${ApiClient.baseUrl}/inventory-adjustments'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -72,7 +81,7 @@ class InventoryAdjustmentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/inventory-adjustments/$id'),
+        _buildUri('${ApiClient.baseUrl}/inventory-adjustments/$id'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -94,7 +103,7 @@ class InventoryAdjustmentProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/inventory-adjustments/$id/confirm'));
+      final response = await _client.post(_buildUri('${ApiClient.baseUrl}/inventory-adjustments/$id/confirm'));
       if (response.statusCode == 200) {
         await fetchAdjustments();
         return true;
@@ -114,7 +123,7 @@ class InventoryAdjustmentProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/inventory-adjustments/$id/cancel'));
+      final response = await _client.post(_buildUri('${ApiClient.baseUrl}/inventory-adjustments/$id/cancel'));
       if (response.statusCode == 200) {
         await fetchAdjustments();
         return true;

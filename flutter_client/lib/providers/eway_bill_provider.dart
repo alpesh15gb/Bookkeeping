@@ -15,12 +15,21 @@ class EwayBillProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchEwayBills() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/eway-bills'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/eway-bills'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _ewayBills = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -36,7 +45,7 @@ class EwayBillProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchEwayBillDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/eway-bills/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/eway-bills/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -51,7 +60,7 @@ class EwayBillProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/eway-bills'),
+        _buildUri('${ApiClient.baseUrl}/eway-bills'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -74,7 +83,7 @@ class EwayBillProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/eway-bills/$id/cancel'),
+        _buildUri('${ApiClient.baseUrl}/eway-bills/$id/cancel'),
         body: jsonEncode({
           'cancel_reason': '2',
           'cancel_remarks': 'Cancelled from ApexBooks',
@@ -100,7 +109,7 @@ class EwayBillProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/eway-bills/$id/vehicle'),
+        _buildUri('${ApiClient.baseUrl}/eway-bills/$id/vehicle'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -124,7 +133,7 @@ class EwayBillProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/eway-bills/consolidated'),
+        _buildUri('${ApiClient.baseUrl}/eway-bills/consolidated'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200 || response.statusCode == 201) {
@@ -145,7 +154,7 @@ class EwayBillProvider extends ChangeNotifier {
   // HSN Lookup
   Future<Map<String, dynamic>?> lookupHsn(String hsnCode) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/gst/hsn/${Uri.encodeComponent(hsnCode)}'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/gst/hsn/${Uri.encodeComponent(hsnCode)}'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -157,7 +166,7 @@ class EwayBillProvider extends ChangeNotifier {
   // GSTIN Verification
   Future<Map<String, dynamic>?> fetchGstCaptcha() async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/gst/verify/captcha'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/gst/verify/captcha'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -169,7 +178,7 @@ class EwayBillProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> verifyGstin(String gstin, String captcha, String sessionId) async {
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/gst/verify'),
+        _buildUri('${ApiClient.baseUrl}/gst/verify'),
         body: jsonEncode({'gstin': gstin, 'captcha': captcha, 'session_id': sessionId}),
       );
       if (response.statusCode == 200) {

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/banking_profile_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart' show LoadingState;
+import 'package:flutter_client/views/shared/app_components.dart' show LoadingState, HeroSummaryCard;
 import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/banking/banking_profile_form_view.dart';

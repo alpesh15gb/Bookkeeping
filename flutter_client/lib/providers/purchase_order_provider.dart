@@ -14,13 +14,20 @@ class PurchaseOrderProvider extends ChangeNotifier {
   List<dynamic> _items = [];
   List<dynamic> get items => _items;
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String, String>{};
+    ApiClient.fyParams.forEach((k, v) => queryParams[k] = v);
+    final uri = _buildUri(endpoint);
+    return uri.replace(queryParameters: {...uri.queryParameters, ...queryParams});
+  }
+
   Future<List<dynamic>> fetchPurchaseOrders() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/purchase-orders'),
+        _buildUri('${ApiClient.baseUrl}/purchase-orders'),
       );
       if (response.statusCode == 200) {
         _items = jsonDecode(response.body);
@@ -40,7 +47,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/purchase-orders'),
+        _buildUri('${ApiClient.baseUrl}/purchase-orders'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -63,7 +70,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id'),
+        _buildUri('${ApiClient.baseUrl}/purchase-orders/$id'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -104,7 +111,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchPurchaseOrderDetail(String id) async {
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id'),
+        _buildUri('${ApiClient.baseUrl}/purchase-orders/$id'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -117,7 +124,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchPurchaseOrderPdfPayload(String id) async {
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/purchase-orders/$id/pdf-payload'),
+        _buildUri('${ApiClient.baseUrl}/purchase-orders/$id/pdf-payload'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -133,7 +140,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/sales-orders'),
+        _buildUri('${ApiClient.baseUrl}/sales-orders'),
       );
       if (response.statusCode == 200) {
         _items = jsonDecode(response.body);
@@ -153,7 +160,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/sales-orders'),
+        _buildUri('${ApiClient.baseUrl}/sales-orders'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -173,7 +180,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/sales-orders/$id'),
+        _buildUri('${ApiClient.baseUrl}/sales-orders/$id'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -214,7 +221,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchSalesOrderDetail(String id) async {
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/sales-orders/$id'),
+        _buildUri('${ApiClient.baseUrl}/sales-orders/$id'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -227,7 +234,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchSalesOrderPdfPayload(String id) async {
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/sales-orders/$id/pdf-payload'),
+        _buildUri('${ApiClient.baseUrl}/sales-orders/$id/pdf-payload'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -242,7 +249,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse(url));
+      final response = await _client.post(_buildUri(url));
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
@@ -263,7 +270,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.delete(Uri.parse(url));
+      final response = await _client.delete(_buildUri(url));
       if (response.statusCode == 204) {
         _isLoading = false;
         notifyListeners();
@@ -284,7 +291,7 @@ class PurchaseOrderProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse(url));
+      final response = await _client.post(_buildUri(url));
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();

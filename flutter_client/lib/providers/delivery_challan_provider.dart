@@ -13,12 +13,21 @@ class DeliveryChallanProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchChallans() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/delivery-challans'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/delivery-challans'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _challans = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -34,7 +43,7 @@ class DeliveryChallanProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchChallanDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/delivery-challans/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/delivery-challans/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -49,7 +58,7 @@ class DeliveryChallanProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/delivery-challans'),
+        _buildUri('${ApiClient.baseUrl}/delivery-challans'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -72,7 +81,7 @@ class DeliveryChallanProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/delivery-challans/$id'),
+        _buildUri('${ApiClient.baseUrl}/delivery-challans/$id'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -94,7 +103,7 @@ class DeliveryChallanProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/delivery-challans/$id/issue'));
+      final response = await _client.post(_buildUri('${ApiClient.baseUrl}/delivery-challans/$id/issue'));
       if (response.statusCode == 200) {
         await fetchChallans();
         return true;
@@ -114,7 +123,7 @@ class DeliveryChallanProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/delivery-challans/$id/cancel'));
+      final response = await _client.post(_buildUri('${ApiClient.baseUrl}/delivery-challans/$id/cancel'));
       if (response.statusCode == 200) {
         await fetchChallans();
         return true;

@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart' show StatusBadge, AppConfirmDialog, AppToast;
+import 'package:flutter_client/views/shared/app_components.dart' show StatusBadge, AppConfirmDialog, AppToast, HeroSummaryCard;
 import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
@@ -207,8 +207,8 @@ class ReturnsDetailView extends StatelessWidget {
                   const SizedBox(height: 8),
                   AppInfoRow(label: 'Status', value: '${m['status'] ?? 'N/A'}'),
                   AppInfoRow(label: 'Issue Date', value: AppDate.format(m['issue_date'])),
-                  AppInfoRow(label: 'Subtotal', value: AmountFormat.format(m['subtotal'] ?? 0)),
-                  AppInfoRow(label: 'Total', value: AmountFormat.format(m['total'] ?? 0)),
+                  AppInfoRow(label: 'Subtotal', value: AmountFormat.format(double.tryParse((m['subtotal'] ?? 0).toString()) ?? 0)),
+                  AppInfoRow(label: 'Total', value: AmountFormat.format(double.tryParse((m['total'] ?? 0).toString()) ?? 0)),
                   if (m['notes'] != null) AppInfoRow(label: 'Notes', value: '${m['notes']}'),
                 ],
               ),
@@ -221,8 +221,8 @@ class ReturnsDetailView extends StatelessWidget {
               children: ((m['lines'] is List ? m['lines'] as List : [])).whereType<Map<String, dynamic>>().map((l) => AppCard(
                 child: AppListTile(
                   title: '${l['product_name'] ?? 'Product'}',
-                  subtitle: 'Qty: ${l['quantity'] ?? 0} @ ${AmountFormat.format(l['rate'] ?? 0)}',
-                  trailingWidget: AppAmount(amount: (l['total'] ?? 0).toDouble()),
+                  subtitle: 'Qty: ${l['quantity'] ?? 0} @ ${AmountFormat.format(double.tryParse((l['rate'] ?? 0).toString()) ?? 0)}',
+                  trailingWidget: AppAmount(amount: double.tryParse((l['total'] ?? 0).toString()) ?? 0),
                 ),
               )).toList(),
             ),

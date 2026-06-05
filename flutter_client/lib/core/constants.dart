@@ -97,15 +97,23 @@ class AppColors {
 class AmountFormat {
   /// Formats a monetary value consistently across the app.
   /// [amount] in rupees, returns "₹1,234.00" or "-₹1,234.00".
+  /// Handles string inputs gracefully (common with JSON API responses).
   static String format(num amount) {
-    final abs = amount.abs();
+    num value;
+    if (amount is num) {
+      value = amount;
+    } else {
+      final raw = amount.toString().replaceAll(RegExp(r'[₹,\s]'), '');
+      value = double.tryParse(raw) ?? 0;
+    }
+    final abs = value.abs();
     final formatted = '₹${abs.toStringAsFixed(2)}';
     // Use minified digit grouping: insert commas in Indian format
     // e.g. 1234567 → ₹12,34,567.00
     final parts = formatted.split('.');
     final intPart = parts[0].substring(1); // remove ₹
     final grouped = _indianGroup(intPart);
-    return amount < 0 ? '-₹$grouped.${parts[1]}' : '₹$grouped.${parts[1]}';
+    return value < 0 ? '-₹$grouped.${parts[1]}' : '₹$grouped.${parts[1]}';
   }
 
   static String _indianGroup(String digits) {

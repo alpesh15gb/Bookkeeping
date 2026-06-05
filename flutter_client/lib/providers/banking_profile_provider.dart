@@ -13,12 +13,21 @@ class BankingProfileProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchBankingProfiles() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/masters/banking-profiles'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/masters/banking-profiles'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _profiles = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -34,7 +43,7 @@ class BankingProfileProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> getBankingProfile(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/masters/banking-profiles/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/masters/banking-profiles/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -49,7 +58,7 @@ class BankingProfileProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/masters/banking-profiles'),
+        _buildUri('${ApiClient.baseUrl}/masters/banking-profiles'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -72,7 +81,7 @@ class BankingProfileProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/masters/banking-profiles/$id'),
+        _buildUri('${ApiClient.baseUrl}/masters/banking-profiles/$id'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -94,7 +103,7 @@ class BankingProfileProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.delete(Uri.parse('${ApiClient.baseUrl}/masters/banking-profiles/$id'));
+      final response = await _client.delete(_buildUri('${ApiClient.baseUrl}/masters/banking-profiles/$id'));
       if (response.statusCode == 204) {
         await fetchBankingProfiles();
         return true;

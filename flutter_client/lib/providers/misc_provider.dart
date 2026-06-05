@@ -11,6 +11,15 @@ class MiscProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   // GSTR-2A
   Future<bool> uploadGstr2a(Map<String, dynamic> payload) async {
     _isLoading = true;
@@ -18,7 +27,7 @@ class MiscProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/gst/gstr2a/upload'),
+        _buildUri('${ApiClient.baseUrl}/gst/gstr2a/upload'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -40,7 +49,7 @@ class MiscProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> fetchAuditLogs({int page = 1, int limit = 50}) async {
     try {
       final response = await _client.get(
-        Uri.parse('${ApiClient.baseUrl}/audit-logs?page=$page&limit=$limit'),
+        _buildUri('${ApiClient.baseUrl}/audit-logs?page=$page&limit=$limit'),
       );
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -53,7 +62,7 @@ class MiscProvider extends ChangeNotifier {
   // Reminders
   Future<List<dynamic>> fetchReminders() async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/reminders'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/reminders'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -68,7 +77,7 @@ class MiscProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/reminders'),
+        _buildUri('${ApiClient.baseUrl}/reminders'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -93,7 +102,7 @@ class MiscProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/import/vyapar'),
+        _buildUri('${ApiClient.baseUrl}/import/vyapar'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {

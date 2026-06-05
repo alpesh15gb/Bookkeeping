@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/inventory_adjustment_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart' show LoadingState, StatusBadge;
+import 'package:flutter_client/views/shared/app_components.dart' show LoadingState, StatusBadge, HeroSummaryCard;
 import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/inventory_adjustments/inventory_adjustment_form_view.dart';

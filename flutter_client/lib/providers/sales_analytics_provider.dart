@@ -17,12 +17,21 @@ class SalesAnalyticsProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchCustomerWise() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales/customer-wise'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/sales/customer-wise'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _customerWise = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -41,7 +50,7 @@ class SalesAnalyticsProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales/period-wise'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/sales/period-wise'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _periodWise = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -60,7 +69,7 @@ class SalesAnalyticsProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/sales/transactions'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/sales/transactions'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _transactions = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -80,9 +89,9 @@ class SalesAnalyticsProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final results = await Future.wait([
-        _client.get(Uri.parse('${ApiClient.baseUrl}/sales/customer-wise')),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/sales/period-wise')),
-        _client.get(Uri.parse('${ApiClient.baseUrl}/sales/transactions')),
+        _client.get(_buildUri('${ApiClient.baseUrl}/sales/customer-wise')),
+        _client.get(_buildUri('${ApiClient.baseUrl}/sales/period-wise')),
+        _client.get(_buildUri('${ApiClient.baseUrl}/sales/transactions')),
       ]);
 
       for (int i = 0; i < results.length; i++) {

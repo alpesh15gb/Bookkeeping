@@ -16,12 +16,21 @@ class PaymentProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchReceipts() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/payments/receipts'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/payments/receipts'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
@@ -40,7 +49,7 @@ class PaymentProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/payments/disbursements'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/payments/disbursements'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
@@ -60,7 +69,7 @@ class PaymentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/payments/receipts'),
+        _buildUri('${ApiClient.baseUrl}/payments/receipts'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -84,7 +93,7 @@ class PaymentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/payments/disbursements'),
+        _buildUri('${ApiClient.baseUrl}/payments/disbursements'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -104,7 +113,7 @@ class PaymentProvider extends ChangeNotifier {
 
   Future<PaymentModel?> fetchReceiptDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/payments/receipts/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/payments/receipts/$id'));
       if (response.statusCode == 200) {
         return PaymentModel.fromJson(jsonDecode(response.body));
       }
@@ -114,7 +123,7 @@ class PaymentProvider extends ChangeNotifier {
 
   Future<BillPaymentModel?> fetchDisbursementDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/payments/disbursements/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/payments/disbursements/$id'));
       if (response.statusCode == 200) {
         return BillPaymentModel.fromJson(jsonDecode(response.body));
       }
@@ -128,7 +137,7 @@ class PaymentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/payments/receipts/$id/cancel'),
+        _buildUri('${ApiClient.baseUrl}/payments/receipts/$id/cancel'),
       );
       if (response.statusCode == 200) {
         await fetchReceipts();
@@ -151,7 +160,7 @@ class PaymentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/payments/disbursements/$id/cancel'),
+        _buildUri('${ApiClient.baseUrl}/payments/disbursements/$id/cancel'),
       );
       if (response.statusCode == 200) {
         await fetchDisbursements();

@@ -21,6 +21,15 @@ class InvoiceProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchInvoices({String? search, String? status, bool reset = true}) async {
     if (reset) {
       _currentPage = 1;
@@ -40,7 +49,7 @@ class InvoiceProvider extends ChangeNotifier {
       }
       final queryString = '?${queryParams.join('&')}';
       
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices$queryString'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/invoices$queryString'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : data;
@@ -89,7 +98,7 @@ class InvoiceProvider extends ChangeNotifier {
   Future<InvoiceModel?> previewInvoice(Map<String, dynamic> payload) async {
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices/preview'),
+        _buildUri('${ApiClient.baseUrl}/invoices/preview'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -119,7 +128,7 @@ class InvoiceProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices'),
+        _buildUri('${ApiClient.baseUrl}/invoices'),
         body: body,
       );
       if (response.statusCode == 201) {
@@ -139,7 +148,7 @@ class InvoiceProvider extends ChangeNotifier {
 
   Future<InvoiceModel?> fetchInvoiceDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/invoices/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/invoices/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         await SyncManager.instance?.cacheDocumentDetail('/invoices/$id', data);
@@ -180,7 +189,7 @@ class InvoiceProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/invoices/$id'),
+        _buildUri('${ApiClient.baseUrl}/invoices/$id'),
         body: body,
       );
       if (response.statusCode == 200) {
@@ -216,7 +225,7 @@ class InvoiceProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices/$id/cancel'),
+        _buildUri('${ApiClient.baseUrl}/invoices/$id/cancel'),
       );
       if (response.statusCode == 200) {
         await fetchInvoices();
@@ -252,7 +261,7 @@ class InvoiceProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices/$id/finalize'),
+        _buildUri('${ApiClient.baseUrl}/invoices/$id/finalize'),
       );
       if (response.statusCode == 200) {
         await fetchInvoices();
@@ -290,7 +299,7 @@ class InvoiceProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/invoices/$id/payment'),
+        _buildUri('${ApiClient.baseUrl}/invoices/$id/payment'),
         body: body,
       );
       if (response.statusCode == 200) {
@@ -328,7 +337,7 @@ class InvoiceProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.delete(
-        Uri.parse('${ApiClient.baseUrl}/invoices/$id'),
+        _buildUri('${ApiClient.baseUrl}/invoices/$id'),
       );
       if (response.statusCode == 204 || response.statusCode == 200) {
         await fetchInvoices();

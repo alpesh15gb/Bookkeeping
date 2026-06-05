@@ -45,6 +45,12 @@ class ApiClient extends http.BaseClient {
   static String? _tenantId;
   static Function()? onSessionExpired;
   static Completer<bool>? _refreshCompleter;
+  static Map<String, String> _fyParams = {};
+
+  static Map<String, String> get fyParams => Map.unmodifiable(_fyParams);
+  static void setFYParams(Map<String, String> params) {
+    _fyParams = params;
+  }
 
   static void setAccessToken(String? token) {
     _accessToken = token;

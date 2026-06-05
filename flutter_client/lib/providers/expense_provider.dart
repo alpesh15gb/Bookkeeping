@@ -33,12 +33,21 @@ class ExpenseProvider extends ChangeNotifier {
   List<dynamic> _paymentTerms = [];
   List<dynamic> get paymentTerms => _paymentTerms;
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<List<dynamic>> fetchExpenses({int page = 1}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/expenses?page=$page&limit=$_pageSize'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/expenses?page=$page&limit=$_pageSize'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data is Map<String, dynamic>) {
@@ -105,7 +114,7 @@ class ExpenseProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/expenses'),
+        _buildUri('${ApiClient.baseUrl}/expenses'),
         body: body,
       );
       if (response.statusCode == 201) {
@@ -139,7 +148,7 @@ class ExpenseProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/expenses/$id'),
+        _buildUri('${ApiClient.baseUrl}/expenses/$id'),
         body: body,
       );
       if (response.statusCode == 200) {
@@ -178,7 +187,7 @@ class ExpenseProvider extends ChangeNotifier {
       }
     }
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/expenses/$id/post'));
+      final response = await _client.post(_buildUri('${ApiClient.baseUrl}/expenses/$id/post'));
       if (response.statusCode == 200) {
         _isLoading = false;
         notifyListeners();
@@ -200,7 +209,7 @@ class ExpenseProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchExpenseDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/expenses/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/expenses/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final safeData = data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : <String, dynamic>{});
@@ -219,7 +228,7 @@ class ExpenseProvider extends ChangeNotifier {
 
   Future<void> fetchExpenseCategories() async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/masters/expense-categories'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/masters/expense-categories'));
       if (response.statusCode == 200) {
         _expenseCategories = jsonDecode(response.body);
         notifyListeners();
@@ -230,7 +239,7 @@ class ExpenseProvider extends ChangeNotifier {
   Future<bool> createExpenseCategory(String name) async {
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/masters/expense-categories'),
+        _buildUri('${ApiClient.baseUrl}/masters/expense-categories'),
         body: jsonEncode({'name': name}),
       );
       if (response.statusCode == 201) {
@@ -244,7 +253,7 @@ class ExpenseProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> previewExpense(double amount, double gstRate) async {
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/expenses/preview'),
+        _buildUri('${ApiClient.baseUrl}/expenses/preview'),
         body: jsonEncode({
           'amount': amount,
           'gst_rate': gstRate,
@@ -260,7 +269,7 @@ class ExpenseProvider extends ChangeNotifier {
 
   Future<List<dynamic>> fetchTaxTemplates() async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/masters/tax-templates'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/masters/tax-templates'));
       if (response.statusCode == 200) {
         _taxTemplates = jsonDecode(response.body);
         notifyListeners();
@@ -272,7 +281,7 @@ class ExpenseProvider extends ChangeNotifier {
 
   Future<List<dynamic>> fetchPaymentTerms() async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/masters/payment-terms'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/masters/payment-terms'));
       if (response.statusCode == 200) {
         _paymentTerms = jsonDecode(response.body);
         notifyListeners();
@@ -284,7 +293,7 @@ class ExpenseProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchBillPdfPayload(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bills/$id/pdf-payload'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bills/$id/pdf-payload'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -295,7 +304,7 @@ class ExpenseProvider extends ChangeNotifier {
 
   Future<Uint8List?> exportGstr1() async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/gst/gstr1/export'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/gst/gstr1/export'));
       if (response.statusCode == 200) return response.bodyBytes;
     } catch (_) {}
     return null;
@@ -303,7 +312,7 @@ class ExpenseProvider extends ChangeNotifier {
 
   Future<Uint8List?> exportGstr2() async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/gst/gstr2/export'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/gst/gstr2/export'));
       if (response.statusCode == 200) return response.bodyBytes;
     } catch (_) {}
     return null;
@@ -311,7 +320,7 @@ class ExpenseProvider extends ChangeNotifier {
 
   Future<Uint8List?> exportGstr3b() async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/gst/gstr3b/export'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/gst/gstr3b/export'));
       if (response.statusCode == 200) return response.bodyBytes;
     } catch (_) {}
     return null;

@@ -21,6 +21,15 @@ class BillProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchBills({bool reset = true}) async {
     if (reset) {
       _currentPage = 1;
@@ -31,7 +40,9 @@ class BillProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bills?page=$_currentPage&limit=$_pageSize'));
+      final queryParams = <String>['page=$_currentPage', 'limit=$_pageSize'];
+      final queryString = '?${queryParams.join('&')}';
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bills$queryString'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : data;
@@ -81,7 +92,7 @@ class BillProvider extends ChangeNotifier {
 
   Future<BillModel?> fetchBillDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bills/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bills/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         await SyncManager.instance?.cacheDocumentDetail('/bills/$id', data);
@@ -117,7 +128,7 @@ class BillProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/bills'),
+        _buildUri('${ApiClient.baseUrl}/bills'),
         body: body,
       );
       if (response.statusCode == 201) {
@@ -139,7 +150,7 @@ class BillProvider extends ChangeNotifier {
   Future<BillModel?> previewBill(Map<String, dynamic> payload) async {
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/bills/preview'),
+        _buildUri('${ApiClient.baseUrl}/bills/preview'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -169,7 +180,7 @@ class BillProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/bills/$id'),
+        _buildUri('${ApiClient.baseUrl}/bills/$id'),
         body: body,
       );
       if (response.statusCode == 200) {
@@ -206,7 +217,7 @@ class BillProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/bills/$id/cancel'),
+        _buildUri('${ApiClient.baseUrl}/bills/$id/cancel'),
       );
       if (response.statusCode == 200) {
         await fetchBills();
@@ -242,7 +253,7 @@ class BillProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/bills/$id/finalize'),
+        _buildUri('${ApiClient.baseUrl}/bills/$id/finalize'),
       );
       if (response.statusCode == 200) {
         await fetchBills();
@@ -280,7 +291,7 @@ class BillProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/bills/$id/payment'),
+        _buildUri('${ApiClient.baseUrl}/bills/$id/payment'),
         body: body,
       );
       if (response.statusCode == 200) {
@@ -318,7 +329,7 @@ class BillProvider extends ChangeNotifier {
     }
     try {
       final response = await _client.delete(
-        Uri.parse('${ApiClient.baseUrl}/bills/$id'),
+        _buildUri('${ApiClient.baseUrl}/bills/$id'),
       );
       if (response.statusCode == 204 || response.statusCode == 200) {
         await fetchBills();

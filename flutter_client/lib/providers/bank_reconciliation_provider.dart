@@ -15,12 +15,21 @@ class BankReconciliationProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   Future<void> fetchStatements() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/statements'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _statements = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -36,7 +45,7 @@ class BankReconciliationProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchStatementDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/statements/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -51,7 +60,7 @@ class BankReconciliationProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/statements'),
+        _buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -70,7 +79,7 @@ class BankReconciliationProvider extends ChangeNotifier {
 
   Future<List<dynamic>> fetchStatementTransactions(String statementId) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/transactions'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/transactions'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -85,7 +94,7 @@ class BankReconciliationProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/transactions'),
+        _buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/transactions'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -104,7 +113,7 @@ class BankReconciliationProvider extends ChangeNotifier {
     _isLoading = true; _errorMessage = null; notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/transactions/$transactionId/reconcile'),
+        _buildUri('${ApiClient.baseUrl}/bank-reconciliation/transactions/$transactionId/reconcile'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200 || response.statusCode == 201) { _isLoading = false; notifyListeners(); return true; }
@@ -120,7 +129,7 @@ class BankReconciliationProvider extends ChangeNotifier {
   Future<void> fetchReconciliations() async {
     _isLoading = true; _errorMessage = null; notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/reconciliations'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/reconciliations'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         _reconciliations = data is List ? data : (data is Map ? (data['items'] ?? []) : []);
@@ -135,7 +144,7 @@ class BankReconciliationProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchReconciliationDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/reconciliations/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/reconciliations/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -147,7 +156,7 @@ class BankReconciliationProvider extends ChangeNotifier {
   Future<bool> undoReconciliation(String id) async {
     _isLoading = true; _errorMessage = null; notifyListeners();
     try {
-      final response = await _client.post(Uri.parse('${ApiClient.baseUrl}/bank-reconciliation/reconciliations/$id/undo'));
+      final response = await _client.post(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/reconciliations/$id/undo'));
       if (response.statusCode == 200) {
         await fetchReconciliations(); return true;
       }

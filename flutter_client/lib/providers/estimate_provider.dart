@@ -11,6 +11,15 @@ class EstimateProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
+  Uri _buildUri(String endpoint) {
+    final queryParams = <String>[];
+    ApiClient.fyParams.forEach((k, v) {
+      queryParams.add('$k=$v');
+    });
+    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
+    return Uri.parse('$endpoint$queryString');
+  }
+
   List<dynamic> _items = [];
   List<dynamic> get items => _items;
 
@@ -19,7 +28,7 @@ class EstimateProvider extends ChangeNotifier {
     _errorMessage = null;
     notifyListeners();
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/proforma-invoices'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/proforma-invoices'));
       if (response.statusCode == 200) {
         _items = jsonDecode(response.body);
         _isLoading = false;
@@ -38,7 +47,7 @@ class EstimateProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/proforma-invoices'),
+        _buildUri('${ApiClient.baseUrl}/proforma-invoices'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 201) {
@@ -58,7 +67,7 @@ class EstimateProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.put(
-        Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id'),
+        _buildUri('${ApiClient.baseUrl}/proforma-invoices/$id'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -79,7 +88,7 @@ class EstimateProvider extends ChangeNotifier {
   Future<Map<String, dynamic>?> previewEstimate(Map<String, dynamic> payload) async {
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/proforma-invoices/preview'),
+        _buildUri('${ApiClient.baseUrl}/proforma-invoices/preview'),
         body: jsonEncode(payload),
       );
       if (response.statusCode == 200) {
@@ -96,7 +105,7 @@ class EstimateProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id/issue'),
+        _buildUri('${ApiClient.baseUrl}/proforma-invoices/$id/issue'),
       );
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -119,7 +128,7 @@ class EstimateProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final response = await _client.post(
-        Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id/convert'),
+        _buildUri('${ApiClient.baseUrl}/proforma-invoices/$id/convert'),
       );
       if (response.statusCode == 200) {
         _isLoading = false;
@@ -146,7 +155,7 @@ class EstimateProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchEstimateDetail(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/proforma-invoices/$id'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
@@ -157,7 +166,7 @@ class EstimateProvider extends ChangeNotifier {
 
   Future<Map<String, dynamic>?> fetchProformaInvoicePdfPayload(String id) async {
     try {
-      final response = await _client.get(Uri.parse('${ApiClient.baseUrl}/proforma-invoices/$id/pdf-payload'));
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/proforma-invoices/$id/pdf-payload'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);

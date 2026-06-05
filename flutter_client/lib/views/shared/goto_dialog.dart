@@ -42,6 +42,7 @@ import 'package:flutter_client/views/returns/returns_list_view.dart';
 import 'package:flutter_client/views/settings/settings_view.dart';
 import 'package:flutter_client/views/sales_analytics/sales_analytics_view.dart';
 import 'package:flutter_client/views/accounting/year_end_view.dart';
+import 'package:flutter_client/views/financial_years/financial_years_manage_view.dart';
 
 class GoToItem {
   final String name;
@@ -385,6 +386,13 @@ class _GoToDialogState extends State<GoToDialog> {
         icon: Icons.lock_clock_outlined,
         shellTabIndex: 28,
         builder: (_) => const YearEndCloseView(),
+      ),
+      GoToItem(
+        name: 'Financial Years',
+        category: 'Masters & Lists',
+        icon: Icons.calendar_month_outlined,
+        shellTabIndex: 28,
+        builder: (_) => const FinancialYearsManageView(),
       ),
     ];
   }

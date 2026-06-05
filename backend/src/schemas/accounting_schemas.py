@@ -129,3 +129,38 @@ class YearEndPrepareResponse(SchemaBase):
 class YearEndCloseRequest(SchemaBase):
     closing_date: date
 
+
+# Financial Year Management Schemas
+class FinancialYearCreate(SchemaBase):
+    name: str = Field(..., max_length=50)
+    start_date: date
+    end_date: date
+
+class FinancialYearResponse(SchemaBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    name: str
+    start_date: date
+    end_date: date
+    status: str
+    is_current: bool
+    closed_at: Optional[datetime] = None
+    closed_by: Optional[uuid.UUID] = None
+    journal_entry_id: Optional[uuid.UUID] = None
+    transaction_count: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+class FinancialYearSwitchRequest(SchemaBase):
+    financial_year_id: uuid.UUID
+
+class YearEndDashboardResponse(SchemaBase):
+    financial_year: FinancialYearResponse
+    readiness_score: int
+    trial_balance_balanced: bool
+    unposted_documents_count: int
+    unposted_documents: List[UnpostedDocument]
+    net_profit: Decimal
+    closing_allowed: bool
+    blocking_items: List[str]
+

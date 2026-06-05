@@ -21,6 +21,7 @@ import 'package:flutter_client/views/purchase_orders/order_list_view.dart';
 import 'package:flutter_client/views/accounting/journal_entry_view.dart';
 import 'package:flutter_client/views/accounting/statement_view.dart';
 import 'package:flutter_client/views/accounting/year_end_view.dart';
+import 'package:flutter_client/views/financial_years/financial_years_manage_view.dart';
 import 'package:flutter_client/views/payments/payment_list_view.dart';
 import 'package:flutter_client/views/accounting/account_list_view.dart';
 import 'package:flutter_client/views/einvoice/eway_bill_list_view.dart';
@@ -38,6 +39,153 @@ import 'package:flutter_client/views/returns/returns_list_view.dart';
 import 'package:flutter_client/views/tools/backup_restore_view.dart';
 import 'package:flutter_client/views/tally/tally_import_view.dart';
 import 'package:flutter_client/views/shared/goto_dialog.dart';
+import 'package:flutter_client/providers/financial_year_provider.dart';
+
+// ─── Financial Year Picker Helper (Sidebar/Mobile) ──────────
+
+void _showFYSidebarPicker(BuildContext context, FinancialYearProvider provider) {
+  showModalBottomSheet(
+    context: context,
+    backgroundColor: AppColors.bgSidebar,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    isScrollControlled: true,
+    builder: (ctx) {
+      return SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: const BoxDecoration(
+                border: Border(bottom: BorderSide(color: Colors.white12)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.goldAccent),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Financial Years',
+                    style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+            ),
+            Flexible(
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: provider.availableYears.length,
+                itemBuilder: (context, i) {
+                  final year = provider.availableYears[i];
+                  final isActive = provider.activeYear?.id == year.id;
+                  final statusColor = year.status.color;
+                  final statusBg = year.status.bgColor;
+
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: isActive ? AppColors.goldAccent.withValues(alpha: 0.1) : null,
+                    ),
+                    child: ListTile(
+                      leading: Container(
+                        width: 4,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: isActive ? AppColors.goldAccent : Colors.transparent,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                      title: Row(
+                        children: [
+                          Text(
+                            'FY ${year.name}',
+                            style: TextStyle(
+                              fontWeight: isActive ? FontWeight.w700 : FontWeight.w500,
+                              color: Colors.white,
+                            ),
+                          ),
+                          if (year.isCurrent) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: FYStatus.current.color.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(
+                                'CURRENT',
+                                style: TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: FYStatus.current.color),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      subtitle: Row(
+                        children: [
+                          Text(
+                            year.dateRange,
+                            style: const TextStyle(fontSize: 11, color: AppColors.textWhiteMuted),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: statusColor.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              year.status.label.toUpperCase(),
+                              style: TextStyle(fontSize: 8, fontWeight: FontWeight.w700, color: statusColor),
+                            ),
+                          ),
+                        ],
+                      ),
+                      trailing: isActive
+                          ? const Icon(Icons.check_circle, size: 18, color: AppColors.goldAccent)
+                          : null,
+                      onTap: () {
+                        provider.setActiveYear(year);
+                        Navigator.pop(ctx);
+                      },
+                    ),
+                  );
+                },
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.white12)),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const FinancialYearsManageView()),
+                        );
+                      },
+                      icon: const Icon(Icons.settings_outlined, size: 14),
+                      label: const Text('Manage Financial Years'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.white,
+                        side: const BorderSide(color: Colors.white24),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
 
 // ─── Offline Banner Widget ────────────────────────────────────
 
@@ -255,6 +403,11 @@ class _ShellViewState extends State<ShellView> {
     showSearch(context: context, delegate: GlobalSearchDelegate());
   }
 
+  String _activeFYLabel(BuildContext context) {
+    final fy = context.read<FinancialYearProvider>().activeYear;
+    return fy?.label ?? '';
+  }
+
   void _refreshCurrentView() {
     setState(() {});
   }
@@ -371,8 +524,9 @@ class _ShellViewState extends State<ShellView> {
                 ),
                 if (!syncManager.isOnline || syncManager.pendingCount > 0)
                   _OfflineBanner(syncManager: syncManager),
+                const _HistoricalYearBanner(),
                 Expanded(
-                  key: ValueKey('${_selectedIndex}_${context.read<AuthProvider>().activeTenantId ?? ''}'),
+                  key: ValueKey('${_selectedIndex}_${context.read<AuthProvider>().activeTenantId ?? ''}_${_activeFYLabel(context)}'),
                   child: _currentView,
                 ),
               ],
@@ -430,14 +584,15 @@ class _ShellViewState extends State<ShellView> {
         children: [
           if (!syncManager.isOnline || syncManager.pendingCount > 0)
             _OfflineBanner(syncManager: syncManager),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: KeyedSubtree(
-                    key: ValueKey('${_selectedIndex}_${context.read<AuthProvider>().activeTenantId ?? ''}'),
-                    child: _currentView,
-                  ),
-                ),
+          const _HistoricalYearBanner(),
+          Expanded(
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: KeyedSubtree(
+                key: ValueKey('${_selectedIndex}_${context.read<AuthProvider>().activeTenantId ?? ''}_${_activeFYLabel(context)}'),
+                child: _currentView,
+              ),
+            ),
           ),
         ],
       ),
@@ -770,6 +925,74 @@ class _Sidebar extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Financial Year Selector
+                Consumer<FinancialYearProvider>(
+                  builder: (context, fy, _) {
+                    if (fy.activeYear == null) return const SizedBox.shrink();
+                    final year = fy.activeYear!;
+                    final isLocked = year.status == FYStatus.locked;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: InkWell(
+                        onTap: () => _showFYSidebarPicker(context, fy),
+                        borderRadius: AppRadius.sidebar,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            borderRadius: AppRadius.sidebar,
+                            border: Border.all(color: Colors.white12),
+                            color: isLocked
+                                ? AppColors.error.withValues(alpha: 0.1)
+                                : fy.isViewingHistoricalYear
+                                    ? AppColors.warning.withValues(alpha: 0.15)
+                                    : Colors.white.withOpacity(0.05),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isLocked ? Icons.lock_outline : Icons.calendar_today_outlined,
+                                size: 14,
+                                color: isLocked
+                                    ? AppColors.error
+                                    : fy.isViewingHistoricalYear
+                                        ? AppColors.warning
+                                        : AppColors.textWhiteMuted,
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'FY ${year.name}',
+                                      style: TextStyle(
+                                        color: isLocked
+                                            ? AppColors.error
+                                            : fy.isViewingHistoricalYear
+                                                ? AppColors.warning
+                                                : Colors.white,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      year.status.label,
+                                      style: TextStyle(
+                                        color: year.status.color.withValues(alpha: 0.8),
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(Icons.expand_more, size: 16, color: AppColors.textWhiteMuted),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
                 // Company Switcher
                 if (memberships.length > 1)
                   Padding(
@@ -926,6 +1149,347 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
+// ─── Financial Year Selector ─────────────────────────────────
+class _FYSelector extends StatelessWidget {
+  const _FYSelector();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<FinancialYearProvider>(
+      builder: (context, fy, _) {
+        if (fy.activeYear == null) return const SizedBox.shrink();
+
+        final year = fy.activeYear!;
+        final statusColor = year.status.color;
+        final statusBg = year.status.bgColor;
+        final isHistorical = fy.isViewingHistoricalYear;
+
+        return InkWell(
+          onTap: () => _showModernFYDropdown(context, fy),
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: isHistorical
+                  ? AppColors.warning.withValues(alpha: 0.1)
+                  : AppColors.borderLight,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+              border: isHistorical
+                  ? Border.all(color: AppColors.warning.withValues(alpha: 0.3))
+                  : null,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  size: 12,
+                  color: isHistorical ? AppColors.warning : AppColors.textSecondary,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  'FY ${year.label}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isHistorical ? AppColors.warning : AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                  child: Text(
+                    year.status.label.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 8,
+                      fontWeight: FontWeight.w700,
+                      color: statusColor,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 14,
+                  color: isHistorical ? AppColors.warning : AppColors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  void _showModernFYDropdown(BuildContext context, FinancialYearProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgSurface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      isScrollControlled: true,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: const BoxDecoration(
+                  border: Border(bottom: BorderSide(color: AppColors.border)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.brandNavy),
+                    const SizedBox(width: 8),
+                    const Expanded(
+                      child: Text(
+                        'Financial Years',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('Close'),
+                    ),
+                  ],
+                ),
+              ),
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: provider.availableYears.length,
+                  itemBuilder: (context, i) {
+                    final year = provider.availableYears[i];
+                    final isActive = provider.activeYear?.id == year.id;
+                    final statusColor = year.status.color;
+                    final statusBg = year.status.bgColor;
+
+                    return Container(
+                      decoration: BoxDecoration(
+                        color: isActive ? AppColors.brandNavy.withValues(alpha: 0.04) : null,
+                        border: const Border(bottom: BorderSide(color: AppColors.borderLight)),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                        leading: Container(
+                          width: 4,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isActive ? AppColors.brandNavy : Colors.transparent,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Text(
+                              'FY ${year.name}',
+                              style: TextStyle(
+                                fontWeight: isActive ? FontWeight.w700 : FontWeight.w600,
+                                color: AppColors.textPrimary,
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (year.isCurrent) ...[
+                              const SizedBox(width: 6),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: FYStatus.current.bgColor,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Text(
+                                  'CURRENT',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: FYStatus.current.color,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Row(
+                            children: [
+                              Text(
+                                year.dateRange,
+                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: statusBg,
+                                  borderRadius: BorderRadius.circular(3),
+                                ),
+                                child: Text(
+                                  year.status.label.toUpperCase(),
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w700,
+                                    color: statusColor,
+                                  ),
+                                ),
+                              ),
+                              if (year.transactionCount > 0) ...[
+                                const SizedBox(width: 8),
+                                Text(
+                                  '${year.transactionCount} txn${year.transactionCount == 1 ? '' : 's'}',
+                                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        trailing: isActive
+                            ? const Icon(Icons.check_circle, size: 18, color: AppColors.brandNavy)
+                            : null,
+                        onTap: () {
+                          provider.setActiveYear(year);
+                          Navigator.pop(ctx);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: AppColors.border)),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const FinancialYearsManageView(),
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.settings_outlined, size: 14),
+                        label: const Text('Manage Financial Years'),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.brandNavy,
+                          side: const BorderSide(color: AppColors.border),
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─── Historical Year Banner (enhanced) ──────────────────────
+class _HistoricalYearBanner extends StatelessWidget {
+  const _HistoricalYearBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<FinancialYearProvider>(
+      builder: (context, fy, _) {
+        if (fy.activeYear == null) return const SizedBox.shrink();
+        final year = fy.activeYear!;
+
+        if (year.status == FYStatus.locked) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            color: AppColors.error.withValues(alpha: 0.06),
+            child: Row(
+              children: [
+                const Icon(Icons.lock_outline_rounded, size: 14, color: AppColors.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'FY ${year.name} is ${year.status.label.toLowerCase()} and locked. No transactions can be modified.',
+                    style: const TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final currentFY = fy.availableYears.firstWhere(
+                      (y) => y.isCurrent,
+                      orElse: () => fy.availableYears.first,
+                    );
+                    fy.setActiveYear(currentFY);
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.error,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  child: const Text('Switch to Current FY'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        if (fy.isViewingHistoricalYear) {
+          return Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            color: AppColors.warning.withValues(alpha: 0.08),
+            child: Row(
+              children: [
+                Icon(Icons.lock_clock_outlined, size: 14, color: AppColors.warning),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Viewing ${year.fullLabel} — read-only mode',
+                    style: TextStyle(fontSize: 12, color: AppColors.warning, fontWeight: FontWeight.w600),
+                  ),
+                ),
+                TextButton(
+                  onPressed: () {
+                    final currentFY = fy.availableYears.firstWhere(
+                      (y) => y.isCurrent,
+                      orElse: () => fy.availableYears.first,
+                    );
+                    fy.setActiveYear(currentFY);
+                  },
+                  style: TextButton.styleFrom(
+                    foregroundColor: AppColors.warning,
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    minimumSize: const Size(0, 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
+                  child: const Text('Switch to Current FY'),
+                ),
+              ],
+            ),
+          );
+        }
+
+        return const SizedBox.shrink();
+      },
+    );
+  }
+}
+
 // ─── Top Bar ──────────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final String title;
@@ -969,21 +1533,7 @@ class _TopBar extends StatelessWidget {
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(
-              color: AppColors.borderLight,
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
-            child: Text(
-              'FY ${DateTime.now().month >= 4 ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}' : '${(DateTime.now().year - 1)}-${DateTime.now().year.toString().substring(2)}'}',
-              style: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textSecondary,
-              ),
-            ),
-          ),
+          const _FYSelector(),
         ],
       ),
     );
@@ -1058,6 +1608,77 @@ class _MobileDrawer extends StatelessWidget {
               ),
               child: Column(
                 children: [
+                  // Financial Year Selector
+                  Consumer<FinancialYearProvider>(
+                    builder: (context, fy, _) {
+                      if (fy.activeYear == null) return const SizedBox.shrink();
+                      final year = fy.activeYear!;
+                      final isLocked = year.status == FYStatus.locked;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.pop(context); // Close drawer first
+                            _showFYSidebarPicker(context, fy);
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white12),
+                              color: isLocked
+                                  ? AppColors.error.withValues(alpha: 0.1)
+                                  : fy.isViewingHistoricalYear
+                                      ? AppColors.warning.withValues(alpha: 0.15)
+                                      : Colors.white.withOpacity(0.05),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  isLocked ? Icons.lock_outline : Icons.calendar_today_outlined,
+                                  size: 16,
+                                  color: isLocked
+                                      ? AppColors.error
+                                      : fy.isViewingHistoricalYear
+                                          ? AppColors.warning
+                                          : AppColors.textWhiteMuted,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'FY ${year.name}',
+                                        style: TextStyle(
+                                          color: isLocked
+                                              ? AppColors.error
+                                              : fy.isViewingHistoricalYear
+                                                  ? AppColors.warning
+                                                  : Colors.white,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        year.status.label,
+                                        style: TextStyle(
+                                          color: year.status.color.withValues(alpha: 0.8),
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(Icons.expand_more, size: 16, color: AppColors.textWhiteMuted),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
                   // Company Switcher
                   Consumer<AuthProvider>(
                     builder: (context, auth, _) {
