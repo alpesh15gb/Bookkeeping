@@ -616,15 +616,22 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       setState(() {
         _subtotal = sub;
         _discountTotal = disc;
-        if (_posStateCode == '27' || _posStateCode == '29') {
-          _cgst = gst / 2;
-          _sgst = gst / 2;
-          _igst = 0;
-        } else {
-          _cgst = 0;
-          _sgst = 0;
-          _igst = gst;
-        }
+        // Calculate GST based on intra-state vs inter-state
+      // Intra-state: origin == POS → CGST + SGST
+      // Inter-state: origin != POS → IGST
+      final settingsProvider = context.read<SettingsProvider>();
+      final originStateCode = settingsProvider.settings['origin_state_code'] ?? '';
+      final isIntraState = _posStateCode == originStateCode && originStateCode.isNotEmpty;
+      
+      if (isIntraState) {
+        _cgst = gst / 2;
+        _sgst = gst / 2;
+        _igst = 0;
+      } else {
+        _cgst = 0;
+        _sgst = 0;
+        _igst = gst;
+      }
         _roundOff = 0;
         _total = sub - disc + gst;
       });
@@ -706,15 +713,22 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           setState(() {
             _subtotal = sub;
             _discountTotal = disc;
-            if (_posStateCode == '27' || _posStateCode == '29') {
-              _cgst = gst / 2;
-              _sgst = gst / 2;
-              _igst = 0;
-            } else {
-              _cgst = 0;
-              _sgst = 0;
-              _igst = gst;
-            }
+            // Calculate GST based on intra-state vs inter-state
+              // Intra-state: origin == POS → CGST + SGST
+              // Inter-state: origin != POS → IGST
+              final settingsProvider = context.read<SettingsProvider>();
+              final originStateCode = settingsProvider.settings['origin_state_code'] ?? '';
+              final isIntraState = _posStateCode == originStateCode && originStateCode.isNotEmpty;
+              
+              if (isIntraState) {
+                _cgst = gst / 2;
+                _sgst = gst / 2;
+                _igst = 0;
+              } else {
+                _cgst = 0;
+                _sgst = 0;
+                _igst = gst;
+              }
             _roundOff = 0;
             _total = sub - disc + gst;
             _isPreviewLoading = false;
