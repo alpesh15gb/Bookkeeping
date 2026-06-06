@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
 import 'package:flutter_client/providers/eway_bill_provider.dart';
+import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/models/contact.dart';
 
 class ContactFormView extends StatefulWidget {
@@ -231,6 +232,7 @@ class _ContactFormViewState extends State<ContactFormView> {
 
   @override
   Widget build(BuildContext context) {
+    final gstEnabled = context.watch<SettingsProvider>().gstEnabled;
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 560, maxHeight: 700),
@@ -344,47 +346,52 @@ class _ContactFormViewState extends State<ContactFormView> {
                       const SizedBox(height: 16),
 
                       // GSTIN + PAN + State Code
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextFormField(
-                              controller: _gstinController,
-                              textCapitalization: TextCapitalization.characters,
-                              decoration: InputDecoration(
-                                labelText: 'GSTIN',
-                                prefixIcon: const Icon(Icons.pin_outlined, size: 18),
-                                suffixIcon: IconButton(
-                                  icon: const Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
-                                  onPressed: _verifyGstin,
-                                  tooltip: 'Verify GSTIN',
+                      if (gstEnabled)
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: TextFormField(
+                                controller: _gstinController,
+                                textCapitalization: TextCapitalization.characters,
+                                decoration: InputDecoration(
+                                  labelText: 'GSTIN',
+                                  prefixIcon: const Icon(Icons.pin_outlined, size: 18),
+                                  suffixIcon: IconButton(
+                                    icon: const Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
+                                    onPressed: _verifyGstin,
+                                    tooltip: 'Verify GSTIN',
+                                  ),
                                 ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              controller: _panController,
-                              decoration: const InputDecoration(
-                                labelText: 'PAN',
-                                prefixIcon: Icon(Icons.credit_card_outlined, size: 18),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                controller: _stateCodeController,
+                                decoration: const InputDecoration(labelText: 'State Code *'),
+                                maxLength: 2,
+                                validator: (v) => (v == null || v.length != 2) ? '2 chars' : null,
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            flex: 2,
-                            child: TextFormField(
-                              controller: _stateCodeController,
-                              decoration: const InputDecoration(labelText: 'State Code *'),
-                              maxLength: 2,
-                              validator: (v) => (v == null || v.length != 2) ? '2 chars' : null,
+                          ],
+                        ),
+                      if (!gstEnabled)
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: TextFormField(
+                                controller: _panController,
+                                decoration: const InputDecoration(
+                                  labelText: 'PAN',
+                                  prefixIcon: Icon(Icons.credit_card_outlined, size: 18),
+                                ),
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
+                          ],
+                        ),
 
                       const SizedBox(height: 24),
 

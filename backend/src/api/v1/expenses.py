@@ -21,11 +21,12 @@ router = APIRouter(prefix="/expenses", tags=["Expenses"])
 def _compute_expense_totals(db: Session, tenant_id: uuid.UUID, amount: Decimal, gst_rate: Decimal, place_of_supply_state_code: str) -> dict:
     from src.domains.company.services import resolve_origin_state_code
     origin = resolve_origin_state_code(db, tenant_id)
+    effective_rate = GSTEngine.resolve_gst_rate(db, tenant_id, gst_rate)
     tax_split = GSTEngine.calculate_tax(
         origin_state_code=origin,
         place_of_supply_state_code=place_of_supply_state_code,
         base_amount=amount,
-        gst_rate=gst_rate,
+        gst_rate=effective_rate,
     )
     raw_total = amount + tax_split.cgst_amount + tax_split.sgst_amount + tax_split.igst_amount + tax_split.utgst_amount + tax_split.cess_amount
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")

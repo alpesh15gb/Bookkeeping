@@ -230,6 +230,14 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   bool _shipToSameAsBilling = true;
   bool _hasRecoveredDraft = false;
 
+  bool get _gstEnabled {
+    try {
+      return context.read<SettingsProvider>().gstEnabled;
+    } catch (_) {
+      return true;
+    }
+  }
+
   String get _draftKey => 'draft_${widget.config.title}_${widget.editEntity != null ? (widget.editEntity is Map ? widget.editEntity['id'] : widget.editEntity.id) : 'new'}';
 
   Future<void> _checkDraft() async {
@@ -1212,7 +1220,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _buildTaxBreakdownCard(),
+                      if (_gstEnabled) _buildTaxBreakdownCard(),
                       const SizedBox(height: 12),
                       _buildTotalSummaryCard(),
                     ],
@@ -1231,7 +1239,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                 const SizedBox(height: 12),
                 _buildLineItemsSection(isDesktop),
                 const SizedBox(height: 12),
-                _buildTaxBreakdownCard(),
+                if (_gstEnabled) _buildTaxBreakdownCard(),
                 const SizedBox(height: 12),
                 _buildTotalSummaryCard(),
                 const SizedBox(height: 12),
@@ -1305,24 +1313,25 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         const SizedBox(width: 6),
         Text('DOCUMENT DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
         const Spacer(),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Checkbox(
-              value: _isGstInclusive,
-              activeColor: AppColors.brandNavy,
-              onChanged: (val) {
-                if (val != null) {
-                  setState(() {
-                    _isGstInclusive = val;
-                  });
-                  _triggerPreview();
-                }
-              },
-            ),
-            const Text('GST Inclusive', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-          ],
-        ),
+        if (_gstEnabled)
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Checkbox(
+                value: _isGstInclusive,
+                activeColor: AppColors.brandNavy,
+                onChanged: (val) {
+                  if (val != null) {
+                    setState(() {
+                      _isGstInclusive = val;
+                    });
+                    _triggerPreview();
+                  }
+                },
+              ),
+              const Text('GST Inclusive', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+            ],
+          ),
       ],
     );
 
@@ -1343,28 +1352,30 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           onTap: () => _pickDate(_issueDateCtrl),
         ),
       ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: AppDropdown<String>(
-          value: _posStateCode,
-          label: 'Place of Supply *',
-          prefixIcon: Icons.map_outlined,
-          items: _gstStateNames.entries
-              .map(
-                (e) => DropdownMenuItem<String>(
-                  value: e.key,
-                  child: Text(e.value),
-                ),
-              )
-              .toList(),
-          onChanged: (val) {
-            if (val != null) {
-              setState(() => _posStateCode = val);
-              _triggerPreview();
-            }
-          },
+      if (_gstEnabled) ...[
+        const SizedBox(width: 12),
+        Expanded(
+          child: AppDropdown<String>(
+            value: _posStateCode,
+            label: 'Place of Supply *',
+            prefixIcon: Icons.map_outlined,
+            items: _gstStateNames.entries
+                .map(
+                  (e) => DropdownMenuItem<String>(
+                    value: e.key,
+                    child: Text(e.value),
+                  ),
+                )
+                .toList(),
+            onChanged: (val) {
+              if (val != null) {
+                setState(() => _posStateCode = val);
+                _triggerPreview();
+              }
+            },
+          ),
         ),
-      ),
+      ],
     ];
 
     return AppCard(
@@ -1532,7 +1543,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: 820,
+                width: _gstEnabled ? 820 : 560,
                 child: Row(
                   children: [
                     SizedBox(
@@ -1544,11 +1555,13 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       width: 200,
                       child: Text('Item Description *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 90,
-                      child: Text('HSN/SAC *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
-                    ),
+                    if (_gstEnabled) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(
+                        width: 90,
+                        child: Text('HSN/SAC *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
+                      ),
+                    ],
                     const SizedBox(width: AppSpacing.sm),
                     SizedBox(
                       width: 60,
@@ -1574,16 +1587,18 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                       width: 100,
                       child: Text('Taxable (₹)', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 70,
-                      child: Text('GST %', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 100,
-                      child: Text('GST Amt (₹)', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
-                    ),
+                    if (_gstEnabled) ...[
+                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(
+                        width: 70,
+                        child: Text('GST %', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(
+                        width: 100,
+                        child: Text('GST Amt (₹)', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
+                      ),
+                    ],
                     const SizedBox(width: AppSpacing.sm),
                     const SizedBox(width: 36),
                   ],
@@ -1618,7 +1633,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: SizedBox(
-                      width: 820,
+                      width: _gstEnabled ? 820 : 560,
                       child: Row(
                         children: [
                           SizedBox(
@@ -1647,15 +1662,17 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               ),
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 90,
-                            child: AppTextField(
-                              controller: line.hsnCtrl,
-                              onChanged: (v) => line.hsnSac = v,
-                              compact: true,
+                          if (_gstEnabled) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            SizedBox(
+                              width: 90,
+                              child: AppTextField(
+                                controller: line.hsnCtrl,
+                                onChanged: (v) => line.hsnSac = v,
+                                compact: true,
+                              ),
                             ),
-                          ),
+                          ],
                           const SizedBox(width: AppSpacing.sm),
                           SizedBox(
                             width: 60,
@@ -1739,35 +1756,37 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               style: AppTextStyles.amount,
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 70,
-                            child: AppDropdown<String>(
-                              value: line.gstRate.toStringAsFixed(0),
-                              compact: true,
-                              items: const [
-                                DropdownMenuItem(value: '18', child: Text('18%')),
-                                DropdownMenuItem(value: '12', child: Text('12%')),
-                                DropdownMenuItem(value: '5', child: Text('5%')),
-                                DropdownMenuItem(value: '0', child: Text('0%')),
-                              ],
-                              onChanged: (v) {
-                                if (v != null) {
-                                  setState(() => line.gstRate = double.tryParse(v) ?? 18);
-                                  _triggerPreview();
-                                }
-                              },
+                          if (_gstEnabled) ...[
+                            const SizedBox(width: AppSpacing.sm),
+                            SizedBox(
+                              width: 70,
+                              child: AppDropdown<String>(
+                                value: line.gstRate.toStringAsFixed(0),
+                                compact: true,
+                                items: const [
+                                  DropdownMenuItem(value: '18', child: Text('18%')),
+                                  DropdownMenuItem(value: '12', child: Text('12%')),
+                                  DropdownMenuItem(value: '5', child: Text('5%')),
+                                  DropdownMenuItem(value: '0', child: Text('0%')),
+                                ],
+                                onChanged: (v) {
+                                  if (v != null) {
+                                    setState(() => line.gstRate = double.tryParse(v) ?? 18);
+                                    _triggerPreview();
+                                  }
+                                },
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 100,
-                            child: Text(
-                              '₹${gstAmount.toStringAsFixed(2)}',
-                              textAlign: TextAlign.right,
-                              style: AppTextStyles.amount,
+                            const SizedBox(width: AppSpacing.sm),
+                            SizedBox(
+                              width: 100,
+                              child: Text(
+                                '₹${gstAmount.toStringAsFixed(2)}',
+                                textAlign: TextAlign.right,
+                                style: AppTextStyles.amount,
+                              ),
                             ),
-                          ),
+                          ],
                           const SizedBox(width: AppSpacing.sm),
                           SizedBox(
                             width: 36,
@@ -1806,6 +1825,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       onPickProduct: () => _openProductSearch(index),
       onChanged: _triggerPreview,
       onRemove: () => _removeLine(index),
+      gstEnabled: _gstEnabled,
     );
   }
 
@@ -1994,6 +2014,7 @@ class _LineItemCard extends StatefulWidget {
   final VoidCallback onPickProduct;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
+  final bool gstEnabled;
 
   const _LineItemCard({
     super.key,
@@ -2002,6 +2023,7 @@ class _LineItemCard extends StatefulWidget {
     required this.onPickProduct,
     required this.onChanged,
     required this.onRemove,
+    this.gstEnabled = true,
   });
 
   @override
@@ -2219,18 +2241,20 @@ class _LineItemCardState extends State<_LineItemCard> {
                         widget.onChanged();
                       },
                     ),
-                    const SizedBox(width: 6),
-                    _SmallField(
-                      label: 'GST %',
-                      ctrl: line.gstCtrl,
-                      onChanged: (v) {
-                        line.gstRate = double.tryParse(v) ?? 0;
-                        widget.onChanged();
-                      },
-                    ),
+                    if (widget.gstEnabled) ...[
+                      const SizedBox(width: 6),
+                      _SmallField(
+                        label: 'GST %',
+                        ctrl: line.gstCtrl,
+                        onChanged: (v) {
+                          line.gstRate = double.tryParse(v) ?? 0;
+                          widget.onChanged();
+                        },
+                      ),
+                    ],
                   ],
                 ),
-                if (_showDetails) ...[
+                if (widget.gstEnabled && _showDetails) ...[
                   const SizedBox(height: 8),
                   Row(
                     children: [

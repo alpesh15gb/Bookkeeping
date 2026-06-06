@@ -67,7 +67,7 @@ def create_proforma_invoice(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         line_desc = line.description or product.name or "Item"
@@ -79,7 +79,7 @@ def create_proforma_invoice(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -175,7 +175,7 @@ def preview_proforma_invoice(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         line_desc = line.description or product.name or "Item"
@@ -188,7 +188,7 @@ def preview_proforma_invoice(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -342,7 +342,7 @@ def update_proforma_invoice(
                 origin_state_code=origin_state_code,
                 place_of_supply_state_code=pi.pos_state_code,
                 base_amount=line_subtotal,
-                gst_rate=line.gst_rate
+                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
             )
 
             line_desc = line.description or product.name or "Item"
@@ -355,7 +355,7 @@ def update_proforma_invoice(
                 discount=line.discount,
                 subtotal=line_subtotal,
                 hsn_sac=line.hsn_sac,
-                gst_rate=line.gst_rate,
+                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
                 cgst_rate=tax_split.cgst_rate,
                 cgst_amount=tax_split.cgst_amount,
                 sgst_rate=tax_split.sgst_rate,

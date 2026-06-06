@@ -69,7 +69,7 @@ def create_bill(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = BillLine(
@@ -80,7 +80,7 @@ def create_bill(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -208,7 +208,7 @@ def preview_bill(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = BillLine(
@@ -220,7 +220,7 @@ def preview_bill(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -532,7 +532,7 @@ def update_bill(
                 origin_state_code=origin_state_code,
                 place_of_supply_state_code=bill.pos_state_code,
                 base_amount=line_subtotal,
-                gst_rate=line.gst_rate
+                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
             )
 
             line_desc = line.description or product.name or "Item"
@@ -574,7 +574,7 @@ def update_bill(
                     discount=line.discount,
                     subtotal=line_subtotal,
                     hsn_sac=line.hsn_sac,
-                    gst_rate=line.gst_rate,
+                    gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
                     cgst_rate=tax_split.cgst_rate,
                     cgst_amount=tax_split.cgst_amount,
                     sgst_rate=tax_split.sgst_rate,
@@ -996,7 +996,7 @@ def clone_bill(
                 discount=line.discount,
                 subtotal=line.subtotal,
                 hsn_sac=line.hsn_sac,
-                gst_rate=line.gst_rate,
+                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
                 cgst_rate=line.cgst_rate,
                 cgst_amount=line.cgst_amount,
                 sgst_rate=line.sgst_rate,

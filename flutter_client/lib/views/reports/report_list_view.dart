@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
+import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/reports/trial_balance_view.dart';
@@ -79,6 +81,7 @@ class _ReportListViewState extends State<ReportListView> {
   @override
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
+    final gstEnabled = context.watch<SettingsProvider>().gstEnabled;
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
@@ -93,8 +96,10 @@ class _ReportListViewState extends State<ReportListView> {
         padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
         children: [
           _buildSection('Transaction', _transactionReports),
-          const SizedBox(height: 12),
-          _buildSection('Compliance', _complianceReports),
+          if (gstEnabled) ...[
+            const SizedBox(height: 12),
+            _buildSection('Compliance', _complianceReports),
+          ],
           const SizedBox(height: 12),
           _buildSection('Party', _partyReports),
         ],

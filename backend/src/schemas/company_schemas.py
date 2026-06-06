@@ -18,6 +18,7 @@ class CompanyCreate(BaseModel):
     trade_name: Optional[str] = Field(None, max_length=150)
     gstin: Optional[str] = Field(None, pattern="^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
     pan: Optional[str] = Field(None, pattern="^[A-Z]{5}[0-9]{4}[A-Z]{1}$")
+    tax_mode: Optional[str] = Field("NON_GST", pattern="^(NON_GST|GST_REGULAR|GST_COMPOSITION)$")
     financial_year_start: Optional[date] = None
 
 class CompanyResponse(SchemaBase):
@@ -26,9 +27,14 @@ class CompanyResponse(SchemaBase):
     trade_name: Optional[str]
     gstin: Optional[str]
     pan: Optional[str]
+    tax_mode: str
+    gst_enabled: bool
     financial_year_start: Optional[date]
     created_at: datetime
     updated_at: datetime
+
+class GstToggleRequest(BaseModel):
+    tax_mode: str = Field(..., pattern="^(NON_GST|GST_REGULAR|GST_COMPOSITION)$")
 
 class BranchCreate(BaseModel):
     name: str = Field(..., max_length=150)

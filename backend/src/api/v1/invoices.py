@@ -97,7 +97,7 @@ def create_invoice(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = InvoiceLine(
@@ -108,7 +108,7 @@ def create_invoice(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -302,7 +302,7 @@ def preview_invoice(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = InvoiceLine(
@@ -314,7 +314,7 @@ def preview_invoice(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -421,7 +421,7 @@ def create_credit_note(
             origin_state_code=origin_state,
             place_of_supply_state_code=place_of_supply,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = CreditNoteLine(
@@ -430,7 +430,7 @@ def create_credit_note(
             rate=line.rate,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -515,7 +515,7 @@ def preview_credit_note(
             origin_state_code=origin_state,
             place_of_supply_state_code=place_of_supply,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = CreditNoteLine(
@@ -525,7 +525,7 @@ def preview_credit_note(
             rate=line.rate,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -823,7 +823,7 @@ def create_debit_note(
             origin_state_code=origin_state,
             place_of_supply_state_code=place_of_supply,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = DebitNoteLine(
@@ -832,7 +832,7 @@ def create_debit_note(
             rate=line.rate,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -917,7 +917,7 @@ def preview_debit_note(
             origin_state_code=origin_state,
             place_of_supply_state_code=place_of_supply,
             base_amount=line_subtotal,
-            gst_rate=line.gst_rate
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = DebitNoteLine(
@@ -927,7 +927,7 @@ def preview_debit_note(
             rate=line.rate,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=line.gst_rate,
+            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -1219,7 +1219,7 @@ def update_invoice(
                 origin_state_code=origin_state_code,
                 place_of_supply_state_code=invoice.pos_state_code,
                 base_amount=line_subtotal,
-                gst_rate=line.gst_rate
+                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
             )
 
             line_desc = line.description or product.name or "Item"
@@ -1261,7 +1261,7 @@ def update_invoice(
                     discount=line.discount,
                     subtotal=line_subtotal,
                     hsn_sac=line.hsn_sac,
-                    gst_rate=line.gst_rate,
+                    gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
                     cgst_rate=tax_split.cgst_rate,
                     cgst_amount=tax_split.cgst_amount,
                     sgst_rate=tax_split.sgst_rate,
@@ -1984,7 +1984,7 @@ def clone_invoice(
                 discount=line.discount,
                 subtotal=line.subtotal,
                 hsn_sac=line.hsn_sac,
-                gst_rate=line.gst_rate,
+                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
                 cgst_rate=line.cgst_rate,
                 cgst_amount=line.cgst_amount,
                 sgst_rate=line.sgst_rate,

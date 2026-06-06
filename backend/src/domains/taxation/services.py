@@ -60,6 +60,22 @@ class GSTEngine:
     """
 
     @staticmethod
+    def resolve_gst_rate(db, tenant_id, requested_rate: Decimal) -> Decimal:
+        """If tenant is NON_GST, force gst_rate to 0. Otherwise return requested_rate."""
+        from src.infrastructure.database.models import Tenant
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.deleted_at == None).first()
+        if tenant and not tenant.gst_enabled:
+            return Decimal("0.00")
+        return requested_rate
+
+    @staticmethod
+    def is_gst_enabled(db, tenant_id) -> bool:
+        """Check if the tenant has GST enabled."""
+        from src.infrastructure.database.models import Tenant
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.deleted_at == None).first()
+        return tenant.gst_enabled if tenant else False
+
+    @staticmethod
     def calculate_tax(
         origin_state_code: str,
         place_of_supply_state_code: str,

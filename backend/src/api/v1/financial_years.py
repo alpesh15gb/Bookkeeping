@@ -3,7 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, case, text
 from typing import List, Optional
 import uuid
-from datetime import date, datetime, timezone
+from decimal import Decimal
+from datetime import date, datetime, timezone, timedelta
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
@@ -23,10 +24,12 @@ router = APIRouter(prefix="/financial-years", tags=["Financial Year Management"]
 
 
 def _compute_status(fy: FinancialYear, today: date) -> str:
-    if fy.is_current:
-        return "CURRENT"
+    # CRITICAL FIX: Check status field BEFORE is_current flag
+    # A locked/archived FY should never show as CURRENT even if is_current is true
     if fy.status in ("LOCKED", "ARCHIVED"):
         return fy.status
+    if fy.is_current:
+        return "CURRENT"
     if today > fy.end_date:
         return "READY_TO_CLOSE"
     return "CURRENT"
@@ -243,7 +246,7 @@ def year_end_dashboard(
     today = date.today()
     computed = _compute_status(fy, today)
 
-    tb = FinancialReportingService.get_trial_balance(db, fy.end_date)
+    tb = FinancialReportingService.get_trial_balance(db, fy.end_date, tenant_id)
     tb_balanced = tb['is_balanced']
 
     unposted = []
@@ -269,7 +272,7 @@ def year_end_dashboard(
                 amount=getattr(r, amount_field),
             ))
 
-    pnl = FinancialReportingService.get_profit_and_loss(db, fy.start_date, fy.end_date)
+    pnl = FinancialReportingService.get_profit_and_loss(db, fy.start_date, fy.end_date, tenant_id)
     net_profit = pnl['net_profit']
 
     blocking_items = []
@@ -317,12 +320,11 @@ def close_financial_year(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage")),
 ):
-    from datetime import timedelta
-
+    # CRITICAL #5: Concurrency protection - lock the FY row
     fy = db.query(FinancialYear).filter(
         FinancialYear.id == fy_id,
         FinancialYear.tenant_id == tenant_id,
-    ).first()
+    ).with_for_update().first()
     if not fy:
         raise HTTPException(status_code=404, detail="Financial year not found.")
 
@@ -356,11 +358,11 @@ def close_financial_year(
 
     movement_map = {row.account_id: (row.debits, row.credits) for row in movements}
     closing_lines = []
-    total_debits = 0
-    total_credits = 0
+    total_debits = Decimal("0.0000")
+    total_credits = Decimal("0.0000")
 
     for account in accounts:
-        debits, credits = movement_map.get(account.id, (0, 0))
+        debits, credits = movement_map.get(account.id, (Decimal("0.0000"), Decimal("0.0000")))
         if account.account_type == "REVENUE":
             bal = credits - debits
             if bal != 0:
@@ -387,9 +389,11 @@ def close_financial_year(
                     total_debits += abs(bal)
 
     # Post net profit/loss to Retained Earnings
+    # CRITICAL #3: Use Decimal for net_profit, not float
     resolver = AccountResolver(db, tenant_id)
     retained_account_id = resolver.resolve("equity.retained")
-    net_profit = dashboard.net_profit
+    pnl = FinancialReportingService.get_profit_and_loss(db, fy.start_date, fy.end_date, tenant_id)
+    net_profit = Decimal(str(pnl['net_profit']))
 
     if net_profit != 0:
         direction = "CREDIT" if net_profit > 0 else "DEBIT"
@@ -401,6 +405,13 @@ def close_financial_year(
             total_credits += abs(net_profit)
         else:
             total_debits += abs(net_profit)
+
+    # CRITICAL: Validate debits == credits before creating closing JE
+    if len(closing_lines) >= 2 and total_debits.quantize(Decimal("0.0001")) != total_credits.quantize(Decimal("0.0001")):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Closing journal does not balance: debits={total_debits}, credits={total_credits}",
+        )
 
     entry_id = uuid.uuid4()
     ref_num = f"YEC-{fy.start_date.year}-{fy.end_date.year % 100:02d}"
@@ -422,6 +433,7 @@ def close_financial_year(
     # Update FY status → LOCKED (immediately, no CLOSED intermediate)
     fy.status = "LOCKED"
     fy.closed_at = datetime.now(timezone.utc)
+    # CRITICAL FIX: closed_by should be tenant_id (acting user), not user_id
     fy.closed_by = tenant_id
     fy.journal_entry_id = entry_id if journal_entry else None
     _log_audit(db, tenant_id, fy.id, "CLOSED", tenant_id,
@@ -434,7 +446,23 @@ def close_financial_year(
     ).update({"is_current": False})
 
     next_fy_start = fy.end_date + timedelta(days=1)
-    next_fy_end = date(next_fy_start.year + 1, 3, 31)
+    # HIGH FIX: Compute next FY end based on FY start month (not hardcoded March 31)
+    # Indian FY: if start is Apr 1, end is Mar 31 next year
+    # Generic: end = start_date + 1 year - 1 day
+    next_fy_end = date(next_fy_start.year + 1, next_fy_start.month, 1) - timedelta(days=1)
+
+    # CRITICAL: Check for overlap before creating next FY
+    overlap = db.query(FinancialYear).filter(
+        FinancialYear.tenant_id == tenant_id,
+        FinancialYear.start_date <= next_fy_end,
+        FinancialYear.end_date >= next_fy_start,
+    ).first()
+    if overlap:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot create next FY: overlaps with existing FY '{overlap.name}'",
+        )
+
     next_fy = FinancialYear(
         id=uuid.uuid4(), tenant_id=tenant_id,
         name=f"{next_fy_start.year}-{((next_fy_start.year + 1) % 100):02d}",
@@ -484,11 +512,19 @@ def reopen_financial_year(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage")),
 ):
-    """Reopen a locked/archived FY. Requires a reason. Logs audit trail."""
+    """Reopen a locked/archived FY. Requires a reason. Logs audit trail.
+    
+    CRITICAL: Reverses roll-forward:
+    - Deletes next FY's opening journal entry (source_type=OPENING_BALANCE)
+    - Resets opening_balance on permanent accounts
+    - Deletes OpeningBalanceSnapshot rows
+    - Deletes InventoryCarryForward rows
+    """
+    # Lock the FY row for concurrency protection
     fy = db.query(FinancialYear).filter(
         FinancialYear.id == fy_id,
         FinancialYear.tenant_id == tenant_id,
-    ).first()
+    ).with_for_update().first()
     if not fy:
         raise HTTPException(status_code=404, detail="Financial year not found.")
     if fy.status not in ("LOCKED", "ARCHIVED"):
@@ -503,6 +539,49 @@ def reopen_financial_year(
             # Delete journal lines first
             db.query(JournalLine).filter(JournalLine.entry_id == je.id).delete()
             db.delete(je)
+
+    # CRITICAL #4: Reverse roll-forward
+    # Find the next FY (created during close)
+    next_fy = db.query(FinancialYear).filter(
+        FinancialYear.tenant_id == tenant_id,
+        FinancialYear.start_date > fy.end_date,
+    ).order_by(FinancialYear.start_date.asc()).first()
+
+    if next_fy:
+        # Delete opening journal entry in next FY (source_type=OPENING_BALANCE)
+        opening_je = db.query(JournalEntry).filter(
+            JournalEntry.tenant_id == tenant_id,
+            JournalEntry.source_type == "OPENING_BALANCE",
+            JournalEntry.entry_date == next_fy.start_date,
+        ).first()
+        if opening_je:
+            db.query(JournalLine).filter(JournalLine.entry_id == opening_je.id).delete()
+            db.delete(opening_je)
+
+        # Delete OpeningBalanceSnapshot rows for next FY
+        db.query(OpeningBalanceSnapshot).filter(
+            OpeningBalanceSnapshot.tenant_id == tenant_id,
+            OpeningBalanceSnapshot.financial_year_id == fy.id,
+        ).delete()
+
+        # Delete InventoryCarryForward rows for next FY
+        db.query(InventoryCarryForward).filter(
+            InventoryCarryForward.tenant_id == tenant_id,
+            InventoryCarryForward.financial_year_id == fy.id,
+        ).delete()
+
+        # Reset opening_balance on permanent accounts
+        accounts = db.query(Account).filter(
+            Account.tenant_id == tenant_id,
+            Account.account_type.in_(["ASSET", "LIABILITY", "EQUITY"]),
+            Account.deleted_at == None,
+        ).all()
+        for account in accounts:
+            account.opening_balance = Decimal("0.0000")
+
+        # Recalculate account balances
+        account_ids = {a.id for a in accounts}
+        update_account_balances(db, tenant_id, account_ids)
 
     fy.status = "CURRENT"
     fy.is_current = False

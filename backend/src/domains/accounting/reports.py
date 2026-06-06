@@ -1,6 +1,7 @@
 from decimal import Decimal
 from typing import List, Dict, Any, Optional
 from datetime import date
+import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -23,15 +24,21 @@ class FinancialReportingService:
     """
     Accounting reporting compiler.
     Uses database-level aggregations to compile standard Indian compliance reports.
-    Since RLS is enabled on the session, these queries automatically filter by tenant.
+    
+    CRITICAL: All queries filter by tenant_id to prevent cross-tenant data leaks.
     """
 
     @staticmethod
-    def get_trial_balance(db: Session, as_of_date: date) -> Dict[str, Any]:
+    def get_trial_balance(db: Session, as_of_date: date, tenant_id: uuid.UUID = None) -> Dict[str, Any]:
         """
         Compiles the Trial Balance as of a specific date.
         Sums debits and credits for each ledger account.
+        
+        CRITICAL: Requires tenant_id parameter to prevent cross-tenant data leaks.
         """
+        if tenant_id is None:
+            raise ValueError("tenant_id is required for get_trial_balance")
+            
         query = text("""
             SELECT 
                 a.name AS account_name,
@@ -43,12 +50,13 @@ class FinancialReportingService:
             LEFT JOIN journal_lines jl ON a.id = jl.account_id
             LEFT JOIN journal_entries je ON jl.entry_id = je.id
             WHERE (je.entry_date <= :as_of_date OR je.entry_date IS NULL)
+              AND a.tenant_id = :tenant_id
               AND a.deleted_at IS NULL
             GROUP BY a.id, a.name, a.code, a.account_type
             ORDER BY a.code
         """)
 
-        result = db.execute(query, {"as_of_date": as_of_date}).fetchall()
+        result = db.execute(query, {"as_of_date": as_of_date, "tenant_id": tenant_id.hex}).fetchall()
 
         trial_balance_lines = []
         total_debits = Decimal("0.00")
@@ -85,11 +93,16 @@ class FinancialReportingService:
         }
 
     @staticmethod
-    def get_profit_and_loss(db: Session, start_date: date, end_date: date) -> Dict[str, Any]:
+    def get_profit_and_loss(db: Session, start_date: date, end_date: date, tenant_id: uuid.UUID = None) -> Dict[str, Any]:
         """
         Compiles the Profit and Loss (Income Statement) for a date range.
         Revenue - Expenses.
+        
+        CRITICAL: Requires tenant_id parameter to prevent cross-tenant data leaks.
         """
+        if tenant_id is None:
+            raise ValueError("tenant_id is required for get_profit_and_loss")
+            
         query = text("""
             SELECT 
                 a.name AS account_name,
@@ -102,12 +115,13 @@ class FinancialReportingService:
             JOIN journal_entries je ON jl.entry_id = je.id
             WHERE je.entry_date BETWEEN :start_date AND :end_date
               AND a.account_type IN ('REVENUE', 'EXPENSE')
+              AND a.tenant_id = :tenant_id
               AND a.deleted_at IS NULL
             GROUP BY a.id, a.name, a.code, a.account_type
             ORDER BY a.account_type DESC, a.code ASC
         """)
 
-        result = db.execute(query, {"start_date": start_date, "end_date": end_date}).fetchall()
+        result = db.execute(query, {"start_date": start_date, "end_date": end_date, "tenant_id": tenant_id.hex}).fetchall()
 
         revenue_items = []
         expense_items = []
@@ -146,11 +160,16 @@ class FinancialReportingService:
         }
 
     @staticmethod
-    def get_balance_sheet(db: Session, as_of_date: date) -> Dict[str, Any]:
+    def get_balance_sheet(db: Session, as_of_date: date, tenant_id: uuid.UUID = None) -> Dict[str, Any]:
         """
         Compiles the Balance Sheet as of a specific date.
         Assets = Liabilities + Equity (including current year Net Profit / Retained Earnings).
+        
+        CRITICAL: Requires tenant_id parameter to prevent cross-tenant data leaks.
         """
+        if tenant_id is None:
+            raise ValueError("tenant_id is required for get_balance_sheet")
+            
         # Fetch Asset, Liability, and Equity account summaries up to target date
         query = text("""
             SELECT 
@@ -164,12 +183,13 @@ class FinancialReportingService:
             JOIN journal_entries je ON jl.entry_id = je.id
             WHERE je.entry_date <= :as_of_date
               AND a.account_type IN ('ASSET', 'LIABILITY', 'EQUITY')
+              AND a.tenant_id = :tenant_id
               AND a.deleted_at IS NULL
             GROUP BY a.id, a.name, a.code, a.account_type
             ORDER BY a.account_type ASC, a.code ASC
         """)
 
-        result = db.execute(query, {"as_of_date": as_of_date}).fetchall()
+        result = db.execute(query, {"as_of_date": as_of_date, "tenant_id": tenant_id.hex}).fetchall()
 
         assets = []
         liabilities = []
@@ -201,7 +221,7 @@ class FinancialReportingService:
         fy_year = as_of_date.year if as_of_date.month >= 4 else as_of_date.year - 1
         fy_start = date(fy_year, 4, 1)
         
-        pl_data = FinancialReportingService.get_profit_and_loss(db, fy_start, as_of_date)
+        pl_data = FinancialReportingService.get_profit_and_loss(db, fy_start, as_of_date, tenant_id)
         current_year_earnings = Decimal(str(pl_data["net_profit"]))
         total_equity += current_year_earnings
         

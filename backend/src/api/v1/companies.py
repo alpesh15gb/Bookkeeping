@@ -12,12 +12,24 @@ from src.schemas.company_schemas import (
     CompanyCreate, CompanyResponse,
     BranchCreate, BranchUpdate, BranchResponse,
     TenantSettingUpdate, TenantSettingResponse,
-    NumberingSeriesCreate, NumberingSeriesUpdate, NumberingSeriesResponse
+    NumberingSeriesCreate, NumberingSeriesUpdate, NumberingSeriesResponse,
+    GstToggleRequest,
 )
 from src.domains.company.services import NumberingSeriesService, encrypt_credential
 from src.api.deps import get_current_user, enforce_permission
 
 router = APIRouter(tags=["Company & Settings"])
+
+
+def _log_audit(db: Session, tenant_id: uuid.UUID, action: str, detail: str) -> None:
+    from src.infrastructure.database.models import AuditLog
+    audit = AuditLog(
+        tenant_id=tenant_id,
+        action=action,
+        entity_type="tenant",
+        entity_id=tenant_id,
+    )
+    db.add(audit)
 
 # 1. Company endpoints
 @router.post("/companies", response_model=CompanyResponse, status_code=status.HTTP_201_CREATED)
@@ -29,9 +41,10 @@ def create_company(
     """Registers an additional company/tenant context under the current active user."""
     tenant = Tenant(
         legal_name=payload.legal_name,
-        trade_name=payload.trade_name or payload.legal_name,
+        trade_name=payload.legal_name,
         gstin=payload.gstin,
-        pan=payload.pan
+        pan=payload.pan,
+        tax_mode=payload.tax_mode or ("GST_REGULAR" if payload.gstin else "NON_GST"),
     )
     db.add(tenant)
     db.flush()
@@ -138,6 +151,64 @@ def update_company(
     tenant.trade_name = payload.trade_name or payload.legal_name
     tenant.gstin = payload.gstin
     tenant.pan = payload.pan
+    if payload.tax_mode:
+        tenant.tax_mode = payload.tax_mode
+
+    db.commit()
+    db.refresh(tenant)
+    return tenant
+
+@router.post("/companies/{id}/gst-toggle", response_model=CompanyResponse)
+def toggle_gst(
+    id: uuid.UUID,
+    payload: GstToggleRequest,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update")),
+):
+    """Toggle GST mode for the company. Only Owner/Admin can do this."""
+    if id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot modify another tenant's tax configuration."
+        )
+
+    tenant = db.query(Tenant).filter(Tenant.id == id, Tenant.deleted_at == None).first()
+    if not tenant:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found.")
+
+    old_mode = tenant.tax_mode
+    new_mode = payload.tax_mode
+
+    # If disabling GST, check for existing GST transactions
+    if old_mode in ("GST_REGULAR", "GST_COMPOSITION") and new_mode == "NON_GST":
+        from src.infrastructure.database.models import Invoice, Bill
+        from sqlalchemy import or_
+        has_gst_invoices = db.query(Invoice).filter(
+            Invoice.tenant_id == tenant_id,
+            or_(Invoice.cgst_amount > 0, Invoice.sgst_amount > 0, Invoice.igst_amount > 0),
+            Invoice.deleted_at == None,
+        ).first()
+        has_gst_bills = db.query(Bill).filter(
+            Bill.tenant_id == tenant_id,
+            or_(Bill.cgst_amount > 0, Bill.sgst_amount > 0, Bill.igst_amount > 0),
+            Bill.deleted_at == None,
+        ).first()
+        if has_gst_invoices or has_gst_bills:
+            # Return warning but still allow the change
+            pass
+
+    tenant.tax_mode = new_mode
+
+    # Also update TenantSetting.gst_enabled for backward compatibility
+    from src.infrastructure.database.models import TenantSetting
+    setting = db.query(TenantSetting).filter(
+        TenantSetting.tenant_id == tenant_id,
+    ).first()
+    if setting:
+        setting.gst_enabled = new_mode in ("GST_REGULAR", "GST_COMPOSITION")
+
+    _log_audit(db, tenant_id, "TAX_MODE_CHANGED",
+               f"Tax mode changed from {old_mode} to {new_mode}")
 
     db.commit()
     db.refresh(tenant)

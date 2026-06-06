@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/product_provider.dart';
+import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/models/product.dart';
@@ -110,6 +111,7 @@ class _ProductFormViewState extends State<ProductFormView> {
 
   @override
   Widget build(BuildContext context) {
+    final gstEnabled = context.watch<SettingsProvider>().gstEnabled;
     return Dialog(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 520, maxHeight: 640),
@@ -205,20 +207,22 @@ class _ProductFormViewState extends State<ProductFormView> {
                               label: 'SKU',
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: AppTextField(
-                              controller: _hsnController,
-                              label: 'HSN/SAC *',
-                              validator: (v) {
-                                final value = v?.trim() ?? '';
-                                if (value.isEmpty) return 'Required';
-                                if (!RegExp(r'^[0-9]{6,8}$').hasMatch(value))
-                                  return 'Must be 6 to 8 digits';
-                                return null;
-                              },
+                          if (gstEnabled) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: AppTextField(
+                                controller: _hsnController,
+                                label: 'HSN/SAC *',
+                                validator: (v) {
+                                  final value = v?.trim() ?? '';
+                                  if (value.isEmpty) return 'Required';
+                                  if (!RegExp(r'^[0-9]{6,8}$').hasMatch(value))
+                                    return 'Must be 6 to 8 digits';
+                                  return null;
+                                },
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -235,18 +239,20 @@ class _ProductFormViewState extends State<ProductFormView> {
                                   (v == null || v.isEmpty) ? 'Required' : null,
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: AppTextField(
-                              controller: _gstRateController,
-                              label: 'GST Rate (%) *',
-                              keyboardType: TextInputType.number,
-                              validator: (v) =>
-                                  (v == null || double.tryParse(v) == null)
-                                  ? 'Invalid'
-                                  : null,
+                          if (gstEnabled) ...[
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: AppTextField(
+                                controller: _gstRateController,
+                                label: 'GST Rate (%) *',
+                                keyboardType: TextInputType.number,
+                                validator: (v) =>
+                                    (v == null || double.tryParse(v) == null)
+                                    ? 'Invalid'
+                                    : null,
+                              ),
                             ),
-                          ),
+                          ],
                         ],
                       ),
                       const SizedBox(height: 16),

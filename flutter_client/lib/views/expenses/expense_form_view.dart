@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/providers/accounting_provider.dart';
+import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
@@ -177,6 +178,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
     final isMobile = AdaptiveLayout.isMobile(context);
     final docProvider = context.watch<DocumentProvider>();
     final acctProvider = context.watch<AccountingProvider>();
+    final gstEnabled = context.watch<SettingsProvider>().gstEnabled;
 
     final categories = docProvider.expenseCategories;
     final allAccounts = acctProvider.accountsList ?? [];
@@ -287,48 +289,50 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                     },
                   ),
                   const SizedBox(height: 16),
-                  AppDropdown<double>(
-                    value: _gstRate,
-                    label: 'GST Rate (%)',
-                    prefixIcon: Icons.percent,
-                    items: const [
-                      DropdownMenuItem(value: 0.0, child: Text('0%')),
-                      DropdownMenuItem(value: 5.0, child: Text('5%')),
-                      DropdownMenuItem(value: 12.0, child: Text('12%')),
-                      DropdownMenuItem(value: 18.0, child: Text('18%')),
-                      DropdownMenuItem(value: 28.0, child: Text('28%')),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setState(() {
-                          _gstRate = val;
-                        });
-                        _triggerPreview();
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      Checkbox(
-                        value: _isGstInclusive,
-                        activeColor: AppColors.brandNavy,
-                        onChanged: (val) {
-                          if (val != null) {
-                            setState(() {
-                              _isGstInclusive = val;
-                            });
-                            _triggerPreview();
-                          }
-                        },
-                      ),
-                      const Text(
-                        'GST Inclusive',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                      ),
-                    ],
-                  ),
+                  if (gstEnabled) ...[
+                    AppDropdown<double>(
+                      value: _gstRate,
+                      label: 'GST Rate (%)',
+                      prefixIcon: Icons.percent,
+                      items: const [
+                        DropdownMenuItem(value: 0.0, child: Text('0%')),
+                        DropdownMenuItem(value: 5.0, child: Text('5%')),
+                        DropdownMenuItem(value: 12.0, child: Text('12%')),
+                        DropdownMenuItem(value: 18.0, child: Text('18%')),
+                        DropdownMenuItem(value: 28.0, child: Text('28%')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) {
+                          setState(() {
+                            _gstRate = val;
+                          });
+                          _triggerPreview();
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        Checkbox(
+                          value: _isGstInclusive,
+                          activeColor: AppColors.brandNavy,
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() {
+                                _isGstInclusive = val;
+                              });
+                              _triggerPreview();
+                            }
+                          },
+                        ),
+                        const Text(
+                          'GST Inclusive',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

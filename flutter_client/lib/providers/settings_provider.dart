@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_client/core/api_client.dart';
+import 'package:flutter_client/core/tax_features.dart';
 
 class SettingsProvider extends ChangeNotifier {
   Map<String, dynamic> _settings = {};
@@ -18,6 +19,10 @@ class SettingsProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
   String? get errorMessage => _errorMessage;
+
+  String get taxMode => _company['tax_mode'] ?? 'NON_GST';
+  bool get gstEnabled => _company['gst_enabled'] ?? false;
+  TaxFeatures get taxFeatures => TaxFeatures(taxMode);
 
   final ApiClient _client = ApiClient();
 
@@ -59,6 +64,40 @@ class SettingsProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  Future<bool> toggleGstMode(String newTaxMode) async {
+    _isSaving = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final tenantId = _company['id'] ?? ApiClient.tenantId;
+      if (tenantId == null) {
+        _errorMessage = 'No active company found.';
+        _isSaving = false;
+        notifyListeners();
+        return false;
+      }
+      final res = await _client.post(
+        Uri.parse('${ApiClient.baseUrl}/companies/$tenantId/gst-toggle'),
+        body: jsonEncode({'tax_mode': newTaxMode}),
+      );
+      if (res.statusCode == 200) {
+        final cd = jsonDecode(res.body);
+        _company = cd is Map<String, dynamic> ? cd : Map<String, dynamic>.from(cd is Map ? cd : {});
+        _isSaving = false;
+        notifyListeners();
+        return true;
+      }
+      final data = jsonDecode(res.body);
+      _errorMessage = data['detail'] ?? 'Failed to toggle GST mode';
+    } catch (_) {
+      _errorMessage = 'Failed to toggle GST mode';
+    } finally {
+      _isSaving = false;
+      notifyListeners();
+    }
+    return false;
   }
 
   Future<bool> saveSettings({

@@ -27,6 +27,7 @@ import 'package:flutter_client/views/accounting/account_list_view.dart';
 import 'package:flutter_client/views/einvoice/eway_bill_list_view.dart';
 import 'package:flutter_client/views/reports/report_list_view.dart';
 import 'package:flutter_client/views/settings/settings_view.dart';
+import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/views/bank_reconciliation/bank_reconciliation_list_view.dart';
 import 'package:flutter_client/views/delivery_challans/delivery_challan_list_view.dart';
 import 'package:flutter_client/views/inventory_adjustments/inventory_adjustment_list_view.dart';
@@ -254,7 +255,6 @@ class _MenuItem {
   final String name;
   final IconData icon;
   final Widget view;
-
   const _MenuItem({required this.name, required this.icon, required this.view});
 }
 
@@ -651,6 +651,12 @@ class _GroupedNavState extends State<_GroupedNav> {
     final fontSize = widget.isMobile ? 14.0 : 13.0;
     final childPadH = widget.isMobile ? 14.0 : 14.0;
 
+    bool gstEnabled = true;
+    try {
+      gstEnabled = context.watch<SettingsProvider>().gstEnabled;
+    } catch (_) {}
+    final hiddenNames = {'E-Way Bills'};
+
     return ListView.builder(
       padding: EdgeInsets.symmetric(horizontal: padH),
       itemCount: _sidebarEntries.length,
@@ -659,6 +665,9 @@ class _GroupedNavState extends State<_GroupedNav> {
 
         if (entry is _MenuLeaf) {
           final item = _flatItems[entry.index];
+          if (!gstEnabled && hiddenNames.contains(item.name)) {
+            return const SizedBox.shrink();
+          }
           final isSelected = widget.selectedIndex == entry.index;
           return _buildLeafItem(
             item: item,
@@ -672,8 +681,12 @@ class _GroupedNavState extends State<_GroupedNav> {
 
         if (entry is _MenuGroupEntry) {
           final group = entry.group;
+          final visibleChildren = gstEnabled
+              ? group.childIndices
+              : group.childIndices.where((idx) => !hiddenNames.contains(_flatItems[idx].name)).toList();
+          if (visibleChildren.isEmpty) return const SizedBox.shrink();
           final isExpanded = _expandedGroups.contains(i);
-          final hasActiveChild = group.childIndices.contains(widget.selectedIndex);
+          final hasActiveChild = visibleChildren.contains(widget.selectedIndex);
 
           return _buildGroupItem(
             group: group,
@@ -692,6 +705,7 @@ class _GroupedNavState extends State<_GroupedNav> {
             childPadH: childPadH,
             selectedIndex: widget.selectedIndex,
             onItemSelected: widget.onItemSelected,
+            visibleChildIndices: gstEnabled ? null : visibleChildren,
           );
         }
 
@@ -761,7 +775,9 @@ class _GroupedNavState extends State<_GroupedNav> {
     required double childPadH,
     required int selectedIndex,
     required ValueChanged<int> onItemSelected,
+    List<int>? visibleChildIndices,
   }) {
+    final childIndices = visibleChildIndices ?? group.childIndices;
     final groupTextColor = hasActiveChild ? AppColors.goldAccent : Colors.white;
 
     return Padding(
@@ -811,7 +827,7 @@ class _GroupedNavState extends State<_GroupedNav> {
             secondChild: Padding(
               padding: EdgeInsets.only(left: childPadH),
               child: Column(
-                children: group.childIndices.map((childIdx) {
+                children: childIndices.map((childIdx) {
                   final childItem = _flatItems[childIdx];
                   final isSelected = selectedIndex == childIdx;
                   return _buildLeafItem(

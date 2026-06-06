@@ -5,9 +5,14 @@ Carries forward opening balances and inventory from one FY to the next.
 
 Flow during FY close:
     1. Balance Sheet snapshot (ASSET, LIABILITY, EQUITY closing balances)
-    2. Set opening_balance on each permanent account
-    3. Create opening journal entry for the new FY (audit trail)
-    4. Inventory carry-forward (product current_stock → opening_stock)
+    2. Set opening_balance = 0 on permanent accounts (journal lines are source of truth)
+    3. Inventory carry-forward (product current_stock → opening_stock)
+
+Design decision:
+    - Journal lines across ALL time are the sole source of truth
+    - opening_balance is set to 0 (not closing balance) to avoid double-counting
+    - No opening journal entry is created (snapshots provide audit trail)
+    - update_account_balances computes: opening_balance + sum(all_journals)
 
 This ensures the user never has to manually enter opening balances.
 """
@@ -44,9 +49,7 @@ def carry_forward_balances(
         1. Compute closing balance for every ASSET, LIABILITY, EQUITY account
            using: opening_balance + (debits - credits) or (credits - debits)
         2. Create OpeningBalanceSnapshot rows (audit trail)
-        3. Update Account.opening_balance = closing_balance
-        4. Update Account.current_balance = closing_balance (clean slate for new FY)
-        5. Create an opening journal entry in the new FY
+        3. Set Account.opening_balance = 0 (journal lines are source of truth)
 
     Returns dict with summary data for audit logging.
     """
@@ -82,10 +85,7 @@ def carry_forward_balances(
     movement_map = {row.account_id: (row.debits, row.credits) for row in movements}
 
     # 3. Process each account
-    opening_lines: List[JournalLine] = []
     snapshots: List[OpeningBalanceSnapshot] = []
-    total_debits = Decimal("0.0000")
-    total_credits = Decimal("0.0000")
 
     for account in permanent_accounts:
         opening_bal = account.opening_balance or Decimal("0.0000")
@@ -103,8 +103,6 @@ def carry_forward_balances(
         else:
             direction = "CREDIT" if account.account_type in ("ASSET", "EXPENSE") else "DEBIT"
 
-        abs_balance = abs(closing_balance)
-
         # Create snapshot (audit trail)
         snapshots.append(OpeningBalanceSnapshot(
             id=uuid.uuid4(),
@@ -119,50 +117,27 @@ def carry_forward_balances(
             created_at=datetime.now(timezone.utc),
         ))
 
-        # Update account for new FY
-        account.opening_balance = closing_balance
-        account.current_balance = closing_balance  # Clean slate — no journal lines yet in new FY
-
-        # Build opening journal line for the new FY (only if balance is non-zero)
-        if abs_balance > 0:
-            opening_lines.append(JournalLine(
-                account_id=account.id,
-                amount=abs_balance,
-                direction=direction,
-                narration=f"Opening balance carried forward from {closing_fy.name}",
-            ))
-            if direction == "DEBIT":
-                total_debits += abs_balance
-            else:
-                total_credits += abs_balance
+        # CRITICAL: Set opening_balance = 0 (not closing_balance!)
+        # Journal lines across ALL time are the source of truth.
+        # update_account_balances computes: opening_balance + sum(all_journals)
+        # By setting opening_balance = 0, we avoid double-counting historical movements.
+        account.opening_balance = Decimal("0.0000")
+        account.current_balance = Decimal("0.0000")
 
     # 4. Create snapshots
     db.add_all(snapshots)
 
-    # 5. Create opening journal entry for the new FY
-    journal_entry = None
-    if len(opening_lines) >= 2:
-        entry_id = uuid.uuid4()
-        ref_num = f"OB-{new_fy.start_date.year}-{new_fy.end_date.year % 100:02d}"
-        journal_entry = JournalEntry(
-            id=entry_id,
-            tenant_id=tenant_id,
-            entry_date=new_fy.start_date,
-            reference_number=ref_num,
-            description=f"Opening balances carried forward from {closing_fy.name}",
-            source_type="OPENING_BALANCE",
-            source_id=entry_id,
-            is_locked=True,
-            lines=opening_lines,
-        )
-        db.add(journal_entry)
-        db.flush()
+    # 5. Recalculate current_balance for all affected accounts
+    # This sums ALL journal lines (which is correct now that opening_balance = 0)
+    account_ids_set = {a.id for a in permanent_accounts}
+    from src.domains.accounting.services import update_account_balances
+    update_account_balances(db, tenant_id, account_ids_set)
 
     return {
         "accounts_carried": len(snapshots),
-        "total_debits": str(total_debits),
-        "total_credits": str(total_credits),
-        "journal_entry_id": str(journal_entry.id) if journal_entry else None,
+        "total_debits": "0",
+        "total_credits": "0",
+        "journal_entry_id": None,
     }
 
 

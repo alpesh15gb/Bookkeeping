@@ -40,12 +40,17 @@ class Tenant(Base):
     trade_name = Column(String(150))
     gstin = Column(String(15))
     pan = Column(String(10))
+    tax_mode = Column(String(20), nullable=False, default="NON_GST", server_default="NON_GST")
     financial_year_start = Column(Date, nullable=False, default=date(2026, 4, 1))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
 
     memberships = relationship("TenantMembership", back_populates="tenant", cascade="all, delete-orphan")
+
+    @property
+    def gst_enabled(self) -> bool:
+        return self.tax_mode in ("GST_REGULAR", "GST_COMPOSITION")
 
 
 class User(Base):

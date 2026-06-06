@@ -265,6 +265,133 @@ class _SettingsViewState extends State<SettingsView> {
     );
   }
 
+  void _showTaxModeDialog(String currentTaxMode) {
+    String selectedMode = currentTaxMode;
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Tax Mode'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              RadioListTile<String>(
+                title: const Text('Non-GST Business'),
+                subtitle: const Text('Simple invoicing, no GST fields'),
+                value: 'NON_GST',
+                groupValue: selectedMode,
+                onChanged: (v) => setDialogState(() => selectedMode = v!),
+              ),
+              RadioListTile<String>(
+                title: const Text('GST Registered Business'),
+                subtitle: const Text('Full GST with CGST/SGST/IGST'),
+                value: 'GST_REGULAR',
+                groupValue: selectedMode,
+                onChanged: (v) => setDialogState(() => selectedMode = v!),
+              ),
+              RadioListTile<String>(
+                title: const Text('Composition Scheme'),
+                subtitle: const Text('Composition GST with turnover limit'),
+                value: 'GST_COMPOSITION',
+                groupValue: selectedMode,
+                onChanged: (v) => setDialogState(() => selectedMode = v!),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                if (selectedMode == 'NON_GST' && currentTaxMode != 'NON_GST') {
+                  await _confirmDisableGst();
+                } else if (selectedMode != 'NON_GST' && currentTaxMode == 'NON_GST') {
+                  await _confirmEnableGst(selectedMode);
+                } else if (selectedMode != currentTaxMode) {
+                  await context.read<SettingsProvider>().toggleGstMode(selectedMode);
+                }
+              },
+              child: const Text('Apply'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmEnableGst(String newMode) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Enable GST'),
+        content: Text(
+          newMode == 'GST_REGULAR'
+              ? 'GST fields (HSN, GST Rate, CGST/SGST/IGST) will appear on all invoices, bills, and expenses.'
+              : 'Composition scheme GST fields will be enabled. Turnover limit applies.',
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Enable GST')),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final ok = await context.read<SettingsProvider>().toggleGstMode(newMode);
+      if (ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('GST enabled successfully'), backgroundColor: AppColors.success),
+        );
+      }
+    }
+  }
+
+  Future<void> _confirmDisableGst() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+        title: const Text('Disable GST?'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('GST fields will be hidden from all forms. Existing GST data is preserved.'),
+            SizedBox(height: 8),
+            Text('What changes:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('- GST fields hidden on Invoice, Bill, Expense forms'),
+            Text('- GST reports hidden from Reports section'),
+            Text('- E-Way Bills and E-Invoice hidden'),
+            Text('- GST calculations bypassed (rate forced to 0)'),
+            SizedBox(height: 8),
+            Text('What stays:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('- All historical GST data preserved'),
+            Text('- GST accounts remain in Chart of Accounts'),
+            Text('- Can re-enable anytime from Settings'),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Disable GST'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      final ok = await context.read<SettingsProvider>().toggleGstMode('NON_GST');
+      if (ok && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('GST disabled. GST data preserved.'), backgroundColor: AppColors.success),
+        );
+      }
+    }
+  }
+
   void _showPreferencesDialog(
     Map<String, dynamic> company,
     Map<String, dynamic> settings,
@@ -433,7 +560,8 @@ class _SettingsViewState extends State<SettingsView> {
     final gstin = company['gstin'] ?? 'Not configured';
     final pan = company['pan'] ?? 'Not configured';
     final currency = settings['currency'] ?? 'INR';
-    final gstEnabled = settings['gst_enabled'] == true;
+    final gstEnabled = settingsProvider.gstEnabled;
+    final taxMode = settingsProvider.taxMode;
     final stateCode = settings['origin_state_code'] ?? 'Not configured';
     final extraSettings =
         settings['extra_settings'] is Map ? Map<String, dynamic>.from(settings['extra_settings']) : <String, dynamic>{};
@@ -541,9 +669,13 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               SettingsListTile(
                 icon: Icons.fact_check_outlined,
-                title: 'GST Enabled',
-                subtitle: gstEnabled ? 'Yes' : 'No',
-                onTap: () => _showTaxComplianceDialog(company, settings),
+                title: 'Tax Mode',
+                subtitle: taxMode == 'GST_REGULAR'
+                    ? 'GST Registered Business'
+                    : taxMode == 'GST_COMPOSITION'
+                        ? 'Composition Scheme'
+                        : 'Non-GST Business',
+                onTap: () => _showTaxModeDialog(taxMode),
               ),
             ],
           ),

@@ -14,6 +14,7 @@ import 'package:flutter_client/views/bills/bill_form_view.dart';
 import 'package:flutter_client/views/invoices/invoice_detail_view.dart';
 import 'package:flutter_client/utils/haptic_helper.dart';
 import 'package:flutter_client/views/shared/skeleton_loading.dart';
+import 'package:flutter_client/providers/settings_provider.dart';
 
 class SalesDashboardView extends StatefulWidget {
   const SalesDashboardView({super.key});
@@ -162,6 +163,7 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
                 netProfit: d.netProfit,
                 format: _fmt,
                 formatFull: _fmtFull,
+                gstEnabled: context.watch<SettingsProvider>().gstEnabled,
               ),
               const SizedBox(height: 20),
 
@@ -282,6 +284,7 @@ class _BusinessSnapshot extends StatelessWidget {
   final double revenue, receivables, payables, cashReceived, gstLiability, netProfit;
   final String Function(double) format;
   final String Function(double) formatFull;
+  final bool gstEnabled;
 
   const _BusinessSnapshot({
     required this.revenue,
@@ -292,6 +295,7 @@ class _BusinessSnapshot extends StatelessWidget {
     required this.netProfit,
     required this.format,
     required this.formatFull,
+    this.gstEnabled = true,
   });
 
   @override
@@ -302,7 +306,8 @@ class _BusinessSnapshot extends StatelessWidget {
       _Metric('Receivables', receivables, AppColors.warning, Icons.arrow_circle_left_rounded),
       _Metric('Payables', payables, AppColors.error, Icons.arrow_circle_right_rounded),
       _Metric('Cash Received', cashReceived, AppColors.success, Icons.payments_rounded),
-      _Metric('GST Due', gstLiability, AppColors.info, Icons.receipt_rounded),
+      if (gstEnabled)
+        _Metric('GST Due', gstLiability, AppColors.info, Icons.receipt_rounded),
       _Metric('Net Profit', netProfit, netProfit >= 0 ? AppColors.success : AppColors.error, Icons.account_balance_wallet_rounded),
     ];
 
@@ -319,47 +324,27 @@ class _BusinessSnapshot extends StatelessWidget {
           ),
           child: Column(
             children: [
-              // Top row: 3 or 6 metrics
               IntrinsicHeight(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(child: _MetricCell(metric: metrics[0], format: format, formatFull: formatFull)),
-                    _vertDivider(),
-                    Expanded(child: _MetricCell(metric: metrics[1], format: format, formatFull: formatFull)),
-                    if (!isMobile) ...[
-                      _vertDivider(),
-                      Expanded(child: _MetricCell(metric: metrics[2], format: format, formatFull: formatFull)),
+                    for (int i = 0; i < metrics.length && i < (isMobile ? 2 : 3); i++) ...[
+                      if (i > 0) _vertDivider(),
+                      Expanded(child: _MetricCell(metric: metrics[i], format: format, formatFull: formatFull)),
                     ],
                   ],
                 ),
               ),
-              Divider(color: AppColors.borderLight, height: 1),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    if (isMobile) ...[
-                      Expanded(child: _MetricCell(metric: metrics[2], format: format, formatFull: formatFull)),
-                      _vertDivider(),
-                    ],
-                    Expanded(child: _MetricCell(metric: metrics[3], format: format, formatFull: formatFull)),
-                    _vertDivider(),
-                    Expanded(child: _MetricCell(metric: metrics[4], format: format, formatFull: formatFull)),
-                    if (!isMobile) ...[
-                      _vertDivider(),
-                      Expanded(child: _MetricCell(metric: metrics[5], format: format, formatFull: formatFull)),
-                    ],
-                  ],
-                ),
-              ),
-              if (isMobile) ...[
+              if (metrics.length > (isMobile ? 2 : 3)) ...[
                 Divider(color: AppColors.borderLight, height: 1),
                 IntrinsicHeight(
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(child: _MetricCell(metric: metrics[5], format: format, formatFull: formatFull)),
+                      for (int i = isMobile ? 2 : 3; i < metrics.length; i++) ...[
+                        if (i > (isMobile ? 2 : 3)) _vertDivider(),
+                        Expanded(child: _MetricCell(metric: metrics[i], format: format, formatFull: formatFull)),
+                      ],
                     ],
                   ),
                 ),
