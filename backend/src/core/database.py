@@ -107,42 +107,69 @@ def ensure_vyapar_import_columns():
 
     # Backfill NULL descriptions on proforma_invoice_lines from product names
     try:
+        dialect = engine.dialect.name
         with engine.begin() as conn:
-            conn.execute(sql_text("""
-                UPDATE proforma_invoice_lines pil
-                SET description = p.name
-                FROM products p
-                WHERE pil.product_id = p.id
-                  AND (pil.description IS NULL OR pil.description = '')
-            """))
+            if dialect == "sqlite":
+                conn.execute(sql_text("""
+                    UPDATE proforma_invoice_lines
+                    SET description = (SELECT p.name FROM products p WHERE p.id = product_id)
+                    WHERE product_id IS NOT NULL
+                      AND (description IS NULL OR description = '')
+                """))
+            else:
+                conn.execute(sql_text("""
+                    UPDATE proforma_invoice_lines pil
+                    SET description = p.name
+                    FROM products p
+                    WHERE pil.product_id = p.id
+                      AND (pil.description IS NULL OR pil.description = '')
+                """))
         logger.info("Backfilled proforma_invoice_lines.description from products.name")
     except Exception as e:
         logger.warning(f"Could not backfill proforma_invoice_lines.description: {e}")
 
     # Backfill NULL descriptions on invoice_lines from product names
     try:
+        dialect = engine.dialect.name
         with engine.begin() as conn:
-            conn.execute(sql_text("""
-                UPDATE invoice_lines il
-                SET description = p.name
-                FROM products p
-                WHERE il.product_id = p.id
-                  AND (il.description IS NULL OR il.description = '')
-            """))
+            if dialect == "sqlite":
+                conn.execute(sql_text("""
+                    UPDATE invoice_lines
+                    SET description = (SELECT p.name FROM products p WHERE p.id = product_id)
+                    WHERE product_id IS NOT NULL
+                      AND (description IS NULL OR description = '')
+                """))
+            else:
+                conn.execute(sql_text("""
+                    UPDATE invoice_lines il
+                    SET description = p.name
+                    FROM products p
+                    WHERE il.product_id = p.id
+                      AND (il.description IS NULL OR il.description = '')
+                """))
         logger.info("Backfilled invoice_lines.description from products.name")
     except Exception as e:
         logger.warning(f"Could not backfill invoice_lines.description: {e}")
 
     # Backfill NULL descriptions on bill_lines from product names
     try:
+        dialect = engine.dialect.name
         with engine.begin() as conn:
-            conn.execute(sql_text("""
-                UPDATE bill_lines bl
-                SET description = p.name
-                FROM products p
-                WHERE bl.product_id = p.id
-                  AND (bl.description IS NULL OR bl.description = '')
-            """))
+            if dialect == "sqlite":
+                conn.execute(sql_text("""
+                    UPDATE bill_lines
+                    SET description = (SELECT p.name FROM products p WHERE p.id = product_id)
+                    WHERE product_id IS NOT NULL
+                      AND (description IS NULL OR description = '')
+                """))
+            else:
+                conn.execute(sql_text("""
+                    UPDATE bill_lines bl
+                    SET description = p.name
+                    FROM products p
+                    WHERE bl.product_id = p.id
+                      AND (bl.description IS NULL OR bl.description = '')
+                """))
         logger.info("Backfilled bill_lines.description from products.name")
     except Exception as e:
         logger.warning(f"Could not backfill bill_lines.description: {e}")
