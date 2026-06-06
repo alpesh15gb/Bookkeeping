@@ -55,29 +55,6 @@ class BankReconciliationProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<bool> uploadStatement(Map<String, dynamic> payload) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-    try {
-      final response = await _client.post(
-        _buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements'),
-        body: jsonEncode(payload),
-      );
-      if (response.statusCode == 201) {
-        await fetchStatements();
-        return true;
-      }
-      final data = jsonDecode(response.body);
-      _errorMessage = data['detail'] ?? 'Upload failed (${response.statusCode})';
-    } catch (e) {
-      _errorMessage = e.toString();
-    }
-    _isLoading = false;
-    notifyListeners();
-    return false;
-  }
-
   Future<List<dynamic>> fetchStatementTransactions(String statementId) async {
     try {
       final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/transactions'));
@@ -89,46 +66,112 @@ class BankReconciliationProvider extends ChangeNotifier {
     return [];
   }
 
-  Future<bool> addTransaction(String statementId, Map<String, dynamic> payload) async {
+  Future<Map<String, dynamic>?> fetchStatementStats(String statementId) async {
+    try {
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/stats'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is Map<String, dynamic> ? data : null;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<Map<String, dynamic>?> autoMatch(String statementId) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
       final response = await _client.post(
-        _buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/transactions'),
-        body: jsonEncode(payload),
+        _buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId/auto-match'),
       );
-      if (response.statusCode == 201) {
-        _isLoading = false; notifyListeners(); return true;
+      if (response.statusCode == 200) {
+        _isLoading = false;
+        notifyListeners();
+        return jsonDecode(response.body);
       }
       final data = jsonDecode(response.body);
-      _errorMessage = data['detail'] ?? 'Failed';
+      _errorMessage = data['detail'] ?? 'Auto-match failed';
     } catch (e) {
       _errorMessage = e.toString();
     }
-    _isLoading = false; notifyListeners();
-    return false;
+    _isLoading = false;
+    notifyListeners();
+    return null;
   }
 
   Future<bool> reconcileTransaction(String transactionId, Map<String, dynamic> payload) async {
-    _isLoading = true; _errorMessage = null; notifyListeners();
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
     try {
       final response = await _client.post(
         _buildUri('${ApiClient.baseUrl}/bank-reconciliation/transactions/$transactionId/reconcile'),
         body: jsonEncode(payload),
       );
-      if (response.statusCode == 200 || response.statusCode == 201) { _isLoading = false; notifyListeners(); return true; }
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
       final data = jsonDecode(response.body);
       _errorMessage = data['detail'] ?? 'Reconcile failed';
     } catch (e) {
       _errorMessage = e.toString();
     }
-    _isLoading = false; notifyListeners();
+    _isLoading = false;
+    notifyListeners();
+    return false;
+  }
+
+  Future<List<dynamic>> fetchPendingInvoices() async {
+    try {
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/pending-invoices'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is List ? data : [];
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<List<dynamic>> fetchPendingBills() async {
+    try {
+      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/pending-bills'));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data is List ? data : [];
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  Future<bool> deleteStatement(String statementId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _client.delete(
+        _buildUri('${ApiClient.baseUrl}/bank-reconciliation/statements/$statementId'),
+      );
+      if (response.statusCode == 204) {
+        await fetchStatements();
+        return true;
+      }
+      final data = jsonDecode(response.body);
+      _errorMessage = data['detail'] ?? 'Delete failed';
+    } catch (e) {
+      _errorMessage = e.toString();
+    }
+    _isLoading = false;
+    notifyListeners();
     return false;
   }
 
   Future<void> fetchReconciliations() async {
-    _isLoading = true; _errorMessage = null; notifyListeners();
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
     try {
       final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/reconciliations'));
       if (response.statusCode == 200) {
@@ -140,33 +183,27 @@ class BankReconciliationProvider extends ChangeNotifier {
     } catch (e) {
       _errorMessage = e.toString();
     }
-    _isLoading = false; notifyListeners();
-  }
-
-  Future<Map<String, dynamic>?> fetchReconciliationDetail(String id) async {
-    try {
-      final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/reconciliations/$id'));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
-      }
-    } catch (_) {}
-    return null;
+    _isLoading = false;
+    notifyListeners();
   }
 
   Future<bool> undoReconciliation(String id) async {
-    _isLoading = true; _errorMessage = null; notifyListeners();
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
     try {
       final response = await _client.post(_buildUri('${ApiClient.baseUrl}/bank-reconciliation/reconciliations/$id/undo'));
       if (response.statusCode == 200) {
-        await fetchReconciliations(); return true;
+        await fetchReconciliations();
+        return true;
       }
       final data = jsonDecode(response.body);
       _errorMessage = data['detail'] ?? 'Undo failed';
     } catch (e) {
       _errorMessage = e.toString();
     }
-    _isLoading = false; notifyListeners();
+    _isLoading = false;
+    notifyListeners();
     return false;
   }
 }

@@ -225,4 +225,15 @@ class ApiClient extends http.BaseClient {
     }
     return request;
   }
+
+  http.MultipartRequest multipartRequest(String url) {
+    final request = http.MultipartRequest('POST', Uri.parse(url));
+    if (_accessToken != null) {
+      request.headers['Authorization'] = 'Bearer $_accessToken';
+    }
+    if (_tenantId != null) {
+      request.headers['X-Tenant-ID'] = _tenantId!;
+    }
+    return request;
+  }
 }
