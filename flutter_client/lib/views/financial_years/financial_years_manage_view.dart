@@ -148,7 +148,7 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
                                       ),
                                     ),
                                   ],
-                                  if (year.isCurrent) ...[
+                                  if (year.status == FYStatus.current) ...[
                                     const SizedBox(width: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),

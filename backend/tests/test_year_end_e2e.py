@@ -469,7 +469,7 @@ class TestYearEndScenario4_Reopen:
             headers=h,
         )
         assert reopen_resp.status_code == 200
-        assert reopen_resp.json()["status"] == "CURRENT"
+        assert reopen_resp.json()["status"] == "READY_TO_CLOSE"
 
         # Verify snapshots deleted
         snaps_after = client.get(f"/api/v1/financial-years/{fy_id}/opening-balances", headers=h).json()

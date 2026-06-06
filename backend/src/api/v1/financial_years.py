@@ -24,14 +24,21 @@ router = APIRouter(prefix="/financial-years", tags=["Financial Year Management"]
 
 
 def _compute_status(fy: FinancialYear, today: date) -> str:
-    # CRITICAL FIX: Check status field BEFORE is_current flag
-    # A locked/archived FY should never show as CURRENT even if is_current is true
+    # CRITICAL: Check LOCKED/ARCHIVED first — these override everything
     if fy.status in ("LOCKED", "ARCHIVED"):
         return fy.status
+
+    # The one explicitly selected FY is the logical current FY.
     if fy.is_current:
         return "CURRENT"
+
     if today > fy.end_date:
         return "READY_TO_CLOSE"
+
+    if today < fy.start_date:
+        return "UPCOMING"
+
+    # If data is missing a current flag, the in-range FY is still current.
     return "CURRENT"
 
 
@@ -68,6 +75,20 @@ def _enforce_single_current(db: Session, tenant_id: uuid.UUID, exclude_id: uuid.
         )
 
 
+def _normalize_current_flags(fys: list[FinancialYear], today: date) -> Optional[FinancialYear]:
+    """Ensure only the FY containing today is marked current."""
+    correct_current = None
+    for fy in fys:
+        if fy.start_date <= today <= fy.end_date and fy.status not in ("LOCKED", "ARCHIVED"):
+            correct_current = fy
+            break
+
+    for fy in fys:
+        fy.is_current = (correct_current is not None and fy.id == correct_current.id)
+
+    return correct_current
+
+
 @router.get("", response_model=List[FinancialYearResponse])
 def list_financial_years(
     db: Session = Depends(get_db_session),
@@ -80,6 +101,9 @@ def list_financial_years(
         .order_by(FinancialYear.start_date.desc())
         .all()
     )
+
+    _normalize_current_flags(fys, today)
+
     results = []
     for fy in fys:
         computed = _compute_status(fy, today)
@@ -135,14 +159,18 @@ def create_financial_year(
     )
     db.add(fy)
     db.flush()
+    all_fys = db.query(FinancialYear).filter(FinancialYear.tenant_id == tenant_id).all()
+    today = date.today()
+    _normalize_current_flags(all_fys, today)
     _log_audit(db, tenant_id, fy.id, "CREATED", tenant_id, f"FY {fy.name} created")
     db.commit()
     db.refresh(fy)
+    computed = _compute_status(fy, today)
 
     return FinancialYearResponse(
         id=fy.id, tenant_id=fy.tenant_id, name=fy.name,
         start_date=fy.start_date, end_date=fy.end_date,
-        status="CURRENT", is_current=False,
+        status=computed, is_current=fy.is_current,
         transaction_count=0, created_by=fy.created_by,
         created_at=fy.created_at, updated_at=fy.updated_at,
     )
@@ -164,18 +192,10 @@ def switch_financial_year(
         raise HTTPException(status_code=400, detail=f"Cannot switch to a {target.status.lower()} financial year.")
 
     today = date.today()
-
-    # Clear current flag on all FYs for this tenant
-    db.query(FinancialYear).filter(
-        FinancialYear.tenant_id == tenant_id,
-        FinancialYear.is_current == True,
-    ).update({"is_current": False})
-
-    target.is_current = True
+    all_fys = db.query(FinancialYear).filter(FinancialYear.tenant_id == tenant_id).all()
+    _normalize_current_flags(all_fys, today)
     target.switched_by = tenant_id
     target.last_accessed_at = datetime.now(timezone.utc)
-    if target.status not in ("LOCKED", "ARCHIVED"):
-        target.status = "CURRENT"
     db.flush()
     _log_audit(db, tenant_id, target.id, "SWITCHED", tenant_id, f"Switched to FY {target.name}")
     _sync_tenant_fy_start(db, tenant_id, target.start_date)
@@ -201,12 +221,12 @@ def get_current_financial_year(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage")),
 ):
-    fy = db.query(FinancialYear).filter(
+    today = date.today()
+    fys = db.query(FinancialYear).filter(
         FinancialYear.tenant_id == tenant_id,
-        FinancialYear.is_current == True,
-    ).first()
+    ).order_by(FinancialYear.start_date.desc()).all()
+    fy = _normalize_current_flags(fys, today)
     if not fy:
-        today = date.today()
         fy_year = today.year if today.month >= 4 else today.year - 1
         fy = db.query(FinancialYear).filter(
             FinancialYear.tenant_id == tenant_id,
@@ -215,8 +235,8 @@ def get_current_financial_year(
         if not fy:
             raise HTTPException(status_code=404, detail="No current financial year found. Create one first.")
 
-    today = date.today()
     computed = _compute_status(fy, today)
+    db.commit()
     return FinancialYearResponse(
         id=fy.id, tenant_id=fy.tenant_id, name=fy.name,
         start_date=fy.start_date, end_date=fy.end_date,
@@ -595,11 +615,12 @@ def reopen_financial_year(
     _log_audit(db, tenant_id, fy.id, "REOPENED", tenant_id, f"Reason: {reason.strip()}")
     db.commit()
     db.refresh(fy)
+    computed = _compute_status(fy, date.today())
 
     return FinancialYearResponse(
         id=fy.id, tenant_id=fy.tenant_id, name=fy.name,
         start_date=fy.start_date, end_date=fy.end_date,
-        status="CURRENT", is_current=fy.is_current,
+        status=computed, is_current=fy.is_current,
         closed_at=fy.closed_at, closed_by=fy.closed_by,
         reopened_at=fy.reopened_at, reopened_by=fy.reopened_by,
         reopen_reason=fy.reopen_reason,

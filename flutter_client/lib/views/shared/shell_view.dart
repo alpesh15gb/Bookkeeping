@@ -105,7 +105,7 @@ void _showFYSidebarPicker(BuildContext context, FinancialYearProvider provider) 
                               color: Colors.white,
                             ),
                           ),
-                          if (year.isCurrent) ...[
+                          if (year.status == FYStatus.current) ...[
                             const SizedBox(width: 6),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
@@ -1311,7 +1311,7 @@ class _FYSelector extends StatelessWidget {
                                 fontSize: 14,
                               ),
                             ),
-                            if (year.isCurrent) ...[
+                            if (year.status == FYStatus.current) ...[
                               const SizedBox(width: 6),
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),

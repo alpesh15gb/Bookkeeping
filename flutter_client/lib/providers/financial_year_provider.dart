@@ -5,11 +5,12 @@ import 'package:flutter_client/core/api_client.dart';
 
 /// Financial year status from the backend.
 enum FYStatus {
-  current, readyToClose, locked, archived, unknown;
+  current, upcoming, readyToClose, locked, archived, unknown;
 
   factory FYStatus.fromString(String s) {
     switch (s.toUpperCase()) {
       case 'CURRENT': return FYStatus.current;
+      case 'UPCOMING': return FYStatus.upcoming;
       case 'READY_TO_CLOSE': return FYStatus.readyToClose;
       case 'LOCKED': return FYStatus.locked;
       case 'ARCHIVED': return FYStatus.archived;
@@ -20,6 +21,7 @@ enum FYStatus {
   String get label {
     switch (this) {
       case FYStatus.current: return 'Current';
+      case FYStatus.upcoming: return 'Upcoming';
       case FYStatus.readyToClose: return 'Ready to Close';
       case FYStatus.locked: return 'Locked';
       case FYStatus.archived: return 'Archived';
@@ -30,6 +32,7 @@ enum FYStatus {
   Color get color {
     switch (this) {
       case FYStatus.current: return const Color(0xFF175CD3);
+      case FYStatus.upcoming: return const Color(0xFF475467);
       case FYStatus.readyToClose: return const Color(0xFFD97706);
       case FYStatus.locked: return const Color(0xFF6B7280);
       case FYStatus.archived: return const Color(0xFF9CA1AB);
@@ -40,6 +43,7 @@ enum FYStatus {
   Color get bgColor {
     switch (this) {
       case FYStatus.current: return const Color(0xFFEFF6FF);
+      case FYStatus.upcoming: return const Color(0xFFF2F4F7);
       case FYStatus.readyToClose: return const Color(0xFFFFFBEB);
       case FYStatus.locked: return const Color(0xFFF2F2F4);
       case FYStatus.archived: return const Color(0xFFF2F2F4);
@@ -269,14 +273,14 @@ class FinancialYearProvider extends ChangeNotifier {
 
     _availableYears = [];
     for (var y = currentYear + 1; y >= earliestYear; y--) {
-      _availableYears.add(FinancialYear(
-        id: 'local-$y',
-        name: '$y-${((y + 1) % 100).toString().padLeft(2, '0')}',
-        startDate: DateTime(y, 4, 1),
-        endDate: DateTime(y + 1, 3, 31),
-        status: y == currentFYStart ? FYStatus.current : (y < currentFYStart ? FYStatus.locked : FYStatus.current),
-        isCurrent: y == currentFYStart,
-        transactionCount: 0,
+        _availableYears.add(FinancialYear(
+          id: 'local-$y',
+          name: '$y-${((y + 1) % 100).toString().padLeft(2, '0')}',
+          startDate: DateTime(y, 4, 1),
+          endDate: DateTime(y + 1, 3, 31),
+          status: y == currentFYStart ? FYStatus.current : (y < currentFYStart ? FYStatus.locked : FYStatus.upcoming),
+          isCurrent: y == currentFYStart,
+          transactionCount: 0,
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       ));
@@ -315,6 +319,7 @@ class FinancialYearProvider extends ChangeNotifier {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKey, _activeYear!.id);
     ApiClient.setFYParams(activeDateRangeParams);
+    await _loadYears();
   }
 
   Map<String, String> get activeDateRangeParams {
