@@ -226,6 +226,11 @@ class FinancialYearProvider extends ChangeNotifier {
         }
 
         ApiClient.setFYParams(activeDateRangeParams);
+
+        // If backend returned empty list, fall back to local generation
+        if (_availableYears.isEmpty) {
+          await _loadYearsLocal();
+        }
       } else if (response.statusCode == 404) {
         // No financial years exist yet — fall back to local generation
         await _loadYearsLocal();

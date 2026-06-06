@@ -53,13 +53,29 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
     });
 
     final provider = context.read<FinancialYearProvider>();
-    if (provider.activeYear == null) {
+
+    // Wait for FY provider to finish loading if it's in progress
+    if (provider.isLoading) {
+      // Give it a moment to complete
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+
+    // If FY provider hasn't loaded yet, trigger initialization
+    if (provider.activeYear == null && !provider.isLoading) {
+      await provider.init();
+      // Give it a moment to complete
+      await Future.delayed(const Duration(milliseconds: 300));
+    }
+
+    if (provider.activeYear == null && mounted) {
       setState(() {
         _localError = 'No active financial year. Please select or create one.';
         _isLoading = false;
       });
       return;
     }
+
+    if (provider.activeYear == null) return;
 
     final data = await provider.loadDashboard(provider.activeYear!.id);
     if (data == null && mounted) {
