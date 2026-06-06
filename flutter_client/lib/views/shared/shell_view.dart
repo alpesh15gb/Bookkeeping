@@ -1074,7 +1074,13 @@ class _Sidebar extends StatelessWidget {
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
-                                memberships.firstWhere((m) => m.tenantId == activeTenantId, orElse: () => memberships.first).tenantName ?? 'Company',
+                                memberships.isNotEmpty
+                                    ? memberships.firstWhere(
+                                        (m) => m.tenantId == activeTenantId,
+                                        orElse: () => memberships.first,
+                                      ).tenantName ??
+                                        'Company'
+                                    : 'Company',
                                 style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -1765,7 +1771,13 @@ class _MobileDrawer extends StatelessWidget {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
-                                    memberships.firstWhere((m) => m.tenantId == activeTenantId, orElse: () => memberships.first).tenantName ?? 'Company',
+                                    memberships.isNotEmpty
+                                        ? memberships.firstWhere(
+                                            (m) => m.tenantId == activeTenantId,
+                                            orElse: () => memberships.first,
+                                          ).tenantName ??
+                                            'Company'
+                                        : 'Company',
                                     style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
