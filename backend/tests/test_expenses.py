@@ -263,7 +263,7 @@ class TestExpenses(unittest.TestCase):
         db = SessionLocal()
         try:
             reversal = db.query(JournalEntry).filter(
-                JournalEntry.source_type == "EXPENSE",
+                JournalEntry.source_type == "EXPENSE_REVERSAL",
                 JournalEntry.source_id == uuid.UUID(expense_id),
                 JournalEntry.description.contains("Reversal"),
             ).first()

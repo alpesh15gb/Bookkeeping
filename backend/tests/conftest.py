@@ -290,6 +290,8 @@ def product_factory(db_session, tenant):
             "sales_price": Decimal("1000.00"),
             "purchase_price": Decimal("800.00"),
             "gst_rate": Decimal("18.00"),
+            "opening_stock": Decimal("1000.00"),
+            "current_stock": Decimal("1000.00"),
             "is_active": True
         }
         defaults.update(kwargs)

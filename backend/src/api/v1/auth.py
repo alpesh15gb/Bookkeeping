@@ -28,6 +28,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
+def _validate_password_strength(password: str) -> None:
+    """Validates password meets minimum strength requirements. Raises HTTPException on failure."""
+    if len(password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters long.")
+    if not re.search(r"[A-Z]", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter.")
+    if not re.search(r"[a-z]", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter.")
+    if not re.search(r"\d", password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one digit.")
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>\-_=+\[\]\\/]', password):
+        raise HTTPException(status_code=400, detail="Password must contain at least one special character.")
+
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: str
 
@@ -58,6 +72,11 @@ def _is_refresh_token_revoked(user_id: str, token: str) -> bool:
             return bool(r.sismember(f"refresh_tokens:{user_id}", token))
         except Exception:
             pass
+    # In production, fail closed: reject token if Redis is unavailable
+    # In development/test, fail open to allow testing without Redis
+    if settings.APP_ENV == "production":
+        logger.critical("Redis unavailable during token revocation check — failing closed")
+        return True
     return False
 
 
@@ -86,7 +105,8 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
 
     # 2. Create User record
     hashed_password = get_password_hash(payload.password)
-    email_verify_token = uuid.uuid4().hex
+    email_verify_token_raw = uuid.uuid4().hex
+    email_verify_token_hash = get_password_hash(email_verify_token_raw)
     email_verify_expires = datetime.now(timezone.utc) + timedelta(hours=24)
     user = User(
         email=payload.email,
@@ -95,7 +115,7 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
         phone_number=payload.phone_number,
         is_active=True,
         email_verified=False,
-        email_verify_token=email_verify_token,
+        email_verify_token=email_verify_token_hash,
         email_verify_expires=email_verify_expires,
     )
     db.add(user)
@@ -156,8 +176,8 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
     db.refresh(user)
 
     # 5. Log verification token (dev mode — no real email sent)
-    verify_url = f"{settings.APP_URL}/verify-email?token={email_verify_token}"
-    logger.info("Email verification token for %s: %s", payload.email, email_verify_token)
+    verify_url = f"{settings.APP_URL}/verify-email?token={email_verify_token_raw}"
+    logger.info("Email verification token for %s: %s", payload.email, email_verify_token_raw)
     logger.info("Verification URL: %s", verify_url)
 
     return user
@@ -240,14 +260,12 @@ def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_d
 def refresh_token(
     request: Request,
     payload: Optional[RefreshTokenRequest] = Body(None),
-    refresh_token: Optional[str] = Query(None),
     db: Session = Depends(get_db_session)
 ):
-    """Receives and validates a refresh token. Accepts from JSON body or query parameter."""
+    """Receives and validates a refresh token. Accepts from JSON body only."""
     token = payload.refresh_token if payload else None
-    token = token or refresh_token
     if not token:
-        raise HTTPException(status_code=400, detail="refresh_token is required.")
+        raise HTTPException(status_code=400, detail="refresh_token is required in the request body.")
     try:
         payload = decode_token(token, expected_type="refresh")
         user_id_str = payload.get("sub")
@@ -260,7 +278,7 @@ def refresh_token(
             detail="Could not validate refresh credentials."
         )
 
-    if _is_refresh_token_revoked(user_id_str, refresh_token):
+    if _is_refresh_token_revoked(user_id_str, token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has been revoked."
@@ -373,16 +391,7 @@ def change_password(
         )
 
     # Validate new password strength
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="New password must be at least 8 characters long.")
-    if not re.search(r"[A-Z]", payload.new_password):
-        raise HTTPException(status_code=400, detail="New password must contain at least one uppercase letter.")
-    if not re.search(r"[a-z]", payload.new_password):
-        raise HTTPException(status_code=400, detail="New password must contain at least one lowercase letter.")
-    if not re.search(r"\d", payload.new_password):
-        raise HTTPException(status_code=400, detail="New password must contain at least one digit.")
-    if not re.search(r"[!@#$%^&*(),.?\":{}|<>\-_=+\[\]\\/]", payload.new_password):
-        raise HTTPException(status_code=400, detail="New password must contain at least one special character.")
+    _validate_password_strength(payload.new_password)
 
     # Hash and save the new password
     current_user.password_hash = get_password_hash(payload.new_password)
@@ -482,16 +491,7 @@ def reset_password(
     if not verify_password(payload.token, reset.token):
         raise HTTPException(status_code=400, detail="Invalid reset token.")
 
-    if len(payload.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
-    if not re.search(r"[A-Z]", payload.new_password):
-        raise HTTPException(status_code=400, detail="Password must contain at least one uppercase letter.")
-    if not re.search(r"[a-z]", payload.new_password):
-        raise HTTPException(status_code=400, detail="Password must contain at least one lowercase letter.")
-    if not re.search(r"\d", payload.new_password):
-        raise HTTPException(status_code=400, detail="Password must contain at least one digit.")
-    if not re.search(r"[!@#$%^&*(),.?\":{}|<>\-_=+\[\]\\/]", payload.new_password):
-        raise HTTPException(status_code=400, detail="Password must contain at least one special character.")
+    _validate_password_strength(payload.new_password)
 
     user.password_hash = get_password_hash(payload.new_password)
     reset.used_at = datetime.now(timezone.utc)
@@ -508,14 +508,19 @@ def reset_password(
 @router.post("/verify-email")
 @limiter.limit("5/minute")
 def verify_email(request: Request, token: str, db: Session = Depends(get_db_session)):
-    user = db.query(User).filter(User.email_verify_token == token).first()
-    if not user:
+    user = db.query(User).filter(User.email_verify_token != None).all()
+    matched_user = None
+    for u in user:
+        if verify_password(token, u.email_verify_token):
+            matched_user = u
+            break
+    if not matched_user:
         raise HTTPException(status_code=400, detail="Invalid verification token.")
-    if user.email_verify_expires and user.email_verify_expires < datetime.now(timezone.utc):
+    if matched_user.email_verify_expires and matched_user.email_verify_expires < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Verification token has expired.")
-    user.email_verified = True
-    user.email_verify_token = None
-    user.email_verify_expires = None
+    matched_user.email_verified = True
+    matched_user.email_verify_token = None
+    matched_user.email_verify_expires = None
     db.commit()
     return {"detail": "Email verified successfully."}
 

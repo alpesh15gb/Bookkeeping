@@ -98,7 +98,66 @@ def get_revenue_trend(
     ]
 
 
-@router.get("/expense-trend")
+@router.get("/kpis")
+def dashboard_kpis(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+):
+    """Returns key performance indicators for the dashboard."""
+    from src.infrastructure.database.models import Invoice, Bill, Expense, Payment
+    from sqlalchemy import func
+
+    # Total invoiced (current FY)
+    from datetime import date
+    today = date.today()
+    fy_start = date(today.year, 4, 1) if today.month >= 4 else date(today.year - 1, 4, 1)
+
+    total_invoiced = db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None,
+        Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+        Invoice.issue_date >= fy_start,
+    ).scalar() or 0
+
+    total_collected = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+        Payment.tenant_id == tenant_id,
+        Payment.deleted_at == None,
+        Payment.status == "ACTIVE",
+        Payment.payment_date >= fy_start,
+    ).scalar() or 0
+
+    total_expenses = db.query(func.coalesce(func.sum(Expense.total), 0)).filter(
+        Expense.tenant_id == tenant_id,
+        Expense.deleted_at == None,
+        Expense.status == "POSTED",
+        Expense.expense_date >= fy_start,
+    ).scalar() or 0
+
+    outstanding = db.query(
+        func.coalesce(func.sum(Invoice.total - Invoice.amount_paid), 0)
+    ).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None,
+        Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
+    ).scalar() or 0
+
+    overdue = db.query(
+        func.coalesce(func.sum(Invoice.total - Invoice.amount_paid), 0)
+    ).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None,
+        Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
+        Invoice.due_date < func.current_date(),
+    ).scalar() or 0
+
+    return {
+        "total_invoiced": float(total_invoiced),
+        "total_collected": float(total_collected),
+        "total_expenses": float(total_expenses),
+        "outstanding": float(outstanding),
+        "overdue": float(overdue),
+        "net_profit": float(total_invoiced) - float(total_expenses),
+    }
 def get_expense_trend(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),

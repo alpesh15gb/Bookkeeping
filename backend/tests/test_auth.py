@@ -54,7 +54,7 @@ class TestAuthentication(unittest.TestCase):
         refresh_token = token_data["refresh_token"]
 
         # 3. Refresh Access Token
-        res_ref = self.client.post(f"/api/v1/auth/refresh?refresh_token={refresh_token}")
+        res_ref = self.client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
         self.assertEqual(res_ref.status_code, 200)
         new_token_data = res_ref.json()
         self.assertIn("access_token", new_token_data)

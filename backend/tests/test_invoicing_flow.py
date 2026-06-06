@@ -84,6 +84,8 @@ class TestInvoicingFlow(unittest.TestCase):
                 sku="APL-MBP-M3MX",
                 hsn_sac="84713010",
                 product_type="GOODS",
+                current_stock=Decimal("1000.00"),
+                opening_stock=Decimal("1000.00"),
                 uom="PCS",
                 sales_price=Decimal("249900.00"),
                 purchase_price=Decimal("200000.00"),
@@ -176,7 +178,7 @@ class TestInvoicingFlow(unittest.TestCase):
                 JournalEntry.reference_number == f"REV-INV/2026/0001"
             ).first()
             self.assertIsNotNone(entry)
-            self.assertEqual(entry.source_type, "INVOICE")
+            self.assertEqual(entry.source_type, "INVOICE_REVERSAL")
             self.assertEqual(entry.source_id, uuid.UUID(inv_id))
 
             # Reversal entries sum of debits must equal sum of credits

@@ -13,13 +13,13 @@ from typing import List, Optional
 from datetime import date, timedelta
 import uuid
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import func, case, and_, cast, Numeric as SaNumeric
 
 from src.infrastructure.database.models import (
     Invoice, InvoiceLine, Bill, BillLine,
     Contact, Account, JournalEntry, JournalLine,
-    Payment, BillPayment
+    Payment, BillPayment, CreditNote, DebitNote
 )
 from src.schemas.report_schemas import (
     BalanceSheetSection, BalanceSheetResponse, ReportLineItem,
@@ -32,6 +32,7 @@ from src.schemas.report_schemas import (
     OutstandingInvoiceLine, OutstandingBillLine,
     OutstandingARResponse, OutstandingAPResponse,
     PartyStatementRow, PartyStatementSummary, PartyStatementResponse,
+    TrialBalanceLine, TrialBalanceResponse,
 )
 
 D = Decimal
@@ -136,6 +137,94 @@ class BalanceSheetService:
 
 
 # ---------------------------------------------------------------------------
+# Trial Balance
+# ---------------------------------------------------------------------------
+
+class TrialBalanceService:
+    @staticmethod
+    def get(db: Session, tenant_id: uuid.UUID, as_of_date: date) -> TrialBalanceResponse:
+        """
+        Compiles the Trial Balance as of a specific date.
+        Shows ALL account types (Asset, Liability, Equity, Revenue, Expense)
+        with opening balance, period debits, period credits, and closing balance.
+        """
+        fy_year = as_of_date.year if as_of_date.month >= 4 else as_of_date.year - 1
+        fy_start = date(fy_year, 4, 1)
+
+        rows = (
+            db.query(
+                Account.id,
+                Account.name,
+                Account.code,
+                Account.account_type,
+                Account.opening_balance,
+                func.coalesce(
+                    func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)), 0
+                ).label("debits"),
+                func.coalesce(
+                    func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)), 0
+                ).label("credits"),
+            )
+            .outerjoin(JournalLine, Account.id == JournalLine.account_id)
+            .outerjoin(
+                JournalEntry,
+                and_(JournalLine.entry_id == JournalEntry.id, JournalEntry.entry_date <= as_of_date),
+            )
+            .filter(
+                Account.tenant_id == tenant_id,
+                Account.deleted_at == None,
+            )
+            .group_by(Account.id, Account.name, Account.code, Account.account_type, Account.opening_balance)
+            .order_by(Account.account_type.asc(), Account.code.asc())
+            .all()
+        )
+
+        lines = []
+        total_debits = ZERO
+        total_credits = ZERO
+
+        for row in rows:
+            op = _q(row.opening_balance)
+            deb = _q(row.debits)
+            cred = _q(row.credits)
+            acc_type = row.account_type
+
+            if acc_type in ("ASSET", "EXPENSE"):
+                closing = op + deb - cred
+                direction = "DEBIT" if closing >= 0 else "CREDIT"
+            else:
+                closing = op + cred - deb
+                direction = "CREDIT" if closing >= 0 else "DEBIT"
+
+            abs_closing = abs(closing)
+            if acc_type in ("ASSET", "EXPENSE"):
+                total_debits += abs_closing if direction == "DEBIT" else ZERO
+                total_credits += abs_closing if direction == "CREDIT" else ZERO
+            else:
+                total_credits += abs_closing if direction == "CREDIT" else ZERO
+                total_debits += abs_closing if direction == "DEBIT" else ZERO
+
+            lines.append(TrialBalanceLine(
+                account_name=row.name,
+                account_code=row.code,
+                account_type=acc_type,
+                opening_balance=op,
+                period_debits=deb,
+                period_credits=cred,
+                closing_balance=abs_closing,
+                closing_direction=direction,
+            ))
+
+        return TrialBalanceResponse(
+            as_of_date=as_of_date,
+            lines=lines,
+            total_debits=_q(total_debits),
+            total_credits=_q(total_credits),
+            is_balanced=abs(_q(total_debits) - _q(total_credits)) <= Decimal("0.01"),
+        )
+
+
+# ---------------------------------------------------------------------------
 # P&L helper (internal use — shared with Balance Sheet)
 # ---------------------------------------------------------------------------
 
@@ -148,14 +237,15 @@ class PLService:
                 func.coalesce(func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)), 0).label("debits"),
                 func.coalesce(func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)), 0).label("credits"),
             )
-            .join(JournalLine, Account.id == JournalLine.account_id)
-            .join(JournalEntry, JournalLine.entry_id == JournalEntry.id)
+            .outerjoin(JournalLine, Account.id == JournalLine.account_id)
+            .outerjoin(JournalEntry, JournalLine.entry_id == JournalEntry.id)
             .filter(
                 Account.tenant_id == tenant_id,
                 Account.account_type.in_(["REVENUE", "EXPENSE"]),
                 Account.deleted_at == None,
                 JournalEntry.entry_date >= start_date,
                 JournalEntry.entry_date <= end_date,
+                JournalEntry.source_type != "YEAR_END_CLOSING",
             )
             .group_by(Account.account_type)
             .all()
@@ -185,12 +275,20 @@ class GSTR1Service:
           - HSN: Line-level HSN summary
         Only FINALIZED (not DRAFT/CANCELLED) invoices are included.
         """
+        # Get origin state code for inter-state detection
+        from src.domains.company.services import resolve_origin_state_code
+        origin_state = resolve_origin_state_code(db, tenant_id)
+
         invoices = (
             db.query(Invoice)
-            .join(Contact, Invoice.contact_id == Contact.id)
+            .options(
+                joinedload(Invoice.contact),
+                joinedload(Invoice.lines).joinedload(InvoiceLine.product),
+            )
             .filter(
                 Invoice.tenant_id == tenant_id,
                 Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+                Invoice.deleted_at == None,
                 Invoice.issue_date >= start_date,
                 Invoice.issue_date <= end_date,
             )
@@ -201,6 +299,8 @@ class GSTR1Service:
         b2cl_map: dict = {}
         b2cs_map: dict = {}
         hsn_map: dict = {}
+        rcm_list: list = []
+        exports_list: list = []
         total_taxable = ZERO
         total_cgst = ZERO
         total_sgst = ZERO
@@ -209,7 +309,7 @@ class GSTR1Service:
         total_invoice_val = ZERO
 
         for inv in invoices:
-            contact = db.get(Contact, inv.contact_id)
+            contact = inv.contact
             taxable = _q(inv.subtotal) - _q(inv.discount_total)
             cgst = _q(inv.cgst_amount)
             sgst = _q(inv.sgst_amount)
@@ -217,6 +317,41 @@ class GSTR1Service:
             cess = _q(inv.cess_amount)
             inv_total = _q(inv.total)
             total_tax = _q(cgst + sgst + igst + cess)
+
+            # Export invoices go to Table 6A
+            if inv.supply_type and inv.supply_type.startswith("EXPORT"):
+                exports_list.append({
+                    "invoice_number": inv.invoice_number,
+                    "invoice_date": str(inv.issue_date),
+                    "supply_type": inv.supply_type,
+                    "taxable_value": str(taxable),
+                    "igst": str(igst),
+                    "cess": str(cess),
+                    "total": str(inv_total),
+                    "port_code": getattr(inv, 'port_code', None),
+                    "shipping_bill_number": getattr(inv, 'shipping_bill_number', None),
+                })
+                total_taxable += taxable
+                total_igst += igst
+                total_cess += cess
+                total_invoice_val += inv_total
+                continue
+
+            # RCM invoices go to Table 4B, not into standard buckets
+            if inv.is_rcm:
+                rcm_list.append({
+                    "invoice_number": inv.invoice_number,
+                    "invoice_date": str(inv.issue_date),
+                    "receiver_gstin": contact.gstin if contact else None,
+                    "receiver_name": contact.name if contact else "Unknown",
+                    "taxable_value": str(taxable),
+                    "igst": str(igst),
+                    "cgst": str(cgst),
+                    "sgst": str(sgst),
+                    "cess": str(cess),
+                    "total": str(inv_total),
+                })
+                continue
 
             total_taxable += taxable
             total_cgst += cgst
@@ -226,7 +361,7 @@ class GSTR1Service:
             total_invoice_val += inv_total
 
             is_registered = bool(contact and contact.gstin)
-            is_inter_state = (igst > ZERO)
+            is_inter_state = (inv.pos_state_code and inv.pos_state_code != origin_state)
 
             if is_registered:
                 key = contact.gstin
@@ -265,30 +400,38 @@ class GSTR1Service:
                     b2cl_map[key]["igst"] += igst
                     b2cl_map[key]["cess"] += cess
                 else:
-                    # B2CS: Group by effective GST rate
-                    # Derive effective rate from first line
-                    eff_rate = ZERO
-                    if inv.lines:
-                        eff_rate = _q(inv.lines[0].gst_rate)
-                    key = str(eff_rate)
-                    if key not in b2cs_map:
-                        b2cs_map[key] = {
-                            "gst_rate": eff_rate,
-                            "taxable_value": ZERO,
-                            "cgst": ZERO, "sgst": ZERO, "cess": ZERO,
-                        }
-                    b2cs_map[key]["taxable_value"] += taxable
-                    b2cs_map[key]["cgst"] += cgst
-                    b2cs_map[key]["sgst"] += sgst
-                    b2cs_map[key]["cess"] += cess
+                    # B2CS: Aggregate at line level by (gst_rate, pos_state_code)
+                    for line in inv.lines:
+                        line_taxable = _q(line.subtotal)
+                        line_cgst = _q(line.cgst_amount)
+                        line_sgst = _q(line.sgst_amount)
+                        line_igst = _q(line.igst_amount)
+                        line_cess = _q(line.cess_amount)
+                        eff_rate = _q(line.gst_rate)
+                        b2cs_key = f"{eff_rate}_{inv.pos_state_code}"
+                        if b2cs_key not in b2cs_map:
+                            b2cs_map[b2cs_key] = {
+                                "gst_rate": eff_rate,
+                                "place_of_supply": inv.pos_state_code or "",
+                                "taxable_value": ZERO,
+                                "cgst": ZERO, "sgst": ZERO, "igst": ZERO, "cess": ZERO,
+                            }
+                        b2cs_map[b2cs_key]["taxable_value"] += line_taxable
+                        b2cs_map[b2cs_key]["cgst"] += line_cgst
+                        b2cs_map[b2cs_key]["sgst"] += line_sgst
+                        b2cs_map[b2cs_key]["igst"] += line_igst
+                        b2cs_map[b2cs_key]["cess"] += line_cess
 
             # HSN summary (line level)
             for line in inv.lines:
                 key = line.hsn_sac
+                uom = "PCS"
+                if line.product:
+                    uom = line.product.uom or "PCS"
                 if key not in hsn_map:
                     hsn_map[key] = {
                         "hsn_sac": key,
-                        "uom": "PCS",   # default; would come from product in production
+                        "uom": uom,
                         "total_qty": ZERO,
                         "taxable_value": ZERO,
                         "cgst": ZERO, "sgst": ZERO, "igst": ZERO, "cess": ZERO,
@@ -315,6 +458,8 @@ class GSTR1Service:
             total_igst=_q(total_igst),
             total_cess=_q(total_cess),
             total_invoice_value=_q(total_invoice_val),
+            rcm_invoices=rcm_list if rcm_list else None,
+            exports=exports_list if exports_list else None,
         )
 
 
@@ -373,6 +518,7 @@ class GSTR3BService:
             .filter(
                 Bill.tenant_id == tenant_id,
                 Bill.status.notin_(["DRAFT", "CANCELLED"]),
+                Bill.deleted_at == None,
                 Bill.issue_date >= start_date,
                 Bill.issue_date <= end_date,
             )
@@ -385,6 +531,8 @@ class GSTR3BService:
         itc_cess = ZERO
 
         for bill in bills:
+            if not bill.itc_eligible:
+                continue
             itc_cgst += _q(bill.cgst_amount)
             itc_sgst += _q(bill.sgst_amount)
             itc_igst += _q(bill.igst_amount)
@@ -446,6 +594,7 @@ class AgingService:
             .filter(
                 Invoice.tenant_id == tenant_id,
                 Invoice.status.notin_(["DRAFT", "CANCELLED", "PAID"]),
+                Invoice.deleted_at == None,
             )
             .all()
         )
@@ -465,6 +614,7 @@ class AgingService:
             .filter(
                 Bill.tenant_id == tenant_id,
                 Bill.status.notin_(["DRAFT", "CANCELLED", "PAID"]),
+                Bill.deleted_at == None,
             )
             .all()
         )
@@ -489,6 +639,8 @@ class AgingService:
                 continue
 
             due = getattr(doc, due_attr)
+            if due is None:
+                due = getattr(doc, "issue_date", as_of_date)
             days_overdue = max(0, (as_of_date - due).days)
             bucket_label = AgingService._bucket_label(days_overdue)
             bucket_totals[bucket_label] += outstanding
@@ -561,43 +713,47 @@ class CashFlowService:
         # Net Profit
         net_profit = PLService._compute_net(db, tenant_id, start_date, end_date)
 
-        # Change in AR (invoiced - collected = net AR movement)
+        # Change in AR: invoiced this period vs cash collected this period
         ar_invoiced = _q(
             db.query(func.coalesce(func.sum(Invoice.total), 0))
             .filter(
                 Invoice.tenant_id == tenant_id,
                 Invoice.issue_date.between(start_date, end_date),
                 Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+                Invoice.deleted_at == None,
             )
             .scalar() or 0
         )
         ar_collected = _q(
-            db.query(func.coalesce(func.sum(Invoice.amount_paid), 0))
+            db.query(func.coalesce(func.sum(Payment.amount), 0))
             .filter(
-                Invoice.tenant_id == tenant_id,
-                Invoice.issue_date.between(start_date, end_date),
-                Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+                Payment.tenant_id == tenant_id,
+                Payment.payment_date.between(start_date, end_date),
+                Payment.status == "ACTIVE",
+                Payment.deleted_at == None,
             )
             .scalar() or 0
         )
         change_in_ar = ar_collected - ar_invoiced  # negative = increase in AR
 
-        # Change in AP (billed - paid = net AP movement)
+        # Change in AP: billed this period vs cash paid this period
         ap_billed = _q(
             db.query(func.coalesce(func.sum(Bill.total), 0))
             .filter(
                 Bill.tenant_id == tenant_id,
                 Bill.issue_date.between(start_date, end_date),
                 Bill.status.notin_(["DRAFT", "CANCELLED"]),
+                Bill.deleted_at == None,
             )
             .scalar() or 0
         )
         ap_paid = _q(
-            db.query(func.coalesce(func.sum(Bill.amount_paid), 0))
+            db.query(func.coalesce(func.sum(BillPayment.amount), 0))
             .filter(
-                Bill.tenant_id == tenant_id,
-                Bill.issue_date.between(start_date, end_date),
-                Bill.status.notin_(["DRAFT", "CANCELLED"]),
+                BillPayment.tenant_id == tenant_id,
+                BillPayment.payment_date.between(start_date, end_date),
+                BillPayment.status == "ACTIVE",
+                BillPayment.deleted_at == None,
             )
             .scalar() or 0
         )
@@ -618,7 +774,10 @@ class CashFlowService:
                 Account.tenant_id == tenant_id,
                 Account.account_type == "ASSET",
                 Account.deleted_at == None,
-                Account.code.notlike("1%"),
+                Account.code.notlike("CASH%"),
+                Account.code.notlike("BANK%"),
+                Account.code.notlike("UPI%"),
+                Account.code.notlike("POS%"),
                 JournalEntry.entry_date.between(start_date, end_date),
                 JournalEntry.source_type == "MANUAL",
             )
@@ -667,7 +826,8 @@ class CashFlowService:
         opening_cash = _q(
             db.query(func.coalesce(func.sum(Account.opening_balance), 0))
             .filter(Account.tenant_id == tenant_id, Account.account_type == "ASSET",
-                    Account.deleted_at == None, Account.code.like("1%"))
+                    Account.deleted_at == None,
+                    Account.code.in_(["CASH", "BANK", "UPI", "POS"]))
             .scalar() or 0
         )
 
@@ -707,56 +867,56 @@ class SalesAnalyticsService:
     @staticmethod
     def get(db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date,
             top_n: int = 10) -> SalesAnalyticsResponse:
-        invoices = (
-            db.query(Invoice)
-            .filter(
-                Invoice.tenant_id == tenant_id,
-                Invoice.status.notin_(["DRAFT", "CANCELLED"]),
-                Invoice.issue_date.between(start_date, end_date),
+        # Aggregate totals in SQL
+        totals = db.query(
+            func.coalesce(func.sum(Invoice.subtotal - Invoice.discount_total), 0).label("total_sales"),
+            func.coalesce(func.sum(Invoice.cgst_amount + Invoice.sgst_amount + Invoice.igst_amount + Invoice.cess_amount), 0).label("total_tax"),
+            func.coalesce(func.sum(Invoice.total), 0).label("total_invoiced"),
+            func.count(Invoice.id).label("invoice_count"),
+        ).filter(
+            Invoice.tenant_id == tenant_id,
+            Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+            Invoice.deleted_at == None,
+            Invoice.issue_date.between(start_date, end_date),
+        ).first()
+
+        # Top customers via SQL GROUP BY
+        top_customers_q = db.query(
+            Contact.id.label("contact_id"),
+            Contact.name.label("contact_name"),
+            func.count(Invoice.id).label("invoice_count"),
+            func.coalesce(func.sum(Invoice.subtotal - Invoice.discount_total), 0).label("total_sales"),
+            func.coalesce(func.sum(Invoice.cgst_amount + Invoice.sgst_amount + Invoice.igst_amount + Invoice.cess_amount), 0).label("total_tax"),
+            func.coalesce(func.sum(Invoice.total), 0).label("total_invoiced"),
+        ).join(Invoice, Invoice.contact_id == Contact.id).filter(
+            Invoice.tenant_id == tenant_id,
+            Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+            Invoice.deleted_at == None,
+            Invoice.issue_date.between(start_date, end_date),
+        ).group_by(Contact.id, Contact.name).order_by(
+            func.sum(Invoice.total).desc()
+        ).limit(top_n).all()
+
+        top_customers = [
+            TopCustomerLine(
+                contact_id=str(row.contact_id),
+                contact_name=row.contact_name,
+                invoice_count=row.invoice_count,
+                total_sales=_q(row.total_sales),
+                total_tax=_q(row.total_tax),
+                total_invoiced=_q(row.total_invoiced),
             )
-            .all()
-        )
-
-        total_sales = ZERO
-        total_tax = ZERO
-        total_inv_val = ZERO
-        contact_map: dict = {}
-
-        for inv in invoices:
-            taxable = _q(inv.subtotal) - _q(inv.discount_total)
-            tax = _q(inv.cgst_amount) + _q(inv.sgst_amount) + _q(inv.igst_amount) + _q(inv.cess_amount)
-            total = _q(inv.total)
-            total_sales += taxable
-            total_tax += tax
-            total_inv_val += total
-
-            cid = str(inv.contact_id)
-            if cid not in contact_map:
-                contact = db.get(Contact, inv.contact_id)
-                contact_map[cid] = {
-                    "contact_id": cid,
-                    "contact_name": contact.name if contact else "Unknown",
-                    "invoice_count": 0,
-                    "total_sales": ZERO,
-                    "total_tax": ZERO,
-                    "total_invoiced": ZERO,
-                }
-            c = contact_map[cid]
-            c["invoice_count"] += 1
-            c["total_sales"] += taxable
-            c["total_tax"] += tax
-            c["total_invoiced"] += total
-
-        top_customers = sorted(contact_map.values(), key=lambda x: x["total_invoiced"], reverse=True)[:top_n]
+            for row in top_customers_q
+        ]
 
         return SalesAnalyticsResponse(
             period_start=start_date,
             period_end=end_date,
-            total_sales=_q(total_sales),
-            total_tax_collected=_q(total_tax),
-            total_invoiced=_q(total_inv_val),
-            invoice_count=len(invoices),
-            top_customers=[TopCustomerLine(**c) for c in top_customers],
+            total_sales=_q(totals.total_sales),
+            total_tax_collected=_q(totals.total_tax),
+            total_invoiced=_q(totals.total_invoiced),
+            invoice_count=totals.invoice_count,
+            top_customers=top_customers,
         )
 
 
@@ -768,57 +928,56 @@ class PurchaseAnalyticsService:
     @staticmethod
     def get(db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date,
             top_n: int = 10) -> PurchaseAnalyticsResponse:
-        bills = (
-            db.query(Bill)
-            .filter(
-                Bill.tenant_id == tenant_id,
-                Bill.status.notin_(["DRAFT", "CANCELLED"]),
-                Bill.issue_date.between(start_date, end_date),
+        # Aggregate totals in SQL
+        totals = db.query(
+            func.coalesce(func.sum(Bill.subtotal), 0).label("total_purchases"),
+            func.coalesce(func.sum(Bill.cgst_amount + Bill.sgst_amount + Bill.igst_amount + Bill.cess_amount), 0).label("total_tax"),
+            func.coalesce(func.sum(Bill.total), 0).label("total_billed"),
+            func.count(Bill.id).label("bill_count"),
+        ).filter(
+            Bill.tenant_id == tenant_id,
+            Bill.status.notin_(["DRAFT", "CANCELLED"]),
+            Bill.deleted_at == None,
+            Bill.issue_date.between(start_date, end_date),
+        ).first()
+
+        # Top vendors via SQL GROUP BY
+        top_vendors_q = db.query(
+            Contact.id.label("contact_id"),
+            Contact.name.label("contact_name"),
+            func.count(Bill.id).label("bill_count"),
+            func.coalesce(func.sum(Bill.subtotal), 0).label("total_purchases"),
+            func.coalesce(func.sum(Bill.cgst_amount + Bill.sgst_amount + Bill.igst_amount + Bill.cess_amount), 0).label("total_tax"),
+            func.coalesce(func.sum(Bill.total), 0).label("total_billed"),
+        ).join(Bill, Bill.contact_id == Contact.id).filter(
+            Bill.tenant_id == tenant_id,
+            Bill.status.notin_(["DRAFT", "CANCELLED"]),
+            Bill.deleted_at == None,
+            Bill.issue_date.between(start_date, end_date),
+        ).group_by(Contact.id, Contact.name).order_by(
+            func.sum(Bill.total).desc()
+        ).limit(top_n).all()
+
+        top_vendors = [
+            TopVendorLine(
+                contact_id=str(row.contact_id),
+                contact_name=row.contact_name,
+                bill_count=row.bill_count,
+                total_purchases=_q(row.total_purchases),
+                total_tax=_q(row.total_tax),
+                total_billed=_q(row.total_billed),
             )
-            .all()
-        )
-
-        total_purchases = ZERO
-        total_tax = ZERO
-        total_billed_val = ZERO
-        vendor_map: dict = {}
-
-        for bill in bills:
-            # Bill model uses subtotal (already net of line discounts)
-            taxable = _q(bill.subtotal)
-            tax = _q(bill.cgst_amount) + _q(bill.sgst_amount) + _q(bill.igst_amount) + _q(bill.cess_amount)
-            total = _q(bill.total)
-            total_purchases += taxable
-            total_tax += tax
-            total_billed_val += total
-
-            cid = str(bill.contact_id)
-            if cid not in vendor_map:
-                contact = db.get(Contact, bill.contact_id)
-                vendor_map[cid] = {
-                    "contact_id": cid,
-                    "contact_name": contact.name if contact else "Unknown",
-                    "bill_count": 0,
-                    "total_purchases": ZERO,
-                    "total_tax": ZERO,
-                    "total_billed": ZERO,
-                }
-            v = vendor_map[cid]
-            v["bill_count"] += 1
-            v["total_purchases"] += taxable
-            v["total_tax"] += tax
-            v["total_billed"] += total
-
-        top_vendors = sorted(vendor_map.values(), key=lambda x: x["total_billed"], reverse=True)[:top_n]
+            for row in top_vendors_q
+        ]
 
         return PurchaseAnalyticsResponse(
             period_start=start_date,
             period_end=end_date,
-            total_purchases=_q(total_purchases),
-            total_tax_paid=_q(total_tax),
-            total_billed=_q(total_billed_val),
-            bill_count=len(bills),
-            top_vendors=[TopVendorLine(**v) for v in top_vendors],
+            total_purchases=_q(totals.total_purchases),
+            total_tax_paid=_q(totals.total_tax),
+            total_billed=_q(totals.total_billed),
+            bill_count=totals.bill_count,
+            top_vendors=top_vendors,
         )
 
 
@@ -835,6 +994,7 @@ class OutstandingService:
             .filter(
                 Invoice.tenant_id == tenant_id,
                 Invoice.status.notin_(["DRAFT", "CANCELLED", "PAID"]),
+                Invoice.deleted_at == None,
             )
             .order_by(Invoice.due_date.asc())
             .all()
@@ -871,6 +1031,7 @@ class OutstandingService:
             .filter(
                 Bill.tenant_id == tenant_id,
                 Bill.status.notin_(["DRAFT", "CANCELLED", "PAID"]),
+                Bill.deleted_at == None,
             )
             .order_by(Bill.due_date.asc())
             .all()
@@ -940,8 +1101,30 @@ class PartyStatementService:
             BillPayment.deleted_at == None
         ).scalar()
 
-        debits_before = _q(inv_before) + _q(bp_before)
-        credits_before = _q(pay_before) + _q(bill_before)
+        # Credit Notes reduce AR (customer owes less)
+        cn_before = db.query(func.coalesce(func.sum(CreditNote.total), 0)).join(
+            Invoice, CreditNote.invoice_id == Invoice.id
+        ).filter(
+            CreditNote.tenant_id == tenant_id,
+            Invoice.contact_id == contact_id,
+            CreditNote.issue_date < start_date,
+            CreditNote.status.notin_(["DRAFT", "CANCELLED"]),
+            CreditNote.deleted_at == None
+        ).scalar()
+
+        # Debit Notes increase AR (customer owes more)
+        dn_before = db.query(func.coalesce(func.sum(DebitNote.total), 0)).join(
+            Invoice, DebitNote.invoice_id == Invoice.id
+        ).filter(
+            DebitNote.tenant_id == tenant_id,
+            Invoice.contact_id == contact_id,
+            DebitNote.issue_date < start_date,
+            DebitNote.status.notin_(["DRAFT", "CANCELLED"]),
+            DebitNote.deleted_at == None
+        ).scalar()
+
+        debits_before = _q(inv_before) + _q(bp_before) + _q(dn_before)
+        credits_before = _q(pay_before) + _q(bill_before) + _q(cn_before)
         opening_balance = debits_before - credits_before
 
         # 2. Get all transactions during the period
@@ -981,6 +1164,29 @@ class PartyStatementService:
             BillPayment.deleted_at == None
         ).all()
 
+        # Credit Notes and Debit Notes for this contact
+        credit_notes = db.query(CreditNote).join(
+            Invoice, CreditNote.invoice_id == Invoice.id
+        ).filter(
+            CreditNote.tenant_id == tenant_id,
+            Invoice.contact_id == contact_id,
+            CreditNote.issue_date >= start_date,
+            CreditNote.issue_date <= end_date,
+            CreditNote.status.notin_(["DRAFT", "CANCELLED"]),
+            CreditNote.deleted_at == None
+        ).all()
+
+        debit_notes = db.query(DebitNote).join(
+            Invoice, DebitNote.invoice_id == Invoice.id
+        ).filter(
+            DebitNote.tenant_id == tenant_id,
+            Invoice.contact_id == contact_id,
+            DebitNote.issue_date >= start_date,
+            DebitNote.issue_date <= end_date,
+            DebitNote.status.notin_(["DRAFT", "CANCELLED"]),
+            DebitNote.deleted_at == None
+        ).all()
+
         raw_ledger = []
         for x in invoices:
             raw_ledger.append({
@@ -1016,6 +1222,24 @@ class PartyStatementService:
                 "voucher_type": "Payment",
                 "voucher_no": x.payment_number,
                 "debit": _q(x.amount),
+                "credit": None,
+            })
+        for x in credit_notes:
+            raw_ledger.append({
+                "date": x.issue_date,
+                "particulars": "Credit Note",
+                "voucher_type": "Credit Note",
+                "voucher_no": x.credit_note_number,
+                "debit": None,
+                "credit": _q(x.total),
+            })
+        for x in debit_notes:
+            raw_ledger.append({
+                "date": x.issue_date,
+                "particulars": "Debit Note",
+                "voucher_type": "Debit Note",
+                "voucher_no": x.debit_note_number,
+                "debit": _q(x.total),
                 "credit": None,
             })
 

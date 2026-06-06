@@ -45,9 +45,11 @@ class _InvoiceListViewState extends State<InvoiceListView> {
   }
 
   void _fetch() {
+    String? apiStatus = _statusFilter == 'ALL' ? null : _statusFilter;
+    if (apiStatus == 'SENT') apiStatus = 'POSTED';
     context.read<InvoiceProvider>().fetchInvoices(
       search: _searchCtrl.text.trim().isNotEmpty ? _searchCtrl.text.trim() : null,
-      status: _statusFilter == 'ALL' ? null : _statusFilter,
+      status: apiStatus,
     );
   }
 
@@ -97,20 +99,30 @@ class _InvoiceListViewState extends State<InvoiceListView> {
   }
 
   void _bulkCancel() async {
+    final cancellable = _selectedIds.where((id) {
+      final match = provider.invoices.where((i) => i.id.toString() == id);
+      if (match.isEmpty) return false;
+      final inv = match.first;
+      return inv.status == 'POSTED' || inv.status == 'PARTIALLY_PAID';
+    }).toList();
+    if (cancellable.isEmpty) {
+      AppToast.info(context, 'No cancellable invoices selected (only Sent/Partial can be cancelled)');
+      return;
+    }
     final confirm = await AppConfirmDialog.show(
       context,
-      title: 'Cancel ${_selectedIds.length} invoices?',
+      title: 'Cancel ${cancellable.length} invoices?',
       message: 'This will reverse ledger entries for each selected invoice.',
     );
     if (confirm == true) {
       final provider = context.read<InvoiceProvider>();
       int successCount = 0;
-      for (final id in _selectedIds) {
+      for (final id in cancellable) {
         final ok = await provider.cancelInvoice(id);
         if (ok) successCount++;
       }
       if (mounted) {
-        AppToast.info(context, '$successCount of ${_selectedIds.length} invoices cancelled');
+        AppToast.info(context, '$successCount of ${cancellable.length} invoices cancelled');
       }
       _clearSelection();
       _fetch();
@@ -171,10 +183,9 @@ class _InvoiceListViewState extends State<InvoiceListView> {
   }
 
   String _balanceLabel(InvoiceModel invoice) {
-    final paid = invoice.amountPaid;
-    if (paid <= 0) return 'Unpaid';
-    if (paid >= invoice.total) return 'Paid';
-    return 'Partial';
+    if (invoice.status == 'PAID') return 'Paid';
+    if (invoice.status == 'PARTIALLY_PAID') return 'Partial';
+    return 'Unpaid';
   }
 
   num _balanceAmount(InvoiceModel invoice) {
@@ -206,7 +217,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       final balance = inv.total - inv.amountPaid;
       if (balance > 0) {
         outstandingAmount += balance;
-        if (inv.status == 'PARTIALLY_PAID') overdueAmount += balance;
+        if (inv.status == 'PARTIALLY_PAID' && inv.dueDate != null && inv.dueDate!.isBefore(DateTime.now())) overdueAmount += balance;
       }
     }
     final avgInvoice = totalCount > 0 ? totalAmount / totalCount : 0;
@@ -320,6 +331,13 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                         count: partialCount,
                         isSelected: _statusFilter == 'PARTIALLY_PAID',
                         onTap: () { setState(() => _statusFilter = 'PARTIALLY_PAID'); _fetch(); },
+                      ),
+                      const SizedBox(width: 4),
+                      FilterChipWithCount(
+                        label: 'Cancelled',
+                        count: cancelledCount,
+                        isSelected: _statusFilter == 'CANCELLED',
+                        onTap: () { setState(() => _statusFilter = 'CANCELLED'); _fetch(); },
                       ),
                     ],
                   ),
@@ -436,11 +454,12 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                         hoverActions: _isSelectionMode
                                             ? null
                                             : [
-                                                _CompactAction(
-                                                  icon: Icons.edit_outlined,
-                                                  tooltip: 'Edit',
-                                                  onTap: () => _showForm(invoice: invoice),
-                                                ),
+                                                if (invoice.status == 'DRAFT')
+                                                  _CompactAction(
+                                                    icon: Icons.edit_outlined,
+                                                    tooltip: 'Edit',
+                                                    onTap: () => _showForm(invoice: invoice),
+                                                  ),
                                                 _CompactAction(
                                                   icon: Icons.print_outlined,
                                                   tooltip: 'Print',
@@ -497,7 +516,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                                                 ),
                                                 const SizedBox(width: 4),
                                                 Text(
-                                                  'All',
+                                                  'Page',
                                                   style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
                                                 ),
                                               ],
@@ -551,13 +570,14 @@ class _InvoiceListViewState extends State<InvoiceListView> {
     );
   }
 
-  double _swipeProgress = 0.0;
+  final Map<String, double> _swipeProgress = {};
 
   Widget _buildSwipeableInvoice(InvoiceModel invoice, Widget child) {
     if (_isSelectionMode) return child;
+    final invoiceId = invoice.id.toString();
 
     return Dismissible(
-      key: Key('invoice_dismiss_${invoice.id}'),
+      key: Key('invoice_dismiss_$invoiceId'),
       background: Container(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20),
@@ -573,22 +593,22 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        color: _swipeProgress > 0.70 ? AppColors.error : AppColors.info,
+        color: (_swipeProgress[invoiceId] ?? 0) > 0.70 ? AppColors.error : AppColors.info,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Text(
-              _swipeProgress > 0.70 ? 'Delete Invoice' : 'Share PDF',
+              (_swipeProgress[invoiceId] ?? 0) > 0.70 ? 'Delete Invoice' : 'Share PDF',
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
-            Icon(_swipeProgress > 0.70 ? Icons.delete : Icons.share, color: Colors.white),
+            Icon((_swipeProgress[invoiceId] ?? 0) > 0.70 ? Icons.delete : Icons.share, color: Colors.white),
           ],
         ),
       ),
       onUpdate: (details) {
         setState(() {
-          _swipeProgress = details.progress;
+          _swipeProgress[invoiceId] = details.progress;
         });
       },
       confirmDismiss: (direction) async {
@@ -596,11 +616,11 @@ class _InvoiceListViewState extends State<InvoiceListView> {
           _showRecordPaymentDialog(invoice);
           return false;
         } else if (direction == DismissDirection.endToStart) {
-          if (_swipeProgress > 0.70) {
+          if ((_swipeProgress[invoiceId] ?? 0) > 0.70) {
             final confirm = await AppConfirmDialog.show(
               context,
               title: 'Delete Invoice?',
-              message: 'Delete invoice ${invoice.invoiceNumber}? This action can be undone.',
+              message: 'Delete invoice ${invoice.invoiceNumber}? This action cannot be undone. Only DRAFT invoices can be deleted.',
             );
             if (confirm == true) {
               _deleteSingleInvoice(invoice);
@@ -710,7 +730,6 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                     final randSeq = 1000 + (DateTime.now().millisecondsSinceEpoch % 9000);
                     final payload = {
                       'contact_id': invoice.contactId,
-                      'payment_number': 'PAY/${payDate.year}-${(payDate.year + 1) % 100}/$randSeq',
                       'payment_date': formattedPayDate,
                       'payment_mode': mode,
                       'amount': amt,
@@ -786,8 +805,20 @@ class _InvoiceListViewState extends State<InvoiceListView> {
   }
 
   void _exportGstr1() async {
+    final now = DateTime.now();
+    final fyStart = now.month >= 4
+        ? DateTime(now.year, 4, 1)
+        : DateTime(now.year - 1, 4, 1);
+    final range = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+      initialDateRange: DateTimeRange(start: fyStart, end: now),
+    );
+    if (range == null) return;
+    final fmt = (DateTime d) => '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
     final response = await ApiClient().get(
-      Uri.parse('${ApiClient.baseUrl}/gst/gstr1/export'),
+      Uri.parse('${ApiClient.baseUrl}/gst/gstr1/export?start_date=${fmt(range.start)}&end_date=${fmt(range.end)}'),
     );
     if (response.statusCode == 200 && mounted) {
       final data = jsonDecode(response.body);

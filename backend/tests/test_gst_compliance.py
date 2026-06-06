@@ -132,6 +132,8 @@ class TestGSTCompliance(unittest.TestCase):
                 sku="SRV-ACC-LIC",
                 hsn_sac="85238020",
                 product_type="GOODS",
+                current_stock=Decimal("1000.00"),
+                opening_stock=Decimal("1000.00"),
                 uom="PCS",
                 sales_price=Decimal("10000.00"),
                 purchase_price=Decimal("5000.00"),

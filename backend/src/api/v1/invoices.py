@@ -151,6 +151,9 @@ def create_invoice(
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
+    if rounded_total <= 0:
+        raise HTTPException(status_code=400, detail="Invoice total must be greater than zero.")
+
     invoice = Invoice(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
@@ -200,6 +203,52 @@ def create_invoice(
     db.commit()
     db.refresh(invoice)
     return invoice
+
+
+@router.get("/stats")
+def invoice_stats(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+):
+    """Returns aggregate invoice statistics for the tenant."""
+    from sqlalchemy import func, case
+    stats = db.query(
+        func.count(Invoice.id).label("total"),
+        func.count(case((Invoice.status == "DRAFT", 1))).label("draft"),
+        func.count(case((Invoice.status == "POSTED", 1))).label("posted"),
+        func.count(case((Invoice.status == "PARTIALLY_PAID", 1))).label("partially_paid"),
+        func.count(case((Invoice.status == "PAID", 1))).label("paid"),
+        func.count(case((Invoice.status == "CANCELLED", 1))).label("cancelled"),
+        func.coalesce(func.sum(Invoice.total), 0).label("total_amount"),
+        func.coalesce(func.sum(Invoice.amount_paid), 0).label("collected"),
+    ).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None,
+    ).first()
+
+    outstanding = float(stats.total_amount) - float(stats.collected)
+    overdue = db.query(
+        func.coalesce(func.sum(Invoice.total - Invoice.amount_paid), 0)
+    ).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None,
+        Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
+        Invoice.due_date < func.current_date(),
+    ).scalar() or 0
+
+    return {
+        "total": stats.total,
+        "draft": stats.draft,
+        "posted": stats.posted,
+        "partially_paid": stats.partially_paid,
+        "paid": stats.paid,
+        "cancelled": stats.cancelled,
+        "total_amount": float(stats.total_amount),
+        "collected": float(stats.collected),
+        "outstanding": float(outstanding),
+        "overdue": float(overdue),
+    }
+
 
 @router.get("", response_model=PaginatedInvoiceResponse)
 def list_invoices(

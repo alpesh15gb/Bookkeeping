@@ -72,6 +72,8 @@ class TestVendorBills(unittest.TestCase):
                 sku="APL-MBP-M3MX",
                 hsn_sac="84713010",
                 product_type="GOODS",
+                current_stock=Decimal("1000.00"),
+                opening_stock=Decimal("1000.00"),
                 uom="PCS",
                 sales_price=Decimal("249900.00"),
                 purchase_price=Decimal("200000.00"),

@@ -99,7 +99,7 @@ class TestCompanyAndSettings(unittest.TestCase):
             self.assertEqual(settings.currency, "INR")
 
             series_count = db.query(NumberingSeries).filter(NumberingSeries.tenant_id == uuid.UUID(new_tenant_id)).count()
-            self.assertEqual(series_count, 12) # Expanded document types
+            self.assertEqual(series_count, 14) # Expanded document types
         finally:
             db.close()
 
@@ -201,7 +201,7 @@ class TestCompanyAndSettings(unittest.TestCase):
         res = self.client.get("/api/v1/settings/series", headers=self.headers)
         self.assertEqual(res.status_code, 200)
         series_list = res.json()
-        self.assertEqual(len(series_list), 12)
+        self.assertEqual(len(series_list), 14)
 
         invoice_series = next(s for s in series_list if s["document_type"] == "INVOICE")
         self.assertEqual(invoice_series["prefix"], "INV/2026/")

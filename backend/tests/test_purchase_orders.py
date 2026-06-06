@@ -49,6 +49,8 @@ class TestPurchaseOrderWorkflow(unittest.TestCase):
             sku="TEST-001",
             hsn_sac="1234",
             product_type="GOODS",
+                current_stock=Decimal("1000.00"),
+                opening_stock=Decimal("1000.00"),
             uom="PCS",
             sales_price=Decimal("1000.00"),
             purchase_price=Decimal("800.00"),

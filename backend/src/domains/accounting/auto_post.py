@@ -164,9 +164,12 @@ def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> Jo
     # Stock ledger: decrement stock for each product line
     for line in invoice.lines:
         if line.product_id and line.quantity:
-            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
-            if product:
-                product.current_stock = (product.current_stock or Decimal("0")) - line.quantity
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
+            if product and product.product_type == "GOODS":
+                available = product.current_stock or Decimal("0")
+                if available < line.quantity:
+                    raise ValueError(f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
+                product.current_stock = available - line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
@@ -188,10 +191,22 @@ def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> Jo
 def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntry:
     """Auto-post a bill on creation. Creates journal entry and sets status to POSTED."""
     _check_no_existing_posting(db, tenant_id, "BILL", bill.id)
+
+    # Duplicate bill number guard per vendor
+    existing = db.query(Bill).filter(
+        Bill.tenant_id == tenant_id,
+        Bill.contact_id == bill.contact_id,
+        Bill.bill_number == bill.bill_number,
+        Bill.deleted_at == None,
+    ).first()
+    if existing and existing.id != bill.id:
+        raise ValueError(f"Duplicate bill number {bill.bill_number} for this vendor.")
+
     resolver = AccountResolver(db, tenant_id)
     vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
     purchase_expense_account_id = resolver.resolve("purchases")
     tax = _resolve_tax_accounts(resolver, "input")
+    tds_account_id = resolver.resolve("liability.tds") if bill.tds_amount and bill.tds_amount > 0 else None
 
     draft = LedgerPostingEngine.create_bill_posting(
         tenant_id=tenant_id,
@@ -214,14 +229,16 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
         cess_amount=bill.cess_amount,
         round_off_account_id=tax["round_off"],
         round_off_amount=bill.round_off,
+        tds_account_id=tds_account_id,
+        tds_amount=bill.tds_amount or Decimal("0"),
     )
     commit_ledger_draft(db, tenant_id, draft)
 
     # Stock ledger: increment stock for each product line
     for line in bill.lines:
         if line.product_id and line.quantity:
-            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
-            if product:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
+            if product and product.product_type == "GOODS":
                 product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
@@ -240,6 +257,14 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
 
 
 # --- Auto-Post Expense ---------------------------------------------------
+# NOTE: Expenses are NOT auto-posted on creation. They require a manual /post call.
+# This is a deliberate design: expenses often need review before posting (e.g., receipt
+# attachment, approval workflows). The /post endpoint in expenses.py handles posting
+# with the correct bank_account_id from the expense record.
+#
+# auto_post_expense below is used ONLY by batch import tools (Vyapar, Tally) that
+# create already-verified expenses. It uses the default cash account since imported
+# expenses may not have a bank_account_id.
 
 def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> JournalEntry:
     """Auto-post an expense on creation. Creates journal entry and sets status to POSTED."""
@@ -257,7 +282,7 @@ def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> Jo
         expense_account_id = resolver.resolve("expense.misc")
 
     resolver = AccountResolver(db, tenant_id)
-    cash_account_id = resolver.resolve("assets.cash")
+    cash_account_id = expense.bank_account_id if expense.bank_account_id else resolver.resolve("assets.cash")
     tax = _resolve_tax_accounts(resolver, "input")
 
     draft = LedgerPostingEngine.create_expense_posting(
@@ -295,7 +320,7 @@ def auto_post_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote) -> 
     _check_no_existing_posting(db, tenant_id, "CREDIT_NOTE", cn.id)
     contact_id = cn.invoice.contact_id if cn.invoice else None
     if not contact_id:
-        return cn
+        raise ValueError("Credit Note must be linked to an invoice with a contact.")
 
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{contact_id}")
@@ -337,7 +362,7 @@ def auto_post_debit_note(db: Session, tenant_id: uuid.UUID, dn: DebitNote) -> Jo
     _check_no_existing_posting(db, tenant_id, "DEBIT_NOTE", dn.id)
     contact_id = dn.invoice.contact_id if dn.invoice else None
     if not contact_id:
-        return dn
+        raise ValueError("Debit Note must be linked to an invoice with a contact.")
 
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{contact_id}")
@@ -379,23 +404,50 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
     if invoice.status not in ("POSTED", "PARTIALLY_PAID"):
         raise ValueError(f"Cannot cancel invoice in status {invoice.status}")
 
-    from src.infrastructure.database.models import PaymentAllocation
+    from src.infrastructure.database.models import PaymentAllocation, JournalEntry, JournalLine
     allocations = db.query(PaymentAllocation).filter(
         PaymentAllocation.invoice_id == invoice.id,
     ).first()
     if allocations:
         raise ValueError("Cannot cancel invoice with existing payments. Reverse payments first.")
 
+    # Secondary guard: check for any PAYMENT journal entries linked to this contact
+    # after the invoice date (catches direct payments without allocation records)
+    payment_entries = db.query(JournalEntry).join(
+        JournalLine, JournalLine.entry_id == JournalEntry.id
+    ).filter(
+        JournalEntry.tenant_id == tenant_id,
+        JournalEntry.source_type.in_(["PAYMENT"]),
+        JournalEntry.entry_date >= invoice.issue_date,
+    ).first()
+    if payment_entries:
+        # Verify the payment is for the same contact by checking the customer account
+        customer_account_id = db.query(Account.id).filter(
+            Account.tenant_id == tenant_id,
+            Account.name.ilike(f"%{invoice.contact.name}%"),
+            Account.account_type == "ASSET",
+        ).first()
+        if customer_account_id:
+            linked_payment = db.query(JournalLine).filter(
+                JournalLine.entry_id == payment_entries.id,
+                JournalLine.account_id == customer_account_id[0],
+            ).first()
+            if linked_payment:
+                raise ValueError("Cannot cancel: active payment journal entries exist for this customer. Reverse payments first.")
+
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
     tax = _resolve_tax_accounts(resolver, "output")
 
+    # Use invoice date for cancellation, not today — ensures reversal falls in same period
+    cancel_date = invoice.issue_date
+
     draft = LedgerPostingEngine.create_invoice_reversal_posting(
         tenant_id=tenant_id,
         invoice_id=invoice.id,
         invoice_number=invoice.invoice_number,
-        cancel_date=date.today(),
+        cancel_date=cancel_date,
         customer_account_id=customer_account_id,
         sales_revenue_account_id=sales_revenue_account_id,
         subtotal=invoice.subtotal,
@@ -418,13 +470,13 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
     # Reverse stock ledger: increment stock for each product line (restoring stock)
     for line in invoice.lines:
         if line.product_id and line.quantity:
-            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
-            if product:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
+            if product and product.product_type == "GOODS":
                 product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    reference_type="INVOICE_CANCEL",
+                    reference_type="INVOICE_REVERSAL",
                     reference_id=invoice.id,
                     quantity=line.quantity,
                     balance_quantity=product.current_stock,
@@ -456,6 +508,7 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
     vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
     purchase_expense_account_id = resolver.resolve("purchases")
     tax = _resolve_tax_accounts(resolver, "input")
+    tds_account_id = resolver.resolve("liability.tds") if bill.tds_amount and bill.tds_amount > 0 else None
 
     draft = LedgerPostingEngine.create_bill_reversal_posting(
         tenant_id=tenant_id,
@@ -478,19 +531,24 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
         cess_amount=bill.cess_amount,
         round_off_account_id=tax["round_off"],
         round_off_amount=bill.round_off,
+        tds_account_id=tds_account_id,
+        tds_amount=bill.tds_amount or Decimal("0"),
     )
     commit_ledger_draft(db, tenant_id, draft)
 
     # Reverse stock ledger: decrement stock for each product line (reversing the purchase)
     for line in bill.lines:
         if line.product_id and line.quantity:
-            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
-            if product:
-                product.current_stock = (product.current_stock or Decimal("0")) - line.quantity
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
+            if product and product.product_type == "GOODS":
+                available = product.current_stock or Decimal("0")
+                if available < line.quantity:
+                    raise ValueError(f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
+                product.current_stock = available - line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    reference_type="BILL_CANCEL",
+                    reference_type="BILL_REVERSAL",
                     reference_id=bill.id,
                     quantity=-line.quantity,
                     balance_quantity=product.current_stock,
@@ -650,6 +708,7 @@ def record_invoice_payment(
     user_id: uuid.UUID,
 ) -> None:
     """Record a payment against an invoice. Updates amount_paid and status."""
+    payment_amount = Decimal(str(payment_amount))
     if invoice.status not in ("POSTED", "PARTIALLY_PAID"):
         raise ValueError(f"Cannot record payment for invoice in status {invoice.status}")
 
@@ -675,6 +734,7 @@ def record_bill_payment(
     user_id: uuid.UUID,
 ) -> None:
     """Record a payment against a bill."""
+    payment_amount = Decimal(str(payment_amount))
     if bill.status not in ("POSTED", "PARTIALLY_PAID"):
         raise ValueError(f"Cannot record payment for bill in status {bill.status}")
 
@@ -726,8 +786,8 @@ def auto_post_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn) -
     # Stock ledger: increment stock for each product line (goods returned)
     for line in sr.lines:
         if line.product_id and line.quantity:
-            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
-            if product:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
+            if product and product.product_type == "GOODS":
                 product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
@@ -780,9 +840,12 @@ def auto_post_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseRet
     # Stock ledger: decrement stock for each product line (goods returned to vendor)
     for line in pr.lines:
         if line.product_id and line.quantity:
-            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
-            if product:
-                product.current_stock = (product.current_stock or Decimal("0")) - line.quantity
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
+            if product and product.product_type == "GOODS":
+                available = product.current_stock or Decimal("0")
+                if available < line.quantity:
+                    raise ValueError(f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
+                product.current_stock = available - line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
@@ -837,13 +900,16 @@ def cancel_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn, user
     # Reverse stock: decrement stock (undoing the stock that came in from the sales return)
     for line in sr.lines:
         if line.product_id and line.quantity:
-            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
-            if product:
-                product.current_stock = (product.current_stock or Decimal("0")) - line.quantity
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
+            if product and product.product_type == "GOODS":
+                available = product.current_stock or Decimal("0")
+                if available < line.quantity:
+                    raise ValueError(f"Cannot cancel sales return: insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
+                product.current_stock = available - line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    reference_type="SALES_RETURN_CANCEL",
+                    reference_type="SALES_RETURN_REVERSAL",
                     reference_id=sr.id,
                     quantity=-line.quantity,
                     balance_quantity=product.current_stock,
@@ -894,13 +960,13 @@ def cancel_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseReturn
     # Reverse stock: increment stock (undoing the stock that was removed from the purchase return)
     for line in pr.lines:
         if line.product_id and line.quantity:
-            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).first()
-            if product:
+            product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
+            if product and product.product_type == "GOODS":
                 product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    reference_type="PURCHASE_RETURN_CANCEL",
+                    reference_type="PURCHASE_RETURN_REVERSAL",
                     reference_id=pr.id,
                     quantity=line.quantity,
                     balance_quantity=product.current_stock,

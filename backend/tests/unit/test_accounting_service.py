@@ -27,7 +27,7 @@ class TestJournalLineDraft:
         assert line.narration == "test"
 
     def test_negative_amount_raises(self):
-        with pytest.raises(LedgerValidationError, match="cannot be negative"):
+        with pytest.raises(LedgerValidationError, match="must be greater than zero"):
             JournalLineDraft(uuid4(), Decimal("-50.00"), "DEBIT")
 
     def test_invalid_direction_raises(self):
@@ -42,9 +42,9 @@ class TestJournalLineDraft:
         line = JournalLineDraft(uuid4(), Decimal("50.00"), "DEBIT")
         assert line.narration is None
 
-    def test_zero_amount_allowed(self):
-        line = JournalLineDraft(uuid4(), Decimal("0.00"), "DEBIT")
-        assert line.amount == Decimal("0.00")
+    def test_zero_amount_raises(self):
+        with pytest.raises(LedgerValidationError, match="must be greater than zero"):
+            JournalLineDraft(uuid4(), Decimal("0.00"), "DEBIT")
 
 
 # =========================================================================
@@ -107,17 +107,17 @@ class TestJournalEntryDraft:
         )
         assert len(entry.lines) == 3
 
-    def test_zero_amount_lines_valid(self):
-        entry = JournalEntryDraft(
-            tenant_id=uuid4(), entry_date=date.today(),
-            reference_number="ZERO", description="Zero",
-            source_type="MANUAL", source_id=uuid4(),
-            lines=[
-                JournalLineDraft(uuid4(), Decimal("0.00"), "DEBIT"),
-                JournalLineDraft(uuid4(), Decimal("0.00"), "CREDIT"),
-            ],
-        )
-        assert len(entry.lines) == 2
+    def test_zero_amount_lines_raises(self):
+        with pytest.raises(LedgerValidationError, match="must be greater than zero"):
+            JournalEntryDraft(
+                tenant_id=uuid4(), entry_date=date.today(),
+                reference_number="ZERO", description="Zero",
+                source_type="MANUAL", source_id=uuid4(),
+                lines=[
+                    JournalLineDraft(uuid4(), Decimal("0.00"), "DEBIT"),
+                    JournalLineDraft(uuid4(), Decimal("0.00"), "CREDIT"),
+                ],
+            )
 
 
 # =========================================================================
@@ -287,6 +287,7 @@ class TestLedgerPostingEngine:
             cust_acc, rev_acc, Decimal("1000.00"),
             cgst_account_id=cgst_acc, cgst_amount=Decimal("90.00"),
         )
+        assert draft.source_type == "INVOICE_REVERSAL"
         assert draft.reference_number == "REV-INV-001"
         assert len(draft.lines) == 3
         # Debit revenue (reverses credit)

@@ -11,8 +11,8 @@ class LedgerValidationError(Exception):
 
 class JournalLineDraft:
     def __init__(self, account_id: uuid.UUID, amount: Decimal, direction: str, narration: Optional[str] = None):
-        if amount < Decimal("0.00"):
-            raise LedgerValidationError("Journal Line amount cannot be negative.")
+        if amount <= Decimal("0.00"):
+            raise LedgerValidationError("Journal Line amount must be greater than zero.")
         if direction not in ("DEBIT", "CREDIT"):
             raise LedgerValidationError("Direction must be either DEBIT or CREDIT.")
         
@@ -50,7 +50,7 @@ class JournalEntryDraft:
         credit_sum = sum(line.amount for line in self.lines if line.direction == "CREDIT")
 
         diff = abs(debit_sum - credit_sum)
-        if diff > Decimal("0.01"):
+        if diff > Decimal("0.00"):
             raise LedgerValidationError(
                 f"Ledger out of balance. Debits ({debit_sum}) must equal Credits ({credit_sum}). "
                 f"Diff: {diff}"
@@ -154,6 +154,8 @@ class LedgerPostingEngine:
         cess_amount: Decimal = Decimal("0.00"),
         round_off_account_id: Optional[uuid.UUID] = None,
         round_off_amount: Decimal = Decimal("0.00"),
+        tds_account_id: Optional[uuid.UUID] = None,
+        tds_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         """
         Generates Double Entry Posting for Purchase Bills (Payables).
@@ -162,12 +164,14 @@ class LedgerPostingEngine:
           - Purchase Expense A/c (Inventory/COGS) -> Subtotal net of discount
           - Input Tax Accounts (CGST, SGST, IGST, etc.) -> tax splits
         Credits:
-          - Vendor A/c (Accounts Payable) -> Bill Total
+          - Vendor A/c (Accounts Payable) -> Bill Total minus TDS
+          - TDS Payable A/c -> TDS deducted at source
         """
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
         bill_total = net_subtotal + tax_total
+        vendor_payable = bill_total - tds_amount
 
         # 1. Debit Purchase Expense (net of discount)
         lines.append(JournalLineDraft(purchase_expense_account_id, net_subtotal, "DEBIT", f"Expense: Bill {bill_number}"))
@@ -184,8 +188,12 @@ class LedgerPostingEngine:
         if cess_amount > 0 and cess_account_id:
             lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Cess Input Tax"))
 
-        # 3. Credit Accounts Payable
-        lines.append(JournalLineDraft(vendor_account_id, bill_total, "CREDIT", f"Payable: Bill {bill_number}"))
+        # 3. Credit Accounts Payable (reduced by TDS)
+        lines.append(JournalLineDraft(vendor_account_id, vendor_payable, "CREDIT", f"Payable: Bill {bill_number}"))
+
+        # 4. Credit TDS Payable (if TDS deducted)
+        if tds_amount > 0 and tds_account_id:
+            lines.append(JournalLineDraft(tds_account_id, tds_amount, "CREDIT", f"TDS Deducted: Bill {bill_number}"))
 
         if round_off_amount != 0 and round_off_account_id:
             if round_off_amount > 0:
@@ -319,7 +327,7 @@ class LedgerPostingEngine:
             entry_date=cancel_date,
             reference_number=f"REV-{expense_number}",
             description=f"Reversal of expense {expense_number}",
-            source_type="EXPENSE",
+            source_type="EXPENSE_REVERSAL",
             source_id=expense_id,
             lines=lines
         )
@@ -528,18 +536,22 @@ class LedgerPostingEngine:
 
         if round_off_amount != 0 and round_off_account_id:
             if round_off_amount > 0:
-                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {credit_note_number}"))
-                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {credit_note_number}"))
-            else:
+                # Original CN: Credit customer, Debit round-off
+                # Reversal: Debit customer, Credit round-off
                 lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {credit_note_number}"))
                 lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {credit_note_number}"))
+            else:
+                # Original CN: Debit round-off, Credit customer
+                # Reversal: Credit round-off, Debit customer
+                lines.append(JournalLineDraft(round_off_account_id, abs(round_off_amount), "DEBIT", f"Round-off Reversal: {credit_note_number}"))
+                lines.append(JournalLineDraft(customer_account_id, abs(round_off_amount), "CREDIT", f"Round-off Reversal: {credit_note_number}"))
 
         return JournalEntryDraft(
             tenant_id=tenant_id,
             entry_date=cancel_date,
             reference_number=f"REV-{credit_note_number}",
             description=f"Reversal of credit note {credit_note_number}",
-            source_type="CREDIT_NOTE",
+            source_type="CREDIT_NOTE_REVERSAL",
             source_id=credit_note_id,
             lines=lines
         )
@@ -597,7 +609,7 @@ class LedgerPostingEngine:
             entry_date=cancel_date,
             reference_number=f"REV-{debit_note_number}",
             description=f"Reversal of debit note {debit_note_number}",
-            source_type="DEBIT_NOTE",
+            source_type="DEBIT_NOTE_REVERSAL",
             source_id=debit_note_id,
             lines=lines
         )
@@ -657,7 +669,7 @@ class LedgerPostingEngine:
             entry_date=cancel_date,
             reference_number=f"REV-{invoice_number}",
             description=f"Reversal of invoice {invoice_number}",
-            source_type="INVOICE",
+            source_type="INVOICE_REVERSAL",
             source_id=invoice_id,
             lines=lines
         )
@@ -684,13 +696,16 @@ class LedgerPostingEngine:
         cess_amount: Decimal = Decimal("0.00"),
         round_off_account_id: Optional[uuid.UUID] = None,
         round_off_amount: Decimal = Decimal("0.00"),
+        tds_account_id: Optional[uuid.UUID] = None,
+        tds_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
         bill_total = net_subtotal + tax_total
+        vendor_payable = bill_total - tds_amount
 
-        lines.append(JournalLineDraft(vendor_account_id, bill_total, "DEBIT", f"Reversal of vendor bill: {bill_number}"))
+        lines.append(JournalLineDraft(vendor_account_id, vendor_payable, "DEBIT", f"Reversal of vendor bill: {bill_number}"))
         lines.append(JournalLineDraft(purchase_expense_account_id, net_subtotal, "CREDIT", f"Reversal of purchase expense: {bill_number}"))
 
         if cgst_amount > 0 and cgst_account_id:
@@ -703,6 +718,11 @@ class LedgerPostingEngine:
             lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "CREDIT", "UTGST Input Reversal"))
         if cess_amount > 0 and cess_account_id:
             lines.append(JournalLineDraft(cess_account_id, cess_amount, "CREDIT", "Cess Input Reversal"))
+
+        # TDS reversal: debit TDS Payable, credit vendor
+        if tds_amount > 0 and tds_account_id:
+            lines.append(JournalLineDraft(tds_account_id, tds_amount, "DEBIT", f"TDS Reversal: {bill_number}"))
+            lines.append(JournalLineDraft(vendor_account_id, tds_amount, "CREDIT", f"TDS Reversal: {bill_number}"))
 
         if round_off_amount != 0 and round_off_account_id:
             if round_off_amount > 0:
@@ -717,7 +737,7 @@ class LedgerPostingEngine:
             entry_date=cancel_date,
             reference_number=f"REV-{bill_number}",
             description=f"Reversal of vendor bill {bill_number}",
-            source_type="BILL",
+            source_type="BILL_REVERSAL",
             source_id=bill_id,
             lines=lines
         )
@@ -740,7 +760,7 @@ class LedgerPostingEngine:
             entry_date=cancel_date,
             reference_number=f"REV-{payment_number}",
             description=f"Reversal of payment receipt {payment_number}",
-            source_type="PAYMENT",
+            source_type="PAYMENT_REVERSAL",
             source_id=payment_id,
             lines=lines
         )
@@ -763,7 +783,7 @@ class LedgerPostingEngine:
             entry_date=cancel_date,
             reference_number=f"REV-{payment_number}",
             description=f"Reversal of vendor payment {payment_number}",
-            source_type="PAYMENT",
+            source_type="PAYMENT_REVERSAL",
             source_id=payment_id,
             lines=lines
         )

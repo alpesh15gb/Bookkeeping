@@ -12,6 +12,7 @@ from src.core.database import get_db_session
 from src.api.deps import enforce_permission
 from src.domains.accounting.report_services import (
     BalanceSheetService,
+    TrialBalanceService,
     GSTR1Service,
     GSTR3BService,
     AgingService,
@@ -23,6 +24,7 @@ from src.domains.accounting.report_services import (
 )
 from src.schemas.report_schemas import (
     BalanceSheetResponse,
+    TrialBalanceResponse,
     GSTR1Response,
     GSTR3BResponse,
     AgingReportResponse,
@@ -58,6 +60,28 @@ def get_balance_sheet(
     tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
 ):
     return BalanceSheetService.get(db, tenant_id, as_of_date)
+
+
+# ---------------------------------------------------------------------------
+# Trial Balance
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/trial-balance",
+    response_model=TrialBalanceResponse,
+    summary="Trial Balance",
+    description=(
+        "Returns the Trial Balance as of a given date. "
+        "Shows all accounts (Asset, Liability, Equity, Revenue, Expense) with "
+        "opening balance, period debits/credits, and closing balance."
+    ),
+)
+def get_trial_balance(
+    as_of_date: date = Query(..., description="Report date, e.g. 2025-03-31"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    return TrialBalanceService.get(db, tenant_id, as_of_date)
 
 
 # ---------------------------------------------------------------------------

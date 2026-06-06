@@ -1,11 +1,21 @@
 import uuid
-from datetime import date
+from datetime import date, timedelta
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
+
+MAX_FUTURE_DAYS = 30
 
 
 def validate_period_open(db: Session, tenant_id: uuid.UUID, entry_date: date) -> None:
     from src.infrastructure.database.models import AccountingPeriod, FinancialYear
+
+    # Reject future-dated postings beyond configurable limit
+    today = date.today()
+    if entry_date > today + timedelta(days=MAX_FUTURE_DAYS):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Cannot post to a date more than {MAX_FUTURE_DAYS} days in the future ({entry_date}).",
+        )
 
     # Check if any FY is in READY_TO_CLOSE (year-end close in progress)
     closing_fy = db.query(FinancialYear).filter(

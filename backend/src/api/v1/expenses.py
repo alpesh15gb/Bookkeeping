@@ -3,10 +3,11 @@ from decimal import Decimal
 from typing import List, Optional
 from datetime import date
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from pydantic import BaseModel, validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from src.api.deps import get_db_session, enforce_permission
-from src.infrastructure.database.models import Expense, ExpenseCategory
+from src.api.deps import get_db_session, enforce_permission, get_current_user
+from src.infrastructure.database.models import Expense, ExpenseCategory, User
 from src.core.rate_limiter import limiter
 from src.core.config import settings
 from src.schemas.expense_schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseListResponse, ExpensePreviewRequest, ExpensePreviewResponse
@@ -16,6 +17,26 @@ from src.domains.taxation.services import GSTEngine
 from src.domains.company.services import resolve_origin_state_code
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
+
+
+def _parse_date(s: Optional[str], param_name: str) -> Optional[date]:
+    """Parse a date string in YYYY-MM-DD format. Raises HTTPException on invalid format."""
+    if s is None:
+        return None
+    try:
+        return date.fromisoformat(s)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid date format for {param_name}. Use YYYY-MM-DD.")
+
+
+class BulkDeleteRequest(BaseModel):
+    ids: List[uuid.UUID]
+
+    @validator('ids')
+    def check_max_ids(cls, v):
+        if len(v) > 100:
+            raise ValueError("Cannot bulk delete more than 100 items at once.")
+        return v
 
 
 def _compute_expense_totals(db: Session, tenant_id: uuid.UUID, amount: Decimal, gst_rate: Decimal, place_of_supply_state_code: str) -> dict:
@@ -91,12 +112,12 @@ def _gen_expense_number(db: Session, tenant_id: uuid.UUID) -> str:
 
 @router.post("/bulk-delete")
 def bulk_delete_expenses(
-    payload: dict,
+    payload: BulkDeleteRequest,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:delete")),
 ):
     """Bulk delete multiple expenses."""
-    ids = payload.get("ids", [])
+    ids = payload.ids
     if not ids:
         raise HTTPException(status_code=400, detail="No IDs provided.")
 
@@ -191,8 +212,10 @@ def list_expenses(
     )
     if status_filter:
         q = q.filter(Expense.status == status_filter)
-    if date_from and date_to:
-        q = q.filter(Expense.expense_date >= date_from, Expense.expense_date <= date_to)
+    date_from_parsed = _parse_date(date_from, "date_from")
+    date_to_parsed = _parse_date(date_to, "date_to")
+    if date_from_parsed and date_to_parsed:
+        q = q.filter(Expense.expense_date >= date_from_parsed, Expense.expense_date <= date_to_parsed)
     offset = (page - 1) * limit
     q = q.order_by(Expense.expense_date.desc(), Expense.created_at.desc())
     q = q.offset(offset).limit(limit)
@@ -330,6 +353,9 @@ def post_expense(
     if expense.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft expenses can be posted.")
 
+    from src.domains.accounting.auto_post import _check_no_existing_posting
+    _check_no_existing_posting(db, tenant_id, "EXPENSE", expense.id)
+
     category = db.query(ExpenseCategory).filter(
         ExpenseCategory.id == expense.expense_category_id,
         ExpenseCategory.tenant_id == tenant_id,
@@ -389,6 +415,7 @@ def cancel_expense(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:finalize")),
+    current_user: User = Depends(get_current_user),
 ):
     """Cancels a posted expense by reversing its journal entry."""
     expense = db.query(Expense).filter(
@@ -455,7 +482,7 @@ def cancel_expense(
     expense.status = "CANCELLED"
     from datetime import datetime, timezone
     expense.cancelled_at = datetime.now(timezone.utc)
-    expense.cancelled_by = tenant_id
+    expense.cancelled_by = current_user.id
     db.commit()
 
     db.refresh(expense)
@@ -482,6 +509,9 @@ def clone_expense(
 
     new_number = _gen_expense_number(db, tenant_id)
 
+    place_of_supply = original.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
+    totals = _compute_expense_totals(db, tenant_id, original.amount, original.gst_rate, place_of_supply)
+
     cloned = Expense(
         tenant_id=tenant_id,
         expense_number=new_number,
@@ -492,13 +522,13 @@ def clone_expense(
         description=original.description,
         amount=original.amount,
         gst_rate=original.gst_rate,
-        cgst_amount=original.cgst_amount,
-        sgst_amount=original.sgst_amount,
-        igst_amount=original.igst_amount,
-        utgst_amount=original.utgst_amount,
-        cess_amount=original.cess_amount,
-        round_off=original.round_off,
-        total=original.total,
+        cgst_amount=totals["cgst_amount"],
+        sgst_amount=totals["sgst_amount"],
+        igst_amount=totals["igst_amount"],
+        utgst_amount=totals["utgst_amount"],
+        cess_amount=totals["cess_amount"],
+        round_off=totals["round_off"],
+        total=totals["total"],
         status="DRAFT",
         notes=original.notes,
         reference_number=original.reference_number,

@@ -105,6 +105,7 @@ class NumberingSeriesService:
             "CREDIT_NOTE", "DEBIT_NOTE",
             "PURCHASE_ORDER", "SALES_ORDER",
             "DELIVERY_CHALLAN", "PROFORMA_INVOICE",
+            "SALES_RETURN", "PURCHASE_RETURN",
         ]:
             exists = db.query(NumberingSeries).filter(
                 NumberingSeries.tenant_id == tenant_id,
@@ -112,6 +113,23 @@ class NumberingSeriesService:
             ).first()
             if not exists:
                 NumberingSeriesService.seed_default_series(db, tenant_id, doc_type)
+
+    @staticmethod
+    def update_prefix(db: Session, tenant_id: uuid.UUID, document_type: str, new_prefix: str) -> None:
+        """Update the prefix for a numbering series. Blocks if documents have been issued."""
+        series = db.query(NumberingSeries).filter(
+            NumberingSeries.tenant_id == tenant_id,
+            NumberingSeries.document_type == document_type,
+        ).first()
+        if not series:
+            raise ValueError(f"Numbering series for {document_type} not found.")
+        if series.next_number > 1 and series.prefix != new_prefix:
+            raise ValueError(
+                f"Cannot change prefix for {document_type}: "
+                f"{series.next_number - 1} documents already issued with prefix '{series.prefix}'."
+            )
+        series.prefix = new_prefix
+        db.flush()
 
 
 # ---------------------------------------------------------------------------

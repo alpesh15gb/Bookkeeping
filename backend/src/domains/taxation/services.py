@@ -24,9 +24,9 @@ UNION_TERRITORIES: Set[str] = {
     "26",  # Dadra and Nagar Haveli and Daman and Diu (DNHDD)
     "04",  # Chandigarh
     "35",  # Andaman and Nicobar Islands
-    # Ladakh (38) has its own legislature and applies SGST, not UTGST
-    # Note: Delhi (07), Puducherry (34), Ladakh (38), and Jammu & Kashmir (01) have their own legislatures
-    # and apply SGST, but UTGST applies to Union Territories without a legislature.
+    "38",  # Ladakh — UT without legislature, UTGST applies
+    # Note: Delhi (07), Puducherry (34), and Jammu & Kashmir (01) have their own legislatures
+    # and apply SGST. UTGST applies to Union Territories without a legislature.
 }
 
 def quantize_decimal(value: Decimal) -> Decimal:
@@ -61,10 +61,10 @@ class GSTEngine:
 
     @staticmethod
     def resolve_gst_rate(db, tenant_id, requested_rate: Decimal) -> Decimal:
-        """If tenant is NON_GST, force gst_rate to 0. Otherwise return requested_rate."""
+        """If tenant is NON_GST or GST_COMPOSITION, force gst_rate to 0. Otherwise return requested_rate."""
         from src.infrastructure.database.models import Tenant
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.deleted_at == None).first()
-        if tenant and not tenant.gst_enabled:
+        if tenant and tenant.tax_mode in ("NON_GST", "GST_COMPOSITION"):
             return Decimal("0.00")
         return requested_rate
 

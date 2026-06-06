@@ -77,6 +77,8 @@ class TestCreditNotes(unittest.TestCase):
                 sku="WGT-001",
                 hsn_sac="84713010",
                 product_type="GOODS",
+                current_stock=Decimal("1000.00"),
+                opening_stock=Decimal("1000.00"),
                 uom="PCS",
                 sales_price=Decimal("10000.00"),
                 purchase_price=Decimal("8000.00"),

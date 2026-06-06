@@ -66,11 +66,13 @@ class GSTR1B2CLLine(BaseModel):
 
 
 class GSTR1B2CSLine(BaseModel):
-    """B2CS (intra-state small or unregistered) grouped by GST rate."""
+    """B2CS (intra-state small or unregistered) grouped by GST rate and place of supply."""
     gst_rate: Decimal
+    place_of_supply: Optional[str] = None
     taxable_value: Decimal
     cgst: Decimal
     sgst: Decimal
+    igst: Decimal
     cess: Decimal
 
 
@@ -88,9 +90,9 @@ class GSTR1HSNLine(BaseModel):
 
 
 class GSTR1Response(BaseModel):
+    """Full GSTR-1 outward supply report."""
     period_start: date
     period_end: date
-    gstin: Optional[str] = None
     b2b: List[GSTR1B2BLine]
     b2cl: List[GSTR1B2CLLine]
     b2cs: List[GSTR1B2CSLine]
@@ -101,6 +103,8 @@ class GSTR1Response(BaseModel):
     total_igst: Decimal
     total_cess: Decimal
     total_invoice_value: Decimal
+    rcm_invoices: Optional[List[dict]] = None  # Table 4B: RCM supplies
+    exports: Optional[List[dict]] = None  # Table 6A: Export supplies
 
 
 # ---------------------------------------------------------------------------
@@ -306,4 +310,29 @@ class PartyStatementResponse(BaseModel):
     end_date: date
     ledger: List[PartyStatementRow]
     summary: PartyStatementSummary
+
+
+# ---------------------------------------------------------------------------
+# Trial Balance
+# ---------------------------------------------------------------------------
+
+class TrialBalanceLine(BaseModel):
+    account_name: str
+    account_code: str
+    account_type: str
+    opening_balance: Decimal
+    period_debits: Decimal
+    period_credits: Decimal
+    closing_balance: Decimal
+    closing_direction: str  # "DEBIT" or "CREDIT"
+
+    model_config = {"from_attributes": True}
+
+
+class TrialBalanceResponse(BaseModel):
+    as_of_date: date
+    lines: List[TrialBalanceLine]
+    total_debits: Decimal
+    total_credits: Decimal
+    is_balanced: bool
 

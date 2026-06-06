@@ -128,6 +128,7 @@ class TestGstToggle:
                 "purchase_price": 500,
                 "hsn_sac": "998311",
                 "gst_rate": 18,
+                "opening_stock": 1000,
             },
             headers=headers,
         )

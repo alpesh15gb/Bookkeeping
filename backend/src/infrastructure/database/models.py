@@ -144,6 +144,26 @@ class Contact(Base):
 
 
 # ---------------------------------------------------------------------------
+# PERIOD LOCK AUDIT — tracks who locked/unlocked periods and when
+# ---------------------------------------------------------------------------
+
+class PeriodLockAudit(Base):
+    """Audit trail for period lock/unlock operations."""
+    __tablename__ = "period_lock_audits"
+    __table_args__ = (
+        Index("ix_pla_tenant_date", "tenant_id", "period_date"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    period_date = Column(Date, nullable=False)
+    action = Column(String(10), nullable=False)  # "LOCK" or "UNLOCK"
+    locked_by = Column(UUID(as_uuid=True), nullable=False)
+    locked_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    note = Column(Text)
+
+
+# ---------------------------------------------------------------------------
 # PRODUCT / SERVICE
 # ---------------------------------------------------------------------------
 
@@ -236,6 +256,8 @@ class Invoice(Base):
     reference_number = Column(String(50))        # PO ref, order number
     vyapar_custom_fields = Column(JSON, nullable=False, default=dict)  # UDF from Vyapar
     sales_person_id = Column(UUID(as_uuid=True)) # who made the sale
+    is_rcm = Column(Boolean, nullable=False, default=False)  # Reverse Charge Mechanism
+    supply_type = Column(String(20), nullable=False, default="DOMESTIC")  # DOMESTIC, EXPORT_WITH_TAX, EXPORT_WITHOUT_TAX, SEZ_WITH_TAX, SEZ_WITHOUT_TAX
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
@@ -385,6 +407,7 @@ class Bill(Base):
     vyapar_custom_fields = Column(JSON, nullable=False, default=dict)
     tds_rate = Column(Numeric(5, 2), nullable=False, default=0)    # TDS %
     tds_amount = Column(Numeric(15, 4), nullable=False, default=0)  # TDS deducted
+    itc_eligible = Column(Boolean, nullable=False, default=True)  # ITC eligibility for GSTR-3B
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
