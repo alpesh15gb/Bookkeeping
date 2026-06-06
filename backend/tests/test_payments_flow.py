@@ -65,9 +65,13 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
         try:
             m_a = db.query(TenantMembership).filter(TenantMembership.user_id == db.query(User).filter(User.email == "owner_a@company.com").first().id).first()
             self.tenant_a_id = m_a.tenant_id
+            tenant_a = db.query(Tenant).filter(Tenant.id == self.tenant_a_id).first()
+            tenant_a.tax_mode = "GST_REGULAR"
 
             m_b = db.query(TenantMembership).filter(TenantMembership.user_id == db.query(User).filter(User.email == "owner_b@company.com").first().id).first()
             self.tenant_b_id = m_b.tenant_id
+            tenant_b = db.query(Tenant).filter(Tenant.id == self.tenant_b_id).first()
+            tenant_b.tax_mode = "GST_REGULAR"
 
             # Seed bank details for Tenant A
             bank_a = BankingProfile(

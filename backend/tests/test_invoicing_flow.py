@@ -45,6 +45,8 @@ class TestInvoicingFlow(unittest.TestCase):
         try:
             membership = db.query(TenantMembership).first()
             self.tenant_id = membership.tenant_id
+            tenant = db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+            tenant.tax_mode = "GST_REGULAR"
 
             # Seed bank details
             bank = BankingProfile(
