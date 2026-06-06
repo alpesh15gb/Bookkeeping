@@ -24,7 +24,7 @@ class _BillListViewState extends State<BillListView> {
   final _searchCtrl = TextEditingController();
   Set<String> _selectedIds = {};
   bool _isSelectionMode = false;
-  double _swipeProgress = 0.0;
+  final Map<String, double> _swipeProgress = {};
 
   @override
   void initState() {
@@ -87,21 +87,30 @@ class _BillListViewState extends State<BillListView> {
   }
 
   void _bulkCancel() async {
+    final provider = context.read<BillProvider>();
+    final cancellable = _selectedIds.where((id) {
+      final match = provider.bills.where((b) => b.id.toString() == id);
+      if (match.isEmpty) return false;
+      return match.first.status == 'POSTED' || match.first.status == 'PARTIALLY_PAID';
+    }).toList();
+    if (cancellable.isEmpty) {
+      AppToast.info(context, 'No cancellable bills selected (only Posted/Partial can be cancelled)');
+      return;
+    }
     final confirm = await AppConfirmDialog.show(
       context,
-      title: 'Cancel ${_selectedIds.length} bills?',
+      title: 'Cancel ${cancellable.length} bills?',
       message: 'This will reverse ledger entries for each selected bill.',
     );
     if (confirm == true) {
-      final provider = context.read<BillProvider>();
       int successCount = 0;
-      for (final id in _selectedIds) {
+      for (final id in cancellable) {
         final ok = await provider.cancelBill(id);
         if (ok) successCount++;
       }
       HapticHelper.medium();
       if (mounted) {
-        AppToast.info(context, '$successCount of ${_selectedIds.length} bills cancelled');
+        AppToast.info(context, '$successCount of ${cancellable.length} bills cancelled');
       }
       _clearSelection();
       provider.fetchBills();
@@ -156,10 +165,9 @@ class _BillListViewState extends State<BillListView> {
   }
 
   String _balanceLabel(BillModel bill) {
-    final paid = bill.amountPaid;
-    if (paid <= 0) return 'Unpaid';
-    if (paid >= bill.total) return 'Paid';
-    return 'Partial';
+    if (bill.status == 'PAID') return 'Paid';
+    if (bill.status == 'PARTIALLY_PAID') return 'Partial';
+    return 'Unpaid';
   }
 
   num _balanceAmount(BillModel bill) {
@@ -170,17 +178,24 @@ class _BillListViewState extends State<BillListView> {
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
     final billProvider = context.watch<BillProvider>();
-    final bills = billProvider.bills;
+    final allBills = billProvider.bills;
+    final search = _searchCtrl.text.trim().toLowerCase();
+    final bills = search.isEmpty
+        ? allBills
+        : allBills.where((b) {
+            return b.billNumber.toLowerCase().contains(search) ||
+                (b.contact?.name ?? '').toLowerCase().contains(search);
+          }).toList();
 
-    final draftCount = bills.where((b) => b.status == 'DRAFT').length;
-    final paidCount = bills.where((b) => b.status == 'PAID').length;
-    final partialCount = bills.where((b) => b.status == 'PARTIALLY_PAID').length;
-    final totalCount = bills.length;
+    final draftCount = allBills.where((b) => b.status == 'DRAFT').length;
+    final paidCount = allBills.where((b) => b.status == 'PAID').length;
+    final partialCount = allBills.where((b) => b.status == 'PARTIALLY_PAID').length;
+    final totalCount = allBills.length;
 
     num totalAmount = 0;
     num paidAmount = 0;
     num outstandingAmount = 0;
-    for (final b in bills) {
+    for (final b in allBills) {
       totalAmount += b.total;
       paidAmount += b.amountPaid;
       final bal = b.total - b.amountPaid;
@@ -483,9 +498,10 @@ class _BillListViewState extends State<BillListView> {
 
   Widget _buildSwipeableBill(BillModel bill, Widget child) {
     if (_isSelectionMode) return child;
+    final billId = bill.id.toString();
 
     return Dismissible(
-      key: Key('bill_dismiss_${bill.id}'),
+      key: Key('bill_dismiss_$billId'),
       background: Container(
         alignment: Alignment.centerLeft,
         padding: const EdgeInsets.only(left: 20),
@@ -501,22 +517,22 @@ class _BillListViewState extends State<BillListView> {
       secondaryBackground: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20),
-        color: _swipeProgress > 0.70 ? AppColors.error : AppColors.info,
+        color: (_swipeProgress[billId] ?? 0) > 0.70 ? AppColors.error : AppColors.info,
         child: Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
             Text(
-              _swipeProgress > 0.70 ? 'Delete Bill' : 'Share PDF',
+              (_swipeProgress[billId] ?? 0) > 0.70 ? 'Delete Bill' : 'Share PDF',
               style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
             ),
             const SizedBox(width: 8),
-            Icon(_swipeProgress > 0.70 ? Icons.delete : Icons.share, color: Colors.white),
+            Icon((_swipeProgress[billId] ?? 0) > 0.70 ? Icons.delete : Icons.share, color: Colors.white),
           ],
         ),
       ),
       onUpdate: (details) {
         setState(() {
-          _swipeProgress = details.progress;
+          _swipeProgress[billId] = details.progress;
         });
       },
       confirmDismiss: (direction) async {
@@ -524,11 +540,11 @@ class _BillListViewState extends State<BillListView> {
           _showRecordPaymentDialog(bill);
           return false;
         } else if (direction == DismissDirection.endToStart) {
-          if (_swipeProgress > 0.70) {
+          if ((_swipeProgress[billId] ?? 0) > 0.70) {
             final confirm = await AppConfirmDialog.show(
               context,
               title: 'Delete Bill?',
-              message: 'Delete bill ${bill.billNumber}? This action can be undone.',
+              message: 'Delete bill ${bill.billNumber}? This action cannot be undone. Only DRAFT bills can be deleted.',
             );
             if (confirm == true) {
               _deleteSingleBill(bill);
@@ -643,10 +659,8 @@ class _BillListViewState extends State<BillListView> {
 
                     final formattedPayDate =
                         '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
-                    final randSeq = 1000 + (DateTime.now().millisecondsSinceEpoch % 9000);
                     final payload = {
                       'contact_id': bill.contactId,
-                      'payment_number': 'PAY/${payDate.year}-${(payDate.year + 1) % 100}/$randSeq',
                       'payment_date': formattedPayDate,
                       'payment_mode': mode,
                       'amount': amt,

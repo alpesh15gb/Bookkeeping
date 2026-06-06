@@ -135,10 +135,12 @@ class _ExpenseListViewState extends State<ExpenseListView> {
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => _showForm(),
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _isSelectionMode
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showForm(),
+              child: const Icon(Icons.add),
+            ),
       body: Column(
         children: [
           if (provider.items.isNotEmpty)
@@ -222,12 +224,13 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                             hoverActions: _isSelectionMode
                                                 ? null
                                                 : [
-                                                    ds.AppButton(
-                                                      label: 'Edit',
-                                                      icon: Icons.edit_outlined,
-                                                      isSmall: true,
-                                                      onTap: () => _showForm(expense: exp),
-                                                    ),
+                                                    if (exp['status'] == 'DRAFT')
+                                                      ds.AppButton(
+                                                        label: 'Edit',
+                                                        icon: Icons.edit_outlined,
+                                                        isSmall: true,
+                                                        onTap: () => _showForm(expense: exp),
+                                                      ),
                                                     ds.AppButton(
                                                       label: 'Delete',
                                                       icon: Icons.delete_outline,
