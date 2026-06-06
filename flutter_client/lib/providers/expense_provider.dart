@@ -38,8 +38,9 @@ class ExpenseProvider extends ChangeNotifier {
     ApiClient.fyParams.forEach((k, v) {
       queryParams.add('$k=$v');
     });
-    final queryString = queryParams.isNotEmpty ? '?${queryParams.join('&')}' : '';
-    return Uri.parse('$endpoint$queryString');
+    if (queryParams.isEmpty) return Uri.parse(endpoint);
+    final separator = endpoint.contains('?') ? '&' : '?';
+    return Uri.parse('$endpoint$separator${queryParams.join('&')}');
   }
 
   Future<List<dynamic>> fetchExpenses({int page = 1}) async {
