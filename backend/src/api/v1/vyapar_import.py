@@ -202,7 +202,7 @@ def import_vyapar_backup(
         }
 
         for n in vy_names:
-            name_str = (n["full_name"] or "").strip()
+            name_str = (n["full_name"] or "").strip()[:150]
             phone = (n["phone_number"] or "").strip()
             email = (n["email"] or "").strip()
 
@@ -395,7 +395,7 @@ def import_vyapar_backup(
         item_map: Dict[int, str] = {}  # vyapar item_id -> our product.id str
 
         for i in vy_items:
-            name_str = (i["item_name"] or "").strip()
+            name_str = (i["item_name"] or "").strip()[:150]
             if not name_str:
                 continue
 
