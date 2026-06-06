@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/dashboard_provider.dart';
+import 'package:flutter_client/providers/financial_year_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/invoices/invoice_form_view.dart';
@@ -23,13 +24,22 @@ class SalesDashboardView extends StatefulWidget {
 
 class _SalesDashboardViewState extends State<SalesDashboardView> {
   int _selectedPeriod = 0; // 0=30d, 1=Quarter, 2=Year
+  String? _lastFyId;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final fy = context.read<FinancialYearProvider>();
+      _lastFyId = fy.activeYear?.id;
       context.read<DashboardProvider>().fetchDashboard();
     });
+  }
+
+  void _onFYChanged() {
+    if (mounted) {
+      context.read<DashboardProvider>().fetchDashboard();
+    }
   }
 
   String _fmt(double v) {
@@ -74,8 +84,17 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
   @override
   Widget build(BuildContext context) {
     final d = context.watch<DashboardProvider>();
+    final fy = context.watch<FinancialYearProvider>();
     final isMobile = AdaptiveLayout.isMobile(context);
     final padH = isMobile ? 16.0 : 24.0;
+
+    // Re-fetch dashboard when FY changes
+    if (fy.activeYear?.id != _lastFyId) {
+      _lastFyId = fy.activeYear?.id;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) d.fetchDashboard();
+      });
+    }
 
     if (d.isLoading) {
       return const Scaffold(backgroundColor: AppColors.bgLight, body: DashboardSkeleton());

@@ -208,6 +208,8 @@ def list_invoices(
     search: Optional[str] = None,
     status: Optional[str] = None,
     contact_id: Optional[uuid.UUID] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
@@ -237,6 +239,9 @@ def list_invoices(
 
     if contact_id:
         q = q.filter(Invoice.contact_id == contact_id)
+
+    if date_from and date_to:
+        q = q.filter(Invoice.issue_date >= date_from, Invoice.issue_date <= date_to)
 
     total = q.count()
     results = q.offset(offset).limit(limit).all()

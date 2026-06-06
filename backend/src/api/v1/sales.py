@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 import uuid
@@ -15,6 +15,8 @@ FINALIZED_STATUSES = ["POSTED", "PARTIALLY_PAID", "PAID"]
 
 @router.get("/summary")
 def get_sales_summary(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
@@ -22,7 +24,14 @@ def get_sales_summary(
     Compiles overall sales KPI metrics from finalized invoices.
     Uses database-level SUM aggregations.
     """
-    query = text("""
+    params = {"tenant_id": str(tenant_id)}
+    date_filter = ""
+    if date_from and date_to:
+        date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"
+        params["date_from"] = date_from
+        params["date_to"] = date_to
+
+    query = text(f"""
         SELECT 
             COALESCE(SUM(total), 0) AS total_sales,
             COALESCE(SUM(amount_paid), 0) AS total_received,
@@ -31,8 +40,9 @@ def get_sales_summary(
         WHERE status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')
           AND deleted_at IS NULL
           AND tenant_id = :tenant_id
+          {date_filter}
     """)
-    result = db.execute(query, {'tenant_id': str(tenant_id)}).fetchone()
+    result = db.execute(query, params).fetchone()
 
     total_sales = Decimal(str(result.total_sales)) if result else Decimal("0.00")
     total_received = Decimal(str(result.total_received)) if result else Decimal("0.00")
