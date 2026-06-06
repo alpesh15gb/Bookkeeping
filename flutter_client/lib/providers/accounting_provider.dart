@@ -37,7 +37,11 @@ class AccountingProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load journals (${response.statusCode})';
+    } catch (e) {
+      debugPrint('Error fetching journals: $e');
+      _errorMessage = 'Failed to load journals';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -82,7 +86,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load ledger statement (${response.statusCode})';
+    } catch (e) {
+      debugPrint('Error fetching ledger statement: $e');
+      _errorMessage = 'Failed to load ledger statement';
+    }
     _isLoading = false;
     notifyListeners();
     return null;
@@ -102,7 +110,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load trial balance (${response.statusCode})';
+    } catch (e) {
+      debugPrint('Error fetching trial balance: $e');
+      _errorMessage = 'Failed to load trial balance';
+    }
     _isLoading = false;
     notifyListeners();
     return null;
@@ -122,7 +134,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load profit & loss (${response.statusCode})';
+    } catch (e) {
+      debugPrint('Error fetching profit & loss: $e');
+      _errorMessage = 'Failed to load profit & loss';
+    }
     _isLoading = false;
     notifyListeners();
     return null;
@@ -142,7 +158,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load balance sheet (${response.statusCode})';
+    } catch (e) {
+      debugPrint('Error fetching balance sheet: $e');
+      _errorMessage = 'Failed to load balance sheet';
+    }
     _isLoading = false;
     notifyListeners();
     return null;
@@ -225,7 +245,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load account detail (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching account detail: $e');
+    }
     return null;
   }
 
@@ -238,7 +261,10 @@ class AccountingProvider extends ChangeNotifier {
         await fetchAccounts();
         return true;
       }
-    } catch (_) {}
+      debugPrint('Failed to delete account (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error deleting account: $e');
+    }
     return false;
   }
 
@@ -273,7 +299,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load GSTR-1 (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching GSTR-1: $e');
+    }
     return null;
   }
 
@@ -288,7 +317,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load GSTR-2 (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching GSTR-2: $e');
+    }
     return null;
   }
 
@@ -303,7 +335,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load GSTR-3B (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching GSTR-3B: $e');
+    }
     return null;
   }
 
@@ -318,7 +353,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load receivables aging (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching receivables aging: $e');
+    }
     return null;
   }
 
@@ -333,7 +371,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load payables aging (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching payables aging: $e');
+    }
     return null;
   }
 
@@ -353,7 +394,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load sales analytics (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching sales analytics: $e');
+    }
     return null;
   }
 
@@ -373,7 +417,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load purchase analytics (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching purchase analytics: $e');
+    }
     return null;
   }
 
@@ -389,7 +436,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load outstanding receivables (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching outstanding receivables: $e');
+    }
     return null;
   }
 
@@ -405,7 +455,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load outstanding payables (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching outstanding payables: $e');
+    }
     return null;
   }
 
@@ -427,7 +480,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load cash flow (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching cash flow: $e');
+    }
     return null;
   }
 
@@ -446,7 +502,10 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+      debugPrint('Failed to load party statement (${response.statusCode})');
+    } catch (e) {
+      debugPrint('Error fetching party statement: $e');
+    }
     return null;
   }
 

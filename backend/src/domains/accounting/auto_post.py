@@ -29,13 +29,14 @@ from src.common.audit_log import set_audit_context
 
 
 def _check_no_existing_posting(db: Session, tenant_id: uuid.UUID, source_type: str, source_id: uuid.UUID) -> None:
-    """Guard: prevent duplicate journal entries for the same document."""
+    """Guard: prevent duplicate journal entries for the same document.
+    Uses SELECT FOR UPDATE to prevent race condition between concurrent requests."""
     from src.infrastructure.database.models import JournalEntry
     existing = db.query(JournalEntry.id).filter(
         JournalEntry.tenant_id == tenant_id,
         JournalEntry.source_type == source_type,
         JournalEntry.source_id == source_id,
-    ).first()
+    ).with_for_update().first()
     if existing:
         raise ValueError(f"Document {source_type}:{source_id} already has a journal entry. Duplicate posting blocked.")
 

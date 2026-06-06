@@ -24,8 +24,9 @@ router = APIRouter(prefix="/financial-years", tags=["Financial Year Management"]
 
 
 def _compute_status(fy: FinancialYear, today: date) -> str:
-    # CRITICAL: Check LOCKED/ARCHIVED first — these override everything
-    if fy.status in ("LOCKED", "ARCHIVED"):
+    # CRITICAL: Check stored status first — these override everything
+    # This handles LOCKED, ARCHIVED, and READY_TO_CLOSE (set during year-end close)
+    if fy.status in ("LOCKED", "ARCHIVED", "READY_TO_CLOSE"):
         return fy.status
 
     # The one explicitly selected FY is the logical current FY.
@@ -98,6 +99,7 @@ def list_financial_years(
     fys = (
         db.query(FinancialYear)
         .filter(FinancialYear.tenant_id == tenant_id)
+        .with_for_update(nowait=True)  # Lock rows to prevent race with concurrent close/switch
         .order_by(FinancialYear.start_date.desc())
         .all()
     )
@@ -352,6 +354,12 @@ def close_financial_year(
     computed = _compute_status(fy, today)
     if computed in ("LOCKED", "ARCHIVED"):
         raise HTTPException(status_code=400, detail="Financial year is already closed.")
+
+    # RACE CONDITION FIX: Set status to READY_TO_CLOSE immediately to block
+    # new transactions from being posted during the close process.
+    # validate_period_open checks status and will reject DRAFT->POSTED transitions.
+    fy.status = "READY_TO_CLOSE"
+    db.flush()
 
     # Run readiness check
     dashboard = year_end_dashboard(fy_id=fy_id, db=db, tenant_id=tenant_id)
