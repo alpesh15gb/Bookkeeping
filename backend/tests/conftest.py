@@ -182,8 +182,16 @@ def db_session() -> Generator[Session, None, None]:
     yield session
 
     app.dependency_overrides[get_db_session] = _original_override or override_get_db_session
-    session.rollback()
-    session.close()
+    try:
+        if session.is_active:
+            session.rollback()
+    except Exception:
+        pass
+    finally:
+        try:
+            session.close()
+        except Exception:
+            pass
 
 @pytest.fixture
 def client(db_session):

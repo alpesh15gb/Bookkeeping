@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
-from src.infrastructure.database.models import Contact, Product, TenantMembership
+from src.infrastructure.database.models import Contact, Product, Tenant, TenantMembership
 
 class TestVendorBills(unittest.TestCase):
     def setUp(self):
@@ -45,6 +45,10 @@ class TestVendorBills(unittest.TestCase):
         try:
             membership = db.query(TenantMembership).first()
             self.tenant_id = membership.tenant_id
+
+            # Set tax_mode to GST_REGULAR so GST calculations work
+            tenant = db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
+            tenant.tax_mode = "GST_REGULAR"
 
             # 2. Seed fresh context details under correct tenant_id
             vendor = Contact(

@@ -50,6 +50,7 @@ class TestExpenses(unittest.TestCase):
                 gstin="27AAPFU0939F1ZV",
                 pan="AAPFU0939F",
                 financial_year_start=date(2026, 4, 1),
+                tax_mode="GST_REGULAR",
             )
             membership = TenantMembership(
                 user_id=user_id,
