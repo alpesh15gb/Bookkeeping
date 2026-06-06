@@ -99,6 +99,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
   }
 
   void _bulkCancel() async {
+    final provider = context.read<InvoiceProvider>();
     final cancellable = _selectedIds.where((id) {
       final match = provider.invoices.where((i) => i.id.toString() == id);
       if (match.isEmpty) return false;
@@ -115,7 +116,6 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       message: 'This will reverse ledger entries for each selected invoice.',
     );
     if (confirm == true) {
-      final provider = context.read<InvoiceProvider>();
       int successCount = 0;
       for (final id in cancellable) {
         final ok = await provider.cancelInvoice(id);
@@ -217,7 +217,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       final balance = inv.total - inv.amountPaid;
       if (balance > 0) {
         outstandingAmount += balance;
-        if (inv.status == 'PARTIALLY_PAID' && inv.dueDate != null && inv.dueDate!.isBefore(DateTime.now())) overdueAmount += balance;
+        if (inv.status == 'PARTIALLY_PAID' && inv.dueDate != null && DateTime.tryParse(inv.dueDate!)?.isBefore(DateTime.now()) == true) overdueAmount += balance;
       }
     }
     final avgInvoice = totalCount > 0 ? totalAmount / totalCount : 0;
