@@ -85,6 +85,12 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
     );
   }
 
+
+  String _fmtCurrency(dynamic val) {
+    final parsed = double.tryParse((val ?? 0).toString()) ?? 0.0;
+    return parsed.toStringAsFixed(2);
+  }
+
   Widget _buildAccountsTab() {
     final isMobile = AdaptiveLayout.isMobile(context);
     if (_accounts.isEmpty) {
@@ -124,7 +130,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                 ),
               ),
               Text(
-                '₹${(acc['current_balance'] ?? 0).toStringAsFixed(2)}',
+                '₹${_fmtCurrency(acc['current_balance'])}',
                 style: AppTextStyles.numeric,
               ),
             ],
@@ -228,7 +234,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(r['account_name'] ?? '', style: AppTextStyles.body),
-                      Text('₹${(r['amount']).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                      Text('₹${_fmtCurrency(r['amount'])}', style: AppTextStyles.numeric),
                     ],
                   ),
                 )),
@@ -239,7 +245,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Total Revenue', style: AppTextStyles.bodyMedium),
-                      Text('₹${(_plData!['total_revenue']).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                      Text('₹${_fmtCurrency(_plData!['total_revenue'])}', style: AppTextStyles.numeric),
                     ],
                   ),
                 ),
@@ -268,7 +274,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(e['account_name'] ?? '', style: AppTextStyles.body),
-                      Text('₹${(e['amount']).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                      Text('₹${_fmtCurrency(e['amount'])}', style: AppTextStyles.numeric),
                     ],
                   ),
                 )),
@@ -279,7 +285,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Total Expenses', style: AppTextStyles.bodyMedium),
-                      Text('₹${(_plData!['total_expenses']).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                      Text('₹${_fmtCurrency(_plData!['total_expenses'])}', style: AppTextStyles.numeric),
                     ],
                   ),
                 ),
@@ -293,7 +299,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
               children: [
                 Text('Net Profit', style: AppTextStyles.h2),
                 Text(
-                  '₹${(_plData!['net_profit']).toStringAsFixed(2)}',
+                  '₹${_fmtCurrency(_plData!['net_profit'])}',
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.info, fontFeatures: [FontFeature.tabularFigures()]),
                 ),
               ],
@@ -343,7 +349,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(a['account_name'] ?? '', style: AppTextStyles.body),
-                      Text('₹${(a['balance']).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                      Text('₹${_fmtCurrency(a['balance'])}', style: AppTextStyles.numeric),
                     ],
                   ),
                 )),
@@ -354,7 +360,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Total Assets', style: AppTextStyles.bodyMedium),
-                      Text('₹${(_bsData!['total_assets']).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                      Text('₹${_fmtCurrency(_bsData!['total_assets'])}', style: AppTextStyles.numeric),
                     ],
                   ),
                 ),
@@ -383,7 +389,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(l['account_name'] ?? '', style: AppTextStyles.body),
-                      Text('₹${(l['balance']).toStringAsFixed(2)}', style: AppTextStyles.numeric),
+                      Text('₹${_fmtCurrency(l['balance'])}', style: AppTextStyles.numeric),
                     ],
                   ),
                 )),

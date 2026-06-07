@@ -3,7 +3,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 import uuid
 from decimal import Decimal
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 from src.core.database import get_db_session
@@ -24,8 +24,8 @@ def get_dashboard_metrics(
     date_filter = ""
     if date_from and date_to:
         date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"
-        params["date_from"] = date_from
-        params["date_to"] = date_to
+        params["date_from"] = date.fromisoformat(date_from)
+        params["date_to"] = date.fromisoformat(date_to)
 
     cache_key = make_cache_key("dashboard_metrics", str(tenant_id), date_from or "", date_to or "")
     cached = cache_get(cache_key)
@@ -68,8 +68,8 @@ def get_revenue_trend(
 ):
     params = {"tenant_id": str(tenant_id)}
     if date_from and date_to:
-        params["date_from"] = date_from
-        params["date_to"] = date_to
+        params["date_from"] = date.fromisoformat(date_from)
+        params["date_to"] = date.fromisoformat(date_to)
         date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"
     else:
         date_filter = "AND issue_date >= :cutoff"
@@ -158,6 +158,7 @@ def dashboard_kpis(
         "overdue": float(overdue),
         "net_profit": float(round(total_invoiced - total_expenses, 2)),
     }
+@router.get("/expense-trend")
 def get_expense_trend(
     date_from: Optional[str] = Query(None),
     date_to: Optional[str] = Query(None),
@@ -166,8 +167,8 @@ def get_expense_trend(
 ):
     params = {"tenant_id": str(tenant_id)}
     if date_from and date_to:
-        params["date_from"] = date_from
-        params["date_to"] = date_to
+        params["date_from"] = date.fromisoformat(date_from)
+        params["date_to"] = date.fromisoformat(date_to)
         date_filter = "AND expense_date >= :date_from AND expense_date <= :date_to"
     else:
         date_filter = "AND expense_date >= :cutoff"

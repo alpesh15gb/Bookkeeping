@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 import uuid
+from datetime import date
 from decimal import Decimal
 from typing import List, Optional
 
@@ -28,8 +29,8 @@ def get_sales_summary(
     date_filter = ""
     if date_from and date_to:
         date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"
-        params["date_from"] = date_from
-        params["date_to"] = date_to
+        params["date_from"] = date.fromisoformat(date_from)
+        params["date_to"] = date.fromisoformat(date_to)
 
     query = text(f"""
         SELECT 
@@ -145,6 +146,8 @@ def get_sales_transactions(
     page: int = 1,
     limit: int = 50,
     contact_id: Optional[uuid.UUID] = None,
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
@@ -158,6 +161,10 @@ def get_sales_transactions(
 
     if contact_id:
         q = q.filter(Invoice.contact_id == contact_id)
+    if date_from and date_to:
+        parsed_from = date.fromisoformat(date_from)
+        parsed_to = date.fromisoformat(date_to)
+        q = q.filter(Invoice.issue_date >= parsed_from, Invoice.issue_date <= parsed_to)
 
     results = q.order_by(Invoice.issue_date.desc()).offset(offset).limit(limit).all()
 

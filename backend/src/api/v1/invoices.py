@@ -633,15 +633,25 @@ def preview_credit_note(
 
 @router.get("/credit-notes", response_model=List[CreditNoteListResponse])
 def list_credit_notes(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
-    notes = db.query(CreditNote).options(
+    q = db.query(CreditNote).options(
         joinedload(CreditNote.invoice).joinedload(Invoice.contact)
     ).filter(
         CreditNote.tenant_id == tenant_id,
         CreditNote.deleted_at == None
-    ).all()
+    )
+    if date_from and date_to:
+        try:
+            parsed_from = date.fromisoformat(date_from)
+            parsed_to = date.fromisoformat(date_to)
+            q = q.filter(CreditNote.issue_date >= parsed_from, CreditNote.issue_date <= parsed_to)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+    notes = q.all()
     return [
         CreditNoteListResponse(
             id=cn.id,
@@ -805,15 +815,25 @@ def cancel_credit_note(
 
 @router.get("/debit-notes", response_model=List[DebitNoteListResponse])
 def list_debit_notes(
+    date_from: Optional[str] = Query(None),
+    date_to: Optional[str] = Query(None),
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
-    notes = db.query(DebitNote).options(
+    q = db.query(DebitNote).options(
         joinedload(DebitNote.invoice).joinedload(Invoice.contact)
     ).filter(
         DebitNote.tenant_id == tenant_id,
         DebitNote.deleted_at == None
-    ).all()
+    )
+    if date_from and date_to:
+        try:
+            parsed_from = date.fromisoformat(date_from)
+            parsed_to = date.fromisoformat(date_to)
+            q = q.filter(DebitNote.issue_date >= parsed_from, DebitNote.issue_date <= parsed_to)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
+    notes = q.all()
     return [
         DebitNoteListResponse(
             id=dn.id,

@@ -173,8 +173,8 @@ def create_manual_journal_entry(
 @router.get("/journals", response_model=List[JournalEntryResponse])
 def list_journal_entries(
     source_type: Optional[str] = None,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db_session),
@@ -186,10 +186,10 @@ def list_journal_entries(
 
     if source_type:
         q = q.filter(JournalEntry.source_type == source_type)
-    if start_date:
-        q = q.filter(JournalEntry.entry_date >= start_date)
-    if end_date:
-        q = q.filter(JournalEntry.entry_date <= end_date)
+    if date_from:
+        q = q.filter(JournalEntry.entry_date >= date_from)
+    if date_to:
+        q = q.filter(JournalEntry.entry_date <= date_to)
 
     entries = q.options(
         selectinload(JournalEntry.lines).selectinload(JournalLine.account)
@@ -446,8 +446,8 @@ def get_trial_balance(
 
 @router.get("/profit-loss", response_model=ProfitLossResponse)
 def get_profit_loss_report(
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
@@ -464,10 +464,10 @@ def get_profit_loss_report(
      .outerjoin(JournalEntry, JournalLine.entry_id == JournalEntry.id)\
      .filter(Account.tenant_id == tenant_id, Account.account_type.in_(["REVENUE", "EXPENSE"]), Account.deleted_at == None)
 
-    if start_date:
-        q = q.filter(JournalEntry.entry_date >= start_date)
-    if end_date:
-        q = q.filter(JournalEntry.entry_date <= end_date)
+    if date_from:
+        q = q.filter(JournalEntry.entry_date >= date_from)
+    if date_to:
+        q = q.filter(JournalEntry.entry_date <= date_to)
 
     results = q.group_by(Account.id, Account.name, Account.code, Account.account_type)\
                .order_by(Account.code.asc()).all()
@@ -528,12 +528,13 @@ def recalculate_account_balances(
 @router.get("/balance-sheet", response_model=BalanceSheetResponse)
 def get_balance_sheet(
     as_on_date: Optional[date] = None,
+    date_to: Optional[date] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
     """Generates a Balance Sheet as on a given date (defaults to today)."""
 
-    cutoff = as_on_date or date.today()
+    cutoff = date_to or as_on_date or date.today()
 
     from sqlalchemy import func, case
 
