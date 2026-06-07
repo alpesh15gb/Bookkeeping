@@ -69,23 +69,45 @@ class DashboardProvider extends ChangeNotifier {
     return uri.replace(queryParameters: {...uri.queryParameters, ...queryParams});
   }
 
+  String _appendParam(String endpoint, String key, String? val) {
+    if (val == null) return endpoint;
+    final separator = endpoint.contains('?') ? '&' : '?';
+    return '$endpoint$separator$key=$val';
+  }
+
   Future<void> fetchDashboard({String? dateFrom, String? dateTo}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    final dateParam = dateFrom != null && dateTo != null
-        ? '&date_from=$dateFrom&date_to=$dateTo'
-        : '';
+    var salesUri = '${ApiClient.baseUrl}/sales/summary';
+    var expensesUri = '${ApiClient.baseUrl}/expenses';
+    var billsUri = '${ApiClient.baseUrl}/bills';
+    var metricsUri = '${ApiClient.baseUrl}/dashboard/metrics';
+    var invoicesUri = '${ApiClient.baseUrl}/invoices?limit=5';
+    var revTrendUri = '${ApiClient.baseUrl}/dashboard/revenue-trend';
+    var expTrendUri = '${ApiClient.baseUrl}/dashboard/expense-trend';
+    var cashBankUri = '${ApiClient.baseUrl}/accounting/cash-bank-balances';
+
+    if (dateFrom != null && dateTo != null) {
+      salesUri = _appendParam(_appendParam(salesUri, 'date_from', dateFrom), 'date_to', dateTo);
+      expensesUri = _appendParam(_appendParam(expensesUri, 'date_from', dateFrom), 'date_to', dateTo);
+      billsUri = _appendParam(_appendParam(billsUri, 'date_from', dateFrom), 'date_to', dateTo);
+      metricsUri = _appendParam(_appendParam(metricsUri, 'date_from', dateFrom), 'date_to', dateTo);
+      invoicesUri = _appendParam(_appendParam(invoicesUri, 'date_from', dateFrom), 'date_to', dateTo);
+      revTrendUri = _appendParam(_appendParam(revTrendUri, 'date_from', dateFrom), 'date_to', dateTo);
+      expTrendUri = _appendParam(_appendParam(expTrendUri, 'date_from', dateFrom), 'date_to', dateTo);
+      cashBankUri = _appendParam(_appendParam(cashBankUri, 'date_from', dateFrom), 'date_to', dateTo);
+    }
 
     try {
       // Core endpoints — these must succeed
       final core = await Future.wait([
-        _client.get(_buildUri('${ApiClient.baseUrl}/sales/summary$dateParam')),
-        _client.get(_buildUri('${ApiClient.baseUrl}/expenses$dateParam')),
-        _client.get(_buildUri('${ApiClient.baseUrl}/bills$dateParam')),
-        _client.get(_buildUri('${ApiClient.baseUrl}/dashboard/metrics$dateParam')),
-        _client.get(_buildUri('${ApiClient.baseUrl}/invoices?limit=5$dateParam')),
+        _client.get(_buildUri(salesUri)),
+        _client.get(_buildUri(expensesUri)),
+        _client.get(_buildUri(billsUri)),
+        _client.get(_buildUri(metricsUri)),
+        _client.get(_buildUri(invoicesUri)),
       ]);
 
       final coreFail = core.any((r) => r.statusCode != 200);
@@ -137,11 +159,11 @@ class DashboardProvider extends ChangeNotifier {
       final dateStr = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
 
       final secondary = await Future.wait([
-        _client.get(_buildUri('${ApiClient.baseUrl}/dashboard/revenue-trend$dateParam'))
+        _client.get(_buildUri(revTrendUri))
             .catchError((_) => http.Response('[]', 500)),
-        _client.get(_buildUri('${ApiClient.baseUrl}/dashboard/expense-trend$dateParam'))
+        _client.get(_buildUri(expTrendUri))
             .catchError((_) => http.Response('[]', 500)),
-        _client.get(_buildUri('${ApiClient.baseUrl}/accounting/cash-bank-balances$dateParam'))
+        _client.get(_buildUri(cashBankUri))
             .catchError((_) => http.Response('[]', 500)),
         _client.get(_buildUri('${ApiClient.baseUrl}/reports/outstanding/receivables?as_of_date=$dateStr'))
             .catchError((_) => http.Response('{}', 500)),
