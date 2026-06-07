@@ -73,20 +73,29 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   }
 
   void _bulkCancel() async {
+    final provider = context.read<ExpenseProvider>();
+    final cancellable = _selectedIds.where((id) {
+      final match = provider.items.where((e) => e['id'].toString() == id);
+      if (match.isEmpty) return false;
+      return match.first['status'] == 'POSTED';
+    }).toList();
+    if (cancellable.isEmpty) {
+      AppToast.info(context, 'No cancellable expenses selected (only Posted can be cancelled)');
+      return;
+    }
     final confirm = await AppConfirmDialog.show(
       context,
-      title: 'Cancel ${_selectedIds.length} expenses?',
+      title: 'Cancel ${cancellable.length} expenses?',
       message: 'This will reverse ledger entries for each selected expense.',
     );
     if (confirm == true) {
-      final provider = context.read<ExpenseProvider>();
       int successCount = 0;
-      for (final id in _selectedIds) {
+      for (final id in cancellable) {
         final ok = await provider.cancelExpense(id);
         if (ok) successCount++;
       }
       if (mounted) {
-        AppToast.info(context, '$successCount of ${_selectedIds.length} expenses cancelled');
+        AppToast.info(context, '$successCount of ${cancellable.length} expenses cancelled');
       }
       _clearSelection();
       provider.fetchExpenses(page: provider.currentPage);
@@ -297,7 +306,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                                             ),
                                             const SizedBox(width: 8),
                                             Text(
-                                              'Select All',
+                                              'Page',
                                               style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
                                             ),
                                           ],

@@ -151,6 +151,10 @@ class _AgingReportViewState extends State<AgingReportView> with SingleTickerProv
                 color: AppColors.bgSurface,
                 child: TabBar(
                   controller: _tabController,
+                  onTap: (_) {
+                    // Re-fetch on tab change to ensure fresh data
+                    if (!_isLoading) _fetchReports();
+                  },
                   tabs: const [
                     Tab(text: 'Receivables (AR)'),
                     Tab(text: 'Payables (AP)'),

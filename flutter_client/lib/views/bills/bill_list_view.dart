@@ -190,6 +190,7 @@ class _BillListViewState extends State<BillListView> {
     final draftCount = allBills.where((b) => b.status == 'DRAFT').length;
     final paidCount = allBills.where((b) => b.status == 'PAID').length;
     final partialCount = allBills.where((b) => b.status == 'PARTIALLY_PAID').length;
+    final cancelledCount = allBills.where((b) => b.status == 'CANCELLED').length;
     final totalCount = allBills.length;
 
     num totalAmount = 0;
@@ -278,6 +279,7 @@ class _BillListViewState extends State<BillListView> {
               SummaryStat(label: 'Draft', count: draftCount, color: AppColors.textMuted),
               SummaryStat(label: 'Paid', count: paidCount, color: AppColors.success),
               SummaryStat(label: 'Partial', count: partialCount, color: AppColors.warning),
+              SummaryStat(label: 'Cancelled', count: cancelledCount, color: AppColors.error),
             ]),
 
           Expanded(
@@ -449,7 +451,7 @@ class _BillListViewState extends State<BillListView> {
                                                   ),
                                                   const SizedBox(width: 6),
                                                   Text(
-                                                    'All',
+                                                    'Page',
                                                     style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
                                                   ),
                                                 ],

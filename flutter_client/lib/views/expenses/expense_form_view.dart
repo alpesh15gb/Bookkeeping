@@ -123,8 +123,16 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
               final name = ctrl.text.trim();
               if (name.isEmpty) return;
               Navigator.pop(context);
-              final success = await context.read<DocumentProvider>().createExpenseCategory(name);
+              final provider = context.read<DocumentProvider>();
+              final success = await provider.createExpenseCategory(name);
               if (success && mounted) {
+                // Refresh categories and auto-select the new one
+                await provider.fetchExpenseCategories();
+                final categories = provider.expenseCategories;
+                final newCat = categories.where((c) => c['name'] == name).toList();
+                if (newCat.isNotEmpty) {
+                  setState(() => _categoryId = newCat.first['id']?.toString());
+                }
                 AppToast.success(context, 'Category created');
               }
             },
@@ -284,7 +292,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                   AppTextField(
                     controller: _amountCtrl,
                     keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    label: 'Amount (₹) *',
+                    label: _isGstInclusive ? 'Amount (₹, GST Inclusive) *' : 'Amount (₹) *',
                     prefixIcon: Icons.attach_money_outlined,
                     validator: (v) {
                       if (v == null || v.isEmpty) return 'Amount required';

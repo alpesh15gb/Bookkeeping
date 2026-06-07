@@ -27,9 +27,10 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
   Future<void> _downloadPdf() async {
     final token = ApiClient.accessToken ?? '';
     final tenantId = ApiClient.tenantId ?? '';
-    final path = _tabController.index == 0
+    final tabIndex = _tabController.index;
+    final path = tabIndex == 0
         ? '/gst/gstr1/pdf'
-        : _tabController.index == 1
+        : tabIndex == 1
             ? '/gst/gstr2/pdf'
             : '/gst/gstr3b/pdf';
     final url = Uri.parse(
@@ -46,9 +47,10 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
   Future<void> _downloadExcel() async {
     final token = ApiClient.accessToken ?? '';
     final tenantId = ApiClient.tenantId ?? '';
-    final path = _tabController.index == 0
+    final tabIndex = _tabController.index;
+    final path = tabIndex == 0
         ? '/gst/gstr1/export'
-        : _tabController.index == 1
+        : tabIndex == 1
             ? '/gst/gstr2/export'
             : '/gst/gstr3b/export';
     final url = Uri.parse(
@@ -67,6 +69,11 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(() {
+      if (!_tabController.indexIsChanging) {
+        _fetchReports();
+      }
+    });
 
     final now = DateTime.now();
     int year = now.year;
@@ -127,21 +134,27 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
     final end = _endCtrl.text;
 
     final provider = context.read<AccountingProvider>();
-    final results = await Future.wait([
-      provider.fetchGstr1(start, end),
-      provider.fetchGstr2(start, end),
-      provider.fetchGstr3b(start, end),
-    ]);
+    
+    // Only fetch the active tab's report
+    final tabIndex = _tabController.index;
+    Map<String, dynamic>? gstr1;
+    Map<String, dynamic>? gstr2;
+    Map<String, dynamic>? gstr3b;
+
+    if (tabIndex == 0) {
+      gstr1 = await provider.fetchGstr1(start, end);
+    } else if (tabIndex == 1) {
+      gstr2 = await provider.fetchGstr2(start, end);
+    } else {
+      gstr3b = await provider.fetchGstr3b(start, end);
+    }
 
     if (mounted) {
       setState(() {
-        _gstr1Data = results[0];
-        _gstr2Data = results[1];
-        _gstr3bData = results[2];
+        if (gstr1 != null) _gstr1Data = gstr1;
+        if (gstr2 != null) _gstr2Data = gstr2;
+        if (gstr3b != null) _gstr3bData = gstr3b;
         _isLoading = false;
-        if (_gstr1Data == null && _gstr2Data == null && _gstr3bData == null) {
-          _error = 'Failed to load GST report data';
-        }
       });
     }
   }
@@ -269,11 +282,14 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
           count: b2cs.length,
           child: b2cs.isEmpty
               ? const Padding(padding: EdgeInsets.all(16), child: Text('No consumer supplies', style: AppTextStyles.caption))
-              : Column(
+                : Column(
                   children: b2cs.map((item) {
+                    final rate = item['gst_rate'] ?? 0;
+                    final pos = item['place_of_supply'] ?? '';
                     return ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text('GST Rate: ${item['gst_rate'] ?? item['pos_state'] ?? "Local"}', style: AppTextStyles.bodyMedium),
+                      title: Text('GST Rate: $rate%', style: AppTextStyles.bodyMedium),
+                      subtitle: pos.isNotEmpty ? Text('Place of Supply: $pos', style: AppTextStyles.caption) : null,
                       trailing: Text('₹${double.parse((item['taxable_value'] ?? 0).toString()).toStringAsFixed(2)}', style: AppTextStyles.numeric),
                     );
                   }).toList(),

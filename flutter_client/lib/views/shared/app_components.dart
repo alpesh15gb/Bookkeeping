@@ -38,22 +38,25 @@ class StatusBadge extends StatelessWidget {
   }
 
   factory StatusBadge.fromContactType(String type) {
+    final displayLabel = type.isNotEmpty
+        ? '${type[0].toUpperCase()}${type.substring(1).toLowerCase()}'
+        : type;
     switch (type.toUpperCase()) {
       case 'CUSTOMER':
         return StatusBadge(
-          label: type,
+          label: displayLabel,
           color: AppColors.typeCustomer,
           backgroundColor: AppColors.typeCustomerBg,
         );
       case 'VENDOR':
         return StatusBadge(
-          label: type,
+          label: displayLabel,
           color: AppColors.typeVendor,
           backgroundColor: AppColors.typeVendorBg,
         );
       default:
         return StatusBadge(
-          label: type,
+          label: displayLabel,
           color: AppColors.typeBoth,
           backgroundColor: AppColors.typeBothBg,
         );
