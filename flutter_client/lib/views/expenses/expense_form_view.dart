@@ -185,8 +185,13 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
 
     final bankAccounts = allAccounts.where((a) {
       final type = a['account_type'] ?? '';
-      final name = (a['name'] ?? '').toString();
-      return type == 'ASSET' && (name.startsWith('Cash') || name.startsWith('Bank'));
+      final code = (a['code'] ?? '').toString().toUpperCase();
+      final name = (a['name'] ?? '').toString().toLowerCase();
+      // Include cash, bank, UPI, POS, and other liquid asset accounts
+      // Exclude fixed assets (furniture, computer, deposits, prepaid)
+      if (type != 'ASSET') return false;
+      if (code.startsWith('AST-')) return false; // Fixed assets
+      return true;
     }).toList();
 
     final title = widget.editExpense != null ? 'Edit Expense' : 'Record Expense';
@@ -369,10 +374,18 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                 child: Column(
                   children: [
                     SummaryRow(label: 'Subtotal', value: '₹${double.parse(_previewData!['amount'].toString()).toStringAsFixed(2)}'),
-                    SummaryRow(label: 'CGST', value: '₹${double.parse(_previewData!['cgst_amount'].toString()).toStringAsFixed(2)}'),
-                    SummaryRow(label: 'SGST', value: '₹${double.parse(_previewData!['sgst_amount'].toString()).toStringAsFixed(2)}'),
-                    SummaryRow(label: 'IGST', value: '₹${double.parse(_previewData!['igst_amount'].toString()).toStringAsFixed(2)}'),
-                    SummaryRow(label: 'Round Off', value: '₹${double.parse(_previewData!['round_off'].toString()).toStringAsFixed(2)}'),
+                    if ((_previewData!['cgst_amount'] ?? 0) > 0)
+                      SummaryRow(label: 'CGST', value: '₹${double.parse(_previewData!['cgst_amount'].toString()).toStringAsFixed(2)}'),
+                    if ((_previewData!['sgst_amount'] ?? 0) > 0)
+                      SummaryRow(label: 'SGST', value: '₹${double.parse(_previewData!['sgst_amount'].toString()).toStringAsFixed(2)}'),
+                    if ((_previewData!['igst_amount'] ?? 0) > 0)
+                      SummaryRow(label: 'IGST', value: '₹${double.parse(_previewData!['igst_amount'].toString()).toStringAsFixed(2)}'),
+                    if ((_previewData!['utgst_amount'] ?? 0) > 0)
+                      SummaryRow(label: 'UTGST', value: '₹${double.parse(_previewData!['utgst_amount'].toString()).toStringAsFixed(2)}'),
+                    if ((_previewData!['cess_amount'] ?? 0) > 0)
+                      SummaryRow(label: 'Cess', value: '₹${double.parse(_previewData!['cess_amount'].toString()).toStringAsFixed(2)}'),
+                    if ((_previewData!['round_off'] ?? 0) != 0)
+                      SummaryRow(label: 'Round Off', value: '₹${double.parse(_previewData!['round_off'].toString()).toStringAsFixed(2)}'),
                     const Divider(),
                     SummaryRow(
                       label: 'Total Amount',

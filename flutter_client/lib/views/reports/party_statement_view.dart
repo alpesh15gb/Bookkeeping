@@ -70,6 +70,10 @@ class _PartyStatementViewState extends State<PartyStatementView> {
           _endCtrl.text = formatted;
         }
       });
+      // Auto-refresh if contact is selected
+      if (_selectedContact != null) {
+        _fetchStatement();
+      }
     }
   }
 
@@ -419,12 +423,13 @@ class _PartyStatementViewState extends State<PartyStatementView> {
     double closing,
     bool isMobile,
   ) {
+    final isVendor = (_data?['contact_type'] ?? '').toString().toUpperCase() == 'VENDOR';
     final items = [
       ('Opening Balance', opening),
-      ('Total Sales', sales),
-      ('Total Receipts', receipts),
-      ('Total Purchases', purchases),
-      ('Total Payments', payments),
+      if (!isVendor) ('Total Sales', sales),
+      if (!isVendor) ('Total Receipts', receipts),
+      if (isVendor) ('Total Purchases', purchases),
+      if (isVendor) ('Total Payments', payments),
       ('Closing Outstanding', closing),
     ];
 

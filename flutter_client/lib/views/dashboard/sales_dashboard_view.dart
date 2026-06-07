@@ -12,6 +12,8 @@ import 'package:flutter_client/views/payments/payment_form_view.dart';
 import 'package:flutter_client/views/contacts/contact_form_view.dart';
 import 'package:flutter_client/views/bills/bill_form_view.dart';
 import 'package:flutter_client/views/invoices/invoice_detail_view.dart';
+import 'package:flutter_client/views/reports/party_statement_view.dart';
+import 'package:flutter_client/models/contact.dart';
 import 'package:flutter_client/utils/haptic_helper.dart';
 import 'package:flutter_client/views/shared/skeleton_loading.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
@@ -33,13 +35,13 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final fy = context.read<FinancialYearProvider>();
       _lastFyId = fy.activeYear?.id;
-      context.read<DashboardProvider>().fetchDashboard();
+      _fetchWithPeriod(_selectedPeriod);
     });
   }
 
   void _onFYChanged() {
     if (mounted) {
-      context.read<DashboardProvider>().fetchDashboard();
+      _fetchWithPeriod(_selectedPeriod);
     }
   }
 
@@ -56,7 +58,40 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
 
   void _nav(Widget view) {
     final p = context.read<DashboardProvider>();
-    Navigator.push(context, MaterialPageRoute(builder: (_) => view)).then((_) => p.fetchDashboard());
+    Navigator.push(context, MaterialPageRoute(builder: (_) => view)).then((_) => _fetchWithPeriod(_selectedPeriod));
+  }
+
+  void _fetchWithPeriod(int period) {
+    final now = DateTime.now();
+    String dateFrom;
+    String dateTo = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+    
+    switch (period) {
+      case 0: // 30 days
+        final d = now.subtract(const Duration(days: 30));
+        dateFrom = '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+        break;
+      case 1: // Quarter
+        final quarterStart = DateTime(now.year, ((now.month - 1) ~/ 3) * 3 + 1, 1);
+        dateFrom = '${quarterStart.year}-${quarterStart.month.toString().padLeft(2, '0')}-${quarterStart.day.toString().padLeft(2, '0')}';
+        break;
+      case 2: // Year (FY)
+        final fy = context.read<FinancialYearProvider>();
+        if (fy.activeYear != null) {
+          final s = fy.activeYear!.startDate;
+          final e = fy.activeYear!.endDate;
+          dateFrom = '${s.year}-${s.month.toString().padLeft(2, '0')}-${s.day.toString().padLeft(2, '0')}';
+          dateTo = '${e.year}-${e.month.toString().padLeft(2, '0')}-${e.day.toString().padLeft(2, '0')}';
+        } else {
+          final fyStart = now.month >= 4 ? DateTime(now.year, 4, 1) : DateTime(now.year - 1, 4, 1);
+          dateFrom = '${fyStart.year}-${fyStart.month.toString().padLeft(2, '0')}-${fyStart.day.toString().padLeft(2, '0')}';
+        }
+        break;
+      default:
+        dateFrom = '${now.year}-01-01';
+    }
+    
+    context.read<DashboardProvider>().fetchDashboard(dateFrom: dateFrom, dateTo: dateTo);
   }
 
   void _navPayment() {
@@ -132,7 +167,10 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
                   _PeriodChip(
                     selected: _selectedPeriod,
                     periods: const ['30 Days', 'Quarter', 'Year'],
-                    onChanged: (i) => setState(() => _selectedPeriod = i),
+                    onChanged: (i) {
+                      setState(() => _selectedPeriod = i);
+                      _fetchWithPeriod(i);
+                    },
                   ),
               ],
             ),
@@ -141,7 +179,10 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
               _PeriodChip(
                 selected: _selectedPeriod,
                 periods: const ['30 Days', 'Quarter', 'Year'],
-                onChanged: (i) => setState(() => _selectedPeriod = i),
+                onChanged: (i) {
+                  setState(() => _selectedPeriod = i);
+                  _fetchWithPeriod(i);
+                },
               ),
             ],
             const SizedBox(height: 20),
@@ -643,31 +684,58 @@ class _OutstandingCollections extends StatelessWidget {
                   children: debtors.map((d) {
                     final name = d is Map ? d['name']?.toString() ?? 'Customer' : 'Customer';
                     final amt = d is Map ? double.tryParse((d['outstanding'] ?? 0).toString()) ?? 0.0 : 0.0;
-                    return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              name,
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                    final contactId = d is Map ? d['contact_id']?.toString() : null;
+                    return InkWell(
+                      onTap: contactId != null
+                          ? () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => PartyStatementView(
+                                    initialContact: ContactModel(
+                                      id: contactId,
+                                      name: name,
+                                      contactType: 'CUSTOMER',
+                                      registrationType: 'CONSUMER',
+                                      billingAddress: {},
+                                      stateCode: '27',
+                                      isActive: true,
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }
+                          : null,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                name,
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
                             ),
-                          ),
-                          Text(
-                            '₹${format(amt)}',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.warning,
-                              fontFeatures: const [FontFeature.tabularFigures()],
+                            Text(
+                              '₹${format(amt)}',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.warning,
+                                fontFeatures: const [FontFeature.tabularFigures()],
+                              ),
                             ),
-                          ),
-                        ],
+                            if (contactId != null) ...[
+                              const SizedBox(width: 4),
+                              Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
+                            ],
+                          ],
+                        ),
                       ),
                     );
                   }).toList(),
@@ -826,7 +894,7 @@ class _SalesTrend extends StatelessWidget {
                             // Expense bar
                             Container(
                               width: double.infinity,
-                              height: (exp[i] / max) * 40,
+                              height: (exp[i] / max) * 80,
                               decoration: BoxDecoration(
                                 color: AppColors.error.withValues(alpha: 0.5),
                                 borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
