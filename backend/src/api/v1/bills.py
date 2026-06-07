@@ -325,7 +325,12 @@ def list_bills(
         q = q.filter(Bill.contact_id == contact_id)
 
     if date_from and date_to:
-        q = q.filter(Bill.issue_date >= date_from, Bill.issue_date <= date_to)
+        try:
+            parsed_from = date.fromisoformat(date_from)
+            parsed_to = date.fromisoformat(date_to)
+            q = q.filter(Bill.issue_date >= parsed_from, Bill.issue_date <= parsed_to)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
 
     total = q.count()
     results = q.offset(offset).limit(limit).all()
