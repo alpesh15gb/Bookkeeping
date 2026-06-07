@@ -367,11 +367,12 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
 }
 
 class _JournalFormLine {
+  String? accountId;
   String direction;
   final TextEditingController amountCtrl = TextEditingController();
   final TextEditingController narrationCtrl = TextEditingController();
 
-  _JournalFormLine({required this.direction});
+  _JournalFormLine({this.accountId, this.direction = 'DEBIT'});
 
   void dispose() {
     amountCtrl.dispose();
