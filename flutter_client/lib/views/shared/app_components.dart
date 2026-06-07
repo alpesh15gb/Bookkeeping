@@ -2035,140 +2035,168 @@ class _CompactDocumentCardState extends State<CompactDocumentCard> {
       child: GestureDetector(
         onLongPress: widget.onLongPress,
         onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 120),
-            margin: const EdgeInsets.symmetric(vertical: 3),
-            decoration: BoxDecoration(
-              color: _isHovered ? AppColors.bgLight : AppColors.bgSurface,
-              borderRadius: AppRadius.card,
-              border: Border.all(
-                color: widget.isSelected ? AppColors.brandNavy : (_isHovered ? AppColors.border : AppColors.borderLight),
-                width: widget.isSelected ? 1.5 : 1,
-              ),
-              boxShadow: _isHovered
-                  ? [BoxShadow(color: Colors.black.withValues(alpha: 0.06), blurRadius: 12, offset: const Offset(0, 4))]
-                  : [BoxShadow(color: Colors.black.withValues(alpha: 0.02), blurRadius: 6, offset: const Offset(0, 2))],
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(vertical: 4),
+          decoration: BoxDecoration(
+            color: _isHovered ? AppColors.bgLight : AppColors.bgSurface,
+            borderRadius: AppRadius.card,
+            border: Border.all(
+              color: widget.isSelected ? AppColors.brandNavy : (_isHovered ? AppColors.border : AppColors.borderLight),
+              width: widget.isSelected ? 1.5 : 1,
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (widget.isSelectionMode)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 12, top: 4),
-                    child: Icon(
-                      widget.isSelected ? Icons.check_circle : Icons.circle_outlined,
-                      size: 20,
-                      color: widget.isSelected ? AppColors.brandNavy : AppColors.textMuted,
-                    ),
-                  ),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Top row: Party name + status
-                      Row(
-                        children: [
-                          if (widget.partyName != null && widget.partyName!.isNotEmpty)
-                            Expanded(
-                              child: Text(
-                                widget.partyName!,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                  height: 1.3,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          const SizedBox(width: 8),
-                          StatusBadge(label: widget.status),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      // Middle row: Doc number + date
-                      Row(
-                        children: [
-                          Text(
-                            '#${widget.docNumber}${widget.date != null && widget.date!.isNotEmpty ? ' • ${_formatDate(widget.date)}' : ''}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: AppColors.textMuted,
-                              letterSpacing: 0.2,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // Bottom row: Amount left, balance + actions right
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          // Amount
-                          Text(
-                            AmountFormat.format(widget.amount),
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                              fontFeatures: const [FontFeature.tabularFigures()],
-                              letterSpacing: 0.1,
-                              height: 1.2,
-                            ),
-                          ),
-                          const Spacer(),
-                          // Balance
-                          if (widget.balanceLabel != null)
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                if (widget.balanceAmount != null && widget.balanceAmount! > 0)
-                                  Text(
-                                    '${widget.balanceLabel!.toUpperCase()} ${AmountFormat.format(widget.balanceAmount!)}',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.error,
-                                      fontFeatures: const [FontFeature.tabularFigures()],
-                                    ),
-                                  ),
-                                if (widget.balanceAmount == null || widget.balanceAmount! <= 0)
-                                  Text(
-                                    widget.balanceLabel!.toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w600,
-                                      color: AppColors.success,
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          // Hover actions
-                          if (_isHovered && widget.hoverActions != null && widget.hoverActions!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: widget.hoverActions!,
-                            ),
-                          ],
-                          // Actions
-                          if (widget.actions != null && widget.actions!.isNotEmpty) ...[
-                            const SizedBox(width: 8),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: widget.actions!,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+            boxShadow: _isHovered
+                ? [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4))]
+                : [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 6, offset: const Offset(0, 2))],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.isSelectionMode)
+                Padding(
+                  padding: const EdgeInsets.only(right: 12, top: 4),
+                  child: Icon(
+                    widget.isSelected ? Icons.check_circle : Icons.circle_outlined,
+                    size: 20,
+                    color: widget.isSelected ? AppColors.brandNavy : AppColors.textMuted,
                   ),
                 ),
-              ],
-            ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Top row: Party name + Doc Number & Date
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        if (widget.partyName != null && widget.partyName!.isNotEmpty)
+                          Expanded(
+                            child: Text(
+                              widget.partyName!,
+                              style: TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.brandNavy,
+                                height: 1.3,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text(
+                              '#${widget.docNumber}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textMuted,
+                              ),
+                            ),
+                            if (widget.date != null && widget.date!.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                _formatDate(widget.date),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Middle row: Voucher Type badge
+                    Row(
+                      children: [
+                        StatusBadge(label: widget.status),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    // Bottom row: Total & Balance amounts + Actions
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        // Total
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Total'.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textMuted,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              AmountFormat.format(widget.amount),
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                                fontFeatures: const [FontFeature.tabularFigures()],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(width: 20),
+                        // Balance
+                        if (widget.balanceLabel != null)
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                widget.balanceLabel!.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textMuted,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                AmountFormat.format(widget.balanceAmount ?? 0),
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: (widget.balanceAmount != null && widget.balanceAmount! > 0)
+                                      ? AppColors.error
+                                      : AppColors.success,
+                                  fontFeatures: const [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                            ],
+                          ),
+                        const Spacer(),
+                        // Actions
+                        if (widget.actions != null && widget.actions!.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: widget.actions!,
+                          )
+                        else if (_isHovered && widget.hoverActions != null && widget.hoverActions!.isNotEmpty)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: widget.hoverActions!,
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
+        ),
       ),
     );
   }

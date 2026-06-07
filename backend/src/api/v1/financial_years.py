@@ -9,7 +9,8 @@ from datetime import date, datetime, timezone, timedelta
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
     FinancialYear, FinancialYearAudit, Tenant, JournalEntry, JournalLine, Account,
-    Invoice, Bill, Expense, SalesReturn, PurchaseReturn, OpeningBalanceSnapshot, InventoryCarryForward
+    Invoice, Bill, Expense, SalesReturn, PurchaseReturn, OpeningBalanceSnapshot,
+    InventoryCarryForward, AccountingPeriod
 )
 from src.schemas.accounting_schemas import (
     FinancialYearCreate, FinancialYearResponse, FinancialYearSwitchRequest,
@@ -464,6 +465,24 @@ def close_financial_year(
     # CRITICAL FIX: closed_by should be tenant_id (acting user), not user_id
     fy.closed_by = tenant_id
     fy.journal_entry_id = entry_id if journal_entry else None
+
+    # Sync AccountingPeriod: close the period covering this FY
+    period = db.query(AccountingPeriod).filter(
+        AccountingPeriod.tenant_id == tenant_id,
+        AccountingPeriod.start_date <= fy.end_date,
+        AccountingPeriod.end_date >= fy.start_date,
+    ).first()
+    if period:
+        period.is_closed = True
+    else:
+        period = AccountingPeriod(
+            tenant_id=tenant_id,
+            period_name=f"FY {fy.name}",
+            start_date=fy.start_date,
+            end_date=fy.end_date,
+            is_closed=True,
+        )
+        db.add(period)
     _log_audit(db, tenant_id, fy.id, "CLOSED", tenant_id,
                f"FY closed. Journal: {ref_num}. Net profit: {net_profit}")
 
@@ -619,6 +638,15 @@ def reopen_financial_year(
     fy.reopened_at = datetime.now(timezone.utc)
     fy.reopened_by = tenant_id
     fy.reopen_reason = reason.strip()
+
+    # Sync AccountingPeriod: reopen the period covering this FY
+    period = db.query(AccountingPeriod).filter(
+        AccountingPeriod.tenant_id == tenant_id,
+        AccountingPeriod.start_date <= fy.end_date,
+        AccountingPeriod.end_date >= fy.start_date,
+    ).first()
+    if period:
+        period.is_closed = False
 
     _log_audit(db, tenant_id, fy.id, "REOPENED", tenant_id, f"Reason: {reason.strip()}")
     db.commit()

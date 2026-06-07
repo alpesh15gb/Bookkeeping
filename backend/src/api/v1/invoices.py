@@ -178,6 +178,7 @@ def create_invoice(
         terms_and_conditions=payload.terms_and_conditions,
         reference_number=payload.reference_number,
         sales_person_id=payload.sales_person_id,
+        is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive else False,
         lines=db_lines
     )
 
@@ -226,7 +227,7 @@ def invoice_stats(
         Invoice.deleted_at == None,
     ).first()
 
-    outstanding = float(stats.total_amount) - float(stats.collected)
+    outstanding = float(round(stats.total_amount - stats.collected, 2))
     overdue = db.query(
         func.coalesce(func.sum(Invoice.total - Invoice.amount_paid), 0)
     ).filter(
@@ -423,6 +424,7 @@ def preview_invoice(
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
         e_invoice_status="PENDING",
+        is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive else False,
         lines=db_lines,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
@@ -1240,6 +1242,9 @@ def update_invoice(
         invoice.due_date = payload.due_date
     if payload.pos_state_code:
         invoice.pos_state_code = payload.pos_state_code
+
+    if payload.is_gst_inclusive is not None:
+        invoice.is_gst_inclusive = payload.is_gst_inclusive
 
     if payload.line_items is not None:
         origin_state_code = resolve_origin_state_code(db, tenant_id)

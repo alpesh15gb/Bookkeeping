@@ -651,8 +651,8 @@ class _BillListViewState extends State<BillListView> {
                         final picked = await showDatePicker(
                           context: context,
                           initialDate: payDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2035),
+                          firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+                          lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
                         );
                         if (picked != null) setDialogState(() => payDate = picked);
                       },
@@ -738,7 +738,10 @@ class _BillListViewState extends State<BillListView> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      amountCtrl.dispose();
+      refCtrl.dispose();
+    });
   }
 
   void _deleteSingleBill(BillModel bill) async {

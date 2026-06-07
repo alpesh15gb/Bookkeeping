@@ -311,8 +311,8 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
                           final picked = await showDatePicker(
                             context: ctx,
                             initialDate: startDate,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2035),
+                            firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+                            lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
                           );
                           if (picked != null) {
                             setDialogState(() {
@@ -333,7 +333,7 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
                           final picked = await showDatePicker(
                             context: ctx,
                             initialDate: endDate,
-                            firstDate: DateTime(2020),
+                            firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
                             lastDate: DateTime(2040),
                           );
                           if (picked != null) {
@@ -399,7 +399,7 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() => nameController.dispose());
   }
 
   Widget _buildDateField({

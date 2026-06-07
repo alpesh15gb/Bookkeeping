@@ -229,6 +229,31 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   double _amountPaid = 0;
   bool _shipToSameAsBilling = true;
   bool _hasRecoveredDraft = false;
+  bool _isDirty = false;
+
+  Future<bool> _onWillPop() async {
+    if (!_isDirty) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('You have unsaved changes. Are you sure you want to go back?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('STAY')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('DISCARD')),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
+  void _markDirty() {
+    if (!_isDirty) setState(() => _isDirty = true);
+  }
+
+  void _markClean() {
+    setState(() => _isDirty = false);
+  }
 
   bool get _gstEnabled {
     try {
@@ -342,7 +367,16 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     );
     _invoiceNoCtrl.text = '';
 
+    _issueDateCtrl.addListener(_markDirty);
+    _dueDateCtrl.addListener(_markDirty);
+    _notesCtrl.addListener(_markDirty);
+    _poNumberCtrl.addListener(_markDirty);
+    _shippingAddrCtrl.addListener(_markDirty);
+    _invoiceNoCtrl.addListener(_markDirty);
+    _reasonCtrl.addListener(_markDirty);
+
     _parseEditEntity();
+    _isDirty = false;
 
     Future.microtask(() async {
       if (!mounted) return;
@@ -359,6 +393,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       if (widget.initialData != null) {
         _applyInitialData(widget.initialData!);
       }
+      _isDirty = false;
       await _checkDraft();
       _triggerPreview();
     });
@@ -492,6 +527,13 @@ class _TransactionFormViewState extends State<TransactionFormView> {
 
   @override
   void dispose() {
+    _issueDateCtrl.removeListener(_markDirty);
+    _dueDateCtrl.removeListener(_markDirty);
+    _notesCtrl.removeListener(_markDirty);
+    _poNumberCtrl.removeListener(_markDirty);
+    _shippingAddrCtrl.removeListener(_markDirty);
+    _invoiceNoCtrl.removeListener(_markDirty);
+    _reasonCtrl.removeListener(_markDirty);
     _issueDateCtrl.dispose();
     _dueDateCtrl.dispose();
     _notesCtrl.dispose();
@@ -754,9 +796,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               'rate': _isGstInclusive ? (l.rate / (1 + l.gstRate / 100)) : l.rate,
               'discount': (l.quantity * (_isGstInclusive ? (l.rate / (1 + l.gstRate / 100)) : l.rate) * l.discount / 100)
                   .toStringAsFixed(4),
-              'hsn_sac': RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac)
-                  ? l.hsnSac
-                  : '84716050',
+              if (RegExp(r'^[0-9]{4,8}$').hasMatch(l.hsnSac))
+                'hsn_sac': l.hsnSac,
               'gst_rate': l.gstRate,
               if (l.descCtrl.text.trim().isNotEmpty)
                 'description': l.descCtrl.text.trim(),
@@ -768,6 +809,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     if (_selectedContact != null) {
       payload['contact_id'] = _selectedContact!.id;
     }
+    payload['is_gst_inclusive'] = _isGstInclusive;
     if (_poNumberCtrl.text.trim().isNotEmpty) {
       payload['reference_number'] = _poNumberCtrl.text.trim();
     }
@@ -795,8 +837,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     final date = await showDatePicker(
       context: context,
       initialDate: DateTime.tryParse(ctrl.text) ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
     );
     if (date != null && mounted) {
       setState(() {
@@ -832,12 +874,14 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         ),
       );
     });
+    _markDirty();
   }
 
   void _setLineProduct(int index, ProductModel p) {
     setState(() {
       _lines[index].setProduct(p, widget.config.isPurchase);
     });
+    _markDirty();
     _triggerPreview();
   }
 
@@ -846,6 +890,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       _lines[index].dispose();
       _lines.removeAt(index);
     });
+    _markDirty();
     _triggerPreview();
   }
 
@@ -878,6 +923,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     if (mounted) {
       setState(() => _isSaving = false);
       if (success) {
+        _markClean();
         _clearDraft();
         HapticHelper.success();
         final docType = _resolvedDocumentType;
@@ -1265,13 +1311,30 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       ),
     );
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_isDirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (!didPop) {
+          final shouldPop = await _onWillPop();
+          if (shouldPop && mounted) {
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bgLight,
       appBar: AppVoucherHeader(
         title: displayTitle,
         status: documentStatus,
         isDraft: _hasRecoveredDraft,
-        onBackPressed: () => Navigator.pop(context),
+        onBackPressed: () async {
+          if (_isDirty) {
+            final shouldPop = await _onWillPop();
+            if (shouldPop) Navigator.of(context).pop();
+          } else {
+            Navigator.of(context).pop();
+          }
+        },
         actions: [
           if (_isPreviewLoading)
             const Center(
@@ -1317,6 +1380,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         padding: const EdgeInsets.all(16),
         child: bodyContent,
       ),
+      ),
     );
   }
 
@@ -1349,7 +1413,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       ],
     );
 
-    final fields = [
+    final fields = <Widget>[
       Expanded(
         child: AppTextField(
           controller: _invoiceNoCtrl,
@@ -1364,6 +1428,14 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           controller: _issueDateCtrl,
           label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
           onTap: () => _pickDate(_issueDateCtrl),
+        ),
+      ),
+      const SizedBox(width: 12),
+      Expanded(
+        child: AppDateField(
+          controller: _dueDateCtrl,
+          label: 'Due Date',
+          onTap: () => _pickDate(_dueDateCtrl),
         ),
       ),
       if (_gstEnabled) ...[
@@ -1390,6 +1462,14 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           ),
         ),
       ],
+      const SizedBox(width: 12),
+      Expanded(
+        child: AppTextField(
+          controller: _poNumberCtrl,
+          label: 'PO / Reference #',
+          prefixIcon: Icons.receipt_long_outlined,
+        ),
+      ),
     ];
 
     return AppCard(
@@ -1427,9 +1507,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           partyName: _selectedContact?.name,
           gstin: _selectedContact?.gstin,
           state: billingStateName,
-          outstanding: _selectedContact != null ? 24500 : 0, // Visual ERP Outstanding Card Detail
-          creditLimit: _selectedContact != null ? 100000 : 0, // Visual Credit Limit ERP detail
-          lastTransaction: _selectedContact != null ? '02-Jun-2026' : null,
           onTap: _openContactSearch,
         ),
         if (widget.config.hasShippingAddress) ...[
@@ -1444,7 +1521,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                     setState(() {
                       _shipToSameAsBilling = val;
                       if (_shipToSameAsBilling && _selectedContact != null) {
-                        _shippingAddrCtrl.text = _flattenAddress(_selectedContact!.billingAddress);
+                        final addr = _selectedContact!.shippingAddress ?? _selectedContact!.billingAddress;
+                        _shippingAddrCtrl.text = _flattenAddress(addr);
                       } else if (!_shipToSameAsBilling) {
                         _shippingAddrCtrl.clear();
                       }
@@ -1778,9 +1856,11 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                                 value: line.gstRate.toStringAsFixed(0),
                                 compact: true,
                                 items: const [
+                                  DropdownMenuItem(value: '28', child: Text('28%')),
                                   DropdownMenuItem(value: '18', child: Text('18%')),
                                   DropdownMenuItem(value: '12', child: Text('12%')),
                                   DropdownMenuItem(value: '5', child: Text('5%')),
+                                  DropdownMenuItem(value: '3', child: Text('3%')),
                                   DropdownMenuItem(value: '0', child: Text('0%')),
                                 ],
                                 onChanged: (v) {
@@ -1964,7 +2044,51 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   String _convertToWords(double val) {
-    return '${val.toStringAsFixed(2)} Rupees';
+    if (val < 0) return 'Negative ${_convertToWords(-val)}';
+    if (val == 0) return 'Zero Rupees Only';
+    final whole = val.floor();
+    final paise = ((val - whole) * 100 + 0.5).floor();
+    final _ones = ['', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
+                   'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
+                   'Seventeen', 'Eighteen', 'Nineteen'];
+    final _tens = ['', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety'];
+
+    String convertBelowThousand(int n) {
+      if (n == 0) return '';
+      String r;
+      if (n >= 100) {
+        r = '${_ones[n ~/ 100]} Hundred ';
+        n %= 100;
+      } else {
+        r = '';
+      }
+      if (n >= 20) {
+        r += '${_tens[n ~/ 10]} ${_ones[n % 10]}'.trim();
+      } else if (n > 0) {
+        r += _ones[n];
+      }
+      return r.trim();
+    }
+
+    String convert(int n) {
+      if (n == 0) return 'Zero';
+      final crore = n ~/ 10000000; n %= 10000000;
+      final lakh = n ~/ 100000; n %= 100000;
+      final thousand = n ~/ 1000; n %= 1000;
+      final hundred = n;
+      final parts = <String>[];
+      if (crore > 0) parts.add('${convertBelowThousand(crore)} Crore');
+      if (lakh > 0) parts.add('${convertBelowThousand(lakh)} Lakh');
+      if (thousand > 0) parts.add('${convertBelowThousand(thousand)} Thousand');
+      if (hundred > 0) parts.add(convertBelowThousand(hundred));
+      return parts.join(' ');
+    }
+
+    final wholeWords = convert(whole);
+    if (paise > 0) {
+      return '$wholeWords Rupees and ${convert(paise)} Paise Only';
+    }
+    return '$wholeWords Rupees Only';
   }
 }
 
@@ -2235,6 +2359,12 @@ class _LineItemCardState extends State<_LineItemCard> {
                         line.quantity = double.tryParse(v) ?? 1;
                         widget.onChanged();
                       },
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Req';
+                        final q = double.tryParse(v);
+                        if (q == null || q <= 0) return 'Invalid';
+                        return null;
+                      },
                     ),
                     const SizedBox(width: 6),
                     _SmallField(
@@ -2245,6 +2375,12 @@ class _LineItemCardState extends State<_LineItemCard> {
                         line.rate = double.tryParse(v) ?? 0;
                         widget.onChanged();
                       },
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Req';
+                        final r = double.tryParse(v);
+                        if (r == null || r < 0) return 'Invalid';
+                        return null;
+                      },
                     ),
                     const SizedBox(width: 6),
                     _SmallField(
@@ -2253,6 +2389,12 @@ class _LineItemCardState extends State<_LineItemCard> {
                       onChanged: (v) {
                         line.discount = double.tryParse(v) ?? 0;
                         widget.onChanged();
+                      },
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return null;
+                        final d = double.tryParse(v);
+                        if (d == null || d < 0 || d > 100) return '0-100';
+                        return null;
                       },
                     ),
                     if (widget.gstEnabled) ...[
@@ -2263,6 +2405,12 @@ class _LineItemCardState extends State<_LineItemCard> {
                         onChanged: (v) {
                           line.gstRate = double.tryParse(v) ?? 0;
                           widget.onChanged();
+                        },
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return null;
+                          final g = double.tryParse(v);
+                          if (g == null || g < 0) return 'Invalid';
+                          return null;
                         },
                       ),
                     ],
@@ -2358,12 +2506,14 @@ class _SmallField extends StatelessWidget {
   final TextEditingController ctrl;
   final Function(String) onChanged;
   final int flex;
+  final String? Function(String?)? validator;
 
   const _SmallField({
     required this.label,
     required this.ctrl,
     required this.onChanged,
     this.flex = 1,
+    this.validator,
   });
 
   @override
@@ -2382,11 +2532,12 @@ class _SmallField extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 2),
-          TextField(
+          TextFormField(
             controller: ctrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             onChanged: onChanged,
+            validator: validator,
             decoration: const InputDecoration(
               isDense: true,
               contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),

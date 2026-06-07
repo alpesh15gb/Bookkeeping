@@ -75,8 +75,8 @@ class _AgingReportViewState extends State<AgingReportView> with SingleTickerProv
     final date = await showDatePicker(
       context: context,
       initialDate: DateTime.tryParse(_dateCtrl.text) ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
     );
     if (date != null) {
       setState(() {

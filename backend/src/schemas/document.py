@@ -93,12 +93,14 @@ class InvoiceCreate(InvoiceBase):
     terms_and_conditions: Optional[str] = None
     reference_number: Optional[str] = Field(None, max_length=50)
     sales_person_id: Optional[uuid.UUID] = None
+    is_gst_inclusive: Optional[bool] = False
 
 class InvoicePreviewRequest(SchemaBase):
     pos_state_code: str = Field(..., pattern="[0-9]{2}$")
     line_items: List[InvoiceLineCreate]
     discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
+    is_gst_inclusive: Optional[bool] = False
 
 class InvoiceUpdate(SchemaBase):
     contact_id: Optional[uuid.UUID] = None
@@ -113,11 +115,13 @@ class InvoiceUpdate(SchemaBase):
     terms_and_conditions: Optional[str] = None
     reference_number: Optional[str] = None
     sales_person_id: Optional[uuid.UUID] = None
+    is_gst_inclusive: Optional[bool] = None
 
 class InvoiceResponse(InvoiceBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
     status: str
+    is_gst_inclusive: Optional[bool] = False
     subtotal: Decimal
     discount_total: Decimal
     cgst_amount: Decimal
@@ -148,6 +152,7 @@ class InvoiceListResponse(SchemaBase):
     issue_date: date
     due_date: date
     status: str
+    is_gst_inclusive: Optional[bool] = False
     total: Decimal
     amount_paid: Decimal
     contact_name: str

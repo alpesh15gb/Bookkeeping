@@ -735,8 +735,8 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                         final picked = await showDatePicker(
                           context: context,
                           initialDate: payDate,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime(2035),
+                          firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+                          lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
                         );
                         if (picked != null) setDialogState(() => payDate = picked);
                       },
@@ -810,7 +810,10 @@ class _InvoiceListViewState extends State<InvoiceListView> {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      amountCtrl.dispose();
+      refCtrl.dispose();
+    });
   }
 
   void _deleteSingleInvoice(InvoiceModel invoice) async {
@@ -865,8 +868,8 @@ class _InvoiceListViewState extends State<InvoiceListView> {
         : DateTime(now.year - 1, 4, 1);
     final range = await showDateRangePicker(
       context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
       initialDateRange: DateTimeRange(start: fyStart, end: now),
     );
     if (range == null) return;

@@ -35,7 +35,7 @@ class EInvoiceService:
             "DocNo": invoice.invoice_number,
             "DocTyp": "INV",
             "DocDt": invoice.issue_date.isoformat(),
-            "TotInvVal": float(invoice.total),
+            "TotInvVal": float(round(invoice.total, 2)),
             "ItemCnt": len(invoice.lines),
             "MainHsnCode": invoice.lines[0].hsn_sac if invoice.lines else "998313",
         }
@@ -69,7 +69,7 @@ class EInvoiceService:
                 "RecipientGSTIN": contact.gstin,
                 "DocNo": invoice.invoice_number,
                 "DocDt": str(invoice.issue_date),
-                "TotVal": float(invoice.total),
+                "TotVal": float(round(invoice.total, 2)),
                 "ItemCnt": len(invoice.lines),
                 "MainHSN": invoice.lines[0].hsn_sac if invoice.lines else "998313",
                 "Irn": irn_hash,

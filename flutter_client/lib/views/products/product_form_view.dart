@@ -82,14 +82,14 @@ class _ProductFormViewState extends State<ProductFormView> {
         hsnSac: _hsnController.text.trim(),
         productType: _productType,
         uom: _uomController.text.trim(),
-        salesPrice: double.parse(_salesPriceController.text.trim()),
-        purchasePrice: double.parse(_purchasePriceController.text.trim()),
-        gstRate: double.parse(_gstRateController.text.trim()),
-        openingStock: double.parse(_stockController.text.trim()),
+        salesPrice: double.tryParse(_salesPriceController.text.trim()) ?? 0,
+        purchasePrice: double.tryParse(_purchasePriceController.text.trim()) ?? 0,
+        gstRate: double.tryParse(_gstRateController.text.trim()) ?? 0,
+        openingStock: double.tryParse(_stockController.text.trim()) ?? 0,
         currentStock:
             widget.product?.currentStock ??
-            double.parse(_stockController.text.trim()),
-        reorderLevel: double.parse(_reorderController.text.trim()),
+            double.tryParse(_stockController.text.trim()) ?? 0,
+        reorderLevel: double.tryParse(_reorderController.text.trim()) ?? 0,
         isActive: widget.product?.isActive ?? true,
       );
 

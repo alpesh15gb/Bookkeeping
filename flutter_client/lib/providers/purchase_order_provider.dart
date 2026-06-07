@@ -265,27 +265,6 @@ class PurchaseOrderProvider extends ChangeNotifier {
     return false;
   }
 
-  Future<bool> _delete(String url) async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-    try {
-      final response = await _client.delete(_buildUri(url));
-      if (response.statusCode == 204) {
-        _isLoading = false;
-        notifyListeners();
-        return true;
-      }
-      final data = jsonDecode(response.body);
-      _errorMessage = data['detail'] ?? 'Delete failed';
-    } catch (_) {
-      _errorMessage = 'An error occurred';
-    }
-    _isLoading = false;
-    notifyListeners();
-    return false;
-  }
-
   Future<bool> _postAction(String url) async {
     _isLoading = true;
     _errorMessage = null;

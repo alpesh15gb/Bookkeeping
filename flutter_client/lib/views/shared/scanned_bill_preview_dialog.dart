@@ -168,8 +168,8 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
     );
     if (picked != null) {
       ctrl.text =

@@ -1,9 +1,12 @@
 import io
 import uuid
 import math
+import logging
 from decimal import Decimal
 from typing import List, Optional, Dict
 from datetime import datetime, date
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -47,29 +50,29 @@ class ImportSummary(BaseModel):
 # tax_mapping groups always come in pairs (SGST + CGST) per rate
 # We build a dict: tax_group_id -> (gst_rate_pct, is_intra_state)
 # ---------------------------------------------------------------------------
-def _build_tax_rate_map(vconn) -> Dict[int, float]:
-    """Return dict: kb_tax_code.tax_code_id -> total_gst_rate_pct (float)"""
+def _build_tax_rate_map(vconn) -> Dict[int, Decimal]:
+    """Return dict: kb_tax_code.tax_code_id -> total_gst_rate_pct (Decimal)"""
     rows = vconn.execute("SELECT tax_code_id, tax_rate, tax_code_type FROM kb_tax_code").fetchall()
-    return {r[0]: float(r[1] or 0) for r in rows}
+    return {r[0]: Decimal(str(r[1] or 0)) for r in rows}
 
 
-def _build_group_rate_map(vconn, tax_code_rates: Dict[int, float]) -> Dict[int, float]:
+def _build_group_rate_map(vconn, tax_code_rates: Dict[int, Decimal]) -> Dict[int, Decimal]:
     """Return dict: tax_mapping_group_id -> total gst rate % (sum of component rates)"""
     mappings = vconn.execute(
         "SELECT tax_mapping_group_id, tax_mapping_code_id FROM kb_tax_mapping"
     ).fetchall()
-    group_rates: Dict[int, float] = {}
+    group_rates: Dict[int, Decimal] = {}
     for m in mappings:
         gid = m[0]
-        code_rate = tax_code_rates.get(m[1], 0)
-        group_rates[gid] = group_rates.get(gid, 0) + code_rate
+        code_rate = tax_code_rates.get(m[1], Decimal("0"))
+        group_rates[gid] = group_rates.get(gid, Decimal("0")) + code_rate
     return group_rates
 
 
 def _split_gst(
-    total_tax_amount: float,
+    total_tax_amount: Decimal,
     line_tax_id: Optional[int],
-    group_rate_map: Dict[int, float],
+    group_rate_map: Dict[int, Decimal],
     is_intrastate: bool,
 ) -> tuple:
     """
@@ -77,22 +80,22 @@ def _split_gst(
     or IGST (interstate).  Returns (cgst_rate, cgst_amt, sgst_rate, sgst_amt, igst_rate, igst_amt).
     All as Decimal.
     """
-    tax = round(total_tax_amount, 2)
-    total_rate = group_rate_map.get(line_tax_id or 0, 18.0) if line_tax_id else 18.0
+    tax = total_tax_amount.quantize(Decimal("0.01"))
+    total_rate = group_rate_map.get(line_tax_id or 0, Decimal("18.00")) if line_tax_id else Decimal("18.00")
 
     if is_intrastate:
-        half_rate = round(total_rate / 2, 2)
-        half_tax = round(tax / 2, 2)
+        half_rate = (total_rate / Decimal("2")).quantize(Decimal("0.01"))
+        half_tax = (tax / Decimal("2")).quantize(Decimal("0.01"))
         return (
-            Decimal(str(half_rate)), Decimal(str(half_tax)),
-            Decimal(str(half_rate)), Decimal(str(half_tax)),
+            half_rate, half_tax,
+            half_rate, half_tax,
             Decimal("0"), Decimal("0"),
         )
     else:
         return (
             Decimal("0"), Decimal("0"),
             Decimal("0"), Decimal("0"),
-            Decimal(str(total_rate)), Decimal(str(round(tax, 2))),
+            total_rate, tax.quantize(Decimal("0.01")),
         )
 
 
@@ -165,18 +168,19 @@ def import_vyapar_backup(
         origin_state_name = "Telangana"
         if firm and firm["firm_state"]:
             state_map = {
-                "Telangana": "36",
-                "Andhra Pradesh": "37",
-                "Maharashtra": "27",
-                "Karnataka": "29",
-                "Tamil Nadu": "33",
-                "Delhi": "07",
-                "Gujarat": "24",
-                "Rajasthan": "08",
-                "Uttar Pradesh": "09",
-                "Kerala": "32",
-                "West Bengal": "19",
-                "Haryana": "06",
+                "Telangana": "36", "Andhra Pradesh": "37", "Arunachal Pradesh": "12",
+                "Assam": "18", "Bihar": "10", "Chhattisgarh": "22", "Goa": "30",
+                "Gujarat": "24", "Haryana": "06", "Himachal Pradesh": "02",
+                "Jharkhand": "20", "Karnataka": "29", "Kerala": "32",
+                "Madhya Pradesh": "23", "Maharashtra": "27", "Manipur": "14",
+                "Meghalaya": "17", "Mizoram": "15", "Nagaland": "13", "Odisha": "21",
+                "Punjab": "03", "Rajasthan": "08", "Sikkim": "11",
+                "Tamil Nadu": "33", "Telangana": "36", "Tripura": "16",
+                "Uttar Pradesh": "09", "Uttarakhand": "05", "West Bengal": "19",
+                "Andaman and Nicobar": "35", "Chandigarh": "04",
+                "Dadra and Nagar Haveli and Daman and Diu": "26",
+                "Jammu and Kashmir": "01", "Ladakh": "38",
+                "Lakshadweep": "31", "Delhi": "07", "Puducherry": "34",
             }
             origin_state_name = firm["firm_state"]
             origin_state_code = state_map.get(firm["firm_state"], "36")
@@ -184,13 +188,12 @@ def import_vyapar_backup(
         # ── 5. Build GST rate lookup tables ───────────────────────────────────
         tax_code_rates = _build_tax_rate_map(vconn)
         group_rate_map = _build_group_rate_map(vconn, tax_code_rates)
-        # We assume all transactions are intrastate (same state as the firm)
-        is_intrastate = True
 
         # ── 6. Import contacts ────────────────────────────────────────────────
         vy_names = vconn.execute("SELECT * FROM kb_names").fetchall()
         vy_expense_cat_names: Dict[int, str] = {}
         contact_map: Dict[int, str] = {}  # vyapar name_id -> our contact.id str
+        contact_state_map: Dict[int, str] = {}  # vyapar name_id -> state_code
 
         # Common words that signal an expense category, not a real party
         _EXPENSE_KEYWORDS = {
@@ -252,18 +255,11 @@ def import_vyapar_backup(
                 if existing.contact_type != contact_type:
                     existing.contact_type = "BOTH"
                 contact_map[n["name_id"]] = str(existing.id)
+                contact_state_map[n["name_id"]] = existing.state_code or origin_state_code
                 continue
-            # Party state
+            # Party state — use same map as firm state lookup
             party_state = (n["name_state"] or "").strip()
-            state_map2 = {
-                "Telangana": "36", "Andhra Pradesh": "37",
-                "Maharashtra": "27", "Karnataka": "29",
-                "Tamil Nadu": "33", "Delhi": "07",
-                "Gujarat": "24", "Rajasthan": "08",
-                "Uttar Pradesh": "09", "Kerala": "32",
-                "West Bengal": "19", "Haryana": "06",
-            }
-            party_state_code = state_map2.get(party_state, origin_state_code)
+            party_state_code = state_map.get(party_state, origin_state_code)
 
             address_str = (n["address"] or "").strip()
 
@@ -286,6 +282,7 @@ def import_vyapar_backup(
             db.add(contact)
             db.flush()
             contact_map[n["name_id"]] = str(contact.id)
+            contact_state_map[n["name_id"]] = party_state_code
             summary.contacts_imported += 1
 
         # ── 6b. Set opening balances from kb_names.amount ─────────────────
@@ -419,7 +416,7 @@ def import_vyapar_backup(
 
             # Determine GST rate from item's tax_id
             item_tax_id = i["item_tax_id"]
-            item_gst_rate = group_rate_map.get(item_tax_id or 0, 18.0) if item_tax_id else 18.0
+            item_gst_rate = group_rate_map.get(item_tax_id or 0, Decimal("18.00")) if item_tax_id else Decimal("18.00")
 
             # item_type: 1=product, 2=service
             product_type = "SERVICE" if i["item_type"] == 2 else "GOODS"
@@ -576,7 +573,8 @@ def import_vyapar_backup(
             txn_type = txn["txn_type"]
             txn_id = txn["txn_id"]
             txn_date = _parse_date(txn["txn_date"])
-            due_date_raw = txn.get("txn_po_date") or txn["txn_date"]
+            # Use actual due date field; fall back to txn_date if not available
+            due_date_raw = txn.get("txn_due_date") or txn.get("txn_po_date") or txn["txn_date"]
             due_date = _parse_date(due_date_raw)
             if due_date < txn_date:
                 due_date = txn_date
@@ -588,7 +586,11 @@ def import_vyapar_backup(
 
             # Reference number from Vyapar (txn_ref_number_char holds the invoice #)
             ref_number = (txn.get("txn_ref_number_char") or "").strip() or None
-            payment_status = txn.get("txn_payment_status", 0)  # 1=paid/2=partial
+            payment_status = txn.get("txn_payment_status", 0)  # 1=paid/2/partial
+
+            # Determine if this transaction is intrastate (party in same state as firm)
+            party_state_code = contact_state_map.get(name_id, origin_state_code)
+            txn_is_intrastate = (party_state_code == origin_state_code)
 
             # ── SALES INVOICES (type=1) ─────────────────────────────────────
             if txn_type == 1 and contact_id_str:
@@ -605,8 +607,8 @@ def import_vyapar_backup(
                 if existing_inv:
                     continue
 
-                cash_amt = float(txn["txn_cash_amount"] or 0)
-                bal_amt = float(txn["txn_balance_amount"] or 0)
+                cash_amt = Decimal(str(txn.get("txn_cash_amount") or 0))
+                bal_amt = Decimal(str(txn.get("txn_balance_amount") or 0))
                 total_from_txn = cash_amt + bal_amt
 
                 # Recalculate from lines for accuracy
@@ -619,26 +621,26 @@ def import_vyapar_backup(
 
                 inv_lines_data = []
                 for vl in txn_lines:
-                    line_total_f = float(vl["total_amount"] or 0)
-                    line_tax_f = float(vl["lineitem_tax_amount"] or 0)
-                    line_disc_f = float(vl["lineitem_discount_amount"] or 0)
-                    qty_f = float(vl["quantity"] or 1)
-                    rate_f = float(vl["priceperunit"] or 0)
-                    line_subtotal_f = line_total_f - line_tax_f
+                    line_total_d = Decimal(str(vl["total_amount"] or 0))
+                    line_tax_d = Decimal(str(vl["lineitem_tax_amount"] or 0))
+                    line_disc_d = Decimal(str(vl["lineitem_discount_amount"] or 0))
+                    qty_d = Decimal(str(vl["quantity"] or 1))
+                    rate_d = Decimal(str(vl["priceperunit"] or 0))
+                    line_subtotal_d = line_total_d - line_tax_d
 
                     line_tax_id = vl["lineitem_tax_id"]
                     cgst_r, cgst_a, sgst_r, sgst_a, igst_r, igst_a = _split_gst(
-                        line_tax_f, line_tax_id, group_rate_map, is_intrastate
+                        float(line_tax_d), line_tax_id, group_rate_map, txn_is_intrastate
                     )
                     total_rate_pct = group_rate_map.get(line_tax_id or 0, 18.0) if line_tax_id else 18.0
                     hsn = (vl["_hsn"] or "").strip() or "998313"
 
-                    subtotal += Decimal(str(round(max(line_subtotal_f, 0), 2)))
+                    subtotal += max(line_subtotal_d, Decimal("0"))
                     total_cgst += cgst_a
                     total_sgst += sgst_a
                     total_igst += igst_a
-                    total_val += Decimal(str(round(line_total_f, 2)))
-                    discount_total += Decimal(str(round(line_disc_f, 2)))
+                    total_val += line_total_d
+                    discount_total += line_disc_d
 
                     product_id = None
                     if vl["item_id"] and vl["item_id"] in item_map:
@@ -650,10 +652,10 @@ def import_vyapar_backup(
                     inv_lines_data.append(InvoiceLine(
                         product_id=product_id,
                         description=(vl["_item_name"] or "").strip() or "Item",
-                        quantity=Decimal(str(qty_f)),
-                        rate=Decimal(str(round(rate_f, 6))),
-                        discount=Decimal(str(round(line_disc_f, 2))),
-                        subtotal=Decimal(str(round(max(line_subtotal_f, 0), 2))),
+                        quantity=qty_d,
+                        rate=rate_d,
+                        discount=line_disc_d,
+                        subtotal=max(line_subtotal_d, Decimal("0")),
                         hsn_sac=hsn,
                         gst_rate=Decimal(str(total_rate_pct)),
                         cgst_rate=cgst_r,
@@ -666,7 +668,7 @@ def import_vyapar_backup(
                         utgst_amount=Decimal("0"),
                         cess_rate=Decimal("0"),
                         cess_amount=Decimal("0"),
-                        total=Decimal(str(round(line_total_f, 2))),
+                        total=line_total_d,
                     ))
 
                 if not inv_lines_data:
@@ -696,7 +698,7 @@ def import_vyapar_backup(
                     ))
 
                 # Determine payment status
-                amount_paid = Decimal(str(round(cash_amt, 2)))
+                amount_paid = cash_amt
                 if amount_paid > total_val:
                     amount_paid = total_val
                 if amount_paid >= total_val:
@@ -706,7 +708,7 @@ def import_vyapar_backup(
                 else:
                     inv_status = "POSTED"
 
-                round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst - discount_total)
+                round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst)
 
                 inv = Invoice(
                     tenant_id=tenant_id,
@@ -768,8 +770,8 @@ def import_vyapar_backup(
                     if existing_bill:
                         continue
 
-                cash_amt = float(txn["txn_cash_amount"] or 0)
-                bal_amt = float(txn["txn_balance_amount"] or 0)
+                cash_amt = Decimal(str(txn.get("txn_cash_amount") or 0))
+                bal_amt = Decimal(str(txn.get("txn_balance_amount") or 0))
                 total_from_txn = cash_amt + bal_amt
 
                 subtotal = Decimal("0")
@@ -781,26 +783,26 @@ def import_vyapar_backup(
 
                 lines_data = []
                 for vl in txn_lines:
-                    line_total_f = float(vl["total_amount"] or 0)
-                    line_tax_f = float(vl["lineitem_tax_amount"] or 0)
-                    line_disc_f = float(vl["lineitem_discount_amount"] or 0)
-                    qty_f = float(vl["quantity"] or 1)
-                    rate_f = float(vl["priceperunit"] or 0)
-                    line_subtotal_f = line_total_f - line_tax_f
+                    line_total_d = Decimal(str(vl["total_amount"] or 0))
+                    line_tax_d = Decimal(str(vl["lineitem_tax_amount"] or 0))
+                    line_disc_d = Decimal(str(vl["lineitem_discount_amount"] or 0))
+                    qty_d = Decimal(str(vl["quantity"] or 1))
+                    rate_d = Decimal(str(vl["priceperunit"] or 0))
+                    line_subtotal_d = line_total_d - line_tax_d
 
                     line_tax_id = vl["lineitem_tax_id"]
                     cgst_r, cgst_a, sgst_r, sgst_a, igst_r, igst_a = _split_gst(
-                        line_tax_f, line_tax_id, group_rate_map, is_intrastate
+                        line_tax_d, line_tax_id, group_rate_map, txn_is_intrastate
                     )
-                    total_rate_pct = group_rate_map.get(line_tax_id or 0, 18.0) if line_tax_id else 18.0
+                    total_rate_pct = group_rate_map.get(line_tax_id or 0, Decimal("18.00")) if line_tax_id else Decimal("18.00")
                     hsn = (vl["_hsn"] or "").strip() or "998313"
 
-                    subtotal += Decimal(str(round(max(line_subtotal_f, 0), 2)))
+                    subtotal += max(line_subtotal_d, Decimal("0"))
                     total_cgst += cgst_a
                     total_sgst += sgst_a
                     total_igst += igst_a
-                    total_val += Decimal(str(round(line_total_f, 2)))
-                    discount_total += Decimal(str(round(line_disc_f, 2)))
+                    total_val += line_total_d
+                    discount_total += line_disc_d
 
                     product_id = None
                     if vl["item_id"] and vl["item_id"] in item_map:
@@ -813,10 +815,10 @@ def import_vyapar_backup(
                         lines_data.append(ProformaInvoiceLine(
                             product_id=product_id,
                             description=(vl["_item_name"] or "").strip() or "Item",
-                            quantity=Decimal(str(qty_f)),
-                            rate=Decimal(str(round(rate_f, 6))),
-                            discount=Decimal(str(round(line_disc_f, 2))),
-                            subtotal=Decimal(str(round(max(line_subtotal_f, 0), 2))),
+                            quantity=qty_d,
+                            rate=rate_d,
+                            discount=line_disc_d,
+                            subtotal=max(line_subtotal_d, Decimal("0")),
                             hsn_sac=hsn,
                             gst_rate=Decimal(str(total_rate_pct)),
                             cgst_rate=cgst_r,
@@ -835,10 +837,10 @@ def import_vyapar_backup(
                         lines_data.append(BillLine(
                             product_id=product_id,
                             description=(vl["_item_name"] or "").strip() or "Item",
-                            quantity=Decimal(str(qty_f)),
-                            rate=Decimal(str(round(rate_f, 6))),
-                            discount=Decimal(str(round(line_disc_f, 2))),
-                            subtotal=Decimal(str(round(max(line_subtotal_f, 0), 2))),
+                            quantity=qty_d,
+                            rate=rate_d,
+                            discount=line_disc_d,
+                            subtotal=max(line_subtotal_d, Decimal("0")),
                             hsn_sac=hsn,
                             gst_rate=Decimal(str(total_rate_pct)),
                             cgst_rate=cgst_r,
@@ -851,7 +853,7 @@ def import_vyapar_backup(
                             utgst_amount=Decimal("0"),
                             cess_rate=Decimal("0"),
                             cess_amount=Decimal("0"),
-                            total=Decimal(str(round(line_total_f, 2))),
+                            total=line_total_d,
                         ))
 
                 if not lines_data:
@@ -1006,12 +1008,12 @@ def import_vyapar_backup(
 
                     line_tax_id = vl["lineitem_tax_id"]
                     cgst_r, cgst_a, sgst_r, sgst_a, igst_r, igst_a = _split_gst(
-                        line_tax_f, line_tax_id, group_rate_map, is_intrastate
+                        line_tax_d, line_tax_id, group_rate_map, txn_is_intrastate
                     )
-                    total_rate_pct = group_rate_map.get(line_tax_id or 0, 18.0) if line_tax_id else 18.0
+                    total_rate_pct = group_rate_map.get(line_tax_id or 0, Decimal("18.00")) if line_tax_id else Decimal("18.00")
                     hsn = (vl["_hsn"] or "").strip() or "998313"
 
-                    subtotal += Decimal(str(round(max(line_subtotal_f, 0), 2)))
+                    subtotal += max(line_subtotal_d, Decimal("0"))
                     total_cgst += cgst_a
                     total_sgst += sgst_a
                     total_igst += igst_a

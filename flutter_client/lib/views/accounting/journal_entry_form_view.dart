@@ -56,8 +56,8 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
     final date = await showDatePicker(
       context: context,
       initialDate: DateTime.tryParse(_dateCtrl.text) ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
     );
     if (date != null) {
       setState(() {
@@ -124,7 +124,7 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
       'description': _descCtrl.text.trim().isEmpty ? 'Manual Journal Entry' : _descCtrl.text.trim(),
       'lines': _lines.map((l) => {
         'account_id': l.accountId,
-        'amount': double.parse(double.parse(l.amountCtrl.text).toStringAsFixed(2)),
+        'amount': (double.tryParse(l.amountCtrl.text) ?? 0),
         'direction': l.direction,
         'narration': l.narrationCtrl.text.trim().isEmpty ? null : l.narrationCtrl.text.trim(),
       }).toList(),
@@ -367,12 +367,11 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
 }
 
 class _JournalFormLine {
-  String? accountId;
   String direction;
   final TextEditingController amountCtrl = TextEditingController();
   final TextEditingController narrationCtrl = TextEditingController();
 
-  _JournalFormLine({this.accountId, this.direction = 'DEBIT'});
+  _JournalFormLine({required this.direction});
 
   void dispose() {
     amountCtrl.dispose();

@@ -58,8 +58,8 @@ class _PartyStatementViewState extends State<PartyStatementView> {
     final date = await showDatePicker(
       context: context,
       initialDate: current,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
     );
     if (date != null) {
       final formatted = _fmt(date);

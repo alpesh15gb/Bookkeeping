@@ -224,7 +224,7 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() => captchaCtrl.dispose());
 
     if (result != null && mounted) {
       setState(() {

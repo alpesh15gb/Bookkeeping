@@ -4,7 +4,7 @@ from sqlalchemy import case, func, and_
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from src.core.database import get_db_session
@@ -914,8 +914,8 @@ def close_year_end(
             description="Empty Year-End closing entry (no activity)",
             source_type="YEAR_END",
             source_id=entry_id,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
             lines=[]
         )
 

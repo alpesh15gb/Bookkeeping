@@ -28,6 +28,7 @@ from typing import Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from src.core.database import get_db_session
@@ -143,7 +144,7 @@ async def import_tally_xml(
 
     # Maps for dedup
     ledger_contact_map: Dict[str, uuid.UUID] = {}   # Tally ledger name → contact.id
-    stock_product_map: Dict[str, uuid.UUID] = {}     # Tally stock item name → product.id
+    stock_product_map: Dict[str, tuple] = {}     # Tally stock item name → (product.id, gst_rate, hsn_sac)
 
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
@@ -261,7 +262,7 @@ async def import_tally_xml(
                 Product.deleted_at == None,
             ).first()
             if existing:
-                stock_product_map[name] = existing.id
+                stock_product_map[name] = (existing.id, existing.gst_rate, existing.hsn_sac or "00000000")
                 continue
 
             product = Product(
@@ -277,7 +278,7 @@ async def import_tally_xml(
             )
             db.add(product)
             db.flush()
-            stock_product_map[name] = product.id
+            stock_product_map[name] = (product.id, product.gst_rate, product.hsn_sac or "00000000")
             summary["products_imported"] += 1
 
     # ── Phase 3: Import Vouchers as Invoices/Bills/Payments/Expenses ─────
@@ -304,32 +305,33 @@ async def import_tally_xml(
 
                 lines = []
                 total_subtotal = Decimal("0")
-                total_cgst = Decimal("0")
-                total_sgst = Decimal("0")
-                total_igst = Decimal("0")
+
+                # Accumulate voucher-level GST outside the line loop
+                voucher_cgst = Decimal("0")
+                voucher_sgst = Decimal("0")
+                voucher_igst = Decimal("0")
+                for alloc in voucher.findall("LEDGERENTRIES.LIST"):
+                    alloc_ledger = _xml_text(alloc, "LEDGERNAME") or ""
+                    alloc_amount = _safe_decimal(_xml_text(alloc, "AMOUNT") or "0")
+                    al = alloc_ledger.lower()
+                    if "cgst" in al:
+                        voucher_cgst += abs(alloc_amount)
+                    elif "sgst" in al or "utgst" in al:
+                        voucher_sgst += abs(alloc_amount)
+                    elif "igst" in al:
+                        voucher_igst += abs(alloc_amount)
 
                 for inv_line in voucher.findall("ALLINVENTORYENTRIES.LIST/INVENTORYENTRIES.LIST"):
                     stock_name = _xml_text(inv_line, "STOCKITEMNAME")
                     qty = _safe_decimal(_xml_text(inv_line, "ACTUALQTY") or _xml_text(inv_line, "BILLEDQTY") or "1")
-                    rate = _safe_decimal(_xml_text(inv_item, "RATE") if (inv_item := inv_line.find("RATE")) is not None else _xml_text(inv_line, "RATE"))
+                    rate_el = inv_line.find("RATE")
+                    rate = _safe_decimal(rate_el.text if rate_el is not None and rate_el.text else "0")
                     amount = _safe_decimal(_xml_text(inv_line, "AMOUNT") or "0")
 
-                    product_id = stock_product_map.get(stock_name) if stock_name else None
-
-                    # GST from accounting allocations
-                    cgst = Decimal("0")
-                    sgst = Decimal("0")
-                    igst = Decimal("0")
-                    for alloc in voucher.findall("LEDGERENTRIES.LIST"):
-                        alloc_ledger = _xml_text(alloc, "LEDGERNAME") or ""
-                        alloc_amount = _safe_decimal(_xml_text(alloc, "AMOUNT") or "0")
-                        al = alloc_ledger.lower()
-                        if "cgst" in al:
-                            cgst += abs(alloc_amount)
-                        elif "sgst" in al or "utgst" in al:
-                            sgst += abs(alloc_amount)
-                        elif "igst" in al:
-                            igst += abs(alloc_amount)
+                    prod_info = stock_product_map.get(stock_name) if stock_name else None
+                    product_id = prod_info[0] if prod_info else None
+                    prod_gst_rate = prod_info[1] if prod_info and len(prod_info) > 1 else Decimal("0")
+                    prod_hsn = prod_info[2] if prod_info and len(prod_info) > 2 else "00000000"
 
                     line_data = {
                         "product_id": str(product_id) if product_id else None,
@@ -337,6 +339,8 @@ async def import_tally_xml(
                         "quantity": float(qty) if qty > 0 else 1,
                         "rate": float(rate) if rate > 0 else float(abs(amount)),
                         "total": float(abs(amount)),
+                        "gst_rate": float(prod_gst_rate),
+                        "hsn_sac": prod_hsn,
                     }
                     lines.append(line_data)
                     total_subtotal += abs(amount)
@@ -344,10 +348,19 @@ async def import_tally_xml(
                 if not lines:
                     continue
 
-                total_cgst = cgst
-                total_sgst = sgst
-                total_igst = igst
-                grand_total = total_subtotal + total_cgst + total_sgst + total_igst
+                # Distribute GST proportionally across lines based on subtotal
+                for line in lines:
+                    if total_subtotal > 0:
+                        ratio = Decimal(str(line["total"])) / total_subtotal
+                        line["cgst"] = float(voucher_cgst * ratio)
+                        line["sgst"] = float(voucher_sgst * ratio)
+                        line["igst"] = float(voucher_igst * ratio)
+                    else:
+                        line["cgst"] = 0.0
+                        line["sgst"] = 0.0
+                        line["igst"] = 0.0
+
+                grand_total = total_subtotal + voucher_cgst + voucher_sgst + voucher_igst
 
                 invoice = Invoice(
                     tenant_id=tenant_id,
@@ -359,9 +372,9 @@ async def import_tally_xml(
                     status="POSTED",
                     subtotal=total_subtotal,
                     discount_total=Decimal("0"),
-                    cgst_amount=total_cgst,
-                    sgst_amount=total_sgst,
-                    igst_amount=total_igst,
+                    cgst_amount=voucher_cgst,
+                    sgst_amount=voucher_sgst,
+                    igst_amount=voucher_igst,
                     utgst_amount=Decimal("0"),
                     cess_amount=Decimal("0"),
                     round_off=Decimal("0"),
@@ -371,23 +384,28 @@ async def import_tally_xml(
                 db.add(invoice)
                 db.flush()
 
+                # Get document-level tax totals to know which tax type applies
+                has_igst = voucher_igst > 0
+
                 for line in lines:
+                    line_total = Decimal(str(line["total"]))
+                    line_gst_rate = Decimal(str(line["gst_rate"]))
                     il = InvoiceLine(
                         invoice_id=invoice.id,
                         product_id=uuid.UUID(line["product_id"]) if line["product_id"] else None,
-                        hsn_sac="00000000",
+                        hsn_sac=line["hsn_sac"],
                         product_name=line["product_name"],
                         quantity=Decimal(str(line["quantity"])),
                         rate=Decimal(str(line["rate"])),
                         discount=Decimal("0"),
-                        subtotal=Decimal(str(line["total"])),
-                        gst_rate=Decimal("0"),
-                        cgst_amount=Decimal("0"),
-                        sgst_amount=Decimal("0"),
-                        igst_amount=Decimal("0"),
+                        subtotal=line_total,
+                        gst_rate=line_gst_rate,
+                        cgst_amount=Decimal(str(line["cgst"])) if not has_igst else Decimal("0"),
+                        sgst_amount=Decimal(str(line["sgst"])) if not has_igst else Decimal("0"),
+                        igst_amount=Decimal(str(line["igst"])) if has_igst else Decimal("0"),
                         utgst_amount=Decimal("0"),
                         cess_amount=Decimal("0"),
-                        total=Decimal(str(line["total"])),
+                        total=line_total + Decimal(str(line["cgst"])) + Decimal(str(line["sgst"])) + Decimal(str(line["igst"])),
                     )
                     db.add(il)
 
@@ -405,6 +423,21 @@ async def import_tally_xml(
                 lines = []
                 total_subtotal = Decimal("0")
 
+                # Accumulate voucher-level GST outside the line loop
+                voucher_cgst = Decimal("0")
+                voucher_sgst = Decimal("0")
+                voucher_igst = Decimal("0")
+                for alloc in voucher.findall("LEDGERENTRIES.LIST"):
+                    alloc_ledger = _xml_text(alloc, "LEDGERNAME") or ""
+                    alloc_amount = _safe_decimal(_xml_text(alloc, "AMOUNT") or "0")
+                    al = alloc_ledger.lower()
+                    if "cgst" in al:
+                        voucher_cgst += abs(alloc_amount)
+                    elif "sgst" in al or "utgst" in al:
+                        voucher_sgst += abs(alloc_amount)
+                    elif "igst" in al:
+                        voucher_igst += abs(alloc_amount)
+
                 for inv_line in voucher.findall("ALLINVENTORYENTRIES.LIST/INVENTORYENTRIES.LIST"):
                     stock_name = _xml_text(inv_line, "STOCKITEMNAME")
                     qty = _safe_decimal(_xml_text(inv_line, "ACTUALQTY") or _xml_text(inv_line, "BILLEDQTY") or "1")
@@ -412,7 +445,10 @@ async def import_tally_xml(
                     rate = _safe_decimal(rate_el.text if rate_el is not None and rate_el.text else "0")
                     amount = _safe_decimal(_xml_text(inv_line, "AMOUNT") or "0")
 
-                    product_id = stock_product_map.get(stock_name) if stock_name else None
+                    prod_info = stock_product_map.get(stock_name) if stock_name else None
+                    product_id = prod_info[0] if prod_info else None
+                    prod_gst_rate = prod_info[1] if prod_info and len(prod_info) > 1 else Decimal("0")
+                    prod_hsn = prod_info[2] if prod_info and len(prod_info) > 2 else "00000000"
 
                     line_data = {
                         "product_id": str(product_id) if product_id else None,
@@ -420,12 +456,29 @@ async def import_tally_xml(
                         "quantity": float(qty) if qty > 0 else 1,
                         "rate": float(rate) if rate > 0 else float(abs(amount)),
                         "total": float(abs(amount)),
+                        "gst_rate": float(prod_gst_rate),
+                        "hsn_sac": prod_hsn,
                     }
                     lines.append(line_data)
                     total_subtotal += abs(amount)
 
                 if not lines:
                     continue
+
+                # Distribute GST proportionally across lines
+                for line in lines:
+                    if total_subtotal > 0:
+                        ratio = Decimal(str(line["total"])) / total_subtotal
+                        line["cgst"] = float(voucher_cgst * ratio)
+                        line["sgst"] = float(voucher_sgst * ratio)
+                        line["igst"] = float(voucher_igst * ratio)
+                    else:
+                        line["cgst"] = 0.0
+                        line["sgst"] = 0.0
+                        line["igst"] = 0.0
+
+                grand_total = total_subtotal + voucher_cgst + voucher_sgst + voucher_igst
+                has_igst = voucher_igst > 0
 
                 bill = Bill(
                     tenant_id=tenant_id,
@@ -437,35 +490,37 @@ async def import_tally_xml(
                     status="POSTED",
                     subtotal=total_subtotal,
                     discount_total=Decimal("0"),
-                    cgst_amount=Decimal("0"),
-                    sgst_amount=Decimal("0"),
-                    igst_amount=Decimal("0"),
+                    cgst_amount=voucher_cgst if not has_igst else Decimal("0"),
+                    sgst_amount=voucher_sgst if not has_igst else Decimal("0"),
+                    igst_amount=voucher_igst if has_igst else Decimal("0"),
                     utgst_amount=Decimal("0"),
                     cess_amount=Decimal("0"),
                     round_off=Decimal("0"),
-                    total=total_subtotal,
+                    total=grand_total,
                     amount_paid=Decimal("0"),
                 )
                 db.add(bill)
                 db.flush()
 
                 for line in lines:
+                    line_total = Decimal(str(line["total"]))
+                    line_gst_rate = Decimal(str(line["gst_rate"]))
                     bl = BillLine(
                         bill_id=bill.id,
                         product_id=uuid.UUID(line["product_id"]) if line["product_id"] else None,
-                        hsn_sac="00000000",
+                        hsn_sac=line["hsn_sac"],
                         product_name=line["product_name"],
                         quantity=Decimal(str(line["quantity"])),
                         rate=Decimal(str(line["rate"])),
                         discount=Decimal("0"),
-                        subtotal=Decimal(str(line["total"])),
-                        gst_rate=Decimal("0"),
-                        cgst_amount=Decimal("0"),
-                        sgst_amount=Decimal("0"),
-                        igst_amount=Decimal("0"),
+                        subtotal=line_total,
+                        gst_rate=line_gst_rate,
+                        cgst_amount=Decimal(str(line["cgst"])) if not has_igst else Decimal("0"),
+                        sgst_amount=Decimal(str(line["sgst"])) if not has_igst else Decimal("0"),
+                        igst_amount=Decimal(str(line["igst"])) if has_igst else Decimal("0"),
                         utgst_amount=Decimal("0"),
                         cess_amount=Decimal("0"),
-                        total=Decimal(str(line["total"])),
+                        total=line_total + Decimal(str(line["cgst"])) + Decimal(str(line["sgst"])) + Decimal(str(line["igst"])),
                     )
                     db.add(bl)
 

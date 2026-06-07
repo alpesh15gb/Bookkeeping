@@ -53,6 +53,7 @@ class BillCreate(BillBase):
     terms_and_conditions: Optional[str] = None
     reference_number: Optional[str] = Field(None, max_length=50)
     tds_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    is_gst_inclusive: Optional[bool] = False
 
 class BillUpdate(SchemaBase):
     contact_id: Optional[uuid.UUID] = None
@@ -67,11 +68,13 @@ class BillUpdate(SchemaBase):
     terms_and_conditions: Optional[str] = None
     reference_number: Optional[str] = None
     tds_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    is_gst_inclusive: Optional[bool] = None
 
 class BillResponse(BillBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
     status: str
+    is_gst_inclusive: Optional[bool] = False
     subtotal: Decimal
     discount_total: Decimal
     cgst_amount: Decimal
@@ -99,6 +102,7 @@ class BillListResponse(SchemaBase):
     issue_date: date
     due_date: date
     status: str
+    is_gst_inclusive: Optional[bool] = False
     total: Decimal
     amount_paid: Decimal
     contact_name: str

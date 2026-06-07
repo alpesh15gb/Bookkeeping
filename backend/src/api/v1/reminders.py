@@ -7,15 +7,6 @@ from sqlalchemy.orm import Session
 import uuid
 from typing import List, Optional
 
-"""
-Reminders CRUD — returns empty data for now.
-Frontend handles empty arrays gracefully.
-"""
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-import uuid
-from typing import List, Optional
-
 from src.core.database import get_db_session
 from src.api.deps import enforce_permission
 

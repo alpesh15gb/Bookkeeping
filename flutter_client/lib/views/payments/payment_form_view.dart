@@ -126,8 +126,8 @@ class _PaymentFormViewState extends State<PaymentFormView> {
     final picked = await showDatePicker(
       context: context,
       initialDate: _paymentDate,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
     );
     if (picked != null) setState(() {
       _paymentDate = picked;
@@ -404,14 +404,14 @@ class _PaymentFormViewState extends State<PaymentFormView> {
       }
     }
 
-    final paymentAmount = double.parse(_amountCtrl.text);
+    final paymentAmount = double.tryParse(_amountCtrl.text) ?? 0;
     final allocatedTotal = allocations.fold<double>(
       0,
       (sum, a) => sum + (double.tryParse(a['amount'].toString()) ?? 0),
     );
 
     if (allocations.isEmpty) {
-      setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isSubmitting = false);
       AppToast.error(context, _isReceipt
           ? 'Select at least one posted invoice allocation.'
           : 'Select at least one posted bill allocation.');
@@ -439,7 +439,7 @@ class _PaymentFormViewState extends State<PaymentFormView> {
         ? await provider.createReceipt(payload)
         : await provider.createDisbursement(payload);
 
-    setState(() => _isSubmitting = false);
+    if (mounted) setState(() => _isSubmitting = false);
 
     if (success && mounted) {
       widget.onSuccess();

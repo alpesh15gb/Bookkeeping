@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
@@ -30,11 +29,6 @@ class BillFormView extends StatelessWidget {
         successMessage: editBill != null ? 'Bill updated' : 'Bill created',
         onSave: (ctx, payload) async {
           final provider = ctx.read<BillProvider>();
-          if (editBill == null) {
-            payload['bill_number'] = 'BILL-${DateTime.now().millisecondsSinceEpoch}';
-          } else {
-            payload['bill_number'] = editBill!.billNumber;
-          }
           final success = editBill != null
               ? await provider.updateBill(editBill!.id, payload)
               : await provider.createBill(payload);
@@ -44,11 +38,6 @@ class BillFormView extends StatelessWidget {
           return success;
         },
         onPreview: (ctx, payload) async {
-          if (editBill == null) {
-            payload['bill_number'] = 'BILL-TEMP';
-          } else {
-            payload['bill_number'] = editBill!.billNumber;
-          }
           final preview = await ctx.read<BillProvider>().previewBill(payload);
           if (preview == null) return null;
           return {

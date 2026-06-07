@@ -257,6 +257,7 @@ class Invoice(Base):
     vyapar_custom_fields = Column(JSON, nullable=False, default=dict)  # UDF from Vyapar
     sales_person_id = Column(UUID(as_uuid=True)) # who made the sale
     is_rcm = Column(Boolean, nullable=False, default=False)  # Reverse Charge Mechanism
+    is_gst_inclusive = Column(Boolean, nullable=False, default=False)
     supply_type = Column(String(20), nullable=False, default="DOMESTIC")  # DOMESTIC, EXPORT_WITH_TAX, EXPORT_WITHOUT_TAX, SEZ_WITH_TAX, SEZ_WITHOUT_TAX
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
@@ -408,6 +409,7 @@ class Bill(Base):
     tds_rate = Column(Numeric(5, 2), nullable=False, default=0)    # TDS %
     tds_amount = Column(Numeric(15, 4), nullable=False, default=0)  # TDS deducted
     itc_eligible = Column(Boolean, nullable=False, default=True)  # ITC eligibility for GSTR-3B
+    is_gst_inclusive = Column(Boolean, nullable=False, default=False)
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)

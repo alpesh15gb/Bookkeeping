@@ -282,6 +282,9 @@ class _ReminderListViewState extends State<ReminderListView> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() {
+      titleCtrl.dispose();
+      messageCtrl.dispose();
+    });
   }
 }

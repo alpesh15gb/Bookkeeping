@@ -37,7 +37,7 @@ class _CashFlowViewState extends State<CashFlowView> {
   Future<void> _pickRange() async {
     final range = await showDateRangePicker(
       context: context,
-      firstDate: DateTime(2020),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
       lastDate: DateTime.now(),
       initialDateRange: DateTimeRange(start: _from, end: _to),
     );

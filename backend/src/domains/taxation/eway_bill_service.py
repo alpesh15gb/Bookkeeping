@@ -100,7 +100,7 @@ class EWayBillService:
                     "FromTrdName": "",
                     "ToGstin": "",
                     "ToTrdName": payload.transporter_name or "",
-                    "TotInvVal": float(invoice.total if invoice else bill.total) if (invoice or bill) else 0,
+                    "TotInvVal": float(round(invoice.total if invoice else bill.total, 2)) if (invoice or bill) else 0,
                     "ItemCnt": 1,
                     "MainHsnCode": "998313",
                     "TransDistance": payload.trans_distance,

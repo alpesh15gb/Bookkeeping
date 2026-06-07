@@ -595,6 +595,25 @@ class _SettingsViewState extends State<SettingsView> {
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(56),
+        child: Container(
+          decoration: BoxDecoration(
+            color: AppColors.bgSurface,
+            border: Border(bottom: BorderSide(color: AppColors.border)),
+          ),
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                children: [
+                  Text('Settings', style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.bold)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
       body: ListView(
         padding: isMobile
             ? AppSpacing.pagePaddingMobile
@@ -606,6 +625,7 @@ class _SettingsViewState extends State<SettingsView> {
             children: [
               SettingsListTile(
                 icon: Icons.business_outlined,
+                iconColor: Colors.blue.shade700,
                 title: 'Legal Name',
                 subtitle: legalName,
                 onTap: () => _showCompanyProfileDialog(company, settings),
@@ -613,30 +633,35 @@ class _SettingsViewState extends State<SettingsView> {
               if (tradeName.isNotEmpty && tradeName != legalName)
                 SettingsListTile(
                   icon: Icons.storefront_outlined,
+                  iconColor: Colors.purple.shade600,
                   title: 'Trade Name',
                   subtitle: tradeName,
                   onTap: () => _showCompanyProfileDialog(company, settings),
                 ),
               SettingsListTile(
                 icon: Icons.location_on_outlined,
+                iconColor: Colors.red.shade600,
                 title: 'Address',
                 subtitle: companyAddress,
                 onTap: () => _showCompanyProfileDialog(company, settings),
               ),
               SettingsListTile(
                 icon: Icons.phone_outlined,
+                iconColor: Colors.green.shade600,
                 title: 'Phone',
                 subtitle: companyPhone,
                 onTap: () => _showCompanyProfileDialog(company, settings),
               ),
               SettingsListTile(
                 icon: Icons.email_outlined,
+                iconColor: Colors.orange.shade700,
                 title: 'Email',
                 subtitle: companyEmail,
                 onTap: () => _showCompanyProfileDialog(company, settings),
               ),
               SettingsListTile(
                 icon: Icons.language_outlined,
+                iconColor: Colors.teal.shade600,
                 title: 'Website',
                 subtitle: companyWebsite,
                 onTap: () => _showCompanyProfileDialog(company, settings),
@@ -651,25 +676,30 @@ class _SettingsViewState extends State<SettingsView> {
             children: [
               SettingsListTile(
                 icon: Icons.badge_outlined,
+                iconColor: Colors.indigo.shade600,
                 title: 'GSTIN',
                 subtitle: gstin,
                 onTap: () => _showTaxComplianceDialog(company, settings),
               ),
               SettingsListTile(
                 icon: Icons.numbers_outlined,
+                iconColor: Colors.cyan.shade700,
                 title: 'PAN',
                 subtitle: pan,
                 onTap: () => _showTaxComplianceDialog(company, settings),
               ),
               SettingsListTile(
                 icon: Icons.location_city_outlined,
+                iconColor: Colors.pink.shade600,
                 title: 'Origin State Code',
                 subtitle: stateCode,
                 onTap: () => _showTaxComplianceDialog(company, settings),
               ),
               SettingsListTile(
                 icon: Icons.fact_check_outlined,
+                iconColor: Colors.amber.shade800,
                 title: 'Tax Mode',
+                showNewBadge: true,
                 subtitle: taxMode == 'GST_REGULAR'
                     ? 'GST Registered Business'
                     : taxMode == 'GST_COMPOSITION'
@@ -687,24 +717,28 @@ class _SettingsViewState extends State<SettingsView> {
             children: [
               SettingsListTile(
                 icon: Icons.account_balance_outlined,
+                iconColor: Colors.blueGrey.shade700,
                 title: 'Bank Name',
                 subtitle: bankName,
                 onTap: () => _openBankProfileForm(primaryBank),
               ),
               SettingsListTile(
                 icon: Icons.payment_outlined,
+                iconColor: Colors.teal.shade700,
                 title: 'Account Number',
                 subtitle: bankAccountNo,
                 onTap: () => _openBankProfileForm(primaryBank),
               ),
               SettingsListTile(
                 icon: Icons.code_outlined,
+                iconColor: Colors.orange.shade800,
                 title: 'IFSC Code',
                 subtitle: bankIfsc,
                 onTap: () => _openBankProfileForm(primaryBank),
               ),
               SettingsListTile(
                 icon: Icons.store_outlined,
+                iconColor: Colors.deepOrange.shade600,
                 title: 'Branch Name',
                 subtitle: bankBranch,
                 onTap: () => _openBankProfileForm(primaryBank),
@@ -719,12 +753,14 @@ class _SettingsViewState extends State<SettingsView> {
             children: [
               SettingsListTile(
                 icon: Icons.monetization_on_outlined,
+                iconColor: Colors.green.shade700,
                 title: 'Currency',
                 subtitle: currency,
                 onTap: () => _showPreferencesDialog(company, settings),
               ),
               SettingsListTile(
                 icon: Icons.calendar_month_outlined,
+                iconColor: Colors.indigo.shade500,
                 title: 'Financial Year',
                 subtitle: DateTime.now().month >= 4
                     ? '${DateTime.now().year}-${(DateTime.now().year + 1).toString().substring(2)}'
@@ -733,12 +769,14 @@ class _SettingsViewState extends State<SettingsView> {
               ),
               SettingsListTile(
                 icon: Icons.picture_as_pdf_outlined,
+                iconColor: Colors.red.shade700,
                 title: 'PDF Template Style',
                 subtitle: pdfTemplate.toString().toUpperCase(),
                 onTap: () => _showPreferencesDialog(company, settings),
               ),
               SettingsListTile(
                 icon: Icons.description_outlined,
+                iconColor: Colors.blue.shade600,
                 title: 'Terms & Conditions',
                 subtitle: terms,
                 onTap: () => _showPreferencesDialog(company, settings),
@@ -747,6 +785,7 @@ class _SettingsViewState extends State<SettingsView> {
                 builder: (context, themeProvider, _) {
                   return SettingsListTile(
                     icon: themeProvider.isDarkMode ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                    iconColor: Colors.yellow.shade900,
                     title: 'Dark Mode',
                     subtitle: themeProvider.isDarkMode ? 'Enabled' : 'Disabled',
                     trailing: Switch(
@@ -1200,7 +1239,7 @@ class _SettingsViewState extends State<SettingsView> {
           ],
         ),
       ),
-    );
+    ).whenComplete(() => otpCtrl.dispose());
   }
 
   void _showError(String message) {

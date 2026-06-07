@@ -156,7 +156,7 @@ def dashboard_kpis(
         "total_expenses": float(total_expenses),
         "outstanding": float(outstanding),
         "overdue": float(overdue),
-        "net_profit": float(total_invoiced) - float(total_expenses),
+        "net_profit": float(round(total_invoiced - total_expenses, 2)),
     }
 def get_expense_trend(
     date_from: Optional[str] = Query(None),

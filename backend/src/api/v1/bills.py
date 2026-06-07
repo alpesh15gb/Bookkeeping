@@ -154,6 +154,7 @@ def create_bill(
         reference_number=payload.reference_number,
         tds_rate=tds_rate,
         tds_amount=tds_amount,
+        is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive else False,
         lines=db_lines
     )
 
@@ -277,6 +278,7 @@ def preview_bill(
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
+        is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive else False,
         lines=db_lines,
         contact=contact,
         created_at=datetime.now(timezone.utc),
@@ -503,6 +505,9 @@ def update_bill(
         bill.due_date = payload.due_date
     if payload.pos_state_code:
         bill.pos_state_code = payload.pos_state_code
+
+    if payload.is_gst_inclusive is not None:
+        bill.is_gst_inclusive = payload.is_gst_inclusive
 
     if payload.line_items is not None:
         contact = db.query(Contact).filter(Contact.id == bill.contact_id).first()

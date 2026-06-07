@@ -192,7 +192,7 @@ class _ContactFormViewState extends State<ContactFormView> {
           ),
         ],
       ),
-    );
+    ).whenComplete(() => captchaCtrl.dispose());
 
     if (result != null && mounted) {
       setState(() {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
@@ -30,7 +31,25 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
   bool _isGstInclusive = false;
 
   bool _isSaving = false;
+  bool _isDirty = false;
   Map<String, dynamic>? _previewData;
+  Timer? _previewDebounce;
+
+  Future<bool> _onWillPop() async {
+    if (!_isDirty) return true;
+    final result = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Discard changes?'),
+        content: const Text('You have unsaved changes. Are you sure you want to go back?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('STAY')),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('DISCARD')),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
 
   @override
   void initState() {
@@ -50,11 +69,15 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
       _descCtrl.text = e['description'] ?? '';
       _amountCtrl.text = e['amount']?.toString() ?? '';
       _gstRate = double.tryParse((e['gst_rate'] ?? 0.0).toString()) ?? 0.0;
+      _isGstInclusive = e['is_gst_inclusive'] == true;
     }
 
     _amountCtrl.addListener(_onAmountChanged);
+    _vendorCtrl.addListener(() => _isDirty = true);
+    _descCtrl.addListener(() => _isDirty = true);
 
     Future.microtask(() {
+      context.read<SettingsProvider>().fetchAllSettings();
       context.read<DocumentProvider>().fetchExpenseCategories();
       context.read<AccountingProvider>().fetchAccounts();
       _triggerPreview();
@@ -64,6 +87,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
   @override
   void dispose() {
     _amountCtrl.removeListener(_onAmountChanged);
+    _previewDebounce?.cancel();
     _amountCtrl.dispose();
     _dateCtrl.dispose();
     _vendorCtrl.dispose();
@@ -72,7 +96,8 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
   }
 
   void _onAmountChanged() {
-    _triggerPreview();
+    _previewDebounce?.cancel();
+    _previewDebounce = Timer(const Duration(milliseconds: 300), _triggerPreview);
   }
 
   void _triggerPreview() async {
@@ -92,8 +117,8 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
     final date = await showDatePicker(
       context: context,
       initialDate: DateTime.tryParse(_dateCtrl.text) ?? DateTime.now(),
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2035),
+      firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
+      lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
     );
     if (date != null) {
       setState(() {
@@ -106,7 +131,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
     final ctrl = TextEditingController();
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text('New Category'),
         content: TextField(
           controller: ctrl,
@@ -115,18 +140,21 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              ctrl.dispose();
+              Navigator.pop(ctx);
+            },
             child: const Text('CANCEL'),
           ),
           TextButton(
             onPressed: () async {
               final name = ctrl.text.trim();
               if (name.isEmpty) return;
-              Navigator.pop(context);
+              ctrl.dispose();
+              Navigator.pop(ctx);
               final provider = context.read<DocumentProvider>();
               final success = await provider.createExpenseCategory(name);
               if (success && mounted) {
-                // Refresh categories and auto-select the new one
                 await provider.fetchExpenseCategories();
                 final categories = provider.expenseCategories;
                 final newCat = categories.where((c) => c['name'] == name).toList();
@@ -144,7 +172,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
   }
 
   void _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (_formKey.currentState == null || !_formKey.currentState!.validate()) return;
     if (_categoryId == null) {
       AppToast.error(context, 'Please select an expense category');
       return;
@@ -152,7 +180,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
 
     setState(() => _isSaving = true);
 
-    final amt = double.parse(_amountCtrl.text);
+    final amt = double.tryParse(_amountCtrl.text) ?? 0;
     final baseAmt = _isGstInclusive ? (amt / (1 + _gstRate / 100)) : amt;
 
     final payload = {
@@ -163,6 +191,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
       'description': _descCtrl.text.trim().isEmpty ? null : _descCtrl.text.trim(),
       'amount': baseAmt,
       'gst_rate': _gstRate,
+      'is_gst_inclusive': _isGstInclusive,
     };
 
     final provider = context.read<DocumentProvider>();
@@ -203,8 +232,19 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
     }).toList();
 
     final title = widget.editExpense != null ? 'Edit Expense' : 'Record Expense';
+    final isLoading = categories.isEmpty || bankAccounts.isEmpty;
 
-    return Scaffold(
+    return PopScope(
+      canPop: !_isDirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (!didPop) {
+          final shouldPop = await _onWillPop();
+          if (shouldPop && mounted) {
+            Navigator.of(context).pop();
+          }
+        }
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bgLight,
       appBar: AppBar(
         title: Text(title),
@@ -217,7 +257,9 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
           ),
         ],
       ),
-      body: Form(
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : Form(
         key: _formKey,
         child: ListView(
           padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
@@ -381,23 +423,23 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                 title: 'TAX SUMMARY',
                 child: Column(
                   children: [
-                    SummaryRow(label: 'Subtotal', value: '₹${double.parse(_previewData!['amount'].toString()).toStringAsFixed(2)}'),
+                    SummaryRow(label: 'Subtotal', value: '₹${(_previewData!['amount'] ?? 0).toStringAsFixed(2)}'),
                     if ((_previewData!['cgst_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'CGST', value: '₹${double.parse(_previewData!['cgst_amount'].toString()).toStringAsFixed(2)}'),
+                      SummaryRow(label: 'CGST', value: '₹${(_previewData!['cgst_amount'] ?? 0).toStringAsFixed(2)}'),
                     if ((_previewData!['sgst_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'SGST', value: '₹${double.parse(_previewData!['sgst_amount'].toString()).toStringAsFixed(2)}'),
+                      SummaryRow(label: 'SGST', value: '₹${(_previewData!['sgst_amount'] ?? 0).toStringAsFixed(2)}'),
                     if ((_previewData!['igst_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'IGST', value: '₹${double.parse(_previewData!['igst_amount'].toString()).toStringAsFixed(2)}'),
+                      SummaryRow(label: 'IGST', value: '₹${(_previewData!['igst_amount'] ?? 0).toStringAsFixed(2)}'),
                     if ((_previewData!['utgst_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'UTGST', value: '₹${double.parse(_previewData!['utgst_amount'].toString()).toStringAsFixed(2)}'),
+                      SummaryRow(label: 'UTGST', value: '₹${(_previewData!['utgst_amount'] ?? 0).toStringAsFixed(2)}'),
                     if ((_previewData!['cess_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'Cess', value: '₹${double.parse(_previewData!['cess_amount'].toString()).toStringAsFixed(2)}'),
+                      SummaryRow(label: 'Cess', value: '₹${(_previewData!['cess_amount'] ?? 0).toStringAsFixed(2)}'),
                     if ((_previewData!['round_off'] ?? 0) != 0)
-                      SummaryRow(label: 'Round Off', value: '₹${double.parse(_previewData!['round_off'].toString()).toStringAsFixed(2)}'),
+                      SummaryRow(label: 'Round Off', value: '₹${(_previewData!['round_off'] ?? 0).toStringAsFixed(2)}'),
                     const Divider(),
                     SummaryRow(
                       label: 'Total Amount',
-                      value: '₹${double.parse(_previewData!['total'].toString()).toStringAsFixed(2)}',
+                      value: '₹${(_previewData!['total'] ?? 0).toStringAsFixed(2)}',
                       isBold: true,
                       valueColor: AppColors.brandNavy,
                     ),
@@ -405,11 +447,27 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                 ),
               ),
             ],
-            const SizedBox(height: 60),
+            const SizedBox(height: 80),
+            if (isMobile)
+              SafeArea(
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isSaving ? null : _save,
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Text('SAVE'),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }
 
