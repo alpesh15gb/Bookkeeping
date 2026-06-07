@@ -1143,7 +1143,7 @@ def import_vyapar_backup(
             try:
                 inv = db.query(Invoice).filter(Invoice.id == uuid.UUID(inv_id_str)).first()
                 if inv and inv.status in ("SENT", "DRAFT"):
-                    auto_post_invoice(db, tenant_id, inv)
+                    auto_post_invoice(db, tenant_id, inv, allow_negative_stock=True)
                     posted_invoices += 1
             except Exception as e:
                 summary.errors.append(f"Auto-post invoice {inv_id_str}: {e}")

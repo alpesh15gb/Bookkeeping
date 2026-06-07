@@ -129,7 +129,7 @@ def _resolve_tax_accounts(resolver: AccountResolver, mode: str = "output"):
 
 # --- Auto-Post Invoice ----------------------------------------------------
 
-def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> JournalEntry:
+def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, allow_negative_stock: bool = False) -> JournalEntry:
     """Auto-post an invoice on creation. Creates journal entry and sets status to POSTED."""
     _check_no_existing_posting(db, tenant_id, "INVOICE", invoice.id)
     resolver = AccountResolver(db, tenant_id)
@@ -167,7 +167,7 @@ def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice) -> Jo
             product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
             if product and product.product_type == "GOODS":
                 available = product.current_stock or Decimal("0")
-                if available < line.quantity:
+                if not allow_negative_stock and available < line.quantity:
                     raise ValueError(f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
                 product.current_stock = available - line.quantity
                 db.add(StockLedger(
