@@ -17,6 +17,7 @@ import 'package:flutter_client/models/contact.dart';
 import 'package:flutter_client/utils/haptic_helper.dart';
 import 'package:flutter_client/views/shared/skeleton_loading.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
+import 'package:flutter_client/views/dashboard/mobile_home_view.dart';
 
 class SalesDashboardView extends StatefulWidget {
   const SalesDashboardView({super.key});
@@ -137,6 +138,13 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
     }
     if (d.errorMessage != null) {
       return ErrorState(message: d.errorMessage!, onRetry: () => d.fetchDashboard());
+    }
+
+    if (isMobile) {
+      return const Scaffold(
+        backgroundColor: AppColors.bgLight,
+        body: MobileHomeView(),
+      );
     }
 
     final hasData = d.revenue > 0 || d.totalExpenses > 0 || d.recentInvoices.isNotEmpty;

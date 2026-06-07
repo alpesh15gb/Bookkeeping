@@ -7,6 +7,7 @@ import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/estimates/estimate_form_view.dart';
 import 'package:flutter_client/views/estimates/estimate_detail_view.dart';
+import 'package:flutter_client/views/shared/skeleton_loading.dart';
 
 class EstimateListView extends StatefulWidget {
   const EstimateListView({super.key});
@@ -127,236 +128,279 @@ class _EstimateListViewState extends State<EstimateListView> {
       totalAmount += double.tryParse((e['total'] ?? 0).toString()) ?? 0;
     }
 
-    String formatAmt(num v) {
-      if (v >= 100000) return '₹${(v / 100000).toStringAsFixed(1)}L';
-      if (v >= 1000) return '₹${(v / 1000).toStringAsFixed(1)}K';
-      return '₹${v.toStringAsFixed(0)}';
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: AppColors.bgLight,
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showForm(),
+          child: const Icon(Icons.add),
+        ),
+        body: Column(
+          children: [
+            Container(
+              color: AppColors.bgSurface,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: AppInput(
+                controller: _searchCtrl,
+                hint: 'Search estimates...',
+                prefix: const Icon(Icons.search_rounded, size: 16),
+                suffix: _searchCtrl.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close, size: 14),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            AppStatusTabBar(
+              tabs: const ['ALL', 'DRAFT', 'CONFIRMED', 'ACCEPTED', 'CANCELLED'],
+              activeTab: _statusFilter,
+              onTabChanged: (tab) {
+                setState(() => _statusFilter = tab);
+              },
+              badges: {
+                'ALL': totalCount,
+                'DRAFT': draftCount,
+                'CONFIRMED': confirmedCount,
+                'ACCEPTED': acceptedCount,
+                'CANCELLED': _estimates.where((e) => e['status'] == 'CANCELLED').length,
+              },
+            ),
+            Expanded(
+              child: _isLoading && _estimates.isEmpty
+                  ? ListSkeleton()
+                  : _errorMessage != null && _estimates.isEmpty
+                      ? ErrorState(message: _errorMessage!, onRetry: _fetch)
+                      : filtered.isEmpty
+                          ? AppEmptyState(
+                              icon: Icons.request_quote_outlined,
+                              title: 'No estimates match your search',
+                              subtitle: 'Try clearing the filters or create an estimate',
+                              actionLabel: 'Create Estimate',
+                              onAction: () => _showForm(),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: () async => _fetch(),
+                              child: ListView.separated(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                itemCount: filtered.length,
+                                separatorBuilder: (context, _) => const SizedBox(height: 4),
+                                itemBuilder: (context, i) {
+                                  final est = filtered[i];
+                                  final status = (est['status'] ?? 'DRAFT').toString();
+                                  final dateStr = (est['issue_date'] ?? est['created_at'] ?? '').toString();
+                                  final amount = double.tryParse((est['total'] ?? 0).toString()) ?? 0;
+                                  final docNo = est['proforma_number']?.toString() ?? 'PROFORMA';
+                                  final partyName = est['contact_name']?.toString() ?? 'Guest';
+
+                                  return CompactDocumentCard(
+                                    docNumber: docNo,
+                                    partyName: partyName,
+                                    date: dateStr.isNotEmpty ? dateStr : null,
+                                    amount: amount,
+                                    status: status,
+                                    onTap: () => _showDetail(est['id']),
+                                    actions: [
+                                      if (status == 'DRAFT')
+                                        IconButton(
+                                          icon: const Icon(Icons.edit_outlined, size: 16),
+                                          onPressed: () => _showForm(estimate: est),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                        ),
+                                      if (status != 'CANCELLED')
+                                        IconButton(
+                                          icon: const Icon(Icons.cancel_outlined, size: 16, color: AppColors.error),
+                                          onPressed: () => _cancelEstimate(est['id']),
+                                          padding: EdgeInsets.zero,
+                                          constraints: const BoxConstraints(),
+                                        ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+            ),
+          ],
+        ),
+      );
     }
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: isMobile
-          ? FloatingActionButton(
-              onPressed: () => _showForm(),
-              child: const Icon(Icons.add),
-            )
-          : null,
       body: Column(
         children: [
-          // ── Search + Filter Bar ──
-          Container(
-            color: AppColors.bgSurface,
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 12 : 20,
-              vertical: 8,
+          AppCommandBar(
+            title: 'Estimates & Proformas',
+            searchWidget: AppInput(
+              controller: _searchCtrl,
+              hint: 'Search by estimate no, contact...',
+              prefix: const Icon(Icons.search_rounded, size: 16),
+              onChanged: (_) => setState(() {}),
             ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: TextField(
-                        controller: _searchCtrl,
-                        decoration: InputDecoration(
-                          hintText: 'Search estimates...',
-                          prefixIcon: const Icon(Icons.search_rounded, size: 18),
-                          suffixIcon: _searchCtrl.text.isNotEmpty
-                              ? IconButton(
-                                  icon: const Icon(Icons.close, size: 16),
-                                  onPressed: () {
-                                    _searchCtrl.clear();
-                                    setState(() {});
-                                  },
-                                )
-                              : null,
-                          isDense: true,
-                          contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(color: AppColors.borderInput),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(AppRadius.md),
-                            borderSide: const BorderSide(color: AppColors.borderInput),
-                          ),
-                        ),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    if (!isMobile) ...[
-                      const SizedBox(width: 8),
-                      ElevatedButton.icon(
-                        onPressed: () => _showForm(),
-                        icon: const Icon(Icons.add, size: 16, color: AppColors.textWhite),
-                        label: const Text('Create Estimate', style: TextStyle(fontSize: 12, color: AppColors.textWhite)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.brandNavy,
-                          foregroundColor: AppColors.textWhite,
-                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 6),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      FilterChipWithCount(
-                        label: 'All', count: totalCount,
-                        isSelected: _statusFilter == 'ALL',
-                        onTap: () => setState(() => _statusFilter = 'ALL'),
-                      ),
-                      const SizedBox(width: 6),
-                      FilterChipWithCount(
-                        label: 'Draft', count: draftCount,
-                        isSelected: _statusFilter == 'DRAFT',
-                        onTap: () => setState(() => _statusFilter = 'DRAFT'),
-                      ),
-                      const SizedBox(width: 6),
-                      FilterChipWithCount(
-                        label: 'Confirmed', count: confirmedCount,
-                        isSelected: _statusFilter == 'CONFIRMED',
-                        onTap: () => setState(() => _statusFilter = 'CONFIRMED'),
-                      ),
-                      const SizedBox(width: 6),
-                      FilterChipWithCount(
-                        label: 'Accepted', count: acceptedCount,
-                        isSelected: _statusFilter == 'ACCEPTED',
-                        onTap: () => setState(() => _statusFilter = 'ACCEPTED'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            actions: [
+              AppButton(
+                label: 'Create Estimate',
+                icon: Icons.add,
+                isPrimary: true,
+                onTap: () => _showForm(),
+              ),
+            ],
           ),
-
-          // ── Hero Summary Card ──
-          if (_estimates.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 12 : 20,
-                vertical: 8,
-              ),
-              child: HeroSummaryCard(
-                title: 'Total Estimates',
-                amount: totalAmount,
-                subtitle: '$acceptedCount accepted · $draftCount draft',
-                icon: Icons.request_quote_outlined,
-              ),
-            ),
-
-          // ── Summary Stats ──
-          if (_estimates.isNotEmpty)
-            SummaryStatsBar(stats: [
-              SummaryStat(label: 'Total', count: totalCount, color: AppColors.brandNavy),
-              SummaryStat(label: 'Draft', count: draftCount, color: AppColors.textMuted),
-              SummaryStat(label: 'Confirmed', count: confirmedCount, color: AppColors.info),
-              SummaryStat(label: 'Accepted', count: acceptedCount, color: AppColors.success),
-            ]),
-
-          // ── List Body ──
+          AppStatusTabBar(
+            tabs: const ['ALL', 'DRAFT', 'CONFIRMED', 'ACCEPTED', 'CANCELLED'],
+            activeTab: _statusFilter,
+            onTabChanged: (tab) {
+              setState(() => _statusFilter = tab);
+            },
+            badges: {
+              'ALL': totalCount,
+              'DRAFT': draftCount,
+              'CONFIRMED': confirmedCount,
+              'ACCEPTED': acceptedCount,
+              'CANCELLED': _estimates.where((e) => e['status'] == 'CANCELLED').length,
+            },
+          ),
           Expanded(
             child: _isLoading && _estimates.isEmpty
-                ? const LoadingState(message: 'Loading estimates...')
+                ? ListSkeleton()
                 : _errorMessage != null && _estimates.isEmpty
                     ? ErrorState(message: _errorMessage!, onRetry: _fetch)
-                    : _estimates.isEmpty
-                        ? EmptyState(
+                    : filtered.isEmpty
+                        ? AppEmptyState(
                             icon: Icons.request_quote_outlined,
-                            title: 'No estimates yet',
-                            subtitle: 'Estimates and proforma invoices will appear here',
+                            title: 'No estimates found',
+                            subtitle: 'Create estimates or proformas to send to your customers',
                             actionLabel: 'Create Estimate',
                             onAction: () => _showForm(),
                           )
-                        : filtered.isEmpty
-                            ? EmptyState(
-                                icon: Icons.search_off_rounded,
-                                title: 'No matches',
-                                subtitle: 'Try adjusting your search or filters',
-                                actionLabel: 'Create Estimate',
-                                onAction: () => _showForm(),
-                              )
-                            : RefreshIndicator(
-                                onRefresh: () async => _fetch(),
+                        : Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.bgSurface,
+                                  border: Border(bottom: BorderSide(color: AppColors.border)),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Expanded(flex: 2, child: Text('DATE', style: AppTextStyles.labelSmall)),
+                                    Expanded(flex: 2, child: Text('ESTIMATE NO', style: AppTextStyles.labelSmall)),
+                                    Expanded(flex: 4, child: Text('PARTY / CUSTOMER', style: AppTextStyles.labelSmall)),
+                                    Expanded(flex: 3, child: Text('AMOUNT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
+                                    Expanded(flex: 2, child: Text('STATUS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                                    SizedBox(width: 100, child: Text('ACTIONS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
                                 child: ListView.separated(
-                                  padding: EdgeInsets.only(
-                                    left: isMobile ? 12 : 20,
-                                    right: isMobile ? 12 : 20,
-                                    top: 8,
-                                    bottom: isMobile ? 80 : 20,
-                                  ),
+                                  padding: EdgeInsets.zero,
                                   itemCount: filtered.length,
-                                  separatorBuilder: (context, _) => const SizedBox(height: 6),
-                                  itemBuilder: (context, i) {
-                                    final est = filtered[i];
-                                    final status = (est['status'] ?? 'DRAFT').toString();
-                                    final dateStr = (est['issue_date'] ?? est['created_at'] ?? '').toString();
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderLight),
+                                  itemBuilder: (context, index) {
+                                    final est = filtered[index];
+                                    final id = est['id'].toString();
+                                    final docNo = est['proforma_number']?.toString() ?? 'PROFORMA';
+                                    final partyName = est['contact_name']?.toString() ?? 'Guest';
                                     final amount = double.tryParse((est['total'] ?? 0).toString()) ?? 0;
+                                    final status = est['status']?.toString() ?? 'DRAFT';
+                                    final dateStr = (est['issue_date'] ?? est['created_at'] ?? '').toString();
 
-                                    return CompactDocumentCard(
-                                      docNumber: est['proforma_number']?.toString() ?? 'PROFORMA',
-                                      partyName: est['contact_name']?.toString(),
-                                      date: dateStr.isNotEmpty ? dateStr : null,
-                                      amount: amount,
-                                      status: status,
-                                      onTap: () => _showDetail(est['id']),
-                                      actions: [
-                                        if (status == 'DRAFT')
-                                          _CompactAction(
-                                            icon: Icons.edit_outlined,
-                                            tooltip: 'Edit',
-                                            onTap: () => _showForm(estimate: est),
-                                          ),
-                                        if (status != 'CANCELLED')
-                                          _CompactAction(
-                                            icon: Icons.cancel_outlined,
-                                            tooltip: 'Cancel',
-                                            color: AppColors.error,
-                                            onTap: () => _cancelEstimate(est['id']),
-                                          ),
-                                      ],
+                                    return InkWell(
+                                      onTap: () => _showDetail(id),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                dateStr.isNotEmpty ? AppDate.format(dateStr) : '--',
+                                                style: AppTextStyles.bodySmall,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                docNo,
+                                                style: AppTextStyles.bodyMedium.copyWith(
+                                                  color: AppColors.brandNavy,
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 4,
+                                              child: Row(
+                                                children: [
+                                                  AppAvatar(name: partyName, size: 24),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Text(
+                                                      partyName,
+                                                      style: AppTextStyles.partyName,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                AmountFormat.format(amount),
+                                                style: AppTextStyles.amount,
+                                                textAlign: TextAlign.right,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Center(
+                                                child: AppInlineStatus(status: status),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 100,
+                                              child: AppRowActions(
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(Icons.visibility_outlined, size: 16),
+                                                    onPressed: () => _showDetail(id),
+                                                    tooltip: 'View Detail',
+                                                  ),
+                                                  if (status == 'DRAFT')
+                                                    IconButton(
+                                                      icon: const Icon(Icons.edit_outlined, size: 16),
+                                                      onPressed: () => _showForm(estimate: est),
+                                                      tooltip: 'Edit',
+                                                    ),
+                                                  if (status != 'CANCELLED')
+                                                    IconButton(
+                                                      icon: const Icon(Icons.cancel_outlined, size: 16),
+                                                      color: AppColors.error,
+                                                      onPressed: () => _cancelEstimate(id),
+                                                      tooltip: 'Cancel',
+                                                    ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
                                     );
                                   },
                                 ),
                               ),
+                            ],
+                          ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _CompactAction extends StatelessWidget {
-  final IconData icon;
-  final String tooltip;
-  final Color? color;
-  final VoidCallback onTap;
-
-  const _CompactAction({
-    required this.icon,
-    required this.tooltip,
-    this.color,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Tooltip(
-      message: tooltip,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: (color ?? AppColors.brandNavy).withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(4),
-          ),
-          child: Icon(icon, size: 14, color: color ?? AppColors.brandNavy),
-        ),
       ),
     );
   }

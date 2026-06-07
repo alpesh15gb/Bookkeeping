@@ -220,158 +220,196 @@ class _InvoiceListViewState extends State<InvoiceListView> {
         if (inv.status == 'PARTIALLY_PAID' && inv.dueDate != null && DateTime.tryParse(inv.dueDate!)?.isBefore(DateTime.now()) == true) overdueAmount += balance;
       }
     }
-    final avgInvoice = totalCount > 0 ? totalAmount / totalCount : 0;
 
-    String formatAmt(num v) {
-      if (v >= 100000) return '₹${(v / 100000).toStringAsFixed(1)}L';
-      if (v >= 1000) return '₹${(v / 1000).toStringAsFixed(1)}K';
-      return '₹${v.toStringAsFixed(0)}';
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: AppColors.bgLight,
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showForm(),
+          child: const Icon(Icons.add),
+        ),
+        body: Column(
+          children: [
+            AppCard(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Column(
+                children: [
+                  AppInput(
+                    controller: _searchCtrl,
+                    hint: 'Search invoices...',
+                    prefix: const Icon(Icons.search_rounded, size: 18),
+                    suffix: _searchCtrl.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.close, size: 16),
+                            onPressed: () {
+                              _searchCtrl.clear();
+                              _fetch();
+                            },
+                          )
+                        : null,
+                    onSubmitted: (_) => _fetch(),
+                    onChanged: (v) {
+                      if (v.isEmpty) _fetch();
+                      setState(() {});
+                    },
+                  ),
+                ],
+              ),
+            ),
+            AppStatusTabBar(
+              tabs: const ['ALL', 'DRAFT', 'SENT', 'PAID', 'PARTIALLY_PAID', 'CANCELLED'],
+              activeTab: _statusFilter,
+              onTabChanged: (tab) {
+                setState(() => _statusFilter = tab);
+                _fetch();
+              },
+              badges: {
+                'ALL': totalCount,
+                'DRAFT': draftCount,
+                'SENT': sentCount,
+                'PAID': paidCount,
+                'PARTIALLY_PAID': partialCount,
+                'CANCELLED': cancelledCount,
+              },
+            ),
+            Expanded(
+              child: provider.isLoading && invoices.isEmpty
+                  ? const ListSkeleton()
+                  : provider.errorMessage != null && invoices.isEmpty
+                      ? ErrorState(message: provider.errorMessage!, onRetry: _fetch)
+                      : invoices.isEmpty
+                          ? AppEmptyState(
+                              icon: Icons.description_outlined,
+                              title: 'No invoices found',
+                              subtitle: _statusFilter != 'ALL' || _searchCtrl.text.isNotEmpty
+                                  ? 'Try clearing your filters'
+                                  : 'Create your first invoice to get started',
+                              actionLabel: 'Create Invoice',
+                              onAction: () => _showForm(),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: () async => _fetch(),
+                              child: ListView.separated(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                itemCount: invoices.length,
+                                separatorBuilder: (context, _) => const SizedBox(height: 4),
+                                itemBuilder: (context, i) {
+                                  final invoice = invoices[i];
+                                  final id = invoice.id.toString();
+                                  final isSelected = _selectedIds.contains(id);
+                                  final partyName = invoice.contactName ?? invoice.contact?.name ?? '';
+                                  final bal = _balanceAmount(invoice);
+
+                                  return _buildSwipeableInvoice(
+                                    invoice,
+                                    CompactDocumentCard(
+                                      docNumber: invoice.invoiceNumber,
+                                      partyName: partyName.isNotEmpty ? partyName : null,
+                                      date: invoice.issueDate,
+                                      amount: invoice.total,
+                                      status: invoice.status,
+                                      balanceLabel: _balanceLabel(invoice),
+                                      balanceAmount: bal > 0 ? bal : null,
+                                      isSelected: isSelected,
+                                      isSelectionMode: _isSelectionMode,
+                                      onTap: () {
+                                        if (_isSelectionMode) {
+                                          _toggleSelection(id);
+                                        } else {
+                                          _showDetail(invoice.id);
+                                        }
+                                      },
+                                      onLongPress: () {
+                                        if (!_isSelectionMode) {
+                                          setState(() {
+                                            _isSelectionMode = true;
+                                            _selectedIds.add(id);
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+            ),
+            if (_selectedIds.isNotEmpty)
+              AppStickyBottomBar(
+                children: [
+                  Text('${_selectedIds.length} selected', style: AppTextStyles.bodyMedium),
+                  Row(
+                    children: [
+                      AppButton(
+                        label: 'Cancel',
+                        icon: Icons.cancel_outlined,
+                        onTap: _bulkCancel,
+                        color: AppColors.error,
+                        isSmall: true,
+                      ),
+                      const SizedBox(width: 4),
+                      AppButton(
+                        label: 'Delete',
+                        icon: Icons.delete_outline,
+                        onTap: _bulkDelete,
+                        color: AppColors.error,
+                        isSmall: true,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+          ],
+        ),
+      );
     }
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: isMobile
-          ? FloatingActionButton(
-              onPressed: () => _showForm(),
-              child: const Icon(Icons.add),
-            )
-          : null,
       body: Column(
         children: [
-          // ── Search + Filter Bar ──
-          AppCard(
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 12 : 20,
-              vertical: 8,
+          AppCommandBar(
+            title: 'Sale Invoices',
+            searchWidget: AppInput(
+              controller: _searchCtrl,
+              hint: 'Search invoices...',
+              prefix: const Icon(Icons.search_rounded, size: 18),
+              onSubmitted: (_) => _fetch(),
+              onChanged: (v) {
+                if (v.isEmpty) _fetch();
+                setState(() {});
+              },
             ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      flex: 5,
-                      child: AppInput(
-                        controller: _searchCtrl,
-                        hint: 'Search invoices...',
-                        prefix: const Icon(Icons.search_rounded, size: 18),
-                        suffix: _searchCtrl.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.close, size: 16),
-                                onPressed: () {
-                                  _searchCtrl.clear();
-                                  _fetch();
-                                },
-                              )
-                            : null,
-                        onSubmitted: (_) => _fetch(),
-                        onChanged: (v) {
-                          if (v.isEmpty) _fetch();
-                          setState(() {});
-                        },
-                      ),
-                    ),
-                    if (!isMobile) ...[
-                      const SizedBox(width: 8),
-                      Tooltip(
-                        message: 'Export GSTR-1',
-                        child: IconButton(
-                          icon: const Icon(Icons.download_rounded, size: 18),
-                          onPressed: _exportGstr1,
-                          style: IconButton.styleFrom(
-                            backgroundColor: AppColors.borderLight,
-                            padding: const EdgeInsets.all(6),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      AppButton(
-                        label: 'Create Invoice',
-                        icon: Icons.add,
-                        isPrimary: true,
-                        onTap: () => _showForm(),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      FilterChipWithCount(
-                        label: 'All',
-                        count: totalCount,
-                        isSelected: _statusFilter == 'ALL',
-                        onTap: () { setState(() => _statusFilter = 'ALL'); _fetch(); },
-                      ),
-                      const SizedBox(width: 4),
-                      FilterChipWithCount(
-                        label: 'Draft',
-                        count: draftCount,
-                        isSelected: _statusFilter == 'DRAFT',
-                        onTap: () { setState(() => _statusFilter = 'DRAFT'); _fetch(); },
-                      ),
-                      const SizedBox(width: 4),
-                      FilterChipWithCount(
-                        label: 'Sent',
-                        count: sentCount,
-                        isSelected: _statusFilter == 'SENT',
-                        onTap: () { setState(() => _statusFilter = 'SENT'); _fetch(); },
-                      ),
-                      const SizedBox(width: 4),
-                      FilterChipWithCount(
-                        label: 'Paid',
-                        count: paidCount,
-                        isSelected: _statusFilter == 'PAID',
-                        onTap: () { setState(() => _statusFilter = 'PAID'); _fetch(); },
-                      ),
-                      const SizedBox(width: 4),
-                      FilterChipWithCount(
-                        label: 'Partial',
-                        count: partialCount,
-                        isSelected: _statusFilter == 'PARTIALLY_PAID',
-                        onTap: () { setState(() => _statusFilter = 'PARTIALLY_PAID'); _fetch(); },
-                      ),
-                      const SizedBox(width: 4),
-                      FilterChipWithCount(
-                        label: 'Cancelled',
-                        count: cancelledCount,
-                        isSelected: _statusFilter == 'CANCELLED',
-                        onTap: () { setState(() => _statusFilter = 'CANCELLED'); _fetch(); },
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.download_rounded),
+                onPressed: _exportGstr1,
+                tooltip: 'Export GSTR-1',
+              ),
+              const SizedBox(width: 8),
+              AppButton(
+                label: 'Create Invoice',
+                icon: Icons.add,
+                isPrimary: true,
+                onTap: () => _showForm(),
+              ),
+            ],
           ),
-
-          // ── Hero Summary Card ──
-          if (invoices.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(
-                horizontal: isMobile ? 12 : 20,
-                vertical: 8,
-              ),
-              child: HeroSummaryCard(
-                title: 'Total Sales',
-                amount: totalAmount,
-                subtitle: '${AmountFormat.format(collectedAmount)} collected · ${AmountFormat.format(outstandingAmount)} outstanding',
-                icon: Icons.receipt_long_outlined,
-              ),
-            ),
-
-          // ── Summary Stats ──
-          if (invoices.isNotEmpty)
-            SummaryStatsBar(stats: [
-              SummaryStat(label: 'Total', count: totalCount, color: AppColors.brandNavy),
-              SummaryStat(label: 'Draft', count: draftCount, color: AppColors.textMuted),
-              SummaryStat(label: 'Sent', count: sentCount, color: AppColors.info),
-              SummaryStat(label: 'Paid', count: paidCount, color: AppColors.success),
-              SummaryStat(label: 'Partial', count: partialCount, color: AppColors.warning),
-            ]),
-
-          // ── List Body ──
+          AppStatusTabBar(
+            tabs: const ['ALL', 'DRAFT', 'SENT', 'PAID', 'PARTIALLY_PAID', 'CANCELLED'],
+            activeTab: _statusFilter,
+            onTabChanged: (tab) {
+              setState(() => _statusFilter = tab);
+              _fetch();
+            },
+            badges: {
+              'ALL': totalCount,
+              'DRAFT': draftCount,
+              'SENT': sentCount,
+              'PAID': paidCount,
+              'PARTIALLY_PAID': partialCount,
+              'CANCELLED': cancelledCount,
+            },
+          ),
           Expanded(
             child: provider.isLoading && invoices.isEmpty
                 ? const ListSkeleton()
@@ -381,190 +419,206 @@ class _InvoiceListViewState extends State<InvoiceListView> {
                         ? AppEmptyState(
                             icon: Icons.description_outlined,
                             title: 'No invoices found',
-                            subtitle: _statusFilter != 'ALL' || _searchCtrl.text.isNotEmpty
-                                ? 'Try clearing your filters'
-                                : 'Create your first invoice to get started',
+                            subtitle: 'Create your first invoice to get started',
                             actionLabel: 'Create Invoice',
                             onAction: () => _showForm(),
                           )
-                        : Stack(
+                        : Column(
                             children: [
-                              RefreshIndicator(
-                                onRefresh: () async => _fetch(),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.bgSurface,
+                                  border: Border(bottom: BorderSide(color: AppColors.border)),
+                                ),
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 40,
+                                      child: Checkbox(
+                                        value: _selectedIds.length == invoices.length && invoices.isNotEmpty,
+                                        onChanged: (_) => _selectAll(),
+                                      ),
+                                    ),
+                                    const Expanded(flex: 2, child: Text('DATE', style: AppTextStyles.labelSmall)),
+                                    const Expanded(flex: 2, child: Text('NUMBER', style: AppTextStyles.labelSmall)),
+                                    const Expanded(flex: 4, child: Text('PARTY / CUSTOMER', style: AppTextStyles.labelSmall)),
+                                    const Expanded(flex: 3, child: Text('AMOUNT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
+                                    const Expanded(flex: 3, child: Text('BALANCE', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
+                                    const Expanded(flex: 2, child: Text('STATUS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                                    const SizedBox(width: 120, child: Text('ACTIONS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                                  ],
+                                ),
+                              ),
+                              Expanded(
                                 child: ListView.separated(
-                                  padding: EdgeInsets.only(
-                                    left: isMobile ? 12 : 20,
-                                    right: isMobile ? 12 : 20,
-                                    top: 4,
-                                    bottom: _selectedIds.isNotEmpty ? 80 : (isMobile ? 80 : 20),
-                                  ),
+                                  padding: EdgeInsets.zero,
                                   itemCount: invoices.length,
-                                  separatorBuilder: (context, _) => const SizedBox(height: 4),
-                                  itemBuilder: (context, i) {
-                                    final invoice = invoices[i];
-                                    final id = invoice.id.toString();
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderLight),
+                                  itemBuilder: (context, index) {
+                                    final inv = invoices[index];
+                                    final id = inv.id.toString();
                                     final isSelected = _selectedIds.contains(id);
-                                    final partyName = invoice.contactName ?? invoice.contact?.name ?? '';
-                                    final bal = _balanceAmount(invoice);
+                                    final partyName = inv.contactName ?? inv.contact?.name ?? 'Guest';
+                                    final bal = _balanceAmount(inv);
 
-                                    return _buildSwipeableInvoice(
-                                      invoice,
-                                      CompactDocumentCard(
-                                        docNumber: invoice.invoiceNumber,
-                                        partyName: partyName.isNotEmpty ? partyName : null,
-                                        date: invoice.issueDate,
-                                        amount: invoice.total,
-                                        status: invoice.status,
-                                        balanceLabel: _balanceLabel(invoice),
-                                        balanceAmount: bal > 0 ? bal : null,
-                                        isSelected: isSelected,
-                                        isSelectionMode: _isSelectionMode,
-                                        onTap: () {
-                                          if (_isSelectionMode) {
-                                            _toggleSelection(id);
-                                          } else {
-                                            _showDetail(invoice.id);
-                                          }
-                                        },
-                                        onLongPress: () {
-                                          if (!_isSelectionMode) {
-                                            setState(() {
-                                              _isSelectionMode = true;
-                                              _selectedIds.add(id);
-                                            });
-                                          }
-                                        },
-                                        actions: _isSelectionMode
-                                            ? null
-                                            : [
-                                                if (invoice.status == 'DRAFT')
-                                                  _CompactAction(
-                                                    icon: Icons.edit_outlined,
-                                                    tooltip: 'Edit',
-                                                    onTap: () => _showForm(invoice: invoice),
-                                                  ),
-                                                if (invoice.status == 'SENT' || invoice.status == 'PARTIALLY_PAID')
-                                                  _CompactAction(
-                                                    icon: Icons.cancel_outlined,
-                                                    tooltip: 'Cancel',
-                                                    color: AppColors.error,
-                                                    onTap: () => _cancelInvoice(invoice),
-                                                  ),
-                                              ],
-                                        hoverActions: _isSelectionMode
-                                            ? null
-                                            : [
-                                                if (invoice.status == 'DRAFT')
-                                                  _CompactAction(
-                                                    icon: Icons.edit_outlined,
-                                                    tooltip: 'Edit',
-                                                    onTap: () => _showForm(invoice: invoice),
-                                                  ),
-                                                _CompactAction(
-                                                  icon: Icons.print_outlined,
-                                                  tooltip: 'Print',
-                                                  onTap: () => _printInvoice(invoice),
+                                    return InkWell(
+                                      onTap: () => _showDetail(inv.id),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                        color: isSelected ? AppColors.bgLight : Colors.transparent,
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 40,
+                                              child: Checkbox(
+                                                value: isSelected,
+                                                onChanged: (_) => _toggleSelection(id),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                AppDate.format(inv.issueDate),
+                                                style: AppTextStyles.bodySmall,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                inv.invoiceNumber,
+                                                style: AppTextStyles.bodyMedium.copyWith(
+                                                  color: AppColors.brandNavy,
+                                                  fontWeight: FontWeight.w600,
                                                 ),
-                                                _CompactAction(
-                                                  icon: Icons.share_outlined,
-                                                  tooltip: 'Share',
-                                                  onTap: () => _shareInvoice(invoice),
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 4,
+                                              child: Row(
+                                                children: [
+                                                  AppAvatar(name: partyName, size: 24),
+                                                  const SizedBox(width: 8),
+                                                  Expanded(
+                                                    child: Text(
+                                                      partyName,
+                                                      style: AppTextStyles.partyName,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                AmountFormat.format(inv.total),
+                                                style: AppTextStyles.amount,
+                                                textAlign: TextAlign.right,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                AmountFormat.format(bal),
+                                                style: AppTextStyles.amount.copyWith(
+                                                  color: bal > 0 ? AppColors.warning : AppColors.success,
                                                 ),
-                                              ],
+                                                textAlign: TextAlign.right,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Center(
+                                                child: AppInlineStatus(status: inv.status),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 120,
+                                              child: AppRowActions(
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(Icons.visibility_outlined, size: 16),
+                                                    onPressed: () => _showDetail(inv.id),
+                                                    tooltip: 'View Detail',
+                                                  ),
+                                                  if (inv.status == 'DRAFT')
+                                                    IconButton(
+                                                      icon: const Icon(Icons.edit_outlined, size: 16),
+                                                      onPressed: () => _showForm(invoice: inv),
+                                                      tooltip: 'Edit',
+                                                    ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.print_outlined, size: 16),
+                                                    onPressed: () => _printInvoice(inv),
+                                                    tooltip: 'Print',
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     );
                                   },
                                 ),
                               ),
-                              if (_selectedIds.isNotEmpty)
-                                Positioned(
-                                  left: 0,
-                                  right: 0,
-                                  bottom: 0,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: AppColors.bgSurface,
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withValues(alpha: 0.1),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, -2),
-                                        ),
-                                      ],
-                                    ),
-                                    padding: EdgeInsets.symmetric(
-                                      horizontal: isMobile ? 12 : 20,
-                                      vertical: 10,
-                                    ),
-                                    child: SafeArea(
-                                      top: false,
-                                      child: Row(
-                                        children: [
-                                          GestureDetector(
-                                            onTap: _selectAll,
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  _selectedIds.length == invoices.length
-                                                      ? Icons.check_circle
-                                                      : Icons.circle_outlined,
-                                                  size: 20,
-                                                  color: _selectedIds.length == invoices.length
-                                                      ? AppColors.brandNavy
-                                                      : AppColors.textMuted,
-                                                ),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  'Page',
-                                                  style: AppTextStyles.caption.copyWith(fontWeight: FontWeight.w600),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Text(
-                                            '${_selectedIds.length} selected',
-                                            style: AppTextStyles.caption,
-                                          ),
-                                          const Spacer(),
-                                          AppButton(
-                                            label: 'Clear',
-                                            icon: Icons.close,
-                                            onTap: _clearSelection,
-                                            isSmall: true,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          AppButton(
-                                            label: 'Cancel',
-                                            icon: Icons.cancel_outlined,
-                                            onTap: _bulkCancel,
-                                            color: AppColors.error,
-                                            isSmall: true,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          AppButton(
-                                            label: 'Email',
-                                            icon: Icons.email_outlined,
-                                            onTap: _bulkEmail,
-                                            isSmall: true,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          AppButton(
-                                            label: 'Delete',
-                                            icon: Icons.delete_outline,
-                                            onTap: _bulkDelete,
-                                            color: AppColors.error,
-                                            isSmall: true,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
                             ],
                           ),
           ),
+          if (_selectedIds.isNotEmpty)
+            AppStickyBottomBar(
+              children: [
+                Text(
+                  '${_selectedIds.length} selected',
+                  style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Row(
+                  children: [
+                    AppButton(
+                      label: 'Cancel Selected',
+                      icon: Icons.cancel_outlined,
+                      onTap: _bulkCancel,
+                      color: AppColors.error,
+                      isSmall: true,
+                    ),
+                    const SizedBox(width: 8),
+                    AppButton(
+                      label: 'Email Selected',
+                      icon: Icons.email_outlined,
+                      onTap: _bulkEmail,
+                      isSmall: true,
+                    ),
+                    const SizedBox(width: 8),
+                    AppButton(
+                      label: 'Delete Selected',
+                      icon: Icons.delete_outline,
+                      onTap: _bulkDelete,
+                      color: AppColors.error,
+                      isSmall: true,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          else
+            AppStickyBottomBar(
+              children: [
+                Text(
+                  'Total: ${AmountFormat.format(totalAmount)}',
+                  style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  'Collected: ${AmountFormat.format(collectedAmount)}',
+                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  'Outstanding: ${AmountFormat.format(outstandingAmount)}',
+                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.warning, fontWeight: FontWeight.w700),
+                ),
+              ],
+            ),
         ],
       ),
     );

@@ -704,7 +704,7 @@ def import_vyapar_backup(
                 elif amount_paid > 0:
                     inv_status = "PARTIALLY_PAID"
                 else:
-                    inv_status = "SENT"
+                    inv_status = "POSTED"
 
                 round_off = total_val - (subtotal + total_cgst + total_sgst + total_igst - discount_total)
 

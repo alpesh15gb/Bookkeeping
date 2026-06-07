@@ -64,101 +64,150 @@ class _ContactListViewState extends State<ContactListView> {
     final isMobile = AdaptiveLayout.isMobile(context);
     final filtered = _filtered(provider.contacts);
 
-    final totalCount = filtered.length;
-    final customerCount = filtered.where((c) => c.contactType == 'CUSTOMER' || c.contactType == 'BOTH').length;
-    final vendorCount = filtered.where((c) => c.contactType == 'VENDOR' || c.contactType == 'BOTH').length;
+    final totalCount = provider.contacts.length;
+    final customerCount = provider.contacts.where((c) => c.contactType == 'CUSTOMER' || c.contactType == 'BOTH').length;
+    final vendorCount = provider.contacts.where((c) => c.contactType == 'VENDOR' || c.contactType == 'BOTH').length;
+
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: AppColors.bgLight,
+        floatingActionButton: FloatingActionButton(
+          onPressed: () => _showForm(),
+          child: const Icon(Icons.add),
+        ),
+        body: Column(
+          children: [
+            Container(
+              color: AppColors.bgSurface,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: AppInput(
+                controller: _searchCtrl,
+                hint: 'Search parties...',
+                prefix: const Icon(Icons.search_rounded, size: 16),
+                suffix: _searchCtrl.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.close, size: 14),
+                        onPressed: () {
+                          _searchCtrl.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            AppStatusTabBar(
+              tabs: const ['ALL', 'CUSTOMER', 'VENDOR'],
+              activeTab: _typeFilter,
+              onTabChanged: (tab) {
+                setState(() => _typeFilter = tab);
+              },
+              badges: {
+                'ALL': totalCount,
+                'CUSTOMER': customerCount,
+                'VENDOR': vendorCount,
+              },
+            ),
+            if (provider.contacts.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                child: HeroSummaryCard(
+                  title: 'Total Parties',
+                  amount: filtered.length,
+                  subtitle: '${filtered.where((c) => c.contactType == 'CUSTOMER' || c.contactType == 'BOTH').length} customers · ${filtered.where((c) => c.contactType == 'VENDOR' || c.contactType == 'BOTH').length} vendors',
+                  icon: Icons.people_outlined,
+                ),
+              ),
+            Expanded(
+              child: provider.isLoading && provider.contacts.isEmpty
+                  ? const ListSkeleton()
+                  : provider.errorMessage != null && provider.contacts.isEmpty
+                      ? ErrorState(
+                          message: provider.errorMessage!,
+                          onRetry: () => provider.fetchContacts(),
+                        )
+                      : filtered.isEmpty
+                          ? RefreshIndicator(
+                              onRefresh: () async => provider.fetchContacts(),
+                              child: ListView(
+                                children: [
+                                  const SizedBox(height: 120),
+                                  AppEmptyState(
+                                    icon: Icons.people_outlined,
+                                    title: 'No parties match your search',
+                                    subtitle: 'Try clearing the filters or add a party',
+                                    actionLabel: 'Add Party',
+                                    onAction: () => _showForm(),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : RefreshIndicator(
+                              onRefresh: () async => provider.fetchContacts(),
+                              child: ListView.separated(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                itemCount: filtered.length,
+                                separatorBuilder: (context, _) => const SizedBox(height: 6),
+                                itemBuilder: (context, i) {
+                                  final contact = filtered[i];
+                                  return _buildSwipeableContact(
+                                    contact,
+                                    _CompactContactCard(
+                                      contact: contact,
+                                      onEdit: () => _showForm(contact: contact),
+                                      onDelete: () => _deleteSingleContact(contact),
+                                      onStatement: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => PartyStatementView(initialContact: contact),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: isMobile
-          ? FloatingActionButton(
-              onPressed: () => _showForm(),
-              child: const Icon(Icons.add),
-            )
-          : null,
       body: Column(
         children: [
-          // ── Search + Filter bar ──────────────────────────────
-          Container(
-            color: AppColors.bgSurface,
-            padding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 12 : 20,
-              vertical: 8,
+          AppCommandBar(
+            title: 'Parties & Contacts',
+            searchWidget: AppInput(
+              controller: _searchCtrl,
+              hint: 'Search by name, phone, GSTIN...',
+              prefix: const Icon(Icons.search_rounded, size: 16),
+              onChanged: (_) => setState(() {}),
             ),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: AppInput(
-                        controller: _searchCtrl,
-                        hint: 'Search parties...',
-                        prefix: const Icon(Icons.search_rounded, size: 16),
-                        suffix: _searchCtrl.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.close, size: 14),
-                                onPressed: () {
-                                  _searchCtrl.clear();
-                                  setState(() {});
-                                },
-                              )
-                            : null,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    if (!isMobile) ...[
-                      const SizedBox(width: 8),
-                      AppButton(
-                        label: 'Add Party',
-                        icon: Icons.add,
-                        isPrimary: true,
-                        onTap: () => _showForm(),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 6),
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      FilterChipWithCount(
-                        label: 'All', count: totalCount,
-                        isSelected: _typeFilter == 'ALL',
-                        onTap: () => setState(() => _typeFilter = 'ALL'),
-                      ),
-                      const SizedBox(width: 6),
-                      FilterChipWithCount(
-                        label: 'Customer', count: customerCount,
-                        isSelected: _typeFilter == 'CUSTOMER',
-                        onTap: () => setState(() => _typeFilter = 'CUSTOMER'),
-                      ),
-                      const SizedBox(width: 6),
-                      FilterChipWithCount(
-                        label: 'Vendor', count: vendorCount,
-                        isSelected: _typeFilter == 'VENDOR',
-                        onTap: () => setState(() => _typeFilter = 'VENDOR'),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          // ── Hero Summary Card ─────────────────────────────────
-          if (provider.contacts.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 8),
-              child: HeroSummaryCard(
-                title: 'Total Parties',
-                amount: totalCount,
-                subtitle: '$customerCount customers · $vendorCount vendors',
-                icon: Icons.people_outlined,
+            actions: [
+              AppButton(
+                label: 'Add Party',
+                icon: Icons.add,
+                isPrimary: true,
+                onTap: () => _showForm(),
               ),
-            ),
-
-          // ── List ─────────────────────────────────────────────
+            ],
+          ),
+          AppStatusTabBar(
+            tabs: const ['ALL', 'CUSTOMER', 'VENDOR'],
+            activeTab: _typeFilter,
+            onTabChanged: (tab) {
+              setState(() => _typeFilter = tab);
+            },
+            badges: {
+              'ALL': totalCount,
+              'CUSTOMER': customerCount,
+              'VENDOR': vendorCount,
+            },
+          ),
           Expanded(
             child: provider.isLoading && provider.contacts.isEmpty
                 ? const ListSkeleton()
@@ -168,64 +217,155 @@ class _ContactListViewState extends State<ContactListView> {
                         onRetry: () => provider.fetchContacts(),
                       )
                     : filtered.isEmpty
-                        ? RefreshIndicator(
-                            onRefresh: () async => provider.fetchContacts(),
-                            child: ListView(
-                              children: [
-                                const SizedBox(height: 120),
-                                AppEmptyState(
-                                  icon: Icons.people_outlined,
-                                  title: _searchCtrl.text.isNotEmpty ||
-                                          _typeFilter != 'ALL'
-                                      ? 'No parties match your search'
-                                      : 'No parties yet',
-                                  subtitle: _searchCtrl.text.isNotEmpty ||
-                                          _typeFilter != 'ALL'
-                                      ? 'Try clearing the filters'
-                                      : 'Add your first customer or vendor',
-                                  actionLabel: 'Add Party',
-                                  onAction: () => _showForm(),
-                                ),
-                              ],
-                            ),
+                        ? AppEmptyState(
+                            icon: Icons.people_outlined,
+                            title: 'No parties found',
+                            subtitle: 'Add your first customer or vendor to get started',
+                            actionLabel: 'Add Party',
+                            onAction: () => _showForm(),
                           )
-                        : RefreshIndicator(
-                            onRefresh: () async => provider.fetchContacts(),
-                            child: ListView.separated(
-                              padding: EdgeInsets.fromLTRB(
-                                isMobile ? 12 : 20,
-                                8,
-                                isMobile ? 12 : 20,
-                                isMobile ? 80 : 20,
+                        : Column(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                decoration: const BoxDecoration(
+                                  color: AppColors.bgSurface,
+                                  border: Border(bottom: BorderSide(color: AppColors.border)),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Expanded(flex: 4, child: Text('PARTY NAME', style: AppTextStyles.labelSmall)),
+                                    Expanded(flex: 3, child: Text('CONTACT DETAILS', style: AppTextStyles.labelSmall)),
+                                    Expanded(flex: 3, child: Text('GSTIN / PAN', style: AppTextStyles.labelSmall)),
+                                    Expanded(flex: 2, child: Text('STATE', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                                    Expanded(flex: 2, child: Text('TYPE', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                                    SizedBox(width: 120, child: Text('ACTIONS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                                  ],
+                                ),
                               ),
-                              itemCount: filtered.length,
-                              separatorBuilder: (context, _) =>
-                                  const SizedBox(height: 6),
-                              itemBuilder: (context, i) {
-                                final contact = filtered[i];
-                                return _buildSwipeableContact(
-                                  contact,
-                                  _CompactContactCard(
-                                    contact: contact,
-                                    onEdit: () =>
-                                        _showForm(contact: contact),
-                                    onDelete: () =>
-                                        _deleteSingleContact(contact),
-                                    onStatement: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              PartyStatementView(
-                                                initialContact: contact,
-                                          ),
+                              Expanded(
+                                child: ListView.separated(
+                                  padding: EdgeInsets.zero,
+                                  itemCount: filtered.length,
+                                  separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderLight),
+                                  itemBuilder: (context, index) {
+                                    final contact = filtered[index];
+                                    final details = [
+                                      if (contact.phone != null && contact.phone!.isNotEmpty) contact.phone,
+                                      if (contact.email != null && contact.email!.isNotEmpty) contact.email,
+                                    ].join(' | ');
+
+                                    return InkWell(
+                                      onTap: () => _showForm(contact: contact),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              flex: 4,
+                                              child: Row(
+                                                children: [
+                                                  AppAvatar(name: contact.name, size: 28),
+                                                  const SizedBox(width: 10),
+                                                  Expanded(
+                                                    child: Text(
+                                                      contact.name,
+                                                      style: AppTextStyles.bodyMedium.copyWith(
+                                                        color: AppColors.brandNavy,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                details.isNotEmpty ? details : 'No contact details',
+                                                style: AppTextStyles.bodySmall,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 3,
+                                              child: Text(
+                                                [
+                                                  if (contact.gstin != null && contact.gstin!.isNotEmpty) contact.gstin,
+                                                  if (contact.pan != null && contact.pan!.isNotEmpty) contact.pan,
+                                                ].join(' / ').toUpperCase(),
+                                                style: AppTextStyles.bodySmall.copyWith(
+                                                  fontFamily: 'Courier',
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Text(
+                                                contact.stateCode,
+                                                style: AppTextStyles.bodySmall,
+                                                textAlign: TextAlign.center,
+                                              ),
+                                            ),
+                                            Expanded(
+                                              flex: 2,
+                                              child: Center(
+                                                child: Text(
+                                                  contact.contactType,
+                                                  style: AppTextStyles.overline.copyWith(
+                                                    color: contact.contactType == 'CUSTOMER'
+                                                        ? AppColors.accentBlue
+                                                        : contact.contactType == 'VENDOR'
+                                                            ? AppColors.goldAccent
+                                                            : AppColors.success,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                            SizedBox(
+                                              width: 120,
+                                              child: AppRowActions(
+                                                children: [
+                                                  IconButton(
+                                                    icon: const Icon(Icons.receipt_long_outlined, size: 16),
+                                                    onPressed: () {
+                                                      Navigator.push(
+                                                        context,
+                                                        MaterialPageRoute(
+                                                          builder: (_) => PartyStatementView(initialContact: contact),
+                                                        ),
+                                                      );
+                                                    },
+                                                    tooltip: 'Statement',
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.edit_outlined, size: 16),
+                                                    onPressed: () => _showForm(contact: contact),
+                                                    tooltip: 'Edit',
+                                                  ),
+                                                  IconButton(
+                                                    icon: const Icon(Icons.delete_outline, size: 16),
+                                                    color: AppColors.error,
+                                                    onPressed: () => _deleteSingleContact(contact),
+                                                    tooltip: 'Delete',
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              },
-                            ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ),
+                            ],
                           ),
           ),
         ],

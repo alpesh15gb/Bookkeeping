@@ -12,6 +12,7 @@ class AppColors {
   static const Color goldAccent = Color(0xFFDCA035);
   static const Color goldAccentLight = Color(0xFFE8B94C);
   static const Color goldAccentDark = Color(0xFFB88728);
+  static const Color accentBlue = Color(0xFF3B82F6);
 
   // Backgrounds
   static const Color bgLight = Color(0xFFF8FAFC);
@@ -19,6 +20,12 @@ class AppColors {
   static const Color bgSidebar = Color(0xFF0F234A);
   static const Color bgSidebarHover = Color(0xFF1A335C);
   static const Color bgSidebarActive = Color(0xFFD4A036);
+  static const Color bgSidebarSection = Color(0xFF162A54);
+  static const Color cardGradientTop = Color(0xFFDCA035);
+
+  // Overlays
+  static const Color overlayLight = Color(0x33000000);
+  static const Color overlayDark = Color(0x99000000);
 
   // Borders
   static const Color border = Color(0xFFE5E7EB);
@@ -177,6 +184,7 @@ class AppRadius {
   static const double lg = 12;
   static const double xl = 16;
   static const double xxl = 20;
+  static const double pill = 24;
 
   static BorderRadius get card => BorderRadius.circular(lg);
   static BorderRadius get input => BorderRadius.circular(sm);
@@ -184,10 +192,19 @@ class AppRadius {
   static BorderRadius get badge => BorderRadius.circular(xs);
   static BorderRadius get dialog => BorderRadius.circular(xl);
   static BorderRadius get sidebar => BorderRadius.circular(md);
+  static BorderRadius get pillBorder => BorderRadius.circular(pill);
 }
 
 // ─── Shadow Tokens ──────────────────────────────────────────────
 class AppShadows {
+  static const List<BoxShadow> glow = [
+    BoxShadow(
+      color: Color(0x1A0F234A),
+      blurRadius: 12,
+      offset: Offset(0, 4),
+    ),
+  ];
+
   static const List<BoxShadow> card = [
     BoxShadow(
       color: Color(0x08000000),
@@ -395,6 +412,19 @@ class AppTextStyles {
     fontWeight: FontWeight.w600,
     letterSpacing: 0.4,
     height: 1.2,
+  );
+
+  static const TextStyle overline = TextStyle(
+    fontSize: 9,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.8,
+    color: AppColors.textMuted,
+  );
+
+  static const TextStyle tabLabel = TextStyle(
+    fontSize: 12,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.2,
   );
 }
 

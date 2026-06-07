@@ -6,6 +6,7 @@ import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/payments/payment_form_view.dart';
+import 'package:flutter_client/views/shared/skeleton_loading.dart';
 
 class PaymentListView extends StatefulWidget {
   const PaymentListView({super.key});
@@ -81,34 +82,57 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(48),
-        child: Container(
-          color: AppColors.bgSurface,
-          child: TabBar(
-            controller: _tabController,
-            tabs: const [
-              Tab(text: 'Receipts'),
-              Tab(text: 'Disbursements'),
-            ],
-          ),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton.small(
-        onPressed: () => _showForm(_tabController.index == 0 ? 'receipt' : 'disbursement'),
-        backgroundColor: AppColors.goldAccent,
-        foregroundColor: AppColors.textWhite,
-        child: const Icon(Icons.add, size: 20),
-      ),
-      body: provider.isLoading
-          ? const LoadingState(message: 'Loading payments...')
-          : TabBarView(
-              controller: _tabController,
-              children: [
-                _buildReceiptsList(provider, isMobile),
-                _buildDisbursementsList(provider, isMobile),
+      body: Column(
+        children: [
+          if (!isMobile)
+            AppCommandBar(
+              title: 'Payments & Transactions',
+              actions: [
+                AppButton(
+                  label: _tabController.index == 0 ? 'Record Receipt' : 'Record Disbursement',
+                  icon: Icons.add,
+                  isPrimary: true,
+                  onTap: () => _showForm(_tabController.index == 0 ? 'receipt' : 'disbursement'),
+                ),
               ],
             ),
+          Container(
+            color: AppColors.bgSurface,
+            child: TabBar(
+              controller: _tabController,
+              labelColor: AppColors.brandNavy,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorColor: AppColors.goldAccent,
+              indicatorWeight: 3,
+              labelStyle: AppTextStyles.tabLabel.copyWith(fontWeight: FontWeight.w700),
+              unselectedLabelStyle: AppTextStyles.tabLabel,
+              onTap: (_) => setState(() {}),
+              tabs: const [
+                Tab(text: 'RECEIPTS (IN)'),
+                Tab(text: 'DISBURSEMENTS (OUT)'),
+              ],
+            ),
+          ),
+          Expanded(
+            child: provider.isLoading
+                ? ListSkeleton()
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildReceiptsList(provider, isMobile),
+                      _buildDisbursementsList(provider, isMobile),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+      floatingActionButton: isMobile
+          ? FloatingActionButton(
+              onPressed: () => _showForm(_tabController.index == 0 ? 'receipt' : 'disbursement'),
+              backgroundColor: AppColors.goldAccent,
+              child: const Icon(Icons.add, color: Colors.white),
+            )
+          : null,
     );
   }
 
@@ -117,79 +141,215 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
       return ErrorState(message: provider.errorMessage!, onRetry: _fetch);
     }
     if (provider.receipts.isEmpty) {
-      return EmptyState(
+      return AppEmptyState(
         icon: Icons.payments_outlined,
         title: 'No receipts yet',
-        subtitle: 'Customer payments will appear here',
+        subtitle: 'Customer payment receipts will appear here',
+        actionLabel: 'Record Receipt',
+        onAction: () => _showForm('receipt'),
       );
     }
+
     num totalAmount = 0;
     for (final r in provider.receipts) {
-      totalAmount += r.amount;
+      if (r.status != 'CANCELLED') {
+        totalAmount += r.amount;
+      }
     }
-    return ListView.separated(
-      padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-      itemCount: provider.receipts.length + 1,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        if (i == 0) {
-          return HeroSummaryCard(
-            title: 'Total Receipts',
-            amount: totalAmount,
-            subtitle: '${provider.receipts.length} payments received',
-            icon: Icons.payments_outlined,
-          );
-        }
-        final r = provider.receipts[i - 1];
-        return AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text(r.contactName ?? 'Receipt', style: AppTextStyles.h3)),
-                  StatusBadge(label: r.status),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.textMuted),
-                  const SizedBox(width: 6),
-                  Text(r.paymentDate, style: AppTextStyles.caption),
-                  const SizedBox(width: 16),
-                  Icon(Icons.account_balance_outlined, size: 13, color: AppColors.textMuted),
-                  const SizedBox(width: 6),
-                  Text(r.paymentMode.replaceAll('_', ' '), style: AppTextStyles.caption),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('₹${r.amount.toStringAsFixed(2)}', style: AppTextStyles.numericLarge),
-                  Row(
-                    children: [
-                      if (r.referenceNumber != null)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Text(r.referenceNumber!, style: AppTextStyles.caption),
+
+    if (isMobile) {
+      return ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: provider.receipts.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 4),
+        itemBuilder: (context, i) {
+          final r = provider.receipts[i];
+          return AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        r.contactName ?? 'Guest Customer',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandNavy,
                         ),
-                       if (r.status != 'CANCELLED')
-                         ActionButton(
-                           label: 'Cancel',
-                           icon: Icons.cancel_outlined,
-                           tier: ActionTier.dangerous,
-                           onPressed: () => _cancelReceipt(r.id),
-                         ),
-                    ],
-                  ),
-                ],
+                      ),
+                    ),
+                    AppInlineStatus(status: r.status),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      AppDate.format(r.paymentDate),
+                      style: AppTextStyles.bodySmall,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '•  ${r.paymentMode.replaceAll('_', ' ')}',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      AmountFormat.format(r.amount),
+                      style: AppTextStyles.amount,
+                    ),
+                    if (r.status != 'CANCELLED')
+                      AppButton(
+                        label: 'Cancel',
+                        icon: Icons.cancel_outlined,
+                        color: AppColors.error,
+                        onTap: () => _cancelReceipt(r.id),
+                        isSmall: true,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: const BoxDecoration(
+                  color: AppColors.bgSurface,
+                  border: Border(bottom: BorderSide(color: AppColors.border)),
+                ),
+                child: const Row(
+                  children: [
+                    Expanded(flex: 2, child: Text('DATE', style: AppTextStyles.labelSmall)),
+                    Expanded(flex: 4, child: Text('CUSTOMER', style: AppTextStyles.labelSmall)),
+                    Expanded(flex: 2, child: Text('METHOD', style: AppTextStyles.labelSmall)),
+                    Expanded(flex: 3, child: Text('REFERENCE', style: AppTextStyles.labelSmall)),
+                    Expanded(flex: 3, child: Text('AMOUNT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
+                    Expanded(flex: 2, child: Text('STATUS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                    SizedBox(width: 100, child: Text('ACTIONS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: EdgeInsets.zero,
+                  itemCount: provider.receipts.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderLight),
+                  itemBuilder: (context, index) {
+                    final r = provider.receipts[index];
+                    final contactName = r.contactName ?? 'Guest Customer';
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              AppDate.format(r.paymentDate),
+                              style: AppTextStyles.bodySmall,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Row(
+                              children: [
+                                AppAvatar(name: contactName, size: 24),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    contactName,
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.brandNavy,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              r.paymentMode.replaceAll('_', ' ').toUpperCase(),
+                              style: AppTextStyles.bodySmall,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              r.referenceNumber ?? '--',
+                              style: AppTextStyles.bodySmall,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              AmountFormat.format(r.amount),
+                              style: AppTextStyles.amount,
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Center(
+                              child: AppInlineStatus(status: r.status),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 100,
+                            child: r.status != 'CANCELLED'
+                                ? Center(
+                                    child: AppButton(
+                                      label: 'Cancel',
+                                      icon: Icons.cancel_outlined,
+                                      color: AppColors.error,
+                                      onTap: () => _cancelReceipt(r.id),
+                                      isSmall: true,
+                                    ),
+                                  )
+                                : const SizedBox(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),
-        );
-      },
+        ),
+        AppStickyBottomBar(
+          children: [
+            Text(
+              'Active Receipts Total',
+              style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+            ),
+            Text(
+              AmountFormat.format(totalAmount),
+              style: AppTextStyles.h2.copyWith(color: AppColors.success),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -198,79 +358,215 @@ class _PaymentListViewState extends State<PaymentListView> with SingleTickerProv
       return ErrorState(message: provider.errorMessage!, onRetry: _fetch);
     }
     if (provider.disbursements.isEmpty) {
-      return EmptyState(
+      return AppEmptyState(
         icon: Icons.money_off_outlined,
         title: 'No disbursements yet',
-        subtitle: 'Vendor payments will appear here',
+        subtitle: 'Vendor payment disbursements will appear here',
+        actionLabel: 'Record Disbursement',
+        onAction: () => _showForm('disbursement'),
       );
     }
+
     num totalAmount = 0;
     for (final d in provider.disbursements) {
-      totalAmount += d.amount;
+      if (d.status != 'CANCELLED') {
+        totalAmount += d.amount;
+      }
     }
-    return ListView.separated(
-      padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-      itemCount: provider.disbursements.length + 1,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
-      itemBuilder: (context, i) {
-        if (i == 0) {
-          return HeroSummaryCard(
-            title: 'Total Disbursements',
-            amount: totalAmount,
-            subtitle: '${provider.disbursements.length} payments made',
-            icon: Icons.money_off_outlined,
-          );
-        }
-        final d = provider.disbursements[i - 1];
-        return AppCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: Text(d.vendorName ?? 'Disbursement', style: AppTextStyles.h3)),
-                  StatusBadge(label: d.status),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Icon(Icons.calendar_today_outlined, size: 13, color: AppColors.textMuted),
-                  const SizedBox(width: 6),
-                  Text(d.paymentDate, style: AppTextStyles.caption),
-                  const SizedBox(width: 16),
-                  Icon(Icons.account_balance_outlined, size: 13, color: AppColors.textMuted),
-                  const SizedBox(width: 6),
-                  Text(d.paymentMode.replaceAll('_', ' '), style: AppTextStyles.caption),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('₹${d.amount.toStringAsFixed(2)}', style: AppTextStyles.numericLarge),
-                  Row(
-                    children: [
-                      if (d.referenceNumber != null)
-                        Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: Text(d.referenceNumber!, style: AppTextStyles.caption),
+
+    if (isMobile) {
+      return ListView.separated(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        itemCount: provider.disbursements.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 4),
+        itemBuilder: (context, i) {
+          final d = provider.disbursements[i];
+          return AppCard(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        d.vendorName ?? 'Guest Vendor',
+                        style: AppTextStyles.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.brandNavy,
                         ),
-                       if (d.status != 'CANCELLED')
-                         ActionButton(
-                           label: 'Cancel',
-                           icon: Icons.cancel_outlined,
-                           tier: ActionTier.dangerous,
-                           onPressed: () => _cancelDisbursement(d.id),
-                         ),
-                    ],
-                  ),
-                ],
+                      ),
+                    ),
+                    AppInlineStatus(status: d.status),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      AppDate.format(d.paymentDate),
+                      style: AppTextStyles.bodySmall,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '•  ${d.paymentMode.replaceAll('_', ' ')}',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      AmountFormat.format(d.amount),
+                      style: AppTextStyles.amount,
+                    ),
+                    if (d.status != 'CANCELLED')
+                      AppButton(
+                        label: 'Cancel',
+                        icon: Icons.cancel_outlined,
+                        color: AppColors.error,
+                        onTap: () => _cancelDisbursement(d.id),
+                        isSmall: true,
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
+
+    return Column(
+      children: [
+        Expanded(
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                decoration: const BoxDecoration(
+                  color: AppColors.bgSurface,
+                  border: Border(bottom: BorderSide(color: AppColors.border)),
+                ),
+                child: const Row(
+                  children: [
+                    Expanded(flex: 2, child: Text('DATE', style: AppTextStyles.labelSmall)),
+                    Expanded(flex: 4, child: Text('VENDOR', style: AppTextStyles.labelSmall)),
+                    Expanded(flex: 2, child: Text('METHOD', style: AppTextStyles.labelSmall)),
+                    Expanded(flex: 3, child: Text('REFERENCE', style: AppTextStyles.labelSmall)),
+                    Expanded(flex: 3, child: Text('AMOUNT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
+                    Expanded(flex: 2, child: Text('STATUS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                    SizedBox(width: 100, child: Text('ACTIONS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  padding: EdgeInsets.zero,
+                  itemCount: provider.disbursements.length,
+                  separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderLight),
+                  itemBuilder: (context, index) {
+                    final d = provider.disbursements[index];
+                    final vendorName = d.vendorName ?? 'Guest Vendor';
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              AppDate.format(d.paymentDate),
+                              style: AppTextStyles.bodySmall,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 4,
+                            child: Row(
+                              children: [
+                                AppAvatar(name: vendorName, size: 24),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    vendorName,
+                                    style: AppTextStyles.bodyMedium.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.brandNavy,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Text(
+                              d.paymentMode.replaceAll('_', ' ').toUpperCase(),
+                              style: AppTextStyles.bodySmall,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              d.referenceNumber ?? '--',
+                              style: AppTextStyles.bodySmall,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 3,
+                            child: Text(
+                              AmountFormat.format(d.amount),
+                              style: AppTextStyles.amount,
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Center(
+                              child: AppInlineStatus(status: d.status),
+                            ),
+                          ),
+                          SizedBox(
+                            width: 100,
+                            child: d.status != 'CANCELLED'
+                                ? Center(
+                                    child: AppButton(
+                                      label: 'Cancel',
+                                      icon: Icons.cancel_outlined,
+                                      color: AppColors.error,
+                                      onTap: () => _cancelDisbursement(d.id),
+                                      isSmall: true,
+                                    ),
+                                  )
+                                : const SizedBox(),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
             ],
           ),
-        );
-      },
+        ),
+        AppStickyBottomBar(
+          children: [
+            Text(
+              'Active Disbursements Total',
+              style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+            ),
+            Text(
+              AmountFormat.format(totalAmount),
+              style: AppTextStyles.h2.copyWith(color: AppColors.error),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

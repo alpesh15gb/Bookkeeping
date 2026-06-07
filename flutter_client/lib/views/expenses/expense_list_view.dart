@@ -141,122 +141,244 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   Widget build(BuildContext context) {
     final provider = context.watch<ExpenseProvider>();
     final isMobile = AdaptiveLayout.isMobile(context);
+    final items = provider.items;
+
+    num totalAmount = 0;
+    for (final e in items) {
+      totalAmount += double.tryParse((e['amount'] ?? 0).toString()) ?? 0;
+    }
+
+    if (isMobile) {
+      return Scaffold(
+        backgroundColor: AppColors.bgLight,
+        floatingActionButton: _isSelectionMode
+            ? null
+            : FloatingActionButton(
+                onPressed: () => _showForm(),
+                child: const Icon(Icons.add),
+              ),
+        body: Column(
+          children: [
+            AppStatusTabBar(
+              tabs: const ['ALL', 'DRAFT', 'POSTED', 'CANCELLED'],
+              activeTab: 'ALL',
+              onTabChanged: (_) {},
+              badges: {
+                'ALL': items.length,
+                'DRAFT': items.where((e) => e['status'] == 'DRAFT').length,
+                'POSTED': items.where((e) => e['status'] == 'POSTED').length,
+                'CANCELLED': items.where((e) => e['status'] == 'CANCELLED').length,
+              },
+            ),
+            Expanded(
+              child: provider.isLoading && items.isEmpty
+                  ? const LoadingState(message: 'Loading expenses...')
+                  : items.isEmpty
+                      ? AppEmptyState(
+                          icon: Icons.money_off_outlined,
+                          title: 'No expenses recorded',
+                          subtitle: 'Expenses you record will appear here',
+                          actionLabel: 'Record Expense',
+                          onAction: () => _showForm(),
+                        )
+                      : RefreshIndicator(
+                          onRefresh: () async => provider.fetchExpenses(page: provider.currentPage),
+                          child: ListView.separated(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            itemCount: items.length,
+                            separatorBuilder: (context, _) => const SizedBox(height: 6),
+                            itemBuilder: (context, i) {
+                              final exp = items[i];
+                              final id = exp['id'].toString();
+                              final isSelected = _selectedIds.contains(id);
+                              final category = exp['category_name'] ?? exp['category']?['name'] ?? 'N/A';
+                              final amount = double.tryParse((exp['amount'] ?? 0).toString()) ?? 0.0;
+
+                              return GestureDetector(
+                                onTap: () {
+                                  if (_isSelectionMode) {
+                                    _toggleSelection(id);
+                                  } else {
+                                    _showDetail(exp['id']);
+                                  }
+                                },
+                                onLongPress: () {
+                                  if (!_isSelectionMode) {
+                                    setState(() {
+                                      _isSelectionMode = true;
+                                      _selectedIds.add(id);
+                                    });
+                                  }
+                                },
+                                child: CompactDocumentCard(
+                                  docNumber: exp['expense_number'] ?? 'EXP',
+                                  partyName: category,
+                                  date: exp['expense_date'],
+                                  amount: amount,
+                                  status: exp['status'] ?? 'POSTED',
+                                  isSelected: isSelected,
+                                  isSelectionMode: _isSelectionMode,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
-      floatingActionButton: _isSelectionMode
-          ? null
-          : FloatingActionButton(
-              onPressed: () => _showForm(),
-              child: const Icon(Icons.add),
-            ),
       body: Column(
         children: [
-          if (provider.items.isNotEmpty)
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 8),
-              child: Builder(
-                builder: (_) {
-                  num totalAmount = 0;
-                  for (final e in provider.items) {
-                    totalAmount += double.tryParse((e['amount'] ?? 0).toString()) ?? 0;
-                  }
-                  return HeroSummaryCard(
-                    title: 'Total Expenses',
-                    amount: totalAmount,
-                    subtitle: '${provider.items.length} expenses recorded',
-                    icon: Icons.money_off_outlined,
-                  );
-                },
+          AppCommandBar(
+            title: 'Expenses',
+            actions: [
+              AppButton(
+                label: 'Record Expense',
+                icon: Icons.add,
+                isPrimary: true,
+                onTap: () => _showForm(),
               ),
-            ),
+            ],
+          ),
+          AppStatusTabBar(
+            tabs: const ['ALL', 'DRAFT', 'POSTED', 'CANCELLED'],
+            activeTab: 'ALL',
+            onTabChanged: (_) {},
+            badges: {
+              'ALL': items.length,
+              'DRAFT': items.where((e) => e['status'] == 'DRAFT').length,
+              'POSTED': items.where((e) => e['status'] == 'POSTED').length,
+              'CANCELLED': items.where((e) => e['status'] == 'CANCELLED').length,
+            },
+          ),
           Expanded(
-            child: provider.isLoading && provider.items.isEmpty
+            child: provider.isLoading && items.isEmpty
                 ? const LoadingState(message: 'Loading expenses...')
-                : provider.items.isEmpty
-                    ? ds.AppEmptyState(
+                : items.isEmpty
+                    ? AppEmptyState(
                         icon: Icons.money_off_outlined,
                         title: 'No expenses recorded',
                         subtitle: 'Expenses you record will appear here',
                         actionLabel: 'Record Expense',
                         onAction: () => _showForm(),
                       )
-                    : Stack(
+                    : Column(
                         children: [
-                          RefreshIndicator(
-                            onRefresh: () async => provider.fetchExpenses(page: provider.currentPage),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                            decoration: const BoxDecoration(
+                              color: AppColors.bgSurface,
+                              border: Border(bottom: BorderSide(color: AppColors.border)),
+                            ),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 40,
+                                  child: Checkbox(
+                                    value: _selectedIds.length == items.length && items.isNotEmpty,
+                                    onChanged: (_) => _selectAll(),
+                                  ),
+                                ),
+                                const Expanded(flex: 2, child: Text('DATE', style: AppTextStyles.labelSmall)),
+                                const Expanded(flex: 2, child: Text('NUMBER', style: AppTextStyles.labelSmall)),
+                                const Expanded(flex: 4, child: Text('CATEGORY', style: AppTextStyles.labelSmall)),
+                                const Expanded(flex: 3, child: Text('AMOUNT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
+                                const Expanded(flex: 2, child: Text('STATUS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                                const SizedBox(width: 120, child: Text('ACTIONS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
+                              ],
+                            ),
+                          ),
+                          Expanded(
                             child: ListView.separated(
-                              padding: EdgeInsets.only(
-                                left: isMobile ? 12 : 20,
-                                right: isMobile ? 12 : 20,
-                                top: isMobile ? 12 : 20,
-                                bottom: _selectedIds.isNotEmpty ? 80 : (isMobile ? 12 : 20),
-                              ),
-                              itemCount: provider.items.length,
-                              separatorBuilder: (context, _) => const SizedBox(height: 10),
-                              itemBuilder: (context, i) {
-                                final exp = provider.items[i];
+                              padding: EdgeInsets.zero,
+                              itemCount: items.length,
+                              separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderLight),
+                              itemBuilder: (context, index) {
+                                final exp = items[index];
                                 final id = exp['id'].toString();
                                 final isSelected = _selectedIds.contains(id);
                                 final category = exp['category_name'] ?? exp['category']?['name'] ?? 'N/A';
                                 final amount = double.tryParse((exp['amount'] ?? 0).toString()) ?? 0.0;
 
-                                return GestureDetector(
-                                  onLongPress: () {
-                                    if (!_isSelectionMode) {
-                                      setState(() {
-                                        _isSelectionMode = true;
-                                        _selectedIds.add(id);
-                                      });
-                                    }
-                                  },
-                                  child: Semantics(
-                                    label: 'Expense ${exp['expense_number'] ?? 'EXPENSE'}, ${exp['status'] ?? 'POSTED'}, $category, ${exp['expense_date']}, ₹${amount.toStringAsFixed(2)}',
+                                return InkWell(
+                                  onTap: () => _showDetail(exp['id']),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                                    color: isSelected ? AppColors.bgLight : Colors.transparent,
                                     child: Row(
                                       children: [
-                                        if (_isSelectionMode)
-                                          Padding(
-                                            padding: const EdgeInsets.only(right: 12),
-                                            child: Icon(
-                                              isSelected ? Icons.check_circle : Icons.circle_outlined,
-                                              size: 22,
-                                              color: isSelected ? AppColors.brandNavy : AppColors.textMuted,
+                                        SizedBox(
+                                          width: 40,
+                                          child: Checkbox(
+                                            value: isSelected,
+                                            onChanged: (_) => _toggleSelection(id),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            AppDate.format(exp['expense_date']),
+                                            style: AppTextStyles.bodySmall,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            exp['expense_number'] ?? 'EXP',
+                                            style: AppTextStyles.bodyMedium.copyWith(
+                                              color: AppColors.brandNavy,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
+                                        ),
                                         Expanded(
-                                          child: ds.AppListTile(
-                                            leadingText: 'E',
-                                            title: exp['expense_number'] ?? 'EXPENSE',
-                                            subtitle: '$category • ${ds.AppDate.format(exp['expense_date'])}',
-                                            trailingWidget: ds.AppAmount(amount: amount),
-                                            badge: StatusBadge(label: exp['status'] ?? 'POSTED'),
-                                            hoverActions: _isSelectionMode
-                                                ? null
-                                                : [
-                                                    if (exp['status'] == 'DRAFT')
-                                                      ds.AppButton(
-                                                        label: 'Edit',
-                                                        icon: Icons.edit_outlined,
-                                                        isSmall: true,
-                                                        onTap: () => _showForm(expense: exp),
-                                                      ),
-                                                    ds.AppButton(
-                                                      label: 'Delete',
-                                                      icon: Icons.delete_outline,
-                                                      isSmall: true,
-                                                      color: AppColors.error,
-                                                      textColor: AppColors.textWhite,
-                                                      onTap: () => _deleteExpense(exp['id']),
-                                                    ),
-                                                  ],
-                                            onTap: () {
-                                              if (_isSelectionMode) {
-                                                _toggleSelection(id);
-                                              } else {
-                                                _showDetail(exp['id']);
-                                              }
-                                            },
-                                            isSelected: isSelected,
+                                          flex: 4,
+                                          child: Text(
+                                            category,
+                                            style: AppTextStyles.partyName,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 3,
+                                          child: Text(
+                                            AmountFormat.format(amount),
+                                            style: AppTextStyles.amount,
+                                            textAlign: TextAlign.right,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Center(
+                                            child: AppInlineStatus(status: exp['status'] ?? 'POSTED'),
+                                          ),
+                                        ),
+                                        SizedBox(
+                                          width: 120,
+                                          child: AppRowActions(
+                                            children: [
+                                              IconButton(
+                                                icon: const Icon(Icons.visibility_outlined, size: 16),
+                                                onPressed: () => _showDetail(exp['id']),
+                                                tooltip: 'View Detail',
+                                              ),
+                                              if (exp['status'] == 'DRAFT')
+                                                IconButton(
+                                                  icon: const Icon(Icons.edit_outlined, size: 16),
+                                                  onPressed: () => _showForm(expense: exp),
+                                                  tooltip: 'Edit',
+                                                ),
+                                              IconButton(
+                                                icon: const Icon(Icons.delete_outline, size: 16),
+                                                onPressed: () => _deleteExpense(exp['id']),
+                                                tooltip: 'Delete',
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ],
@@ -266,90 +388,53 @@ class _ExpenseListViewState extends State<ExpenseListView> {
                               },
                             ),
                           ),
-                          if (_selectedIds.isNotEmpty)
-                            Positioned(
-                              left: 0,
-                              right: 0,
-                              bottom: 0,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: AppColors.bgSurface,
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withValues(alpha: 0.1),
-                                      blurRadius: 8,
-                                      offset: const Offset(0, -2),
-                                    ),
-                                  ],
-                                ),
-                                padding: EdgeInsets.symmetric(
-                                  horizontal: isMobile ? 12 : 20,
-                                  vertical: 12,
-                                ),
-                                child: SafeArea(
-                                  top: false,
-                                  child: Row(
-                                    children: [
-                                      GestureDetector(
-                                        onTap: _selectAll,
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Icon(
-                                              _selectedIds.length == provider.items.length
-                                                  ? Icons.check_circle
-                                                  : Icons.circle_outlined,
-                                              size: 22,
-                                              color: _selectedIds.length == provider.items.length
-                                                  ? AppColors.brandNavy
-                                                  : AppColors.textMuted,
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(
-                                              'Page',
-                                              style: AppTextStyles.bodySmall.copyWith(fontWeight: FontWeight.w600),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 16),
-                                      Text(
-                                        '${_selectedIds.length} selected',
-                                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                                      ),
-                                      const Spacer(),
-                                      ds.AppButton(
-                                        label: 'Clear',
-                                        icon: Icons.close,
-                                        onTap: _clearSelection,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      ds.AppButton(
-                                        label: 'Cancel',
-                                        icon: Icons.cancel_outlined,
-                                        color: AppColors.error,
-                                        textColor: AppColors.textWhite,
-                                        onTap: _bulkCancel,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      ds.AppButton(
-                                        label: 'Delete',
-                                        icon: Icons.delete_outline,
-                                        color: AppColors.error,
-                                        textColor: AppColors.textWhite,
-                                        onTap: _bulkDelete,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
                         ],
                       ),
           ),
+          if (_selectedIds.isNotEmpty)
+            AppStickyBottomBar(
+              children: [
+                Text(
+                  '${_selectedIds.length} selected',
+                  style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Row(
+                  children: [
+                    AppButton(
+                      label: 'Cancel Selected',
+                      icon: Icons.cancel_outlined,
+                      onTap: _bulkCancel,
+                      color: AppColors.error,
+                      isSmall: true,
+                    ),
+                    const SizedBox(width: 8),
+                    AppButton(
+                      label: 'Delete Selected',
+                      icon: Icons.delete_outline,
+                      onTap: _bulkDelete,
+                      color: AppColors.error,
+                      isSmall: true,
+                    ),
+                  ],
+                ),
+              ],
+            )
+          else
+            AppStickyBottomBar(
+              children: [
+                Text(
+                  'Total Expenses: ${AmountFormat.format(totalAmount)}',
+                  style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  'Count: ${items.length}',
+                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.textSecondary),
+                ),
+              ],
+            ),
           if (provider.totalPages > 1)
             Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 8),
               child: PaginationControls(
                 currentPage: provider.currentPage,
                 totalPages: provider.totalPages,

@@ -7,10 +7,14 @@ import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/models/auth.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
+import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/global_search.dart';
 import 'package:flutter_client/views/dashboard/sales_dashboard_view.dart';
 import 'package:flutter_client/views/invoices/invoice_list_view.dart';
 import 'package:flutter_client/views/invoices/invoice_form_view.dart';
+import 'package:flutter_client/views/expenses/expense_form_view.dart';
+import 'package:flutter_client/views/payments/payment_form_view.dart';
+import 'package:flutter_client/views/bills/bill_form_view.dart';
 import 'package:flutter_client/views/products/product_list_view.dart';
 import 'package:flutter_client/views/contacts/contact_list_view.dart';
 import 'package:flutter_client/views/estimates/estimate_list_view.dart';
@@ -223,27 +227,46 @@ class _OfflineBanner extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      color: bgColor,
-      child: Row(
-        children: [
-          Icon(icon, size: 14, color: textColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              text,
-              style: TextStyle(fontSize: 12, color: textColor, fontWeight: FontWeight.w500),
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        color: bgColor,
+        child: Row(
+          children: [
+            Icon(icon, size: 14, color: textColor),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(fontSize: 12, color: textColor, fontWeight: FontWeight.w600),
+              ),
             ),
-          ),
-          if (!isOffline && pending > 0)
-            SizedBox(
-              width: 14,
-              height: 14,
-              child: CircularProgressIndicator(strokeWidth: 2, color: textColor),
-            ),
-        ],
+            if (pending > 0) ...[
+              TextButton(
+                onPressed: () => syncManager.syncPendingActions(),
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  minimumSize: Size.zero,
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(
+                  'RETRY SYNC',
+                  style: TextStyle(fontSize: 11, color: textColor, fontWeight: FontWeight.bold),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+            if (!isOffline && pending > 0)
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2, color: textColor),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -359,6 +382,34 @@ class ShellView extends StatefulWidget {
 
 class _ShellViewState extends State<ShellView> {
   int _selectedIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  int get _mobileBottomNavIndex {
+    switch (_selectedIndex) {
+      case 0: return 0;
+      case 1: return 1;
+      case 9: return 2;
+      case 18: return 3;
+      default: return 4;
+    }
+  }
+
+  void _onMobileBottomNavTap(int index) {
+    if (index == 4) {
+      _scaffoldKey.currentState?.openDrawer();
+    } else {
+      int targetIndex = 0;
+      switch (index) {
+        case 0: targetIndex = 0; break;
+        case 1: targetIndex = 1; break;
+        case 2: targetIndex = 9; break;
+        case 3: targetIndex = 18; break;
+      }
+      setState(() {
+        _selectedIndex = targetIndex;
+      });
+    }
+  }
 
   Widget get _currentView => _flatItems[_selectedIndex].view;
 
@@ -540,6 +591,7 @@ class _ShellViewState extends State<ShellView> {
   Widget _buildMobileLayout(UserResponse? user) {
     final syncManager = context.watch<SyncManager>();
     return Scaffold(
+      key: _scaffoldKey,
       backgroundColor: AppColors.bgLight,
       appBar: AppBar(
         backgroundColor: AppColors.bgSidebar,
@@ -593,6 +645,76 @@ class _ShellViewState extends State<ShellView> {
                 child: _currentView,
               ),
             ),
+          ),
+        ],
+      ),
+      floatingActionButton: AppSpeedDial(
+        options: [
+          AppSpeedDialOption(
+            icon: Icons.receipt_long_outlined,
+            label: 'New Invoice',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const InvoiceFormView()),
+              );
+            },
+          ),
+          AppSpeedDialOption(
+            icon: Icons.money_off_rounded,
+            label: 'New Expense',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ExpenseFormView()),
+              );
+            },
+          ),
+          AppSpeedDialOption(
+            icon: Icons.payments_rounded,
+            label: 'New Payment',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (ctx) => PaymentFormView(mode: 'receipt', onSuccess: () => Navigator.pop(ctx))),
+              );
+            },
+          ),
+          AppSpeedDialOption(
+            icon: Icons.receipt_rounded,
+            label: 'New Bill',
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BillFormView()),
+              );
+            },
+          ),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _mobileBottomNavIndex,
+        onTap: _onMobileBottomNavTap,
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard_rounded),
+            label: 'Home',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.receipt_long_outlined),
+            label: 'Sales',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.people_rounded),
+            label: 'Parties',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bar_chart_rounded),
+            label: 'Reports',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.menu_rounded),
+            label: 'More',
           ),
         ],
       ),
@@ -734,13 +856,8 @@ class _GroupedNavState extends State<_GroupedNav> {
             duration: const Duration(milliseconds: 150),
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: itemPadV),
             decoration: BoxDecoration(
-              color: isSelected ? const Color(0x1AD4A036) : Colors.transparent,
+              color: isSelected ? AppColors.goldAccent.withValues(alpha: 0.15) : Colors.transparent,
               borderRadius: AppRadius.sidebar,
-              border: isSelected
-                  ? const Border(
-                      left: BorderSide(color: AppColors.goldAccent, width: 3),
-                    )
-                  : null,
             ),
             child: Row(
               children: [
@@ -869,6 +986,13 @@ class _Sidebar extends StatelessWidget {
     final authProvider = context.watch<AuthProvider>();
     final memberships = authProvider.memberships;
     final activeTenantId = authProvider.activeTenantId;
+    final currentMembership = memberships.isNotEmpty
+        ? memberships.firstWhere(
+            (m) => m.tenantId == activeTenantId,
+            orElse: () => memberships.first,
+          )
+        : null;
+    final companyName = currentMembership?.tenantName ?? 'Apex Books';
 
     return Container(
       width: AdaptiveLayout.sidebarWidth,
@@ -877,45 +1001,41 @@ class _Sidebar extends StatelessWidget {
         children: [
           // Brand Header
           Container(
-            padding: const EdgeInsets.fromLTRB(18, 22, 18, 18),
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 16),
             decoration: const BoxDecoration(
               border: Border(bottom: BorderSide(color: Colors.white12)),
             ),
             child: Row(
               children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(9),
-                  child: Image.asset(
-                    'assets/logo.png',
-                    width: 36,
-                    height: 36,
-                    fit: BoxFit.cover,
-                  ),
-                ),
+                AppAvatar(name: companyName, size: 36),
                 const SizedBox(width: 12),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Apex Books',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.3,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        companyName,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: -0.3,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                    SizedBox(height: 1),
-                    Text(
-                      'Accounting Suite',
-                      style: TextStyle(
-                        color: AppColors.textWhiteMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w500,
-                        letterSpacing: 0.5,
+                      const SizedBox(height: 2),
+                      const Text(
+                        'Accounting Suite',
+                        style: TextStyle(
+                          color: AppColors.textWhiteMuted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ),

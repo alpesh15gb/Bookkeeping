@@ -28,6 +28,7 @@ class AppCard extends StatelessWidget {
   final Color? color;
   final Border? border;
   final double? borderRadius;
+  final Color? accentColor;
 
   const AppCard({
     super.key,
@@ -36,6 +37,7 @@ class AppCard extends StatelessWidget {
     this.color,
     this.border,
     this.borderRadius,
+    this.accentColor,
   });
 
   @override
@@ -45,7 +47,14 @@ class AppCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: color ?? AppColors.bgSurface,
         borderRadius: borderRadius != null ? BorderRadius.circular(borderRadius!) : AppRadius.card,
-        border: border ?? Border.all(color: AppColors.border),
+        border: border ?? (accentColor != null
+            ? Border(
+                top: BorderSide(color: accentColor!, width: 3),
+                left: const BorderSide(color: AppColors.border),
+                right: const BorderSide(color: AppColors.border),
+                bottom: const BorderSide(color: AppColors.border),
+              )
+            : Border.all(color: AppColors.border)),
       ),
       child: child,
     );
@@ -294,6 +303,9 @@ class AppTimelineItem {
   });
 }
 
+enum AppButtonSize { sm, md, lg }
+enum AppButtonVariant { primary, secondary, ghost, danger }
+
 // ─── BUTTON ───────────────────────────────────────────────────────
 class AppButton extends StatelessWidget {
   final String label;
@@ -304,6 +316,8 @@ class AppButton extends StatelessWidget {
   final bool isPrimary;
   final bool isSmall;
   final bool isLoading;
+  final AppButtonSize? size;
+  final AppButtonVariant? variant;
 
   const AppButton({
     super.key,
@@ -315,50 +329,98 @@ class AppButton extends StatelessWidget {
     this.isPrimary = false,
     this.isSmall = false,
     this.isLoading = false,
+    this.size,
+    this.variant,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bg = isPrimary
-        ? (color ?? AppColors.brandNavy)
-        : (color ?? AppColors.bgSurface);
-    final fg = isPrimary
-        ? (textColor ?? AppColors.textWhite)
-        : (textColor ?? AppColors.textPrimary);
+    final effectiveVariant = variant ?? (isPrimary ? AppButtonVariant.primary : AppButtonVariant.secondary);
+    final effectiveSize = size ?? (isSmall ? AppButtonSize.sm : AppButtonSize.md);
+
+    Color bg;
+    Color fg;
+    Border? border;
+
+    switch (effectiveVariant) {
+      case AppButtonVariant.primary:
+        bg = color ?? AppColors.brandNavy;
+        fg = textColor ?? AppColors.textWhite;
+        border = null;
+        break;
+      case AppButtonVariant.secondary:
+        bg = color ?? AppColors.bgSurface;
+        fg = textColor ?? AppColors.textPrimary;
+        border = Border.all(color: AppColors.border);
+        break;
+      case AppButtonVariant.ghost:
+        bg = Colors.transparent;
+        fg = textColor ?? AppColors.brandNavy;
+        border = null;
+        break;
+      case AppButtonVariant.danger:
+        bg = color ?? AppColors.error;
+        fg = textColor ?? AppColors.textWhite;
+        border = null;
+        break;
+    }
+
+    EdgeInsets padding;
+    double fontSize;
+    double iconSize;
+
+    switch (effectiveSize) {
+      case AppButtonSize.sm:
+        padding = const EdgeInsets.symmetric(horizontal: 10, vertical: 6);
+        fontSize = 12;
+        iconSize = 14;
+        break;
+      case AppButtonSize.md:
+        padding = const EdgeInsets.symmetric(horizontal: 14, vertical: 10);
+        fontSize = 13;
+        iconSize = 16;
+        break;
+      case AppButtonSize.lg:
+        padding = const EdgeInsets.symmetric(horizontal: 20, vertical: 14);
+        fontSize = 15;
+        iconSize = 18;
+        break;
+    }
 
     return Material(
       color: bg,
-      borderRadius: isSmall ? AppRadius.button : AppRadius.button,
+      borderRadius: AppRadius.button,
       child: InkWell(
         onTap: isLoading ? null : onTap,
         borderRadius: AppRadius.button,
         child: Container(
-          padding: isSmall
-              ? const EdgeInsets.symmetric(horizontal: 10, vertical: 6)
-              : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: padding,
           decoration: BoxDecoration(
             color: bg,
             borderRadius: AppRadius.button,
-            border: isPrimary ? null : Border.all(color: AppColors.border),
+            border: border,
           ),
           child: isLoading
               ? SizedBox(
-                  width: 16,
-                  height: 16,
+                  width: iconSize,
+                  height: iconSize,
                   child: CircularProgressIndicator(strokeWidth: 2, color: fg),
                 )
               : Row(
                   mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     if (icon != null) ...[
-                      Icon(icon, size: isSmall ? 14 : 16, color: fg),
+                      Icon(icon, size: iconSize, color: fg),
                       const SizedBox(width: 6),
                     ],
                     Text(
                       label,
                       style: TextStyle(
-                        fontSize: isSmall ? 12 : 13,
-                        fontWeight: isPrimary ? FontWeight.w600 : FontWeight.w500,
+                        fontSize: fontSize,
+                        fontWeight: effectiveVariant == AppButtonVariant.primary || effectiveVariant == AppButtonVariant.danger
+                            ? FontWeight.w600
+                            : FontWeight.w500,
                         color: fg,
                       ),
                     ),
@@ -508,9 +570,10 @@ class AppBarData {
   AppBarData({required this.label, required this.value, required this.color});
 }
 
-// ─── LIST TILE (standard) ─────────────────────────────────────────
 class AppListTile extends StatefulWidget {
   final String? leadingText;
+  final Widget? leadingAvatar;
+  final Color? statusDot;
   final String title;
   final String? subtitle;
   final String? trailing;
@@ -523,6 +586,8 @@ class AppListTile extends StatefulWidget {
   const AppListTile({
     super.key,
     this.leadingText,
+    this.leadingAvatar,
+    this.statusDot,
     required this.title,
     this.subtitle,
     this.trailing,
@@ -542,6 +607,26 @@ class _AppListTileState extends State<AppListTile> {
 
   @override
   Widget build(BuildContext context) {
+    Widget? leadingWidget;
+    if (widget.leadingAvatar != null) {
+      leadingWidget = widget.leadingAvatar;
+    } else if (widget.leadingText != null) {
+      leadingWidget = Container(
+        width: 32,
+        height: 32,
+        decoration: BoxDecoration(
+          color: AppColors.borderLight,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Center(
+          child: Text(
+            widget.leadingText!,
+            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
+          ),
+        ),
+      );
+    }
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -555,21 +640,19 @@ class _AppListTileState extends State<AppListTile> {
           ),
           child: Row(
             children: [
-              if (widget.leadingText != null) ...[
+              if (widget.statusDot != null) ...[
                 Container(
-                  width: 32,
-                  height: 32,
+                  width: 8,
+                  height: 8,
                   decoration: BoxDecoration(
-                    color: AppColors.borderLight,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Center(
-                    child: Text(
-                      widget.leadingText!,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.textSecondary),
-                    ),
+                    color: widget.statusDot,
+                    shape: BoxShape.circle,
                   ),
                 ),
+                const SizedBox(width: 8),
+              ],
+              if (leadingWidget != null) ...[
+                leadingWidget,
                 const SizedBox(width: 10),
               ],
               Expanded(
@@ -1410,3 +1493,533 @@ class DocumentPreviewScreen extends StatelessWidget {
 //   DocumentPreviewScreen with Hero + Sections + Actions
 //
 // ═══════════════════════════════════════════════════════════════════
+
+// ─── NEW WIDGETS FOR REDESIGN v4.1 ──────────────────────────────────
+
+class AppAvatar extends StatelessWidget {
+  final String name;
+  final double size;
+  const AppAvatar({super.key, required this.name, this.size = 32});
+
+  @override
+  Widget build(BuildContext context) {
+    final cleanName = name.trim();
+    String initials = '';
+    if (cleanName.isNotEmpty) {
+      final parts = cleanName.split(' ');
+      if (parts.length > 1) {
+        initials = (parts[0][0] + parts[1][0]).toUpperCase();
+      } else if (parts[0].isNotEmpty) {
+        initials = parts[0].substring(0, parts[0].length > 1 ? 2 : 1).toUpperCase();
+      }
+    }
+    final hash = name.hashCode;
+    final colors = [
+      const Color(0xFF3B82F6),
+      const Color(0xFF10B981),
+      const Color(0xFFF59E0B),
+      const Color(0xFFEF4444),
+      const Color(0xFF8B5CF6),
+      const Color(0xFFEC4899),
+      const Color(0xFF06B6D4),
+    ];
+    final color = colors[hash.abs() % colors.length];
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        shape: BoxShape.circle,
+        border: Border.all(color: color, width: 1),
+      ),
+      child: Center(
+        child: Text(
+          initials,
+          style: TextStyle(
+            fontSize: size * 0.4,
+            fontWeight: FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AppStatBar extends StatelessWidget {
+  final String title;
+  final double total;
+  final double? paid;
+  final double? pending;
+  const AppStatBar({
+    super.key,
+    required this.title,
+    required this.total,
+    this.paid,
+    this.pending,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title.toUpperCase(),
+                style: AppTextStyles.overline,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                AmountFormat.format(total),
+                style: AppTextStyles.amountLarge.copyWith(color: AppColors.brandNavy),
+              ),
+            ],
+          ),
+          if (paid != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'PAID',
+                  style: AppTextStyles.overline.copyWith(color: AppColors.success),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  AmountFormat.format(paid!),
+                  style: AppTextStyles.amount.copyWith(color: AppColors.success),
+                ),
+              ],
+            ),
+          if (pending != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'PENDING',
+                  style: AppTextStyles.overline.copyWith(color: AppColors.warning),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  AmountFormat.format(pending!),
+                  style: AppTextStyles.amount.copyWith(color: AppColors.warning),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class AppFilterChip extends StatelessWidget {
+  final String label;
+  final bool isActive;
+  final VoidCallback onTap;
+  final String? badgeText;
+
+  const AppFilterChip({
+    super.key,
+    required this.label,
+    required this.isActive,
+    required this.onTap,
+    this.badgeText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isActive ? AppColors.brandNavy : AppColors.bgSurface,
+          borderRadius: AppRadius.pillBorder,
+          border: Border.all(
+            color: isActive ? AppColors.brandNavy : AppColors.borderInput,
+            width: 1,
+          ),
+          boxShadow: isActive ? AppShadows.glow : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: AppTextStyles.tabLabel.copyWith(
+                color: isActive ? AppColors.textWhite : AppColors.textSecondary,
+              ),
+            ),
+            if (badgeText != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: isActive ? AppColors.goldAccent : AppColors.bgLight,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badgeText!,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isActive ? AppColors.brandNavy : AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AppSpeedDialOption {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  AppSpeedDialOption({required this.icon, required this.label, required this.onTap});
+}
+
+class AppSpeedDial extends StatefulWidget {
+  final List<AppSpeedDialOption> options;
+  final IconData mainIcon;
+  final IconData activeIcon;
+  const AppSpeedDial({
+    super.key,
+    required this.options,
+    this.mainIcon = Icons.add,
+    this.activeIcon = Icons.close,
+  });
+
+  @override
+  State<AppSpeedDial> createState() => _AppSpeedDialState();
+}
+
+class _AppSpeedDialState extends State<AppSpeedDial> with SingleTickerProviderStateMixin {
+  bool _isOpen = false;
+  late AnimationController _controller;
+  late Animation<double> _expandAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      value: 0.0,
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    );
+    _expandAnimation = CurvedAnimation(
+      parent: _controller,
+      curve: Curves.fastOutSlowIn,
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _toggle() {
+    setState(() {
+      _isOpen = !_isOpen;
+      if (_isOpen) {
+        _controller.forward();
+      } else {
+        _controller.reverse();
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.end,
+      children: [
+        if (_isOpen)
+          SizeTransition(
+            sizeFactor: _expandAnimation,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: widget.options.map((opt) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10, right: 4),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Material(
+                        color: AppColors.brandNavy,
+                        borderRadius: BorderRadius.circular(4),
+                        elevation: 2,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          child: Text(
+                            opt.label,
+                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      FloatingActionButton.small(
+                        heroTag: opt.label,
+                        onPressed: () {
+                          _toggle();
+                          opt.onTap();
+                        },
+                        backgroundColor: AppColors.bgSurface,
+                        foregroundColor: AppColors.brandNavy,
+                        child: Icon(opt.icon),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        FloatingActionButton(
+          heroTag: 'main_fab',
+          onPressed: _toggle,
+          backgroundColor: AppColors.goldAccent,
+          child: Icon(_isOpen ? widget.activeIcon : widget.mainIcon),
+        ),
+      ],
+    );
+  }
+}
+
+class AppCommandBar extends StatelessWidget {
+  final String title;
+  final Widget? searchWidget;
+  final List<Widget> actions;
+  const AppCommandBar({
+    super.key,
+    required this.title,
+    this.searchWidget,
+    required this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: AppTextStyles.h2.copyWith(color: AppColors.brandNavy),
+          ),
+          const Spacer(),
+          if (searchWidget != null) ...[
+            SizedBox(
+              width: 300,
+              child: searchWidget!,
+            ),
+            const SizedBox(width: 16),
+          ],
+          ...actions,
+        ],
+      ),
+    );
+  }
+}
+
+class AppStatusTabBar extends StatelessWidget {
+  final List<String> tabs;
+  final String activeTab;
+  final ValueChanged<String> onTabChanged;
+  final Map<String, int>? badges;
+
+  const AppStatusTabBar({
+    super.key,
+    required this.tabs,
+    required this.activeTab,
+    required this.onTabChanged,
+    this.badges,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: tabs.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final tab = tabs[index];
+          final isActive = tab.toUpperCase() == activeTab.toUpperCase();
+          final badgeCount = badges?[tab];
+          return Center(
+            child: AppFilterChip(
+              label: tab,
+              isActive: isActive,
+              onTap: () => onTabChanged(tab),
+              badgeText: badgeCount != null ? badgeCount.toString() : null,
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class AppCheckboxCell extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool?> onChanged;
+  const AppCheckboxCell({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 40,
+      height: 40,
+      child: Center(
+        child: Checkbox(
+          value: value,
+          onChanged: onChanged,
+        ),
+      ),
+    );
+  }
+}
+
+class AppInlineStatus extends StatelessWidget {
+  final String status;
+  const AppInlineStatus({super.key, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    Color color;
+    switch (status.toUpperCase()) {
+      case 'PAID':
+      case 'SUCCESS':
+      case 'ACCEPTED':
+        color = AppColors.success;
+        break;
+      case 'DRAFT':
+        color = AppColors.textMuted;
+        break;
+      case 'OVERDUE':
+      case 'CANCELLED':
+      case 'DECLINED':
+      case 'FAILED':
+        color = AppColors.error;
+        break;
+      case 'PENDING':
+      case 'PARTIALLY_PAID':
+      case 'SENT':
+        color = AppColors.warning;
+        break;
+      default:
+        color = AppColors.textSecondary;
+    }
+
+    return Text(
+      status.toUpperCase(),
+      style: TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w600,
+        color: color,
+        letterSpacing: 0.3,
+      ),
+    );
+  }
+}
+
+class AppRowActions extends StatelessWidget {
+  final List<Widget> children;
+  const AppRowActions({super.key, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: children,
+    );
+  }
+}
+
+class AppLinkedDocChip extends StatelessWidget {
+  final String docNumber;
+  final VoidCallback? onTap;
+  const AppLinkedDocChip({super.key, required this.docNumber, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+        decoration: BoxDecoration(
+          color: AppColors.accentBlue.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: AppColors.accentBlue.withValues(alpha: 0.2)),
+        ),
+        child: Text(
+          docNumber,
+          style: const TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            color: AppColors.accentBlue,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class AppStickyBottomBar extends StatelessWidget {
+  final List<Widget> children;
+  const AppStickyBottomBar({super.key, required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        border: Border(top: BorderSide(color: AppColors.border, width: 1)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0A000000),
+            blurRadius: 8,
+            offset: Offset(0, -2),
+          ),
+        ],
+      ),
+      child: SafeArea(
+        top: false,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: children,
+        ),
+      ),
+    );
+  }
+}
