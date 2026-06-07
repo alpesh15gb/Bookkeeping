@@ -95,12 +95,14 @@ class AccountCreate(BaseModel):
     name: str = Field(..., max_length=150)
     code: str = Field(..., max_length=50)
     account_type: str = Field(..., pattern="^(ASSET|LIABILITY|EQUITY|REVENUE|EXPENSE)$")
+    account_group: Optional[str] = Field(None, max_length=100)
     parent_id: Optional[uuid.UUID] = None
     opening_balance: Decimal = Field(Decimal("0.00"))
 
 class AccountUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=150)
     code: Optional[str] = Field(None, max_length=50)
+    account_group: Optional[str] = Field(None, max_length=100)
     parent_id: Optional[uuid.UUID] = None
     opening_balance: Optional[Decimal] = None
     is_active: Optional[bool] = None
@@ -111,6 +113,7 @@ class AccountResponse(SchemaBase):
     name: str
     code: str
     account_type: str
+    account_group: Optional[str] = None
     parent_id: Optional[uuid.UUID]
     opening_balance: Decimal
     current_balance: Decimal

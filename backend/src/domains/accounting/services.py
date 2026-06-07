@@ -910,72 +910,162 @@ class LedgerPostingEngine:
 
 
 # ---------------------------------------------------------------------------
-# Standard Chart of Accounts
+# Standard Chart of Accounts — Indian Accounting Standards
 # ---------------------------------------------------------------------------
+# Each account has: name, code, type, group (for UI grouping)
+# Groups follow Indian Schedule III / common business practice
+
 _STANDARD_ACCOUNTS: Dict[str, Dict[str, str]] = {
-    # ── Revenue ──
-    "sales_revenue": {"name": "Sales Revenue", "code": "SRV", "type": "REVENUE"},
-    "interest_income": {"name": "Interest Income", "code": "INC-INT", "type": "REVENUE"},
-    "other_income": {"name": "Other Income", "code": "INC-OTH", "type": "REVENUE"},
+    # ══════════════════════════════════════════════════════════════════════
+    # ASSETS
+    # ══════════════════════════════════════════════════════════════════════
 
-    # ── Purchases ──
-    "purchases": {"name": "Purchases", "code": "PUR", "type": "EXPENSE"},
+    # ── Current Assets: Cash & Bank ──
+    "assets.cash":        {"name": "Cash on Hand",           "code": "1001", "type": "ASSET", "group": "Cash & Bank"},
+    "assets.bank":        {"name": "Bank Account",           "code": "1002", "type": "ASSET", "group": "Cash & Bank"},
+    "assets.upi":         {"name": "UPI Collections",        "code": "1003", "type": "ASSET", "group": "Cash & Bank"},
+    "assets.pos":         {"name": "POS Collections",        "code": "1004", "type": "ASSET", "group": "Cash & Bank"},
+    "assets.petty_cash":  {"name": "Petty Cash",             "code": "1005", "type": "ASSET", "group": "Cash & Bank"},
 
-    # ── GST Output (Liability) ──
-    "cgst_output": {"name": "CGST Output Tax", "code": "CGST-OUT", "type": "LIABILITY"},
-    "sgst_output": {"name": "SGST Output Tax", "code": "SGST-OUT", "type": "LIABILITY"},
-    "igst_output": {"name": "IGST Output Tax", "code": "IGST-OUT", "type": "LIABILITY"},
-    "utgst_output": {"name": "UTGST Output Tax", "code": "UTGST-OUT", "type": "LIABILITY"},
-    "cess_output": {"name": "Cess Output Tax", "code": "CESS-OUT", "type": "LIABILITY"},
+    # ── Current Assets: Receivables ──
+    # (customer.<uuid> accounts are auto-created per contact)
 
-    # ── GST Input (Asset) ──
-    "cgst_input": {"name": "CGST Input Tax", "code": "CGST-IN", "type": "ASSET"},
-    "sgst_input": {"name": "SGST Input Tax", "code": "SGST-IN", "type": "ASSET"},
-    "igst_input": {"name": "IGST Input Tax", "code": "IGST-IN", "type": "ASSET"},
-    "utgst_input": {"name": "UTGST Input Tax", "code": "UTGST-IN", "type": "ASSET"},
-    "cess_input": {"name": "Cess Input Tax", "code": "CESS-IN", "type": "ASSET"},
+    # ── Current Assets: Inventory ──
+    "assets.inventory":   {"name": "Inventory",              "code": "1300", "type": "ASSET", "group": "Inventory"},
 
-    # ── Cash & Bank (Asset) ──
-    "assets.cash": {"name": "Cash on Hand", "code": "CASH", "type": "ASSET"},
-    "assets.bank": {"name": "Bank Account", "code": "BANK", "type": "ASSET"},
-    "assets.upi": {"name": "UPI Collections", "code": "UPI", "type": "ASSET"},
-    "assets.pos": {"name": "POS Collections", "code": "POS", "type": "ASSET"},
+    # ── Current Assets: Input Tax ──
+    "cgst_input":         {"name": "CGST Input Tax",         "code": "1401", "type": "ASSET", "group": "Input Tax Credit"},
+    "sgst_input":         {"name": "SGST Input Tax",         "code": "1402", "type": "ASSET", "group": "Input Tax Credit"},
+    "igst_input":         {"name": "IGST Input Tax",         "code": "1403", "type": "ASSET", "group": "Input Tax Credit"},
+    "utgst_input":        {"name": "UTGST Input Tax",        "code": "1404", "type": "ASSET", "group": "Input Tax Credit"},
+    "cess_input":         {"name": "Cess Input Tax",         "code": "1405", "type": "ASSET", "group": "Input Tax Credit"},
+    "tds_receivable":     {"name": "TDS Receivable",         "code": "1410", "type": "ASSET", "group": "Input Tax Credit"},
 
-    # ── Fixed Assets ──
-    "assets.furniture": {"name": "Furniture & Fixtures", "code": "AST-FUR", "type": "ASSET"},
-    "assets.computer": {"name": "Computer & Equipment", "code": "AST-CMP", "type": "ASSET"},
-    "assets.security_deposit": {"name": "Security Deposits", "code": "AST-SEC", "type": "ASSET"},
-    "assets.prepaid": {"name": "Prepaid Expenses", "code": "AST-PRD", "type": "ASSET"},
+    # ── Current Assets: Other ──
+    "assets.prepaid":     {"name": "Prepaid Expenses",       "code": "1500", "type": "ASSET", "group": "Other Current Assets"},
+    "assets.security_deposit": {"name": "Security Deposits", "code": "1510", "type": "ASSET", "group": "Other Current Assets"},
+    "assets.advance_vendor":   {"name": "Advance to Vendors","code": "1520", "type": "ASSET", "group": "Other Current Assets"},
 
-    # ── Expenses ──
-    "round_off": {"name": "Round Off Account", "code": "ROF", "type": "EXPENSE"},
-    "expense.tea": {"name": "Tea & Refreshments", "code": "EXP-TEA", "type": "EXPENSE"},
-    "expense.transport": {"name": "Transport & Travel", "code": "EXP-TRN", "type": "EXPENSE"},
-    "expense.rent": {"name": "Rent", "code": "EXP-RNT", "type": "EXPENSE"},
-    "expense.salary": {"name": "Salary & Wages", "code": "EXP-SAL", "type": "EXPENSE"},
-    "expense.office": {"name": "Office Supplies & Stationery", "code": "EXP-OFC", "type": "EXPENSE"},
-    "expense.telephone": {"name": "Telephone & Internet", "code": "EXP-TEL", "type": "EXPENSE"},
-    "expense.electricity": {"name": "Electricity & Utilities", "code": "EXP-UTL", "type": "EXPENSE"},
-    "expense.advertising": {"name": "Advertising & Marketing", "code": "EXP-ADV", "type": "EXPENSE"},
-    "expense.insurance": {"name": "Insurance", "code": "EXP-INS", "type": "EXPENSE"},
-    "expense.professional": {"name": "Professional Fees", "code": "EXP-PRO", "type": "EXPENSE"},
-    "expense.repairs": {"name": "Repairs & Maintenance", "code": "EXP-RPR", "type": "EXPENSE"},
-    "expense.bank_charges": {"name": "Bank Charges", "code": "EXP-BNK", "type": "EXPENSE"},
-    "expense.depreciation": {"name": "Depreciation", "code": "EXP-DEP", "type": "EXPENSE"},
-    "expense.misc": {"name": "Miscellaneous Expense", "code": "EXP-MSC", "type": "EXPENSE"},
+    # ── Non-Current Assets: Fixed Assets ──
+    "assets.furniture":   {"name": "Furniture & Fixtures",   "code": "2001", "type": "ASSET", "group": "Fixed Assets"},
+    "assets.computer":    {"name": "Computer & Equipment",   "code": "2002", "type": "ASSET", "group": "Fixed Assets"},
+    "assets.vehicle":     {"name": "Motor Vehicle",          "code": "2003", "type": "ASSET", "group": "Fixed Assets"},
+    "assets.plant":       {"name": "Plant & Machinery",      "code": "2004", "type": "ASSET", "group": "Fixed Assets"},
+    "assets.building":    {"name": "Building",               "code": "2005", "type": "ASSET", "group": "Fixed Assets"},
+    "assets.land":        {"name": "Land",                   "code": "2006", "type": "ASSET", "group": "Fixed Assets"},
 
-    # ── Statutory Liabilities ──
-    "liability.tds": {"name": "TDS Payable", "code": "LTD-TDS", "type": "LIABILITY"},
-    "liability.gst_payable": {"name": "GST Payable", "code": "LTD-GST", "type": "LIABILITY"},
-    "liability.pf": {"name": "PF Payable", "code": "LTD-PF", "type": "LIABILITY"},
-    "liability.esi": {"name": "ESI Payable", "code": "LTD-ESI", "type": "LIABILITY"},
-    "liability.loan": {"name": "Loan Account", "code": "LTD-LOAN", "type": "LIABILITY"},
-    "liability.advance": {"name": "Advance from Customers", "code": "LTD-ADV", "type": "LIABILITY"},
+    # ── Non-Current Assets: Accumulated Depreciation ──
+    "assets.depr_furniture": {"name": "Accum. Depreciation - Furniture", "code": "2101", "type": "ASSET", "group": "Accumulated Depreciation"},
+    "assets.depr_computer":  {"name": "Accum. Depreciation - Computer",  "code": "2102", "type": "ASSET", "group": "Accumulated Depreciation"},
+    "assets.depr_vehicle":   {"name": "Accum. Depreciation - Vehicle",   "code": "2103", "type": "ASSET", "group": "Accumulated Depreciation"},
+    "assets.depr_plant":     {"name": "Accum. Depreciation - Plant",     "code": "2104", "type": "ASSET", "group": "Accumulated Depreciation"},
+    "assets.depr_building":  {"name": "Accum. Depreciation - Building",  "code": "2105", "type": "ASSET", "group": "Accumulated Depreciation"},
 
-    # ── Equity ──
-    "equity.capital": {"name": "Owner's Capital", "code": "EQT-CAP", "type": "EQUITY"},
-    "equity.drawings": {"name": "Drawings", "code": "EQT-DRW", "type": "EQUITY"},
-    "equity.retained": {"name": "Retained Earnings", "code": "EQT-RE", "type": "EQUITY"},
+    # ══════════════════════════════════════════════════════════════════════
+    # LIABILITIES
+    # ══════════════════════════════════════════════════════════════════════
+
+    # ── Current Liabilities: Payables ──
+    # (vendor.<uuid> accounts are auto-created per contact)
+
+    # ── Current Liabilities: GST Output ──
+    "cgst_output":        {"name": "CGST Output Tax",        "code": "3001", "type": "LIABILITY", "group": "GST Output"},
+    "sgst_output":        {"name": "SGST Output Tax",        "code": "3002", "type": "LIABILITY", "group": "GST Output"},
+    "igst_output":        {"name": "IGST Output Tax",        "code": "3003", "type": "LIABILITY", "group": "GST Output"},
+    "utgst_output":       {"name": "UTGST Output Tax",       "code": "3004", "type": "LIABILITY", "group": "GST Output"},
+    "cess_output":        {"name": "Cess Output Tax",        "code": "3005", "type": "LIABILITY", "group": "GST Output"},
+
+    # ── Current Liabilities: Statutory ──
+    "liability.tds":      {"name": "TDS Payable",            "code": "3101", "type": "LIABILITY", "group": "Statutory Liabilities"},
+    "liability.gst_payable": {"name": "GST Payable",         "code": "3102", "type": "LIABILITY", "group": "Statutory Liabilities"},
+    "liability.pf":       {"name": "PF Payable",             "code": "3103", "type": "LIABILITY", "group": "Statutory Liabilities"},
+    "liability.esi":      {"name": "ESI Payable",            "code": "3104", "type": "LIABILITY", "group": "Statutory Liabilities"},
+    "liability.professional_tax": {"name": "Professional Tax Payable", "code": "3105", "type": "LIABILITY", "group": "Statutory Liabilities"},
+
+    # ── Current Liabilities: Other ──
+    "liability.advance":  {"name": "Advance from Customers", "code": "3201", "type": "LIABILITY", "group": "Other Current Liabilities"},
+    "liability.salary_payable": {"name": "Salary Payable",   "code": "3202", "type": "LIABILITY", "group": "Other Current Liabilities"},
+    "liability.expense_payable": {"name": "Expenses Payable","code": "3203", "type": "LIABILITY", "group": "Other Current Liabilities"},
+
+    # ── Non-Current Liabilities ──
+    "liability.loan":     {"name": "Loan Account",           "code": "3301", "type": "LIABILITY", "group": "Long-term Liabilities"},
+    "liability.term_loan": {"name": "Term Loan",             "code": "3302", "type": "LIABILITY", "group": "Long-term Liabilities"},
+
+    # ══════════════════════════════════════════════════════════════════════
+    # EQUITY
+    # ══════════════════════════════════════════════════════════════════════
+
+    "equity.capital":     {"name": "Owner's Capital",        "code": "4001", "type": "EQUITY", "group": "Capital"},
+    "equity.drawings":    {"name": "Drawings",               "code": "4002", "type": "EQUITY", "group": "Capital"},
+    "equity.retained":    {"name": "Retained Earnings",      "code": "4003", "type": "EQUITY", "group": "Capital"},
+    "equity.current_year": {"name": "Current Year Earnings", "code": "4004", "type": "EQUITY", "group": "Capital"},
+
+    # ══════════════════════════════════════════════════════════════════════
+    # REVENUE
+    # ══════════════════════════════════════════════════════════════════════
+
+    "sales_revenue":      {"name": "Sales Revenue",          "code": "5001", "type": "REVENUE", "group": "Sales"},
+    "sales_discount":     {"name": "Sales Discount",         "code": "5002", "type": "REVENUE", "group": "Sales"},
+    "service_revenue":    {"name": "Service Revenue",        "code": "5010", "type": "REVENUE", "group": "Sales"},
+
+    "interest_income":    {"name": "Interest Income",        "code": "5101", "type": "REVENUE", "group": "Other Income"},
+    "rental_income":      {"name": "Rental Income",          "code": "5102", "type": "REVENUE", "group": "Other Income"},
+    "commission_income":  {"name": "Commission Income",      "code": "5103", "type": "REVENUE", "group": "Other Income"},
+    "other_income":       {"name": "Other Income",           "code": "5199", "type": "REVENUE", "group": "Other Income"},
+
+    # ══════════════════════════════════════════════════════════════════════
+    # EXPENSES
+    # ══════════════════════════════════════════════════════════════════════
+
+    # ── Cost of Goods Sold ──
+    "purchases":          {"name": "Purchases",              "code": "6001", "type": "EXPENSE", "group": "Cost of Goods Sold"},
+    "purchase_discount":  {"name": "Purchase Discount",      "code": "6002", "type": "EXPENSE", "group": "Cost of Goods Sold"},
+    "freight_in":         {"name": "Freight Inward",         "code": "6003", "type": "EXPENSE", "group": "Cost of Goods Sold"},
+
+    # ── Direct Expenses ──
+    "expense.salary":     {"name": "Salary & Wages",         "code": "6101", "type": "EXPENSE", "group": "Direct Expenses"},
+    "expense.freight_out": {"name": "Freight Outward",       "code": "6102", "type": "EXPENSE", "group": "Direct Expenses"},
+    "expense.job_work":   {"name": "Job Work Charges",       "code": "6103", "type": "EXPENSE", "group": "Direct Expenses"},
+
+    # ── Administrative Expenses ──
+    "expense.rent":       {"name": "Rent",                   "code": "6201", "type": "EXPENSE", "group": "Admin Expenses"},
+    "expense.office":     {"name": "Office Supplies & Stationery", "code": "6202", "type": "EXPENSE", "group": "Admin Expenses"},
+    "expense.telephone":  {"name": "Telephone & Internet",   "code": "6203", "type": "EXPENSE", "group": "Admin Expenses"},
+    "expense.electricity": {"name": "Electricity & Utilities","code": "6204", "type": "EXPENSE", "group": "Admin Expenses"},
+    "expense.tea":        {"name": "Tea & Refreshments",     "code": "6205", "type": "EXPENSE", "group": "Admin Expenses"},
+    "expense.cleaning":   {"name": "Cleaning & Housekeeping","code": "6206", "type": "EXPENSE", "group": "Admin Expenses"},
+    "expense.security":   {"name": "Security Charges",       "code": "6207", "type": "EXPENSE", "group": "Admin Expenses"},
+
+    # ── Selling & Distribution ──
+    "expense.advertising": {"name": "Advertising & Marketing","code": "6301", "type": "EXPENSE", "group": "Selling Expenses"},
+    "expense.commission_paid": {"name": "Commission Paid",   "code": "6302", "type": "EXPENSE", "group": "Selling Expenses"},
+    "expense.transport":  {"name": "Transport & Travel",     "code": "6303", "type": "EXPENSE", "group": "Selling Expenses"},
+    "expense.packing":    {"name": "Packing & Forwarding",   "code": "6304", "type": "EXPENSE", "group": "Selling Expenses"},
+
+    # ── Financial Expenses ──
+    "expense.interest_paid": {"name": "Interest Paid",       "code": "6401", "type": "EXPENSE", "group": "Financial Expenses"},
+    "expense.bank_charges": {"name": "Bank Charges",         "code": "6402", "type": "EXPENSE", "group": "Financial Expenses"},
+    "expense.loan_processing": {"name": "Loan Processing Fee","code": "6403", "type": "EXPENSE", "group": "Financial Expenses"},
+
+    # ── Depreciation & Amortization ──
+    "expense.depreciation": {"name": "Depreciation",         "code": "6501", "type": "EXPENSE", "group": "Depreciation"},
+    "expense.amortization": {"name": "Amortization",         "code": "6502", "type": "EXPENSE", "group": "Depreciation"},
+
+    # ── Employee Benefits ──
+    "expense.staff_welfare": {"name": "Staff Welfare",       "code": "6601", "type": "EXPENSE", "group": "Employee Benefits"},
+    "expense.insurance":  {"name": "Insurance",              "code": "6602", "type": "EXPENSE", "group": "Employee Benefits"},
+
+    # ── Repairs & Maintenance ──
+    "expense.repairs":    {"name": "Repairs & Maintenance",  "code": "6701", "type": "EXPENSE", "group": "Repairs & Maintenance"},
+
+    # ── Professional Fees ──
+    "expense.professional": {"name": "Professional Fees",    "code": "6801", "type": "EXPENSE", "group": "Professional Fees"},
+    "expense.legal":      {"name": "Legal Fees",             "code": "6802", "type": "EXPENSE", "group": "Professional Fees"},
+    "expense.audit":      {"name": "Audit & Accounting Fees","code": "6803", "type": "EXPENSE", "group": "Professional Fees"},
+
+    # ── Miscellaneous ──
+    "round_off":          {"name": "Round Off Account",      "code": "6901", "type": "EXPENSE", "group": "Miscellaneous"},
+    "expense.misc":       {"name": "Miscellaneous Expense",  "code": "6999", "type": "EXPENSE", "group": "Miscellaneous"},
 }
 
 
@@ -1051,6 +1141,7 @@ class AccountResolver:
             name=definition["name"],
             code=definition["code"],
             account_type=definition["type"],
+            account_group=definition.get("group"),
             is_active=True,
         )
         self.db.add(account)

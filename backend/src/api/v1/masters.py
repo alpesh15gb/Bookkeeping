@@ -353,6 +353,7 @@ def create_account(
         name=payload.name,
         code=payload.code,
         account_type=payload.account_type,
+        account_group=payload.account_group,
         parent_id=payload.parent_id,
         opening_balance=payload.opening_balance,
         current_balance=payload.opening_balance,
@@ -375,6 +376,34 @@ def list_accounts(
         Account.tenant_id == tenant_id,
         Account.deleted_at == None
     ).order_by(Account.code.asc()).offset(offset).limit(limit).all()
+
+
+@router.post("/accounts/seed-defaults")
+def seed_default_accounts(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage"))
+):
+    """Bulk-create all standard chart of accounts for this tenant."""
+    from src.domains.accounting.services import AccountResolver, _STANDARD_ACCOUNTS
+    
+    resolver = AccountResolver(db, tenant_id)
+    created = 0
+    skipped = 0
+    
+    for key in _STANDARD_ACCOUNTS:
+        try:
+            resolver.resolve(key)
+            created += 1
+        except Exception:
+            skipped += 1
+    
+    db.commit()
+    return {
+        "created": created,
+        "skipped": skipped,
+        "total": len(_STANDARD_ACCOUNTS),
+        "message": f"Seeded {created} standard accounts ({skipped} already existed)."
+    }
 
 
 @router.post("/accounts/dedupe-contact-accounts")

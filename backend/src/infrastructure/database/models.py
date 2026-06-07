@@ -642,6 +642,7 @@ class Account(Base):
     name = Column(String(150), nullable=False)
     code = Column(String(50), nullable=False)
     account_type = Column(String(50), nullable=False)
+    account_group = Column(String(100), nullable=True)  # e.g. "Cash & Bank", "Fixed Assets", "GST Output"
     parent_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id"))
     opening_balance = Column(Numeric(15, 4), nullable=False, default=0)
     current_balance = Column(Numeric(15, 4), nullable=False, default=0)

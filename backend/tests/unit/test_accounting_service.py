@@ -405,7 +405,8 @@ class TestAccountResolver:
         added_account = resolver.db.add.call_args[0][0]
         assert added_account.account_type == "ASSET"
         assert added_account.name == "Cash on Hand"
-        assert added_account.code == "CASH"
+        assert added_account.code == "1001"
+        assert added_account.account_group == "Cash & Bank"
         assert added_account.is_active is True
         assert added_account.tenant_id == resolver.tenant_id
 

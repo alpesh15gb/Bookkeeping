@@ -26,6 +26,9 @@ def upgrade() -> None:
     # Add itc_eligible to bills (C6 GSTR-3B ITC filter)
     op.add_column('bills', sa.Column('itc_eligible', sa.Boolean(), nullable=False, server_default='1'))
     
+    # Add account_group to accounts (Chart of Accounts grouping)
+    op.add_column('accounts', sa.Column('account_group', sa.String(100), nullable=True))
+    
     # Create period_lock_audits table (FY-4.4)
     op.create_table('period_lock_audits',
         sa.Column('id', sa.UUID(), nullable=False),
@@ -43,6 +46,7 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index('ix_pla_tenant_date', table_name='period_lock_audits')
     op.drop_table('period_lock_audits')
+    op.drop_column('accounts', 'account_group')
     op.drop_column('bills', 'itc_eligible')
     op.drop_column('invoices', 'is_rcm')
     op.drop_column('invoices', 'supply_type')
