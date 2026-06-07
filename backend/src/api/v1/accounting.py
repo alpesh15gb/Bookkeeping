@@ -729,7 +729,7 @@ def prepare_year_end(
     tb_diff = abs(tb.total_closing_debits - tb.total_closing_credits)
 
     # 3. Calculate Net Profit/Loss for the period
-    pnl = get_profit_loss_report(start_date=fy_start, end_date=closing_date, db=db, tenant_id=tenant_id)
+    pnl = get_profit_loss_report(date_from=fy_start, date_to=closing_date, db=db, tenant_id=tenant_id)
     net_profit = pnl.net_profit
 
     ready = tb_balanced and len(unposted) == 0
