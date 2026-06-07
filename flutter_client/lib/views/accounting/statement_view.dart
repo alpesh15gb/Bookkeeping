@@ -174,7 +174,8 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                   DataColumn(label: Text('Credit'), numeric: true),
                 ],
                 rows: lines.map<DataRow>((l) {
-                  final closeBal = (l['closing_balance'] ?? 0).toDouble();
+                  final closeBalRaw = l['closing_balance'] ?? 0;
+                  final closeBal = closeBalRaw is String ? double.tryParse(closeBalRaw) ?? 0.0 : (closeBalRaw as num).toDouble();
                   final isDebit = l['account_type'] == 'ASSET' || l['account_type'] == 'EXPENSE';
                   return DataRow(cells: [
                     DataCell(Text('${l['account_code']} - ${l['account_name']}', style: AppTextStyles.bodyMedium)),
