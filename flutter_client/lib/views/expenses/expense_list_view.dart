@@ -75,7 +75,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   void _bulkCancel() async {
     final provider = context.read<ExpenseProvider>();
     final cancellable = _selectedIds.where((id) {
-      final match = provider.items.where((e) => e['id'].toString() == id);
+      final match = provider.items.where((e) => e is Map ? e['id']?.toString() == id : false);
       if (match.isEmpty) return false;
       return match.first['status'] == 'POSTED';
     }).toList();

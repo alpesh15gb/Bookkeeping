@@ -25,7 +25,7 @@ class MobileHomeView extends StatelessWidget {
     final activeFY = fy.activeYear?.name ?? 'Active';
 
     // Get overdue invoices from recentInvoices
-    final overdueInvoices = d.recentInvoices.where((inv) => inv['status']?.toString().toUpperCase() == 'OVERDUE').take(3).toList();
+    final overdueInvoices = d.recentInvoices.where((inv) => (inv is Map ? inv['status']?.toString().toUpperCase() : null) == 'OVERDUE').take(3).toList();
 
     return RefreshIndicator(
       onRefresh: () async {
