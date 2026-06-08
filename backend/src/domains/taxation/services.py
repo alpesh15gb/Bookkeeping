@@ -59,11 +59,17 @@ class GSTEngine:
 
     @staticmethod
     def resolve_gst_rate(db, tenant_id, requested_rate: Decimal) -> Decimal:
-        """If tenant is NON_GST or GST_COMPOSITION, force gst_rate to 0. Otherwise return requested_rate."""
+        """If tenant is NON_GST or GST_COMPOSITION, force gst_rate to 0. Otherwise return requested_rate.
+        Auto-detects GST registration from GSTIN presence."""
         from src.infrastructure.database.models import Tenant
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.deleted_at == None).first()
-        if tenant and tenant.tax_mode in ("NON_GST", "GST_COMPOSITION"):
-            return Decimal("0.00")
+        if tenant:
+            # Auto-detect: if tenant has a GSTIN, treat as GST_REGULAR
+            effective_mode = tenant.tax_mode
+            if effective_mode == "NON_GST" and tenant.gstin and len(tenant.gstin) == 15:
+                effective_mode = "GST_REGULAR"
+            if effective_mode in ("NON_GST", "GST_COMPOSITION"):
+                return Decimal("0.00")
         return requested_rate
 
     @staticmethod

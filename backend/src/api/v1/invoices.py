@@ -553,7 +553,9 @@ def create_credit_note(
     db.add(cn)
     db.flush()
 
-    # Credit note stays as DRAFT — use /finalize endpoint to post to ledger
+    # Auto-post: create journal entry immediately
+    from src.domains.accounting.auto_post import auto_post_credit_note
+    auto_post_credit_note(db, tenant_id, cn)
 
     db.commit()
     db.refresh(cn)
@@ -907,6 +909,12 @@ def create_debit_note(
     origin_state = resolve_origin_state_code(db, tenant_id)
     place_of_supply = inv.pos_state_code if payload.invoice_id and inv else origin_state
 
+    # For standalone debit notes, use the contact's state as place of supply
+    if not payload.invoice_id and payload.contact_id:
+        contact = db.query(Contact).filter(Contact.id == payload.contact_id, Contact.tenant_id == tenant_id).first()
+        if contact and contact.state_code:
+            place_of_supply = contact.state_code
+
     db_lines = []
     subtotal = Decimal("0.0000")
     cgst = Decimal("0.0000")
@@ -979,7 +987,9 @@ def create_debit_note(
     db.add(dn)
     db.flush()
 
-    # Debit note stays as DRAFT — use /finalize endpoint to post to ledger
+    # Auto-post: create journal entry immediately
+    from src.domains.accounting.auto_post import auto_post_debit_note
+    auto_post_debit_note(db, tenant_id, dn)
 
     db.commit()
     db.refresh(dn)

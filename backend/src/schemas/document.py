@@ -269,6 +269,7 @@ class DebitNoteLineResponse(SchemaBase):
 
 class DebitNoteCreate(SchemaBase):
     invoice_id: Optional[uuid.UUID] = None
+    contact_id: Optional[uuid.UUID] = None
     debit_note_number: Optional[str] = Field(None, max_length=50)
     issue_date: date
     reason: str = Field(..., min_length=1, max_length=255)
