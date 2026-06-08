@@ -221,7 +221,7 @@ class FinancialYearProvider extends ChangeNotifier {
             (y) => y.id == savedId,
             orElse: () => _availableYears.firstWhere(
               (y) => y.isCurrent,
-              orElse: () => _availableYears.isNotEmpty ? _availableYears.first : _activeYear!,
+              orElse: () => _availableYears.isNotEmpty ? _availableYears.first : _activeYear,
             ),
           );
         } else {
