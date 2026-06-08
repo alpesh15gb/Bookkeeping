@@ -1017,6 +1017,7 @@ class CustomerCard extends StatelessWidget {
   final String? address;
   final double? outstandingBalance;
   final String? state;
+  final String partyLabel;
 
   const CustomerCard({
     super.key,
@@ -1027,6 +1028,7 @@ class CustomerCard extends StatelessWidget {
     this.address,
     this.outstandingBalance,
     this.state,
+    this.partyLabel = 'Customer',
   });
 
   @override
@@ -1036,7 +1038,7 @@ class CustomerCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Customer'.toUpperCase(),
+            partyLabel.toUpperCase(),
             style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5),
           ),
           const SizedBox(height: 10),
@@ -1058,7 +1060,7 @@ class CustomerCard extends StatelessWidget {
               if (state != null && state!.isNotEmpty)
                 _infoChip('State', state!),
               if (outstandingBalance != null && outstandingBalance! > 0)
-                _infoChip('Outstanding', '₹${outstandingBalance!.toStringAsFixed(0)}', isAlert: true),
+                _infoChip('Outstanding', AmountFormat.format(outstandingBalance!), isAlert: true),
             ],
           ),
           if (address != null && address!.isNotEmpty) ...[

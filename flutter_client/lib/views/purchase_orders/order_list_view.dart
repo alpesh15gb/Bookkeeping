@@ -392,6 +392,7 @@ class _OrderListViewState extends State<OrderListView> {
                 amount: totalCount,
                 subtitle: '$draftCount draft · $confirmedCount confirmed',
                 icon: Icons.receipt_long_outlined,
+                formatAsCurrency: false,
               ),
             ),
 
@@ -590,9 +591,9 @@ class _OrderListViewState extends State<OrderListView> {
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
                                           AppAmount(
-                                            amount: double.parse(
+                                            amount: double.tryParse(
                                               (order['total'] ?? 0).toString(),
-                                            ),
+                                            ) ?? 0.0,
                                           ),
                                           const SizedBox(width: 8),
                                           StatusBadge(

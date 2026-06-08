@@ -116,6 +116,7 @@ class _ContactListViewState extends State<ContactListView> {
                   amount: filtered.length,
                   subtitle: '${filtered.where((c) => c.contactType == 'CUSTOMER' || c.contactType == 'BOTH').length} customers · ${filtered.where((c) => c.contactType == 'VENDOR' || c.contactType == 'BOTH').length} vendors',
                   icon: Icons.people_outlined,
+                  formatAsCurrency: false,
                 ),
               ),
             Expanded(

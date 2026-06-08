@@ -147,8 +147,8 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                         return ItemTableRow(
                           name: l['description'] ?? l['product_name'] ?? 'Item',
                           qty: qty.toStringAsFixed(0),
-                          rate: '₹${rate.toStringAsFixed(2)}',
-                          amount: '₹${total.toStringAsFixed(2)}',
+                          rate: AmountFormat.format(rate),
+                          amount: AmountFormat.format(total),
                         );
                       }).toList(),
                     ),

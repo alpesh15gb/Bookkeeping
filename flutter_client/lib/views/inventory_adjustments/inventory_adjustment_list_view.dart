@@ -63,6 +63,7 @@ class _InventoryAdjustmentListViewState extends State<InventoryAdjustmentListVie
                         amount: provider.adjustments.length,
                         subtitle: '${provider.adjustments.where((a) => a['status'] == 'POSTED').length} posted',
                         icon: Icons.inventory_2_outlined,
+                        formatAsCurrency: false,
                       ),
                     );
                   }

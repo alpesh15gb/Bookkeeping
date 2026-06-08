@@ -82,6 +82,7 @@ class _DeliveryChallanListViewState extends State<DeliveryChallanListView> {
                 amount: provider.challans.length,
                 subtitle: '${provider.challans.where((c) => c['status'] == 'DELIVERED').length} delivered',
                 icon: Icons.local_shipping_rounded,
+                formatAsCurrency: false,
               ),
             ),
           Expanded(

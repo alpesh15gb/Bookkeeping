@@ -113,6 +113,7 @@ class _BillDetailViewState extends State<BillDetailView> {
           email: contact?.email,
           state: contact?.stateCode,
           outstandingBalance: (bill?.total ?? 0) - (bill?.amountPaid ?? 0),
+          partyLabel: 'Vendor',
         ),
         const SizedBox(height: 16),
 

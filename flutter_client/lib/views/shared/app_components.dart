@@ -2461,6 +2461,7 @@ class HeroSummaryCard extends StatelessWidget {
   final Color? amountColor;
   final String? subtitle;
   final IconData? icon;
+  final bool formatAsCurrency;
 
   const HeroSummaryCard({
     super.key,
@@ -2469,10 +2470,14 @@ class HeroSummaryCard extends StatelessWidget {
     this.amountColor,
     this.subtitle,
     this.icon,
+    this.formatAsCurrency = true,
   });
 
   @override
   Widget build(BuildContext context) {
+    final displayValue = formatAsCurrency
+        ? AmountFormat.format(amount)
+        : amount.toString();
     return AppCard(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -2497,7 +2502,7 @@ class HeroSummaryCard extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Text(
-            AmountFormat.format(amount),
+            displayValue,
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.w700,

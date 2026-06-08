@@ -127,6 +127,7 @@ class _EwayBillListViewState extends State<EwayBillListView> with SingleTickerPr
                       amount: provider.ewayBills.length,
                       subtitle: '${provider.ewayBills.where((e) => e['status'] == 'ACTIVE').length} active',
                       icon: Icons.local_shipping_outlined,
+                      formatAsCurrency: false,
                     ),
                   );
                 }

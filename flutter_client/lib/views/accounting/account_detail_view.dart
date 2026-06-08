@@ -91,7 +91,7 @@ class _AccountDetailViewState extends State<AccountDetailView> {
                   children: [
                     Text('Balance', style: AppTextStyles.h3),
                     Text(
-                      '₹${double.parse((a['balance'] ?? 0).toString()).toStringAsFixed(2)}',
+                      '₹${double.tryParse((a['balance'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}',
                       style: AppTextStyles.numericLarge,
                     ),
                   ],

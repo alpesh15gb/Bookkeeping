@@ -64,7 +64,7 @@ class _LedgerViewState extends State<LedgerView> {
     }
 
     final openingBalance = double.tryParse((ledger['opening_balance'] ?? 0).toString()) ?? 0.0;
-    final closingBalance = double.parse((ledger['closing_balance'] ?? 0).toString());
+    final closingBalance = double.tryParse((ledger['closing_balance'] ?? 0).toString()) ?? 0.0;
 
     return Column(
       children: [
