@@ -129,7 +129,7 @@ class _JournalEntryViewState extends State<JournalEntryView> {
                                     style: AppTextStyles.caption,
                                   ),
                                   Text(
-                                    '₹${(l['amount']).toStringAsFixed(2)}',
+                                    '₹${double.tryParse((l['amount'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}',
                                     style: AppTextStyles.numeric,
                                   ),
                                 ],

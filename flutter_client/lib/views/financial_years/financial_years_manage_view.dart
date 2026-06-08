@@ -590,7 +590,7 @@ class _YearEndDashboardScreenState extends State<_YearEndDashboardScreen> {
                               ...d.unpostedDocuments.map((doc) => Padding(
                                 padding: const EdgeInsets.only(bottom: 4),
                                 child: Text(
-                                  '• ${doc['document_type']} #${doc['document_number']} — ${AmountFormat.format(doc['amount'] ?? 0)}',
+                                  '• ${doc['document_type']} #${doc['document_number']} — ${AmountFormat.format(double.tryParse((doc['amount'] ?? 0).toString()) ?? 0)}',
                                   style: const TextStyle(fontSize: 12),
                                 ),
                               )),

@@ -423,23 +423,23 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                 title: 'TAX SUMMARY',
                 child: Column(
                   children: [
-                    SummaryRow(label: 'Subtotal', value: '₹${(_previewData!['amount'] ?? 0).toStringAsFixed(2)}'),
-                    if ((_previewData!['cgst_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'CGST', value: '₹${(_previewData!['cgst_amount'] ?? 0).toStringAsFixed(2)}'),
-                    if ((_previewData!['sgst_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'SGST', value: '₹${(_previewData!['sgst_amount'] ?? 0).toStringAsFixed(2)}'),
-                    if ((_previewData!['igst_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'IGST', value: '₹${(_previewData!['igst_amount'] ?? 0).toStringAsFixed(2)}'),
-                    if ((_previewData!['utgst_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'UTGST', value: '₹${(_previewData!['utgst_amount'] ?? 0).toStringAsFixed(2)}'),
-                    if ((_previewData!['cess_amount'] ?? 0) > 0)
-                      SummaryRow(label: 'Cess', value: '₹${(_previewData!['cess_amount'] ?? 0).toStringAsFixed(2)}'),
-                    if ((_previewData!['round_off'] ?? 0) != 0)
-                      SummaryRow(label: 'Round Off', value: '₹${(_previewData!['round_off'] ?? 0).toStringAsFixed(2)}'),
+                    SummaryRow(label: 'Subtotal', value: '₹${double.tryParse((_previewData!['amount'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}'),
+                    if (double.tryParse((_previewData!['cgst_amount'] ?? 0).toString()) ?? 0 > 0)
+                      SummaryRow(label: 'CGST', value: '₹${double.tryParse((_previewData!['cgst_amount'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}'),
+                    if (double.tryParse((_previewData!['sgst_amount'] ?? 0).toString()) ?? 0 > 0)
+                      SummaryRow(label: 'SGST', value: '₹${double.tryParse((_previewData!['sgst_amount'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}'),
+                    if (double.tryParse((_previewData!['igst_amount'] ?? 0).toString()) ?? 0 > 0)
+                      SummaryRow(label: 'IGST', value: '₹${double.tryParse((_previewData!['igst_amount'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}'),
+                    if (double.tryParse((_previewData!['utgst_amount'] ?? 0).toString()) ?? 0 > 0)
+                      SummaryRow(label: 'UTGST', value: '₹${double.tryParse((_previewData!['utgst_amount'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}'),
+                    if (double.tryParse((_previewData!['cess_amount'] ?? 0).toString()) ?? 0 > 0)
+                      SummaryRow(label: 'Cess', value: '₹${double.tryParse((_previewData!['cess_amount'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}'),
+                    if (double.tryParse((_previewData!['round_off'] ?? 0).toString()) ?? 0 != 0)
+                      SummaryRow(label: 'Round Off', value: '₹${double.tryParse((_previewData!['round_off'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}'),
                     const Divider(),
                     SummaryRow(
                       label: 'Total Amount',
-                      value: '₹${(_previewData!['total'] ?? 0).toStringAsFixed(2)}',
+                      value: '₹${double.tryParse((_previewData!['total'] ?? 0).toString())?.toStringAsFixed(2) ?? '0.00'}',
                       isBold: true,
                       valueColor: AppColors.brandNavy,
                     ),
