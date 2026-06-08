@@ -21,9 +21,19 @@ class ContactBase(SchemaBase):
 class ContactCreate(ContactBase):
     pass
 
-class ContactResponse(ContactBase):
+class ContactResponse(SchemaBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
+    name: str
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    contact_type: str
+    gstin: Optional[str] = None
+    pan: Optional[str] = None
+    registration_type: str
+    billing_address: dict
+    shipping_address: Optional[dict] = None
+    state_code: str
     is_active: bool
     created_at: datetime
 

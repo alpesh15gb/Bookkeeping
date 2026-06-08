@@ -20,7 +20,7 @@ def get_dashboard_metrics(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
 ):
-    params = {"tenant_id": str(tenant_id)}
+    params = {"tenant_id": str(tenant_id).replace("-", "")}
     date_filter = ""
     if date_from and date_to:
         date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"
@@ -66,7 +66,7 @@ def get_revenue_trend(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
 ):
-    params = {"tenant_id": str(tenant_id)}
+    params = {"tenant_id": str(tenant_id).replace("-", "")}
     if date_from and date_to:
         params["date_from"] = date.fromisoformat(date_from)
         params["date_to"] = date.fromisoformat(date_to)
@@ -166,7 +166,7 @@ def get_expense_trend(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:view")),
 ):
-    params = {"tenant_id": str(tenant_id)}
+    params = {"tenant_id": str(tenant_id).replace("-", "")}
     if date_from and date_to:
         params["date_from"] = date.fromisoformat(date_from)
         params["date_to"] = date.fromisoformat(date_to)

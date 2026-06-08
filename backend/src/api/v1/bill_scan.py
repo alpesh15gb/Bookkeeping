@@ -18,7 +18,6 @@ POST /api/v1/bills/scan-save
 import logging
 import asyncio
 import base64
-import uuid as _uuid
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -172,7 +171,7 @@ async def scan_preview(
     file_bytes = await _read_and_validate_file(file)
 
     # Submit to Celery worker (non-blocking)
-    job_id = str(_uuid.uuid4())
+    job_id = str(uuid.uuid4())
     file_bytes_b64 = base64.b64encode(file_bytes).decode("utf-8")
 
     try:

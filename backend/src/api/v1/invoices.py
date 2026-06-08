@@ -9,7 +9,8 @@ from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    Invoice, InvoiceLine, Contact, Product, Payment, PaymentAllocation, Account, JournalEntry, JournalLine,
+    Invoice, InvoiceLine, Contact, Product, StockLedger,
+    Payment, PaymentAllocation, Account, JournalEntry, JournalLine,
     CreditNote, CreditNoteLine, DebitNote, DebitNoteLine, TenantSetting, BankingProfile, Tenant, User
 )
 from src.schemas.document import (
@@ -367,7 +368,12 @@ def preview_invoice(
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
 
         line_desc = line.description or product.name or "Item"
+        resolved_gst_rate = GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         line_subtotal = (line.quantity * line.rate) - line.discount
+
+        if payload.is_gst_inclusive and resolved_gst_rate > 0:
+            line_subtotal = line_subtotal / (1 + resolved_gst_rate / Decimal("100"))
+
         if line_subtotal < 0:
             raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
 
@@ -375,7 +381,7 @@ def preview_invoice(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+            gst_rate=resolved_gst_rate
         )
 
         db_line = InvoiceLine(
@@ -584,7 +590,8 @@ def preview_credit_note(
     cess = Decimal("0.0000")
 
     for line in payload.line_items:
-        line_subtotal = line.quantity * line.rate
+        line_discount = line.discount if hasattr(line, 'discount') and line.discount else Decimal("0.0000")
+        line_subtotal = (line.quantity * line.rate) - line_discount
         tax_split = GSTEngine.calculate_tax(
             origin_state_code=origin_state,
             place_of_supply_state_code=place_of_supply,
@@ -1016,7 +1023,8 @@ def preview_debit_note(
     cess = Decimal("0.0000")
 
     for line in payload.line_items:
-        line_subtotal = line.quantity * line.rate
+        line_discount = line.discount if hasattr(line, 'discount') and line.discount else Decimal("0.0000")
+        line_subtotal = (line.quantity * line.rate) - line_discount
         tax_split = GSTEngine.calculate_tax(
             origin_state_code=origin_state,
             place_of_supply_state_code=place_of_supply,
@@ -1675,12 +1683,31 @@ def cancel_invoice(
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
+    for line in invoice.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(
+                Product.id == line.product_id,
+                Product.tenant_id == tenant_id
+            ).with_for_update().first()
+            if product and product.product_type == "GOODS":
+                product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    reference_type="INVOICE_REVERSAL",
+                    reference_id=invoice.id,
+                    quantity=line.quantity,
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
+                ))
+
     invoice.status = "CANCELLED"
     invoice.cancelled_at = datetime.now(timezone.utc)
     invoice.cancelled_by = current_user.id
     db.commit()
     db.refresh(invoice)
     return invoice
+
 
 @router.get("/{id}/pdf-payload")
 def get_invoice_pdf_payload(
@@ -2144,8 +2171,6 @@ def clone_invoice(
     )
 
     db.add(cloned)
-    db.flush()
-    auto_post_invoice(db, tenant_id, cloned)
     db.commit()
     db.refresh(cloned)
     return cloned

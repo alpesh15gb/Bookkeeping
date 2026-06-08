@@ -6,7 +6,7 @@ from decimal import Decimal
 from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import Bill, BillLine, Contact, Product, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant, User
+from src.infrastructure.database.models import Bill, BillLine, Contact, Product, StockLedger, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant, User
 from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate, PaginatedBillResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
@@ -207,7 +207,12 @@ def preview_bill(
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
 
         line_desc = line.description or product.name or "Item"
+        resolved_gst_rate = GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         line_subtotal = (line.quantity * line.rate) - line.discount
+
+        if payload.is_gst_inclusive and resolved_gst_rate > 0:
+            line_subtotal = line_subtotal / (1 + resolved_gst_rate / Decimal("100"))
+
         if line_subtotal < 0:
             raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
 
@@ -215,7 +220,7 @@ def preview_bill(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+            gst_rate=resolved_gst_rate
         )
 
         db_line = BillLine(
@@ -676,6 +681,10 @@ def finalize_bill(
         db.refresh(bill)
         return bill
 
+    # Guard against double-posting
+    from src.domains.accounting.auto_post import _check_no_existing_posting
+    _check_no_existing_posting(db, tenant_id, "BILL", bill.id)
+
     resolver = AccountResolver(db, tenant_id)
     vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
     purchase_expense_account_id = resolver.resolve("purchases")
@@ -867,6 +876,30 @@ def cancel_bill(
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
+    for line in bill.lines:
+        if line.product_id and line.quantity:
+            product = db.query(Product).filter(
+                Product.id == line.product_id,
+                Product.tenant_id == tenant_id
+            ).with_for_update().first()
+            if product and product.product_type == "GOODS":
+                available = product.current_stock or Decimal("0")
+                if available < line.quantity:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}"
+                    )
+                product.current_stock = available - line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    reference_type="BILL_REVERSAL",
+                    reference_id=bill.id,
+                    quantity=-line.quantity,
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
+                ))
+
     bill.status = "CANCELLED"
     bill.cancelled_at = datetime.now(timezone.utc)
     bill.cancelled_by = current_user.id
@@ -1036,8 +1069,6 @@ def clone_bill(
     )
 
     db.add(cloned)
-    db.flush()
-    auto_post_bill(db, tenant_id, cloned)
     db.commit()
     db.refresh(cloned)
     return cloned

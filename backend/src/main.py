@@ -13,7 +13,6 @@ Production hardening applied:
 """
 import logging
 import uuid
-import uuid as uuid_mod
 from contextlib import asynccontextmanager
 from decimal import Decimal
 from typing import List, Optional
@@ -265,7 +264,7 @@ async def add_security_headers(request: Request, call_next):
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
-    request_id = str(uuid_mod.uuid4())[:8]
+    request_id = str(uuid.uuid4())[:8]
     request.state.request_id = request_id
     token = request_id_var.set(request_id)
     try:

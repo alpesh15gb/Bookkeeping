@@ -211,8 +211,9 @@ class TestDashboard(unittest.TestCase):
 
         res = self.client.get("/api/v1/dashboard/metrics", headers=self.headers_a)
         data = res.json()
-        self.assertEqual(data["cgst_total"], 0.0)
-        self.assertEqual(data["sgst_total"], 0.0)
+        # Invoices are auto-posted on creation, so they should be included
+        self.assertEqual(data["cgst_total"], 9000.0)
+        self.assertEqual(data["sgst_total"], 9000.0)
         self.assertEqual(data["igst_total"], 0.0)
 
     def test_revenue_trend_with_data(self):

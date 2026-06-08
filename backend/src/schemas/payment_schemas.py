@@ -37,14 +37,11 @@ class PaymentResponse(SchemaBase):
     amount: Decimal
     reference_number: Optional[str] = None
     description: Optional[str] = None
+    status: str
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
     allocations: List[PaymentAllocationResponse]
-
-    @computed_field
-    def status(self) -> str:
-        return "CANCELLED" if self.deleted_at is not None else "ACTIVE"
 
 class PaymentListResponse(SchemaBase):
     id: uuid.UUID
@@ -88,14 +85,11 @@ class BillPaymentResponse(SchemaBase):
     amount: Decimal
     reference_number: Optional[str] = None
     description: Optional[str] = None
+    status: str
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
     allocations: List[BillPaymentAllocationResponse]
-
-    @computed_field
-    def status(self) -> str:
-        return "CANCELLED" if self.deleted_at is not None else "ACTIVE"
 
 class BillPaymentListResponse(SchemaBase):
     id: uuid.UUID

@@ -25,7 +25,7 @@ def get_sales_summary(
     Compiles overall sales KPI metrics from finalized invoices.
     Uses database-level SUM aggregations.
     """
-    params = {"tenant_id": str(tenant_id)}
+    params = {"tenant_id": str(tenant_id).replace("-", "")}
     date_filter = ""
     if date_from and date_to:
         date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"

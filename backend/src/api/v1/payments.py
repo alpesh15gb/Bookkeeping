@@ -248,7 +248,6 @@ def cancel_payment_receipt(
         commit_ledger_draft(db, tenant_id, ledger_draft)
 
     payment.status = "CANCELLED"
-    payment.deleted_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(payment)
     return payment
@@ -459,7 +458,6 @@ def cancel_vendor_payment(
     commit_ledger_draft(db, tenant_id, ledger_draft)
 
     payment.status = "CANCELLED"
-    payment.deleted_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(payment)
     return payment

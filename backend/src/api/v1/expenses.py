@@ -1,7 +1,7 @@
 import uuid
 from decimal import Decimal
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from pydantic import BaseModel, validator
 from sqlalchemy.orm import Session
@@ -129,7 +129,7 @@ def bulk_delete_expenses(
             Expense.deleted_at == None,
         ).first()
         if expense and expense.status == "DRAFT":
-            expense.deleted_at = func.now()
+            expense.deleted_at = datetime.now(timezone.utc)
             deleted += 1
 
     db.commit()

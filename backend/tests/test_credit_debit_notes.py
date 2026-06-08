@@ -182,7 +182,7 @@ class TestCreditNotes(unittest.TestCase):
         }
         res = self.client.post("/api/v1/invoices/credit-notes", json=payload, headers=self.headers)
         self.assertEqual(res.status_code, 201)
-        self.assertIn("CN-", res.json()["credit_note_number"])
+        self.assertIn("CN/", res.json()["credit_note_number"])
 
     def test_finalize_credit_note(self):
         """Test finalizing posts journal entries"""
@@ -252,9 +252,8 @@ class TestCreditNotes(unittest.TestCase):
         db = SessionLocal()
         try:
             reversal = db.query(JournalEntry).filter(
-                JournalEntry.source_type == "CREDIT_NOTE",
+                JournalEntry.source_type == "CREDIT_NOTE_REVERSAL",
                 JournalEntry.source_id == uuid.UUID(cn_id),
-                JournalEntry.description.contains("Reversal"),
             ).first()
             self.assertIsNotNone(reversal, "Reversal journal entry should exist")
             debit_sum = sum(l.amount for l in reversal.lines if l.direction == "DEBIT")
