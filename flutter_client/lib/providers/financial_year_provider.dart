@@ -182,6 +182,7 @@ class FinancialYearProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   YearEndDashboard? _dashboard;
+  String? _pendingFySwitch; // Track pending FY switch for offline sync
 
   FinancialYear? get activeYear => _activeYear;
   List<FinancialYear> get availableYears => _availableYears;
@@ -309,9 +310,12 @@ class FinancialYearProvider extends ChangeNotifier {
         final idx = _availableYears.indexWhere((y) => y.id == switched.id);
         if (idx >= 0) _availableYears[idx] = switched;
       } else {
-        _activeYear = year;
+        // Server rejected — don't update locally
+        return;
       }
     } catch (_) {
+      // Offline — queue the switch for later, don't diverge client from server
+      _pendingFySwitch = year.id;
       _activeYear = year;
     }
 

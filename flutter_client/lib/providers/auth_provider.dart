@@ -64,12 +64,21 @@ class AuthProvider extends ChangeNotifier {
         _memberships = [];
         _activeTenantId = null;
       }
-    } catch (_) {
-      await ApiClient.clearSession();
-      _currentUser = null;
-      _isAuthenticated = false;
-      _memberships = [];
-      _activeTenantId = null;
+    } catch (e) {
+      // Don't clear session on network errors — keep offline session alive
+      if (ApiClient.hasSavedSession) {
+        _isAuthenticated = true;
+        // Try to restore minimal user info from cache
+        _currentUser = null;
+        _memberships = [];
+        _activeTenantId = ApiClient.tenantId;
+      } else {
+        await ApiClient.clearSession();
+        _currentUser = null;
+        _isAuthenticated = false;
+        _memberships = [];
+        _activeTenantId = null;
+      }
     } finally {
       _isLoading = false;
       notifyListeners();

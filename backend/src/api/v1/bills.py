@@ -6,13 +6,13 @@ from decimal import Decimal
 from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import Bill, BillLine, Contact, Product, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
+from src.infrastructure.database.models import Bill, BillLine, Contact, Product, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant, User
 from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate, PaginatedBillResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.accounting.auto_post import auto_post_bill, cancel_bill, get_bill_display_status
 from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
-from src.api.deps import get_tenant_context, enforce_permission
+from src.api.deps import get_tenant_context, enforce_permission, get_current_user
 from src.core.rate_limiter import limiter
 from src.core.config import settings
 
@@ -800,7 +800,8 @@ def record_bill_payment(
 def cancel_bill(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
+    current_user: User = Depends(get_current_user)
 ):
     """Cancels a posted bill, reversing its ledger postings via the dedicated reversal engine."""
     bill = db.query(Bill).filter(
@@ -863,7 +864,7 @@ def cancel_bill(
 
     bill.status = "CANCELLED"
     bill.cancelled_at = datetime.now(timezone.utc)
-    bill.cancelled_by = tenant_id
+    bill.cancelled_by = current_user.id
     db.commit()
     db.refresh(bill)
     return bill

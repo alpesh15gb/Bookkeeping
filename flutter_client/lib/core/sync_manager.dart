@@ -147,6 +147,13 @@ class SyncManager extends ChangeNotifier {
       final endpoint = action['endpoint'] as String;
       final method = action['method'] as String;
       final body = action['body'] as String?;
+      final retryCount = action['retry_count'] as int? ?? 0;
+
+      // Skip actions that have exceeded max retries
+      if (retryCount >= 5) {
+        _lastSyncMessage = 'Some actions failed after 5 retries. Please try manually.';
+        continue;
+      }
 
       try {
         final uri = Uri.parse(endpoint);

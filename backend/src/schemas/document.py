@@ -124,6 +124,8 @@ class InvoiceResponse(InvoiceBase):
     tenant_id: uuid.UUID
     status: str
     is_gst_inclusive: Optional[bool] = False
+    is_rcm: Optional[bool] = False
+    supply_type: Optional[str] = "DOMESTIC"
     subtotal: Decimal
     discount_total: Decimal
     cgst_amount: Decimal
@@ -155,6 +157,8 @@ class InvoiceListResponse(SchemaBase):
     due_date: date
     status: str
     is_gst_inclusive: Optional[bool] = False
+    is_rcm: Optional[bool] = False
+    supply_type: Optional[str] = "DOMESTIC"
     total: Decimal
     amount_paid: Decimal
     contact_name: str

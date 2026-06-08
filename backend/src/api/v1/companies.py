@@ -7,6 +7,7 @@ from datetime import datetime, date, timezone
 
 from src.core.config import settings
 from src.core.database import get_db_session
+from src.core.rate_limiter import limiter
 from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries, ExpenseCategory
 from src.schemas.company_schemas import (
     CompanyCreate, CompanyResponse,
@@ -711,8 +712,10 @@ def verify_and_execute_purge(
 # ─── Data Export / Backup ───
 
 @router.get("/companies/{tenant_id}/export")
+@limiter.limit(settings.RATE_LIMIT_REPORTS)
 def export_tenant_data(
     tenant_id: uuid.UUID,
+    request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
 ):

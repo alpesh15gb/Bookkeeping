@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
     Invoice, InvoiceLine, Contact, Product, Payment, PaymentAllocation, Account, JournalEntry, JournalLine,
-    CreditNote, CreditNoteLine, DebitNote, DebitNoteLine, TenantSetting, BankingProfile, Tenant
+    CreditNote, CreditNoteLine, DebitNote, DebitNoteLine, TenantSetting, BankingProfile, Tenant, User
 )
 from src.schemas.document import (
     InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse,
@@ -24,7 +24,7 @@ from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.accounting.auto_post import auto_post_invoice, cancel_invoice, get_display_status
 from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
-from src.api.deps import enforce_permission
+from src.api.deps import enforce_permission, get_current_user
 from src.core.rate_limiter import limiter
 from src.core.config import settings
 
@@ -99,12 +99,21 @@ def create_invoice(
         if line_subtotal < 0:
             raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
 
+        # Supply type overrides for exports/SEZ
+        supply_type = payload.supply_type or "DOMESTIC"
+        if supply_type in ("EXPORT_WITHOUT_TAX", "SEZ_WITHOUT_TAX"):
+            effective_gst_rate = Decimal("0.00")
+        else:
+            effective_gst_rate = resolved_gst_rate
+        force_igst = supply_type in ("EXPORT_WITH_TAX", "EXPORT_WITHOUT_TAX", "SEZ_WITH_TAX", "SEZ_WITHOUT_TAX")
+
         tax_split = GSTEngine.calculate_tax(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=resolved_gst_rate,
-            is_rcm=payload.is_rcm or False
+            gst_rate=effective_gst_rate,
+            is_rcm=payload.is_rcm or False,
+            force_igst=force_igst
         )
 
         db_line = InvoiceLine(
@@ -1565,7 +1574,8 @@ def record_invoice_payment(
 def cancel_invoice(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
+    current_user: User = Depends(get_current_user)
 ):
     invoice = db.query(Invoice).filter(
         Invoice.id == id,
@@ -1627,7 +1637,7 @@ def cancel_invoice(
 
     invoice.status = "CANCELLED"
     invoice.cancelled_at = datetime.now(timezone.utc)
-    invoice.cancelled_by = tenant_id  # Using tenant_id as placeholder; real user_id from auth
+    invoice.cancelled_by = current_user.id
     db.commit()
     db.refresh(invoice)
     return invoice

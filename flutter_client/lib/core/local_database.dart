@@ -127,11 +127,12 @@ class LocalDatabase {
     // Full document detail cache
     await db.execute('''
       CREATE TABLE cached_document_details (
-        id TEXT PRIMARY KEY,
+        id TEXT,
         tenant_id TEXT,
         doc_type TEXT,
         json TEXT,
-        synced_at TEXT
+        synced_at TEXT,
+        PRIMARY KEY (id, doc_type)
       )
     ''');
 

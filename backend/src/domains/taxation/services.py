@@ -80,7 +80,8 @@ class GSTEngine:
         base_amount: Decimal,
         gst_rate: Decimal,
         cess_rate: Decimal = Decimal("0.00"),
-        is_rcm: bool = False
+        is_rcm: bool = False,
+        force_igst: bool = False
     ) -> TaxSplit:
         if base_amount < Decimal("0.00"):
             raise ValueError("Base taxable amount cannot be negative.")
@@ -112,7 +113,7 @@ class GSTEngine:
         utgst_amount = Decimal("0.00")
 
         # Determine Intra-state vs Inter-state
-        is_intra_state = (origin_state_code == place_of_supply_state_code)
+        is_intra_state = (origin_state_code == place_of_supply_state_code) and not force_igst
 
         if is_intra_state:
             # Intra-state: CGST + SGST/UTGST
