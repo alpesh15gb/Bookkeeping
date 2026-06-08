@@ -554,6 +554,7 @@ class _ShellViewState extends State<ShellView> {
   }
 
   Widget _buildDesktopLayout(UserResponse? user) {
+    final authProvider = context.watch<AuthProvider>();
     final syncManager = context.watch<SyncManager>();
     return Scaffold(
       backgroundColor: AppColors.bgLight,
@@ -589,6 +590,7 @@ class _ShellViewState extends State<ShellView> {
   }
 
   Widget _buildMobileLayout(UserResponse? user) {
+    final authProvider = context.watch<AuthProvider>();
     final syncManager = context.watch<SyncManager>();
     return Scaffold(
       key: _scaffoldKey,
