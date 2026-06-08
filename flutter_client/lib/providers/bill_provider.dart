@@ -128,7 +128,7 @@ class BillProvider extends ChangeNotifier {
       );
       if (queued) {
         // Optimistic UI: add placeholder to local list
-        final placeholder = {
+        _bills.insert(0, BillModel.fromJson({
           'id': 'pending-${DateTime.now().millisecondsSinceEpoch}',
           'bill_number': payload['bill_number'] ?? 'Pending',
           'issue_date': payload['issue_date']?.toString() ?? '',
@@ -136,8 +136,7 @@ class BillProvider extends ChangeNotifier {
           'total': 0.0,
           'amount_paid': 0.0,
           'contact_name': '',
-        };
-        _bills.insert(0, placeholder);
+        }));
         _isLoading = false;
         notifyListeners();
         return true;

@@ -143,7 +143,7 @@ class InvoiceProvider extends ChangeNotifier {
       );
       if (queued) {
         // Optimistic UI: add placeholder to local list
-        final placeholder = {
+        _invoices.insert(0, InvoiceModel.fromJson({
           'id': 'pending-${DateTime.now().millisecondsSinceEpoch}',
           'invoice_number': payload['invoice_number'] ?? 'Pending',
           'issue_date': payload['issue_date']?.toString() ?? '',
@@ -151,8 +151,7 @@ class InvoiceProvider extends ChangeNotifier {
           'total': 0.0,
           'amount_paid': 0.0,
           'contact_name': '',
-        };
-        _invoices.insert(0, placeholder);
+        }));
         _isLoading = false;
         notifyListeners();
         return true;
