@@ -180,7 +180,7 @@ class _RegisterViewState extends State<RegisterView> {
                         hintText: 'Enter your email address',
                         prefixIcon: Icon(Icons.email_outlined, size: 18),
                       ),
-                      validator: (v) => (v == null || !v.contains('@')) ? 'Invalid email' : null,
+                      validator: (v) => (v == null || v.trim().isEmpty || !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v.trim())) ? 'Invalid email' : null,
                     ),
                     const SizedBox(height: 14),
 

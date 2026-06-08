@@ -929,12 +929,16 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         final docType = _resolvedDocumentType;
         if (docType == 'INVOICE') {
           final invoiceProvider = context.read<InvoiceProvider>();
-          final latestInvoice = invoiceProvider.invoices.firstOrNull;
-          final docNum = _invoiceNoCtrl.text.isNotEmpty 
-              ? _invoiceNoCtrl.text 
-              : (latestInvoice?.invoiceNumber ?? 'INV-Auto');
-          final docId = latestInvoice?.id;
-          
+          final docNum = _invoiceNoCtrl.text;
+          // Find the invoice by number in the refreshed list (most reliable after fetchInvoices)
+          final matchedInvoice = docNum.isNotEmpty
+              ? invoiceProvider.invoices.where((i) => i.invoiceNumber == docNum).firstOrNull
+              : null;
+          final docId = matchedInvoice?.id;
+          final displayNum = docNum.isNotEmpty ? docNum : (matchedInvoice?.invoiceNumber ?? 'Invoice');
+
+          // Pop first, then show snackbar on the parent route
+          Navigator.pop(context, true);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               duration: const Duration(seconds: 8),
@@ -945,7 +949,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Invoice $docNum saved',
+                      '$displayNum saved',
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
                     ),
                   ),
@@ -968,7 +972,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                         PrintShareHelper.showShareSheet(
                           context,
                           docLabel: 'Invoice',
-                          docNumber: docNum,
+                          docNumber: displayNum,
                           docType: 'invoices',
                           docId: docId,
                         );
@@ -981,9 +985,9 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             ),
           );
         } else {
+          Navigator.pop(context, true);
           _showSnack(widget.config.successMessage);
         }
-        Navigator.pop(context, true);
       } else {
         HapticHelper.error();
       }
@@ -1635,7 +1639,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: SizedBox(
-                width: _gstEnabled ? 820 : 560,
+                width: _gstEnabled ? 992 : 708,
                 child: Row(
                   children: [
                     SizedBox(
@@ -1725,7 +1729,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: SizedBox(
-                      width: _gstEnabled ? 820 : 560,
+                      width: _gstEnabled ? 992 : 708,
                       child: Row(
                         children: [
                           SizedBox(
@@ -1760,7 +1764,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               width: 90,
                               child: AppTextField(
                                 controller: line.hsnCtrl,
-                                onChanged: (v) => line.hsnSac = v,
+                                onChanged: (v) { line.hsnSac = v; _markDirty(); },
                                 compact: true,
                               ),
                             ),
@@ -1780,6 +1784,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               },
                               onChanged: (v) {
                                 line.quantity = double.tryParse(v) ?? 1;
+                                _markDirty();
                                 _triggerPreview();
                               },
                             ),
@@ -1796,7 +1801,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                                 DropdownMenuItem(value: 'Box', child: Text('Box')),
                               ],
                               onChanged: (v) {
-                                if (v != null) setState(() => line.unit = v);
+                                if (v != null) { setState(() => line.unit = v); _markDirty(); }
                               },
                             ),
                           ),
@@ -1815,6 +1820,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               },
                               onChanged: (v) {
                                 line.rate = double.tryParse(v) ?? 0;
+                                _markDirty();
                                 _triggerPreview();
                               },
                             ),
@@ -1835,6 +1841,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               },
                               onChanged: (v) {
                                 line.discount = double.tryParse(v) ?? 0;
+                                _markDirty();
                                 _triggerPreview();
                               },
                             ),
@@ -1866,6 +1873,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                                 onChanged: (v) {
                                   if (v != null) {
                                     setState(() => line.gstRate = double.tryParse(v) ?? 18);
+                                    _markDirty();
                                     _triggerPreview();
                                   }
                                 },
@@ -1917,7 +1925,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       index: index,
       line: line,
       onPickProduct: () => _openProductSearch(index),
-      onChanged: _triggerPreview,
+      onChanged: () { _markDirty(); _triggerPreview(); },
       onRemove: () => _removeLine(index),
       gstEnabled: _gstEnabled,
     );

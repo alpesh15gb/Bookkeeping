@@ -27,6 +27,8 @@ def decrypt_credential(val: str) -> str:
     try:
         return cipher_suite.decrypt(val.encode()).decode()
     except Exception:
+        import logging
+        logging.getLogger(__name__).warning("Failed to decrypt credential — possible key mismatch or corrupted data")
         return None
 
 class NumberingSeriesService:

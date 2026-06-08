@@ -178,14 +178,9 @@ class _ContactFormViewState extends State<ContactFormView> {
             onPressed: () async {
               final captcha = captchaCtrl.text.trim();
               if (captcha.isEmpty) return;
-              Navigator.pop(ctx);
               final verified = await provider.verifyGstin(gstin, captcha, sessionId);
-              if (verified != null && ctx.mounted) {
+              if (ctx.mounted) {
                 Navigator.pop(ctx, verified);
-              } else if (ctx.mounted) {
-                ScaffoldMessenger.of(ctx).showSnackBar(
-                  const SnackBar(content: Text('Verification failed. Check captcha and try again.'), backgroundColor: AppColors.error),
-                );
               }
             },
             child: const Text('Verify'),

@@ -72,8 +72,9 @@ def get_revenue_trend(
         params["date_to"] = date.fromisoformat(date_to)
         date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"
     else:
+        from datetime import timezone as _tz
         date_filter = "AND issue_date >= :cutoff"
-        params["cutoff"] = datetime.now().replace(year=datetime.now().year - 1)
+        params["cutoff"] = datetime.now(_tz.utc).replace(year=datetime.now(_tz.utc).year - 1)
 
     results = db.execute(
         text(f"""
@@ -171,8 +172,9 @@ def get_expense_trend(
         params["date_to"] = date.fromisoformat(date_to)
         date_filter = "AND expense_date >= :date_from AND expense_date <= :date_to"
     else:
+        from datetime import timezone as _tz
         date_filter = "AND expense_date >= :cutoff"
-        params["cutoff"] = datetime.now().replace(year=datetime.now().year - 1)
+        params["cutoff"] = datetime.now(_tz.utc).replace(year=datetime.now(_tz.utc).year - 1)
 
     results = db.execute(
         text(f"""

@@ -437,7 +437,9 @@ async def upload_bank_statement(
         raise HTTPException(status_code=400, detail="No transactions found in file.")
 
     # Compute balances
-    dates = [t["transaction_date"] for t in transactions]
+    dates = [t["transaction_date"] for t in transactions if t.get("transaction_date") is not None]
+    if not dates:
+        raise HTTPException(status_code=400, detail="No valid transaction dates found in file.")
     amounts = [t["amount"] for t in transactions]
     starting_balance = Decimal("0")
     ending_balance = sum(amounts)

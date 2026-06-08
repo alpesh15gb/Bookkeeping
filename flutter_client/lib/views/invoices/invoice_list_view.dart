@@ -93,6 +93,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       for (final id in _selectedIds) {
         await provider.deleteInvoice(id);
       }
+      if (!mounted) return;
       _clearSelection();
       _fetch();
     }
@@ -123,9 +124,9 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       }
       if (mounted) {
         AppToast.info(context, '$successCount of ${cancellable.length} invoices cancelled');
+        _clearSelection();
+        _fetch();
       }
-      _clearSelection();
-      _fetch();
     }
   }
 
@@ -160,7 +161,11 @@ class _InvoiceListViewState extends State<InvoiceListView> {
         barrierDismissible: false,
         builder: (context) => const Center(child: CircularProgressIndicator()),
       );
-      fullInvoice = await context.read<InvoiceProvider>().fetchInvoiceDetail(invoice.id);
+      try {
+        fullInvoice = await context.read<InvoiceProvider>().fetchInvoiceDetail(invoice.id);
+      } catch (_) {
+        fullInvoice = null;
+      }
       if (mounted) Navigator.pop(context);
       if (fullInvoice == null) {
         if (mounted) AppToast.error(context, 'Failed to load invoice details');
@@ -217,7 +222,7 @@ class _InvoiceListViewState extends State<InvoiceListView> {
       final balance = inv.total - inv.amountPaid;
       if (balance > 0) {
         outstandingAmount += balance;
-        if (inv.status == 'PARTIALLY_PAID' && inv.dueDate != null && DateTime.tryParse(inv.dueDate!)?.isBefore(DateTime.now()) == true) overdueAmount += balance;
+        if ((inv.status == 'PARTIALLY_PAID' || inv.status == 'POSTED' || inv.status == 'SENT') && inv.dueDate != null && DateTime.tryParse(inv.dueDate!)?.isBefore(DateTime.now()) == true) overdueAmount += balance;
       }
     }
 

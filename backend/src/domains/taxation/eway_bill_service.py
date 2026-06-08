@@ -126,12 +126,12 @@ class EWayBillService:
 
         if not ewb_number:
             # Mock 12-digit number starting with 201
-            ewb_number = f"201{int(datetime.now(timezone.utc).timestamp()) % 1000000000:09d}"
+            ewb_number = f"201{uuid.uuid4().int % 1000000000:09d}"
 
         # Check duplicate (unlikely, but safe)
         dup = db.query(EWayBill).filter(EWayBill.eway_bill_number == ewb_number).first()
         if dup:
-            ewb_number = f"201{(int(datetime.now(timezone.utc).timestamp()) + 1) % 1000000000:09d}"
+            ewb_number = f"201{uuid.uuid4().int % 1000000000:09d}"
 
         # 4. Calculate validity: 1 day per 200 km, minimum 1 day
         validity_days = max(1, (payload.trans_distance + 199) // 200)
@@ -269,7 +269,7 @@ class EWayBillService:
                 )
 
         # 2. Compile consolidated e-way bill (mock 12-digit number starting with 301)
-        con_ewb_number = f"301{int(datetime.now(timezone.utc).timestamp()) % 1000000000:09d}"
+        con_ewb_number = f"301{uuid.uuid4().int % 1000000000:09d}"
 
         return {
             "consolidated_eway_bill_number": con_ewb_number,

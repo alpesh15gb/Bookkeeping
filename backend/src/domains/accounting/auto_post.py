@@ -511,11 +511,13 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
     tax = _resolve_tax_accounts(resolver, "input")
     tds_account_id = resolver.resolve("liability.tds") if bill.tds_amount and bill.tds_amount > 0 else None
 
+    cancel_date = bill.issue_date
+
     draft = LedgerPostingEngine.create_bill_reversal_posting(
         tenant_id=tenant_id,
         bill_id=bill.id,
         bill_number=bill.bill_number,
-        cancel_date=date.today(),
+        cancel_date=cancel_date,
         vendor_account_id=vendor_account_id,
         purchase_expense_account_id=purchase_expense_account_id,
         subtotal=bill.subtotal,

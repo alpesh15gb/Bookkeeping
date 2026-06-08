@@ -113,10 +113,34 @@ class ThemeProvider extends ChangeNotifier {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: _surfaceDark,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(8),
         borderSide: const BorderSide(color: _borderDark),
       ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: _borderDark),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFDCA035), width: 1.5),
+      ),
+      errorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFEF5350), width: 1),
+      ),
+      focusedErrorBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: const BorderSide(color: Color(0xFFEF5350), width: 1.5),
+      ),
+      disabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(8),
+        borderSide: BorderSide(color: _borderDark.withValues(alpha: 0.5)),
+      ),
+      labelStyle: const TextStyle(fontSize: 13, color: Colors.white70),
+      hintStyle: const TextStyle(fontSize: 13, color: Colors.white38),
+      errorStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Color(0xFFEF5350), height: 1.3),
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: _surfaceDark,

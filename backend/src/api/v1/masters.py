@@ -18,6 +18,7 @@ from src.schemas.master_schemas import (
     TaxTemplateResponse, PaymentTermResponse
 )
 from src.api.deps import enforce_permission
+from src.domains.accounting.services import LedgerValidationError
 
 router = APIRouter(prefix="/masters", tags=["Master Data"])
 
@@ -394,7 +395,11 @@ def seed_default_accounts(
         try:
             resolver.resolve(key)
             created += 1
-        except Exception:
+        except LedgerValidationError:
+            skipped += 1
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("Failed to seed account %s: %s", key, exc)
             skipped += 1
     
     db.commit()

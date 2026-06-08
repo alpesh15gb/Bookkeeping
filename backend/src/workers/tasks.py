@@ -125,7 +125,7 @@ def generate_invoice_pdf(invoice_id: str) -> str:
             db.close()
     except Exception as e:
         logger.error(f"PDF generation failed for {invoice_id}: {e}")
-        return ""
+        raise
 
 
 @celery_app.task(name="tasks.send_invoice_email")

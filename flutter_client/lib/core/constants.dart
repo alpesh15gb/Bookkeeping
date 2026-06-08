@@ -106,13 +106,7 @@ class AmountFormat {
   /// [amount] in rupees, returns "₹1,234.00" or "-₹1,234.00".
   /// Handles string inputs gracefully (common with JSON API responses).
   static String format(num amount) {
-    num value;
-    if (amount is num) {
-      value = amount;
-    } else {
-      final raw = amount.toString().replaceAll(RegExp(r'[₹,\s]'), '');
-      value = double.tryParse(raw) ?? 0;
-    }
+    final value = amount;
     final abs = value.abs();
     final formatted = '₹${abs.toStringAsFixed(2)}';
     // Use minified digit grouping: insert commas in Indian format

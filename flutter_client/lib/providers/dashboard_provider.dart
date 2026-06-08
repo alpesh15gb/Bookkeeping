@@ -112,8 +112,7 @@ class DashboardProvider extends ChangeNotifier {
 
       final coreFail = core.any((r) => r.statusCode != 200);
       if (coreFail) {
-        final bad = core.where((r) => r.statusCode != 200).map((r) => '${r.request?.url}: ${r.statusCode}').join(', ');
-        _errorMessage = 'API error: $bad';
+        _errorMessage = 'Some data could not be loaded. Please try again.';
         _isLoading = false;
         notifyListeners();
         return;

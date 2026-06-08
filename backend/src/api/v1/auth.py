@@ -307,7 +307,7 @@ def refresh_token(
     new_refresh_token = create_refresh_token(user_id=str(user.id))
 
     # Revoke the old refresh token on rotation
-    _revoke_refresh_token(str(user.id), refresh_token)
+    _revoke_refresh_token(str(user.id), token)
 
     return TokenResponse(
         access_token=new_access_token,

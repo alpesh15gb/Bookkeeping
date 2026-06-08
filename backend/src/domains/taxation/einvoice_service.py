@@ -77,7 +77,7 @@ class EInvoiceService:
             return {
                 "irn": irn_hash,
                 "qr_code": base64.b64encode(json.dumps(qr_data).encode("utf-8")).decode("utf-8"),
-                "ack_number": str(100000000000000 + int(datetime.now().timestamp())),
+                "ack_number": str(100000000000000 + uuid.uuid4().int % 100000000000000),
                 "ack_date": datetime.now(timezone.utc).isoformat(),
             }
 

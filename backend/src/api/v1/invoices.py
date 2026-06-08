@@ -1445,8 +1445,11 @@ def update_invoice(
             if old_je:
                 db.query(JournalLine).filter(JournalLine.entry_id == old_je.id).delete()
                 db.delete(old_je)
-        except Exception:
-            pass
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning(
+                "Failed to reverse old journal entry for invoice %s: %s", invoice.id, exc
+            )
         # Re-post with new amounts
         auto_post_invoice(db, tenant_id, invoice)
 

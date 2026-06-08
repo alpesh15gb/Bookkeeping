@@ -73,8 +73,8 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
     }
 
     _amountCtrl.addListener(_onAmountChanged);
-    _vendorCtrl.addListener(() => _isDirty = true);
-    _descCtrl.addListener(() => _isDirty = true);
+    _vendorCtrl.addListener(_markDirty);
+    _descCtrl.addListener(_markDirty);
 
     Future.microtask(() {
       context.read<SettingsProvider>().fetchAllSettings();
@@ -84,9 +84,15 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
     });
   }
 
+  void _markDirty() {
+    if (!_isDirty && mounted) setState(() => _isDirty = true);
+  }
+
   @override
   void dispose() {
     _amountCtrl.removeListener(_onAmountChanged);
+    _vendorCtrl.removeListener(_markDirty);
+    _descCtrl.removeListener(_markDirty);
     _previewDebounce?.cancel();
     _amountCtrl.dispose();
     _dateCtrl.dispose();
@@ -96,6 +102,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
   }
 
   void _onAmountChanged() {
+    _markDirty();
     _previewDebounce?.cancel();
     _previewDebounce = Timer(const Duration(milliseconds: 300), _triggerPreview);
   }

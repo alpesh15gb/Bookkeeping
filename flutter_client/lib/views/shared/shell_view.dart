@@ -577,7 +577,7 @@ class _ShellViewState extends State<ShellView> {
                   _OfflineBanner(syncManager: syncManager),
                 const _HistoricalYearBanner(),
                 Expanded(
-                  key: ValueKey('${_selectedIndex}_${context.read<AuthProvider>().activeTenantId ?? ''}_${_activeFYLabel(context)}'),
+                  key: ValueKey('${_selectedIndex}_${authProvider.activeTenantId ?? ''}_${_activeFYLabel(context)}'),
                   child: _currentView,
                 ),
               ],
@@ -641,7 +641,7 @@ class _ShellViewState extends State<ShellView> {
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 200),
               child: KeyedSubtree(
-                key: ValueKey('${_selectedIndex}_${context.read<AuthProvider>().activeTenantId ?? ''}_${_activeFYLabel(context)}'),
+                key: ValueKey('${_selectedIndex}_${authProvider.activeTenantId ?? ''}_${_activeFYLabel(context)}'),
                 child: _currentView,
               ),
             ),

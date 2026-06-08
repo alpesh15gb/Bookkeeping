@@ -5,6 +5,7 @@ import 'package:flutter_client/providers/invoice_provider.dart';
 import 'package:flutter_client/models/invoice.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/invoices/invoice_form_view.dart';
+import 'package:flutter_client/views/payments/payment_form_view.dart';
 import 'package:flutter_client/core/print_share_helper.dart';
 
 class InvoiceDetailView extends StatefulWidget {
@@ -61,14 +62,23 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
   }
 
   void _recordPayment() {
-    // Existing payment dialog logic preserved
     final remaining = _invoice!.total - _invoice!.amountPaid;
     if (remaining <= 0) {
       AppToast.error(context, 'Invoice is already fully paid');
       return;
     }
-    // ... show payment dialog
-    AppToast.info(context, 'Payment dialog would open here');
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentFormView(
+          mode: 'receipt',
+          onSuccess: () {
+            Navigator.pop(context);
+            _fetchDetail();
+          },
+        ),
+      ),
+    );
   }
 
   @override

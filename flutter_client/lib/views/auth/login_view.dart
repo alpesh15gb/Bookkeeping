@@ -101,7 +101,7 @@ class _LoginViewState extends State<LoginView> {
                         prefixIcon: Icon(Icons.email_outlined, size: 18),
                       ),
                       validator: (v) =>
-                          (v == null || !v.contains('@')) ? 'Please enter a valid email' : null,
+                          (v == null || v.trim().isEmpty || !RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(v.trim())) ? 'Please enter a valid email' : null,
                     ),
                     const SizedBox(height: 16),
 
