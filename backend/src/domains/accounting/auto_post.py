@@ -576,7 +576,7 @@ def cancel_expense(db: Session, tenant_id: uuid.UUID, expense: Expense, user_id:
         ExpenseCategory.tenant_id == tenant_id,
     ).first()
     expense_account_id = category.linked_account_id if category else resolver.resolve("expense.misc")
-    cash_account_id = resolver.resolve("assets.cash")
+    cash_account_id = expense.bank_account_id if expense.bank_account_id else resolver.resolve("assets.cash")
     tax = _resolve_tax_accounts(resolver, "input")
 
     draft = LedgerPostingEngine.create_expense_reversal_posting(
@@ -873,27 +873,27 @@ def cancel_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn, user
     sales_revenue_account_id = resolver.resolve("sales_revenue")
     tax = _resolve_tax_accounts(resolver, "output")
 
-    # Reversal: opposite of sales return posting
+    # Reversal: negate all amounts to reverse the original posting
     draft = LedgerPostingEngine.create_sales_return_posting(
         tenant_id=tenant_id,
         return_id=sr.id,
-        return_number=sr.return_number,
+        return_number=f"REV-{sr.return_number}",
         return_date=date.today(),
         customer_account_id=customer_account_id,
         sales_revenue_account_id=sales_revenue_account_id,
-        subtotal=sr.subtotal,
+        subtotal=-sr.subtotal,
         cgst_account_id=tax["cgst"],
-        cgst_amount=sr.cgst_amount,
+        cgst_amount=-sr.cgst_amount,
         sgst_account_id=tax["sgst"],
-        sgst_amount=sr.sgst_amount,
+        sgst_amount=-sr.sgst_amount,
         igst_account_id=tax["igst"],
-        igst_amount=sr.igst_amount,
+        igst_amount=-sr.igst_amount,
         utgst_account_id=tax["utgst"],
-        utgst_amount=sr.utgst_amount,
+        utgst_amount=-sr.utgst_amount,
         cess_account_id=tax["cess"],
-        cess_amount=sr.cess_amount,
+        cess_amount=-sr.cess_amount,
         round_off_account_id=tax["round_off"],
-        round_off_amount=sr.round_off,
+        round_off_amount=-sr.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -937,23 +937,23 @@ def cancel_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseReturn
     draft = LedgerPostingEngine.create_purchase_return_posting(
         tenant_id=tenant_id,
         return_id=pr.id,
-        return_number=pr.return_number,
+        return_number=f"REV-{pr.return_number}",
         return_date=date.today(),
         vendor_account_id=vendor_account_id,
         purchase_expense_account_id=purchase_expense_account_id,
-        subtotal=pr.subtotal,
+        subtotal=-pr.subtotal,
         cgst_account_id=tax["cgst"],
-        cgst_amount=pr.cgst_amount,
+        cgst_amount=-pr.cgst_amount,
         sgst_account_id=tax["sgst"],
-        sgst_amount=pr.sgst_amount,
+        sgst_amount=-pr.sgst_amount,
         igst_account_id=tax["igst"],
-        igst_amount=pr.igst_amount,
+        igst_amount=-pr.igst_amount,
         utgst_account_id=tax["utgst"],
-        utgst_amount=pr.utgst_amount,
+        utgst_amount=-pr.utgst_amount,
         cess_account_id=tax["cess"],
-        cess_amount=pr.cess_amount,
+        cess_amount=-pr.cess_amount,
         round_off_account_id=tax["round_off"],
-        round_off_amount=pr.round_off,
+        round_off_amount=-pr.round_off,
     )
     commit_ledger_draft(db, tenant_id, draft)
 

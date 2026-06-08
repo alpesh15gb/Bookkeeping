@@ -38,12 +38,10 @@ def quantize_reporting(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
 def split_intrastate_gst_amount(gst_amount: Decimal) -> tuple[Decimal, Decimal]:
-    """Splits GST into CGST and SGST/UTGST without losing odd paise."""
+    """Splits GST into CGST and SGST/UTGST equally, with round_off absorbing odd paise."""
     gst_amount_q = quantize_reporting(gst_amount)
-    cgst = ((gst_amount_q / Decimal("2.00")) * Decimal("100")).to_integral_value(
-        rounding=ROUND_CEILING
-    ) / Decimal("100")
-    cgst = quantize_reporting(cgst)
+    half = (gst_amount_q / Decimal("2.00"))
+    cgst = quantize_reporting(half)
     state_tax = quantize_reporting(gst_amount_q - cgst)
     return cgst, state_tax
 

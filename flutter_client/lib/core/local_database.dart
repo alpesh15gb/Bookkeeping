@@ -276,11 +276,9 @@ class LocalDatabase {
   static Future<void> incrementRetry(int id, String error) async {
     if (kIsWeb) return;
     final db = await database;
-    await db.update(
-      'pending_actions',
-      {'retry_count': 1, 'error': error},
-      where: 'id = ?',
-      whereArgs: [id],
+    await db.rawUpdate(
+      'UPDATE pending_actions SET retry_count = retry_count + 1, error = ? WHERE id = ?',
+      [error, id],
     );
   }
 
@@ -381,6 +379,46 @@ class LocalDatabase {
     await clearTable('cached_invoices');
     await upsertMany('cached_invoices', rows);
     await updateSyncMetadata('invoices', lastSync: DateTime.now(), recordCount: rows.length);
+  }
+
+  static Future<void> cacheBills(String tenantId, List<dynamic> bills) async {
+    if (kIsWeb) return;
+    final rows = bills.map((b) => {
+      'id': b['id']?.toString() ?? '',
+      'tenant_id': tenantId,
+      'bill_number': b['bill_number']?.toString() ?? '',
+      'issue_date': b['issue_date']?.toString() ?? '',
+      'due_date': b['due_date']?.toString() ?? '',
+      'status': b['status']?.toString() ?? '',
+      'total': double.tryParse(b['total']?.toString() ?? '') ?? 0.0,
+      'amount_paid': double.tryParse(b['amount_paid']?.toString() ?? '') ?? 0.0,
+      'contact_name': b['contact_name']?.toString() ?? '',
+      'json': jsonEncode(b),
+      'synced_at': DateTime.now().toIso8601String(),
+    }).toList();
+    await clearTable('cached_bills');
+    await upsertMany('cached_bills', rows);
+    await updateSyncMetadata('bills', lastSync: DateTime.now(), recordCount: rows.length);
+  }
+
+  static Future<void> cacheExpenses(String tenantId, List<dynamic> expenses) async {
+    if (kIsWeb) return;
+    final rows = expenses.map((e) => {
+      'id': e['id']?.toString() ?? '',
+      'tenant_id': tenantId,
+      'expense_number': e['expense_number']?.toString() ?? '',
+      'expense_date': e['expense_date']?.toString() ?? '',
+      'vendor_name': e['vendor_name']?.toString() ?? '',
+      'amount': double.tryParse(e['amount']?.toString() ?? '') ?? 0.0,
+      'total': double.tryParse(e['total']?.toString() ?? '') ?? 0.0,
+      'status': e['status']?.toString() ?? '',
+      'category_name': e['category_name']?.toString() ?? '',
+      'json': jsonEncode(e),
+      'synced_at': DateTime.now().toIso8601String(),
+    }).toList();
+    await clearTable('cached_expenses');
+    await upsertMany('cached_expenses', rows);
+    await updateSyncMetadata('expenses', lastSync: DateTime.now(), recordCount: rows.length);
   }
 
   static Future<void> cacheDocumentDetail(String tenantId, String docType,

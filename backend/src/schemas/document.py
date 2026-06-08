@@ -94,9 +94,11 @@ class InvoiceCreate(InvoiceBase):
     reference_number: Optional[str] = Field(None, max_length=50)
     sales_person_id: Optional[uuid.UUID] = None
     is_gst_inclusive: Optional[bool] = False
+    is_rcm: Optional[bool] = False
+    supply_type: Optional[str] = Field(default="DOMESTIC", pattern="^(DOMESTIC|EXPORT_WITH_TAX|EXPORT_WITHOUT_TAX|SEZ_WITH_TAX|SEZ_WITHOUT_TAX)$")
 
 class InvoicePreviewRequest(SchemaBase):
-    pos_state_code: str = Field(..., pattern="[0-9]{2}$")
+    pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
     line_items: List[InvoiceLineCreate]
     discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
@@ -170,6 +172,7 @@ class CreditNoteLineCreate(SchemaBase):
     product_id: uuid.UUID
     quantity: Decimal = Field(..., gt=0)
     rate: Decimal = Field(..., ge=0)
+    discount: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
     hsn_sac: str = Field(..., pattern="^[0-9]{4,8}$")
     gst_rate: Decimal = Field(..., ge=0, le=100)
 
@@ -236,6 +239,7 @@ class DebitNoteLineCreate(SchemaBase):
     product_id: uuid.UUID
     quantity: Decimal = Field(..., gt=0)
     rate: Decimal = Field(..., ge=0)
+    discount: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
     hsn_sac: str = Field(..., pattern="^[0-9]{4,8}$")
     gst_rate: Decimal = Field(..., ge=0, le=100)
 

@@ -77,8 +77,11 @@ class SyncManager extends ChangeNotifier {
       await LocalDatabase.cacheProducts(tId, data);
     } else if (endpoint.contains('/invoices') && !endpoint.contains('/invoices/')) {
       await LocalDatabase.cacheInvoices(tId, data);
+    } else if (endpoint.contains('/bills') && !endpoint.contains('/bills/')) {
+      await LocalDatabase.cacheBills(tId, data);
+    } else if (endpoint.contains('/expenses') && !endpoint.contains('/expenses/')) {
+      await LocalDatabase.cacheExpenses(tId, data);
     }
-    // Add more entity types as needed
   }
 
   /// Call this after any successful API GET for a single document

@@ -61,7 +61,13 @@ def create_bill(
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found in this context.")
 
         line_desc = line.description or product.name or "Item"
+        resolved_gst_rate = GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         line_subtotal = (line.quantity * line.rate) - line.discount
+
+        # If GST-inclusive, extract the base taxable amount
+        if payload.is_gst_inclusive and resolved_gst_rate > 0:
+            line_subtotal = line_subtotal / (1 + resolved_gst_rate / Decimal("100"))
+
         if line_subtotal < 0:
             raise HTTPException(status_code=400, detail="Line item subtotal cannot be negative.")
 
@@ -69,7 +75,7 @@ def create_bill(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+            gst_rate=resolved_gst_rate
         )
 
         db_line = BillLine(
@@ -80,7 +86,7 @@ def create_bill(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
+            gst_rate=resolved_gst_rate,
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,

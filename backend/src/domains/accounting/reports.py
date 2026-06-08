@@ -48,7 +48,7 @@ class FinancialReportingService:
                 COALESCE(SUM(CASE WHEN jl.direction = 'CREDIT' THEN jl.amount ELSE 0 END), 0) AS total_credit
             FROM accounts a
             LEFT JOIN journal_lines jl ON a.id = jl.account_id
-            LEFT JOIN journal_entries je ON jl.entry_id = je.id
+            LEFT JOIN journal_entries je ON jl.entry_id = je.id AND je.tenant_id = :tenant_id
             WHERE (je.entry_date <= :as_of_date OR je.entry_date IS NULL)
               AND a.tenant_id = :tenant_id
               AND a.deleted_at IS NULL
