@@ -1745,57 +1745,64 @@ class _AppSpeedDialState extends State<AppSpeedDial> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        if (_isOpen)
-          SizeTransition(
-            sizeFactor: _expandAnimation,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: widget.options.map((opt) {
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10, right: 4),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Material(
-                        color: AppColors.brandNavy,
-                        borderRadius: BorderRadius.circular(4),
-                        elevation: 2,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          child: Text(
-                            opt.label,
-                            style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+    return Padding(
+      padding: EdgeInsets.only(bottom: bottomPadding),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (_isOpen)
+            SizeTransition(
+              sizeFactor: _expandAnimation,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: widget.options.map((opt) {
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 10, right: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Flexible(
+                          child: Material(
+                            color: AppColors.brandNavy,
+                            borderRadius: BorderRadius.circular(4),
+                            elevation: 2,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              child: Text(
+                                opt.label,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
+                              ),
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
-                      FloatingActionButton.small(
-                        heroTag: opt.label,
-                        onPressed: () {
-                          _toggle();
-                          opt.onTap();
-                        },
-                        backgroundColor: AppColors.bgSurface,
-                        foregroundColor: AppColors.brandNavy,
-                        child: Icon(opt.icon),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                        const SizedBox(width: 10),
+                        FloatingActionButton.small(
+                          heroTag: opt.label,
+                          onPressed: () {
+                            _toggle();
+                            opt.onTap();
+                          },
+                          backgroundColor: AppColors.bgSurface,
+                          foregroundColor: AppColors.brandNavy,
+                          child: Icon(opt.icon),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
+          FloatingActionButton(
+            heroTag: 'main_fab',
+            onPressed: _toggle,
+            backgroundColor: AppColors.goldAccent,
+            child: Icon(_isOpen ? widget.activeIcon : widget.mainIcon),
           ),
-        FloatingActionButton(
-          heroTag: 'main_fab',
-          onPressed: _toggle,
-          backgroundColor: AppColors.goldAccent,
-          child: Icon(_isOpen ? widget.activeIcon : widget.mainIcon),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
