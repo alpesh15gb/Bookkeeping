@@ -553,9 +553,7 @@ def create_credit_note(
     db.add(cn)
     db.flush()
 
-    # Auto-post: create journal entry immediately
-    from src.domains.accounting.auto_post import auto_post_credit_note
-    auto_post_credit_note(db, tenant_id, cn)
+    # Credit note stays as DRAFT — use /finalize endpoint to post to ledger
 
     db.commit()
     db.refresh(cn)
@@ -981,9 +979,7 @@ def create_debit_note(
     db.add(dn)
     db.flush()
 
-    # Auto-post: create journal entry immediately
-    from src.domains.accounting.auto_post import auto_post_debit_note
-    auto_post_debit_note(db, tenant_id, dn)
+    # Debit note stays as DRAFT — use /finalize endpoint to post to ledger
 
     db.commit()
     db.refresh(dn)
