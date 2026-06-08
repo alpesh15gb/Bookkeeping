@@ -5,7 +5,7 @@ import 'package:path/path.dart';
 
 class LocalDatabase {
   static Database? _db;
-  static const int _version = 1;
+  static const int _version = 2;
 
   static Future<Database> get database async {
     if (kIsWeb) {
@@ -22,7 +22,25 @@ class LocalDatabase {
       path,
       version: _version,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
+  }
+
+  static Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Recreate cached_document_details with composite primary key
+      await db.execute('DROP TABLE IF EXISTS cached_document_details');
+      await db.execute('''
+        CREATE TABLE cached_document_details (
+          id TEXT,
+          tenant_id TEXT,
+          doc_type TEXT,
+          json TEXT,
+          synced_at TEXT,
+          PRIMARY KEY (id, doc_type)
+        )
+      ''');
+    }
   }
 
   static Future<void> _onCreate(Database db, int version) async {

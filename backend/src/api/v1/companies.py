@@ -665,7 +665,8 @@ def verify_and_execute_purge(
         # 4. Delete master data
         db.query(Contact).filter(Contact.tenant_id == tenant_id).delete(synchronize_session=False)
         db.query(Product).filter(Product.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id).delete(synchronize_session=False)
+        # Preserve audit logs — they are append-only for compliance (ICAI audit trail)
+        # db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id).delete(synchronize_session=False)
 
         # Remove auto-created per-contact AR/AP accounts. Standard chart accounts
         # remain and simply have their balances reset.

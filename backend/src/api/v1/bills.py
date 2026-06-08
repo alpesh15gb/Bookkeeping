@@ -167,8 +167,7 @@ def create_bill(
     db.add(bill)
     db.flush()
 
-    # Auto-post: create journal entry immediately
-    auto_post_bill(db, tenant_id, bill)
+    # Bill stays as DRAFT — use /finalize endpoint to post to ledger
 
     db.commit()
     db.refresh(bill)

@@ -110,6 +110,16 @@ class ExpenseProvider extends ChangeNotifier {
         body: body,
       );
       if (queued) {
+        // Optimistic UI: add placeholder to local list
+        final placeholder = {
+          'id': 'pending-${DateTime.now().millisecondsSinceEpoch}',
+          'expense_number': payload['expense_number'] ?? 'Pending',
+          'expense_date': payload['expense_date']?.toString() ?? '',
+          'status': 'DRAFT',
+          'total': 0.0,
+          'vendor_name': '',
+        };
+        _items.insert(0, placeholder);
         _isLoading = false;
         notifyListeners();
         return true;

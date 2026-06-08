@@ -122,15 +122,7 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> List[str]:
-        base = {origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()}
-        base.update({
-            "https://app.apexbooks.in",
-            "https://apexbooks.in",
-            "https://api.apexbooks.in",
-            "http://localhost:5173",
-            "http://localhost:3000",
-        })
-        return sorted(base)
+        return sorted({origin.strip() for origin in self.ALLOWED_ORIGINS.split(",") if origin.strip()})
 
     @property
     def is_production(self) -> bool:

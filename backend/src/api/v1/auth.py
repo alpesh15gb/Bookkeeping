@@ -507,20 +507,21 @@ def reset_password(
 
 @router.post("/verify-email")
 @limiter.limit("5/minute")
-def verify_email(request: Request, token: str, db: Session = Depends(get_db_session)):
-    user = db.query(User).filter(User.email_verify_token != None).all()
-    matched_user = None
-    for u in user:
-        if verify_password(token, u.email_verify_token):
-            matched_user = u
-            break
-    if not matched_user:
+def verify_email(request: Request, token: str, email: str, db: Session = Depends(get_db_session)):
+    # Filter by email to avoid loading all unverified users (prevents DoS)
+    user = db.query(User).filter(
+        User.email == email,
+        User.email_verify_token != None,
+    ).first()
+    if not user:
         raise HTTPException(status_code=400, detail="Invalid verification token.")
-    if matched_user.email_verify_expires and matched_user.email_verify_expires < datetime.now(timezone.utc):
+    if not verify_password(token, user.email_verify_token):
+        raise HTTPException(status_code=400, detail="Invalid verification token.")
+    if user.email_verify_expires and user.email_verify_expires < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Verification token has expired.")
-    matched_user.email_verified = True
-    matched_user.email_verify_token = None
-    matched_user.email_verify_expires = None
+    user.email_verified = True
+    user.email_verify_token = None
+    user.email_verify_expires = None
     db.commit()
     return {"detail": "Email verified successfully."}
 

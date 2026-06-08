@@ -203,8 +203,7 @@ def create_invoice(
     db.add(invoice)
     db.flush()
 
-    # Auto-post: create journal entry immediately
-    auto_post_invoice(db, tenant_id, invoice)
+    # Invoice stays as DRAFT — use /finalize endpoint to post to ledger
 
     # Trigger background e-invoice generation if tenant has e-invoicing enabled
     tenant_settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
@@ -722,6 +721,10 @@ def finalize_credit_note(
     if cn.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft Credit Notes can be finalized.")
 
+    # Guard against double-posting
+    from src.domains.accounting.auto_post import _check_no_existing_posting
+    _check_no_existing_posting(db, tenant_id, "CREDIT_NOTE", cn.id)
+
     contact_id = cn.invoice.contact_id if cn.invoice else None
     if not contact_id:
         raise HTTPException(status_code=400, detail="Credit Note must be linked to a contact or invoice for finalization.")
@@ -1095,6 +1098,10 @@ def finalize_debit_note(
     if dn.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft Debit Notes can be finalized.")
 
+    # Guard against double-posting
+    from src.domains.accounting.auto_post import _check_no_existing_posting
+    _check_no_existing_posting(db, tenant_id, "DEBIT_NOTE", dn.id)
+
     contact_id = dn.invoice.contact_id if dn.invoice else None
     if not contact_id:
         raise HTTPException(status_code=400, detail="Debit Note must be linked to a contact or invoice for finalization.")
@@ -1446,6 +1453,10 @@ def finalize_invoice(
     if invoice.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft invoices can be finalized.")
 
+    # Guard against double-posting
+    from src.domains.accounting.auto_post import _check_no_existing_posting
+    _check_no_existing_posting(db, tenant_id, "INVOICE", invoice.id)
+
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
@@ -1586,7 +1597,7 @@ def cancel_invoice(
         raise HTTPException(status_code=404, detail="Invoice not found.")
 
     from src.domains.accounting.period_lock import validate_period_open
-    validate_period_open(db, tenant_id, date.today())
+    validate_period_open(db, tenant_id, invoice.issue_date)
     
     if invoice.status not in ("POSTED", "PARTIALLY_PAID"):
         raise HTTPException(status_code=400, detail="Only posted or partially paid invoices can be cancelled.")
@@ -1614,7 +1625,7 @@ def cancel_invoice(
         tenant_id=tenant_id,
         invoice_id=invoice.id,
         invoice_number=invoice.invoice_number,
-        cancel_date=date.today(),
+        cancel_date=invoice.issue_date,
         customer_account_id=customer_account_id,
         sales_revenue_account_id=sales_revenue_account_id,
         subtotal=invoice.subtotal,

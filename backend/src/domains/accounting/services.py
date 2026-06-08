@@ -73,6 +73,7 @@ class LedgerPostingEngine:
         sales_revenue_account_id: uuid.UUID,
         subtotal: Decimal,
         discount_total: Decimal = Decimal("0.00"),
+        shipping_charges: Decimal = Decimal("0.00"),
         cgst_account_id: Optional[uuid.UUID] = None,
         cgst_amount: Decimal = Decimal("0.00"),
         sgst_account_id: Optional[uuid.UUID] = None,
@@ -98,13 +99,13 @@ class LedgerPostingEngine:
 
         if is_rcm:
             # RCM: seller invoices subtotal only — buyer accounts for tax
-            invoice_total = net_subtotal
+            invoice_total = net_subtotal + shipping_charges
             lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable (RCM): {invoice_number}"))
             lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue (RCM): {invoice_number}"))
         else:
             tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-            # Customer is debited for subtotal + taxes. Round-off handled separately below.
-            invoice_total = net_subtotal + tax_total
+            # Customer is debited for subtotal + shipping + taxes. Round-off handled separately below.
+            invoice_total = net_subtotal + shipping_charges + tax_total
 
             lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable: {invoice_number}"))
             lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue: {invoice_number}"))

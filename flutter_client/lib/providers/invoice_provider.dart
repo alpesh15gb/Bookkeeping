@@ -83,7 +83,22 @@ class InvoiceProvider extends ChangeNotifier {
           final jsonStr = row['json'] as String?;
           return InvoiceModel.fromJson(jsonStr != null ? jsonDecode(jsonStr) : row);
         }).toList();
-        _errorMessage = _invoices.isNotEmpty ? null : 'No cached invoices available';
+        // Check cache staleness
+        if (cached.isNotEmpty) {
+          final syncedAt = cached.first['synced_at'] as String?;
+          if (syncedAt != null) {
+            final syncTime = DateTime.tryParse(syncedAt);
+            if (syncTime != null && DateTime.now().difference(syncTime).inHours > 24) {
+              _errorMessage = 'Cached data is over 24 hours old. Connect to refresh.';
+            } else {
+              _errorMessage = _invoices.isNotEmpty ? null : 'No cached invoices available';
+            }
+          } else {
+            _errorMessage = _invoices.isNotEmpty ? null : 'No cached invoices available';
+          }
+        } else {
+          _errorMessage = 'No cached invoices available';
+        }
       } catch (_) {}
     }
     _isLoading = false;

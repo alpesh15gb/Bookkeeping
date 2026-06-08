@@ -184,6 +184,10 @@ class SyncManager extends ChangeNotifier {
         if (response.statusCode >= 200 && response.statusCode < 300) {
           await LocalDatabase.removePendingAction(id);
           successCount++;
+        } else if (response.statusCode == 0) {
+          // Network error — stop syncing, wait for connectivity change
+          _lastSyncMessage = 'Network error. Will retry when connected.';
+          break;
         } else {
           await LocalDatabase.incrementRetry(id, 'HTTP ${response.statusCode}');
           failCount++;

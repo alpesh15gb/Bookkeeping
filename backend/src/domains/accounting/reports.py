@@ -221,8 +221,12 @@ class FinancialReportingService:
         fy_year = as_of_date.year if as_of_date.month >= 4 else as_of_date.year - 1
         fy_start = date(fy_year, 4, 1)
         
-        pl_data = FinancialReportingService.get_profit_and_loss(db, fy_start, as_of_date, tenant_id)
-        current_year_earnings = Decimal(str(pl_data["net_profit"]))
+        # Guard: ensure P&L period is valid (start <= end)
+        if fy_start <= as_of_date:
+            pl_data = FinancialReportingService.get_profit_and_loss(db, fy_start, as_of_date, tenant_id)
+            current_year_earnings = Decimal(str(pl_data["net_profit"]))
+        else:
+            current_year_earnings = Decimal("0.00")
         total_equity += current_year_earnings
         
         equity.append({

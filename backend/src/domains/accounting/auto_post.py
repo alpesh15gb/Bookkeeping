@@ -146,6 +146,7 @@ def auto_post_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, allow
         sales_revenue_account_id=sales_revenue_account_id,
         subtotal=invoice.subtotal,
         discount_total=invoice.discount_total,
+        shipping_charges=invoice.shipping_charges or Decimal("0.0000"),
         cgst_account_id=tax["cgst"],
         cgst_amount=invoice.cgst_amount,
         sgst_account_id=tax["sgst"],

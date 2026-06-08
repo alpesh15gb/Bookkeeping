@@ -119,14 +119,16 @@ class ApiClient extends http.BaseClient {
     try {
       response = await _inner.send(request).timeout(_requestTimeout);
     } catch (e) {
-      // Network failure — return synthetic error response
+      // Network failure — return synthetic error response with status 0
+      // (distinct from any real HTTP status code)
       final fakeBody = jsonEncode({
         'detail': 'Network error. Please check your connection and try again.',
+        'code': 'NETWORK_ERROR',
       });
       final fakeBytes = utf8.encode(fakeBody);
       return http.StreamedResponse(
         Stream.fromIterable([fakeBytes]),
-        503,
+        0,  // Not a real HTTP status — callers can distinguish from server errors
         contentLength: fakeBytes.length,
         headers: {'content-type': 'application/json'},
       );
@@ -166,7 +168,15 @@ class ApiClient extends http.BaseClient {
         if (_tenantId != null) {
           newRequest.headers['X-Tenant-ID'] = _tenantId!;
         }
-        return await _inner.send(newRequest).timeout(_requestTimeout);
+        final retryResponse = await _inner.send(newRequest).timeout(_requestTimeout);
+        // If the new token is also rejected, clear session to avoid infinite loop
+        if (retryResponse.statusCode == 401) {
+          await clearSession();
+          if (hadAccessToken && onSessionExpired != null) {
+            onSessionExpired!();
+          }
+        }
+        return retryResponse;
       } else {
         await clearSession();
         if (hadAccessToken && onSessionExpired != null) {

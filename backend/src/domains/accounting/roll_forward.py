@@ -63,6 +63,14 @@ def carry_forward_balances(
     if not permanent_accounts:
         return {"accounts_carried": 0, "total_debits": "0", "total_credits": "0"}
 
+    # Idempotency guard: check if snapshots already exist for this FY
+    existing_count = db.query(func.count(OpeningBalanceSnapshot.id)).filter(
+        OpeningBalanceSnapshot.tenant_id == tenant_id,
+        OpeningBalanceSnapshot.financial_year_id == closing_fy.id,
+    ).scalar()
+    if existing_count > 0:
+        return {"accounts_carried": existing_count, "total_debits": "0", "total_credits": "0", "already_carried": True}
+
     # 2. Compute journal movements within the closing FY
     account_ids = [a.id for a in permanent_accounts]
     movements = db.query(
