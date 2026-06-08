@@ -35,7 +35,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
         notifyListeners();
         return _items;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -55,7 +57,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -117,7 +121,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -130,7 +136,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -148,7 +156,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
         notifyListeners();
         return _items;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -168,7 +178,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -227,7 +239,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -240,7 +254,9 @@ class PurchaseOrderProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 

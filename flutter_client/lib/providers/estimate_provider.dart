@@ -36,7 +36,9 @@ class EstimateProvider extends ChangeNotifier {
         notifyListeners();
         return _items;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -56,7 +58,9 @@ class EstimateProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -96,7 +100,9 @@ class EstimateProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -161,7 +167,9 @@ class EstimateProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -172,7 +180,9 @@ class EstimateProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 

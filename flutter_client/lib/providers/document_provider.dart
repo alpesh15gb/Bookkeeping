@@ -37,7 +37,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -57,7 +59,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -75,7 +79,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -93,7 +99,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -112,7 +120,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -132,7 +142,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -151,7 +163,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -169,7 +183,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -187,7 +203,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -206,7 +224,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -224,7 +244,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -242,7 +264,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -261,7 +285,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -281,7 +307,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -300,7 +328,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -440,7 +470,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -453,7 +485,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -466,7 +500,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -479,7 +515,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -609,7 +647,9 @@ class DocumentProvider extends ChangeNotifier {
         await fetchExpenseCategories();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return false;
   }
 
@@ -626,7 +666,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -639,7 +681,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -652,7 +696,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -712,7 +758,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -727,7 +775,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -740,7 +790,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -753,7 +805,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -766,7 +820,9 @@ class DocumentProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -777,7 +833,9 @@ class DocumentProvider extends ChangeNotifier {
         _buildUri('${ApiClient.baseUrl}/gst/gstr1/export'),
       );
       if (response.statusCode == 200) return response.bodyBytes;
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -787,7 +845,9 @@ class DocumentProvider extends ChangeNotifier {
         _buildUri('${ApiClient.baseUrl}/gst/gstr2/export'),
       );
       if (response.statusCode == 200) return response.bodyBytes;
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -797,7 +857,9 @@ class DocumentProvider extends ChangeNotifier {
         _buildUri('${ApiClient.baseUrl}/gst/gstr3b/export'),
       );
       if (response.statusCode == 200) return response.bodyBytes;
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -911,7 +973,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -930,7 +994,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -942,7 +1008,9 @@ class DocumentProvider extends ChangeNotifier {
         _buildUri('${ApiClient.baseUrl}/returns/sales/$id/cancel'),
       );
       return response.statusCode == 200;
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return false;
   }
 
@@ -960,7 +1028,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return [];
@@ -979,7 +1049,9 @@ class DocumentProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -991,7 +1063,9 @@ class DocumentProvider extends ChangeNotifier {
         _buildUri('${ApiClient.baseUrl}/returns/purchase/$id/cancel'),
       );
       return response.statusCode == 200;
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return false;
   }
 }
