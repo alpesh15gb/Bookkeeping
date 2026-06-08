@@ -1,4 +1,4 @@
-"""Add missing invoice and bill columns: is_rcm, is_gst_inclusive, supply_type, itc_eligible.
+"""Add missing columns: invoice/bill GST fields + accounts.account_group.
 
 Revision ID: 20260608_0001
 Revises: 20260606_0003
@@ -23,8 +23,12 @@ def upgrade() -> None:
     op.add_column("bills", sa.Column("is_gst_inclusive", sa.Boolean(), nullable=False, server_default=sa.text("false")))
     op.add_column("bills", sa.Column("itc_eligible", sa.Boolean(), nullable=False, server_default=sa.text("true")))
 
+    # accounts — account_group for chart of accounts categorization
+    op.add_column("accounts", sa.Column("account_group", sa.String(100), nullable=True))
+
 
 def downgrade() -> None:
+    op.drop_column("accounts", "account_group")
     op.drop_column("bills", "itc_eligible")
     op.drop_column("bills", "is_gst_inclusive")
     op.drop_column("invoices", "supply_type")

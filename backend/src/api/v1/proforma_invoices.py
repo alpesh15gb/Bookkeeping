@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import uuid
 from decimal import Decimal
 from datetime import date, datetime, timezone
@@ -242,14 +242,26 @@ def preview_proforma_invoice(
 def list_proforma_invoices(
     page: int = 1,
     limit: int = 50,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
+    from datetime import date as date_cls
     offset = (page - 1) * limit
-    results = db.query(ProformaInvoice, Contact.name.label("contact_name"))\
+    q = db.query(ProformaInvoice, Contact.name.label("contact_name"))\
         .join(Contact, ProformaInvoice.contact_id == Contact.id)\
-        .filter(ProformaInvoice.tenant_id == tenant_id, ProformaInvoice.deleted_at == None)\
-        .offset(offset).limit(limit).all()
+        .filter(ProformaInvoice.tenant_id == tenant_id, ProformaInvoice.deleted_at == None)
+
+    if date_from and date_to:
+        try:
+            parsed_from = date_cls.fromisoformat(date_from)
+            parsed_to = date_cls.fromisoformat(date_to)
+            q = q.filter(ProformaInvoice.issue_date >= parsed_from, ProformaInvoice.issue_date <= parsed_to)
+        except ValueError:
+            pass
+
+    results = q.offset(offset).limit(limit).all()
 
     response = []
     for pi, contact_name in results:
