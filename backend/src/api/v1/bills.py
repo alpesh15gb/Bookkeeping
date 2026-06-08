@@ -167,7 +167,8 @@ def create_bill(
     db.add(bill)
     db.flush()
 
-    # Bill stays as DRAFT — use /finalize endpoint to post to ledger
+    # Auto-post: create journal entry immediately
+    auto_post_bill(db, tenant_id, bill)
 
     db.commit()
     db.refresh(bill)
@@ -498,8 +499,8 @@ def update_bill(
     if payload.issue_date:
         validate_period_open(db, tenant_id, payload.issue_date)
 
-    if bill.status != "DRAFT":
-        raise HTTPException(status_code=400, detail="Only draft bills can be modified.")
+    if bill.status not in ("DRAFT", "POSTED"):
+        raise HTTPException(status_code=400, detail="Only draft or posted bills can be modified.")
 
     if payload.contact_id:
         contact = db.query(Contact).filter(Contact.id == payload.contact_id, Contact.tenant_id == tenant_id).first()
@@ -667,8 +668,13 @@ def finalize_bill(
     from src.domains.accounting.period_lock import validate_period_open
     validate_period_open(db, tenant_id, bill.issue_date)
 
-    if bill.status != "DRAFT":
-        raise HTTPException(status_code=400, detail="Only draft bills can be finalized.")
+    if bill.status not in ("DRAFT", "POSTED"):
+        raise HTTPException(status_code=400, detail="Only draft or posted bills can be finalized.")
+
+    # If already posted, return as-is (idempotent)
+    if bill.status == "POSTED":
+        db.refresh(bill)
+        return bill
 
     resolver = AccountResolver(db, tenant_id)
     vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")

@@ -203,7 +203,8 @@ def create_invoice(
     db.add(invoice)
     db.flush()
 
-    # Invoice stays as DRAFT — use /finalize endpoint to post to ledger
+    # Auto-post: create journal entry immediately
+    auto_post_invoice(db, tenant_id, invoice)
 
     # Trigger background e-invoice generation if tenant has e-invoicing enabled
     tenant_settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
@@ -1276,10 +1277,10 @@ def update_invoice(
     if payload.issue_date:
         validate_period_open(db, tenant_id, payload.issue_date)
 
-    if invoice.status != "DRAFT":
+    if invoice.status not in ("DRAFT", "POSTED"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only draft invoices can be edited."
+            detail="Only draft or posted invoices can be edited."
         )
 
     if payload.contact_id:
@@ -1429,6 +1430,24 @@ def update_invoice(
         invoice.total = rounded_total
         invoice.lines = db_lines
 
+    # If invoice was already posted, re-post the journal entry with updated amounts
+    if invoice.status == "POSTED":
+        from src.domains.accounting.auto_post import _check_no_existing_posting
+        try:
+            # Reverse old posting
+            old_je = db.query(JournalEntry).filter(
+                JournalEntry.source_type == "INVOICE",
+                JournalEntry.source_id == invoice.id,
+                JournalEntry.tenant_id == tenant_id,
+            ).first()
+            if old_je:
+                db.query(JournalLine).filter(JournalLine.entry_id == old_je.id).delete()
+                db.delete(old_je)
+        except Exception:
+            pass
+        # Re-post with new amounts
+        auto_post_invoice(db, tenant_id, invoice)
+
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -1450,8 +1469,13 @@ def finalize_invoice(
     from src.domains.accounting.period_lock import validate_period_open
     validate_period_open(db, tenant_id, invoice.issue_date)
 
-    if invoice.status != "DRAFT":
-        raise HTTPException(status_code=400, detail="Only draft invoices can be finalized.")
+    if invoice.status not in ("DRAFT", "POSTED"):
+        raise HTTPException(status_code=400, detail="Only draft or posted invoices can be finalized.")
+
+    # If already posted, return as-is (idempotent)
+    if invoice.status == "POSTED":
+        db.refresh(invoice)
+        return invoice
 
     # Guard against double-posting
     from src.domains.accounting.auto_post import _check_no_existing_posting
