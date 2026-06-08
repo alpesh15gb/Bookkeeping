@@ -118,7 +118,12 @@ class PaymentProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         return PaymentModel.fromJson(jsonDecode(response.body));
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load receipt (${response.statusCode})';
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to load receipt';
+      notifyListeners();
+    }
     return null;
   }
 
@@ -128,7 +133,12 @@ class PaymentProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         return BillPaymentModel.fromJson(jsonDecode(response.body));
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load disbursement (${response.statusCode})';
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to load disbursement';
+      notifyListeners();
+    }
     return null;
   }
 

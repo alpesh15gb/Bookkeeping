@@ -62,6 +62,8 @@ class ExpenseProvider extends ChangeNotifier {
         }
         _currentPage = page;
         await SyncManager.instance?.cacheGetResponse('/expenses', _items);
+      } else {
+        _errorMessage = 'Failed to load expenses (${response.statusCode})';
       }
     } catch (_) {
       _errorMessage = 'Failed to load expenses';
@@ -134,6 +136,9 @@ class ExpenseProvider extends ChangeNotifier {
         _isLoading = false;
         notifyListeners();
         return true;
+      } else {
+        final data = jsonDecode(response.body);
+        _errorMessage = data['detail'] ?? 'Failed to create expense (${response.statusCode})';
       }
     } catch (_) {
       _errorMessage = 'An error occurred';

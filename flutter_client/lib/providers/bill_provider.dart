@@ -99,7 +99,12 @@ class BillProvider extends ChangeNotifier {
         await SyncManager.instance?.cacheDocumentDetail('/bills/$id', data);
         return BillModel.fromJson(data);
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load bill (${response.statusCode})';
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to load bill';
+      notifyListeners();
+    }
     if (!(SyncManager.instance?.isOnline ?? true)) {
       final cached = await LocalDatabase.getCachedDocumentDetail(
         ApiClient.tenantId ?? '', 'bill', id,
@@ -168,7 +173,12 @@ class BillProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         return BillModel.fromJson(jsonDecode(response.body));
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to preview bill (${response.statusCode})';
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to preview bill';
+      notifyListeners();
+    }
     return null;
   }
 

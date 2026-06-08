@@ -394,7 +394,12 @@ class FinancialYearProvider extends ChangeNotifier {
         notifyListeners();
         return _dashboard;
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to load year-end dashboard (${response.statusCode})';
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to load year-end dashboard';
+      notifyListeners();
+    }
     return null;
   }
 

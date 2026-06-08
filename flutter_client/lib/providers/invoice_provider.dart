@@ -120,7 +120,12 @@ class InvoiceProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         return InvoiceModel.fromJson(jsonDecode(response.body));
       }
-    } catch (_) {}
+      _errorMessage = 'Failed to preview invoice (${response.statusCode})';
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to preview invoice';
+      notifyListeners();
+    }
     return null;
   }
 
@@ -180,12 +185,12 @@ class InvoiceProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         await SyncManager.instance?.cacheDocumentDetail('/invoices/$id', data);
         return InvoiceModel.fromJson(data);
-      } else {
-        debugPrint('fetchInvoiceDetail server returned error: ${response.statusCode} - ${response.body}');
       }
-    } catch (e, stack) {
-      debugPrint('fetchInvoiceDetail error: $e');
-      debugPrint('Stacktrace: $stack');
+      _errorMessage = 'Failed to load invoice (${response.statusCode})';
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = 'Failed to load invoice';
+      notifyListeners();
     }
     if (!(SyncManager.instance?.isOnline ?? true)) {
       final cached = await LocalDatabase.getCachedDocumentDetail(

@@ -197,7 +197,9 @@ class DashboardProvider extends ChangeNotifier {
           final sorted = debtorMap.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
           _topDebtors = sorted.take(5).map((e) => {'name': e.key, 'outstanding': e.value}).toList();
         }
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('Failed to parse top debtors: $e');
+      }
 
       _isLoading = false;
       notifyListeners();

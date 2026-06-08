@@ -245,9 +245,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load account detail (${response.statusCode})');
+      _errorMessage = 'Failed to load account detail (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching account detail: $e');
+      _errorMessage = 'Failed to load account detail';
+      notifyListeners();
     }
     return null;
   }
@@ -261,9 +263,11 @@ class AccountingProvider extends ChangeNotifier {
         await fetchAccounts();
         return true;
       }
-      debugPrint('Failed to delete account (${response.statusCode})');
+      _errorMessage = 'Failed to delete account (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error deleting account: $e');
+      _errorMessage = 'Failed to delete account';
+      notifyListeners();
     }
     return false;
   }
@@ -299,9 +303,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load GSTR-1 (${response.statusCode})');
+      _errorMessage = 'Failed to load GSTR-1 (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching GSTR-1: $e');
+      _errorMessage = 'Failed to load GSTR-1';
+      notifyListeners();
     }
     return null;
   }
@@ -317,9 +323,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load GSTR-2 (${response.statusCode})');
+      _errorMessage = 'Failed to load GSTR-2 (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching GSTR-2: $e');
+      _errorMessage = 'Failed to load GSTR-2';
+      notifyListeners();
     }
     return null;
   }
@@ -335,9 +343,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load GSTR-3B (${response.statusCode})');
+      _errorMessage = 'Failed to load GSTR-3B (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching GSTR-3B: $e');
+      _errorMessage = 'Failed to load GSTR-3B';
+      notifyListeners();
     }
     return null;
   }
@@ -353,9 +363,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load receivables aging (${response.statusCode})');
+      _errorMessage = 'Failed to load receivables aging (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching receivables aging: $e');
+      _errorMessage = 'Failed to load receivables aging';
+      notifyListeners();
     }
     return null;
   }
@@ -371,9 +383,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load payables aging (${response.statusCode})');
+      _errorMessage = 'Failed to load payables aging (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching payables aging: $e');
+      _errorMessage = 'Failed to load payables aging';
+      notifyListeners();
     }
     return null;
   }
@@ -394,9 +408,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load sales analytics (${response.statusCode})');
+      _errorMessage = 'Failed to load sales analytics (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching sales analytics: $e');
+      _errorMessage = 'Failed to load sales analytics';
+      notifyListeners();
     }
     return null;
   }
@@ -417,9 +433,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load purchase analytics (${response.statusCode})');
+      _errorMessage = 'Failed to load purchase analytics (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching purchase analytics: $e');
+      _errorMessage = 'Failed to load purchase analytics';
+      notifyListeners();
     }
     return null;
   }
@@ -436,9 +454,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load outstanding receivables (${response.statusCode})');
+      _errorMessage = 'Failed to load outstanding receivables (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching outstanding receivables: $e');
+      _errorMessage = 'Failed to load outstanding receivables';
+      notifyListeners();
     }
     return null;
   }
@@ -455,9 +475,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load outstanding payables (${response.statusCode})');
+      _errorMessage = 'Failed to load outstanding payables (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching outstanding payables: $e');
+      _errorMessage = 'Failed to load outstanding payables';
+      notifyListeners();
     }
     return null;
   }
@@ -480,9 +502,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load cash flow (${response.statusCode})');
+      _errorMessage = 'Failed to load cash flow (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching cash flow: $e');
+      _errorMessage = 'Failed to load cash flow';
+      notifyListeners();
     }
     return null;
   }
@@ -502,9 +526,11 @@ class AccountingProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-      debugPrint('Failed to load party statement (${response.statusCode})');
+      _errorMessage = 'Failed to load party statement (${response.statusCode})';
+      notifyListeners();
     } catch (e) {
-      debugPrint('Error fetching party statement: $e');
+      _errorMessage = 'Failed to load party statement';
+      notifyListeners();
     }
     return null;
   }
