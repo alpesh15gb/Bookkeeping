@@ -80,7 +80,9 @@ class ExpenseProvider extends ChangeNotifier {
         _totalItems = _items.length;
         _totalPages = 1;
         _errorMessage = _items.isNotEmpty ? null : 'No cached expenses available';
-      } catch (_) {}
+      } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     }
     _isLoading = false;
     notifyListeners();
@@ -123,7 +125,9 @@ class ExpenseProvider extends ChangeNotifier {
         notifyListeners();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     _isLoading = false;
     notifyListeners();
     return false;
@@ -217,7 +221,9 @@ class ExpenseProvider extends ChangeNotifier {
         await SyncManager.instance?.cacheDocumentDetail('/expenses/$id', safeData);
         return safeData;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     if (!(SyncManager.instance?.isOnline ?? true)) {
       final cached = await LocalDatabase.getCachedDocumentDetail(
         ApiClient.tenantId ?? '', 'expense', id,
@@ -234,7 +240,9 @@ class ExpenseProvider extends ChangeNotifier {
         _expenseCategories = jsonDecode(response.body);
         notifyListeners();
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
   }
 
   Future<bool> createExpenseCategory(String name) async {
@@ -247,7 +255,9 @@ class ExpenseProvider extends ChangeNotifier {
         await fetchExpenseCategories();
         return true;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return false;
   }
 
@@ -264,7 +274,9 @@ class ExpenseProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -276,7 +288,9 @@ class ExpenseProvider extends ChangeNotifier {
         notifyListeners();
         return _taxTemplates;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return _taxTemplates;
   }
 
@@ -288,7 +302,9 @@ class ExpenseProvider extends ChangeNotifier {
         notifyListeners();
         return _paymentTerms;
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return _paymentTerms;
   }
 
@@ -299,7 +315,9 @@ class ExpenseProvider extends ChangeNotifier {
         final data = jsonDecode(response.body);
         return data is Map<String, dynamic> ? data : (data is Map ? Map<String, dynamic>.from(data) : null);
       }
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -307,7 +325,9 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       final response = await _client.get(_buildUri('${ApiClient.baseUrl}/gst/gstr1/export'));
       if (response.statusCode == 200) return response.bodyBytes;
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -315,7 +335,9 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       final response = await _client.get(_buildUri('${ApiClient.baseUrl}/gst/gstr2/export'));
       if (response.statusCode == 200) return response.bodyBytes;
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
@@ -323,7 +345,9 @@ class ExpenseProvider extends ChangeNotifier {
     try {
       final response = await _client.get(_buildUri('${ApiClient.baseUrl}/gst/gstr3b/export'));
       if (response.statusCode == 200) return response.bodyBytes;
-    } catch (_) {}
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
     return null;
   }
 
