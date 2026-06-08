@@ -70,7 +70,8 @@ class _RegisterViewState extends State<RegisterView> {
         elevation: 0,
         foregroundColor: Colors.white,
       ),
-      body: Center(
+      body: SafeArea(
+        child: Center(
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -235,6 +236,7 @@ class _RegisterViewState extends State<RegisterView> {
             ),
           ),
         ),
+      ),
       ),
     );
   }

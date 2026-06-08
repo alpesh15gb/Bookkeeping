@@ -49,7 +49,8 @@ class _LoginViewState extends State<LoginView> {
 
     return Scaffold(
       backgroundColor: AppColors.bgSidebar,
-      body: Center(
+      body: SafeArea(
+        child: Center(
         child: SingleChildScrollView(
           child: Padding(
             padding: const EdgeInsets.all(24),
@@ -196,6 +197,7 @@ class _LoginViewState extends State<LoginView> {
             ),
           ),
         ),
+      ),
       ),
     );
   }
