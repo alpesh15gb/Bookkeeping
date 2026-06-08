@@ -242,7 +242,7 @@ class _PartyStatementViewState extends State<PartyStatementView> {
         return DropdownMenuItem(
           value: c,
           child: Text(
-            '${c.name} (${c.contactType})',
+            '${c.name} (${c.contactType == "CUSTOMER" ? "Customer" : c.contactType == "VENDOR" ? "Vendor" : "Both"})',
             style: AppTextStyles.bodySmall,
             overflow: TextOverflow.ellipsis,
           ),

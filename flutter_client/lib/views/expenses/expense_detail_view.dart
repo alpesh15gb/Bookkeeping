@@ -120,20 +120,21 @@ class _ExpenseDetailViewState extends State<ExpenseDetailView> {
       appBar: AppBar(
         title: Text(_expense!['expense_number'] ?? 'Expense Detail'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.edit_outlined),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ExpenseFormView(editExpense: _expense),
-                ),
-              ).then((updated) {
-                if (updated == true) _fetchDetail();
-              });
-            },
-            tooltip: 'Edit expense',
-          ),
+          if (status != 'CANCELLED')
+            IconButton(
+              icon: const Icon(Icons.edit_outlined),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ExpenseFormView(editExpense: _expense),
+                  ),
+                ).then((updated) {
+                  if (updated == true) _fetchDetail();
+                });
+              },
+              tooltip: 'Edit expense',
+            ),
           const SizedBox(width: 8),
           StatusBadge(label: status),
           const SizedBox(width: 16),
