@@ -1387,7 +1387,13 @@ def import_vyapar_backup(
             detail=f"Import failed: {str(exc)}",
         )
     finally:
-        vconn.close()
-        os.unlink(tmp.name)
+        try:
+            vconn.close()
+        except Exception:
+            logger.exception("Error closing Vyapar SQLite connection")
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            logger.warning("Could not remove temp file %s", tmp.name)
 
     return summary

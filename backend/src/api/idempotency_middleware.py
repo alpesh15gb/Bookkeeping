@@ -1,4 +1,5 @@
 import logging
+import uuid
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
@@ -22,6 +23,14 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         tenant_id = request.headers.get("X-Tenant-ID")
         if not tenant_id:
             return await call_next(request)
+
+        try:
+            uuid.UUID(tenant_id)
+        except ValueError:
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Invalid X-Tenant-ID header format."},
+            )
 
         db = SessionLocal()
         try:

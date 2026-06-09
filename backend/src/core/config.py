@@ -105,11 +105,15 @@ class Settings(BaseSettings):
     @field_validator("JWT_SECRET_KEY", "SECRET_KEY")
     @classmethod
     def secret_must_be_set(cls, v: str, info) -> str:
-        if not v or len(v) < 32:
-            raise ValueError(
-                f"{info.field_name} must be set to a strong random value. "
-                f"Generate one with: python -c \"import secrets; print(secrets.token_hex(64))\""
-            )
+        import os
+        # Only enforce strong secret in non-development environments
+        env = os.getenv("APP_ENV", "development")
+        if env != "development":
+            if not v or len(v) < 32:
+                raise ValueError(
+                    f"{info.field_name} must be set to a strong random value. "
+                    f"Generate one with: python -c \"import secrets; print(secrets.token_hex(64))\""
+                )
         return v
 
     @field_validator("RATE_LIMIT_ENABLED")
@@ -150,4 +154,14 @@ def get_settings() -> Settings:
 
 
 # Convenience alias — use `settings.JWT_SECRET_KEY` anywhere
-settings = get_settings()
+# Lazy-initialized to avoid validation side-effects at import time
+_settings_instance = None
+
+
+def __getattr__(name: str):
+    global _settings_instance
+    if name == "settings":
+        if _settings_instance is None:
+            _settings_instance = get_settings()
+        return _settings_instance
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

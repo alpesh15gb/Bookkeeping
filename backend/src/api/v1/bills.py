@@ -24,7 +24,7 @@ def create_bill(
     request: Request,
     payload: BillCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("bill:create"))
 ):
     from src.domains.accounting.period_lock import validate_period_open
     validate_period_open(db, tenant_id, payload.issue_date)
@@ -183,7 +183,7 @@ def create_bill(
 def preview_bill(
     payload: BillCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("bill:create"))
 ):
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
@@ -1046,7 +1046,7 @@ def print_bill(
 def clone_bill(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("bill:create")),
 ):
     """Clone an existing bill into a new DRAFT bill."""
     original = db.query(Bill).filter(

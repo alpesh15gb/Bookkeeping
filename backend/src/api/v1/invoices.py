@@ -173,8 +173,8 @@ def create_invoice(
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
-    if rounded_total <= 0:
-        raise HTTPException(status_code=400, detail="Invoice total must be greater than zero.")
+    if rounded_total < 0:
+        raise HTTPException(status_code=400, detail="Invoice total must not be negative.")
 
     invoice = Invoice(
         tenant_id=tenant_id,
@@ -1340,6 +1340,14 @@ def update_invoice(
             detail="Only draft or posted invoices can be edited."
         )
 
+    if invoice.status == "POSTED":
+        existing_allocations = db.query(PaymentAllocation).filter(PaymentAllocation.invoice_id == invoice.id).first()
+        if existing_allocations:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Cannot modify a posted invoice that has payment allocations. Reverse payments first."
+            )
+
     if payload.contact_id:
         contact = db.query(Contact).filter(Contact.id == payload.contact_id, Contact.tenant_id == tenant_id).first()
         if not contact:
@@ -2245,7 +2253,7 @@ class EmailInvoiceRequest(BaseModel):
 @router.post("/{id}/email")
 def email_invoice(
     id: uuid.UUID,
-    payload: EmailInvoiceRequest = Body(None),
+    payload: EmailInvoiceRequest = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:update")),
 ):

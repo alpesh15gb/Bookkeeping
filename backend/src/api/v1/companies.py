@@ -326,6 +326,7 @@ def delete_branch(
 
 # 3. Logo upload endpoint
 ALLOWED_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+MAX_LOGO_SIZE = 5 * 1024 * 1024  # 5 MB
 
 @router.post("/settings/logo")
 def upload_logo(
@@ -339,10 +340,13 @@ def upload_logo(
     if ext not in ALLOWED_EXTENSIONS:
         raise HTTPException(status_code=400, detail=f"Invalid file type: {ext}. Allowed: {', '.join(ALLOWED_EXTENSIONS)}")
 
+    contents = file.file.read()
+    if len(contents) > MAX_LOGO_SIZE:
+        raise HTTPException(status_code=400, detail=f"File too large. Maximum size is {MAX_LOGO_SIZE // (1024 * 1024)} MB.")
+
     logo_path = os.path.join("static", "logos", f"{tenant_id}{ext}")
     os.makedirs(os.path.dirname(logo_path), exist_ok=True)
 
-    contents = file.file.read()
     with open(logo_path, "wb") as f:
         f.write(contents)
 

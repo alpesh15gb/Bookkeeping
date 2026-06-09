@@ -39,7 +39,7 @@ def create_payment_receipt(
         Contact.id == payload.contact_id,
         Contact.tenant_id == tenant_id,
         Contact.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not contact:
         raise HTTPException(status_code=404, detail="Customer not found in this company context.")
     if contact.contact_type not in ("CUSTOMER", "BOTH"):
@@ -78,13 +78,6 @@ def create_payment_receipt(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Sum of allocations ({total_allocated}) cannot exceed payment amount ({payload.amount})."
         )
-
-    contact = db.query(Contact).filter(
-        Contact.id == payload.contact_id,
-        Contact.tenant_id == tenant_id
-    ).with_for_update().first()
-    if not contact:
-        raise HTTPException(status_code=404, detail="Contact not found.")
 
     invoice_ids = [alloc.invoice_id for alloc in payload.allocations]
     locked_invoices = db.query(Invoice).filter(
