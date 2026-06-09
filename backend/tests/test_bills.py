@@ -47,9 +47,6 @@ class TestVendorBills(unittest.TestCase):
             membership = db.query(TenantMembership).filter(TenantMembership.user_id == user.id).first()
             self.tenant_id = membership.tenant_id
             
-            # Grant bill:create permission scope to the user
-            membership.permission_scopes = ["bill:create", "bill:read", "bill:update", "bill:delete"]
-            
             # Set tax_mode to GST_REGULAR so GST calculations work
             tenant = db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
             tenant.tax_mode = "GST_REGULAR"

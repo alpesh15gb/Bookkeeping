@@ -74,6 +74,12 @@ class Permissions:
     EXPENSE_DELETE = "expense:delete"
     EXPENSE_FINALIZE = "expense:finalize"
 
+    # Vendor Bills (Purchases)
+    BILL_CREATE = "bill:create"
+    BILL_VIEW = "bill:view"
+    BILL_UPDATE = "bill:update"
+    BILL_DELETE = "bill:delete"
+
 
 ROLE_PERMISSIONS = {
     "superadmin": [perm for name, perm in Permissions.__dict__.items() if not name.startswith("__")],
@@ -91,6 +97,7 @@ ROLE_PERMISSIONS = {
         Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
         Permissions.EXPENSE_CREATE, Permissions.EXPENSE_VIEW,
         Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
+        Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
     ],
     "accountant": [
         Permissions.TENANT_VIEW,
@@ -103,6 +110,7 @@ ROLE_PERMISSIONS = {
         Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
         Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
         Permissions.EXPENSE_VIEW, Permissions.EXPENSE_CREATE, Permissions.EXPENSE_FINALIZE,
+        Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
     ],
     "salesperson": [
         Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
