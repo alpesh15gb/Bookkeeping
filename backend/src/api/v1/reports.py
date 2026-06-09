@@ -717,7 +717,7 @@ def trial_balance_excel(
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill
     from src.api.v1.accounting import get_trial_balance
-    data = get_trial_balance(db, tenant_id)
+    data = get_trial_balance(db=db, tenant_id=tenant_id)
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     company_name = tenant.legal_name if tenant else "ApexBooks"
 
@@ -785,7 +785,7 @@ def trial_balance_pdf(
 ):
     from src.domains.printing.invoice_pdf import generate_trial_balance_pdf
     from src.api.v1.accounting import get_trial_balance
-    data = get_trial_balance(db, tenant_id)
+    data = get_trial_balance(db=db, tenant_id=tenant_id)
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     company_name = tenant.legal_name if tenant else "ApexBooks"
 

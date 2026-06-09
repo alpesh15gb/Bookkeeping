@@ -380,6 +380,9 @@ def get_trial_balance(
     cutoff = as_of_date or date.today()
 
     # Query accounts and group summing of journal movements
+    # Note: JournalEntry date filter must be in the JOIN condition, not WHERE,
+    # because a WHERE filter on an outer-joined table eliminates unmatched rows
+    # (accounts with no journal entries would vanish).
     results = db.query(
         Account.id,
         Account.name,
@@ -389,11 +392,10 @@ def get_trial_balance(
         func.coalesce(func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)), 0).label("debits"),
         func.coalesce(func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)), 0).label("credits")
     ).outerjoin(JournalLine, Account.id == JournalLine.account_id)\
-     .outerjoin(JournalEntry, JournalLine.entry_id == JournalEntry.id)\
+     .outerjoin(JournalEntry, db.and_(JournalLine.entry_id == JournalEntry.id, JournalEntry.entry_date <= cutoff))\
      .filter(
          Account.tenant_id == tenant_id,
-         Account.deleted_at == None,
-         JournalEntry.entry_date <= cutoff
+         Account.deleted_at == None
      )\
      .group_by(Account.id, Account.name, Account.code, Account.account_type, Account.opening_balance)\
      .order_by(Account.code.asc()).all()
@@ -733,7 +735,7 @@ def prepare_year_end(
         ))
 
     # 2. Get Trial Balance and check if balanced
-    tb = get_trial_balance(db, tenant_id)
+    tb = get_trial_balance(as_of_date=closing_date, db=db, tenant_id=tenant_id)
     tb_balanced = abs(tb.total_closing_debits - tb.total_closing_credits) < Decimal("0.01")
     tb_diff = abs(tb.total_closing_debits - tb.total_closing_credits)
 
