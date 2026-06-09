@@ -371,10 +371,14 @@ def get_ledger_statement(
 
 @router.get("/trial-balance", response_model=TrialBalanceResponse)
 def get_trial_balance(
+    as_of_date: Optional[date] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
-    """Compiles the Trial Balance for all accounts under the tenant."""
+    """Compiles the Trial Balance for all accounts under the tenant.
+    Filters journal entries up to as_of_date (defaults to today)."""
+    cutoff = as_of_date or date.today()
+
     # Query accounts and group summing of journal movements
     results = db.query(
         Account.id,
@@ -385,7 +389,12 @@ def get_trial_balance(
         func.coalesce(func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)), 0).label("debits"),
         func.coalesce(func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)), 0).label("credits")
     ).outerjoin(JournalLine, Account.id == JournalLine.account_id)\
-     .filter(Account.tenant_id == tenant_id, Account.deleted_at == None)\
+     .outerjoin(JournalEntry, JournalLine.entry_id == JournalEntry.id)\
+     .filter(
+         Account.tenant_id == tenant_id,
+         Account.deleted_at == None,
+         JournalEntry.entry_date <= cutoff
+     )\
      .group_by(Account.id, Account.name, Account.code, Account.account_type, Account.opening_balance)\
      .order_by(Account.code.asc()).all()
 

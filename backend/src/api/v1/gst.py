@@ -499,8 +499,8 @@ def export_gstr1(
             # Group lines by rate
             rate_groups = {}
             for line in inv.lines:
-                rate = float(line.gst_rate)
-                rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+                rate = line.gst_rate
+                rate_groups[rate] = rate_groups.get(rate, Decimal("0")) + line.subtotal
             
             for rate, taxable_val in rate_groups.items():
                 ws_b2b.append([
@@ -508,7 +508,7 @@ def export_gstr1(
                     contact.name,
                     inv.invoice_number,
                     inv.issue_date.strftime("%d-%b-%Y") if inv.issue_date else "",
-                    float(inv.total),
+                    inv.total,
                     format_pos(inv.pos_state_code),
                     "N",
                     "",
@@ -516,7 +516,7 @@ def export_gstr1(
                     "",
                     rate,
                     taxable_val,
-                    0.0
+                    Decimal("0")
                 ])
 
     # 2. b2cs sheet
@@ -530,9 +530,9 @@ def export_gstr1(
             "OE",
             format_pos(line.pos_state_code),
             "",
-            float(line.gst_rate),
-            float(line.taxable_value),
-            float(line.cess_amount),
+            line.gst_rate,
+            line.taxable_value,
+            line.cess_amount,
             ""
         ])
 
@@ -561,8 +561,8 @@ def export_gstr1(
         if contact and contact.gstin:
             rate_groups = {}
             for line in cn.lines:
-                rate = float(line.gst_rate)
-                rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+                rate = line.gst_rate
+                rate_groups[rate] = rate_groups.get(rate, Decimal("0")) + line.subtotal
             
             for rate, taxable_val in rate_groups.items():
                 ws_cdnr.append([
@@ -571,13 +571,13 @@ def export_gstr1(
                     cn.credit_note_number,
                     cn.issue_date.strftime("%d-%b-%Y") if cn.issue_date else "",
                     "C",
-                    float(cn.total),
+                    cn.total,
                     format_pos(inv.pos_state_code if inv else origin_state_code),
                     "",
                     cn.reason or "Sales Return",
                     rate,
                     taxable_val,
-                    0.0
+                    Decimal("0")
                 ])
 
     q_dn = db.query(DebitNote).filter(
@@ -597,8 +597,8 @@ def export_gstr1(
         if contact and contact.gstin:
             rate_groups = {}
             for line in dn.lines:
-                rate = float(line.gst_rate)
-                rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+                rate = line.gst_rate
+                rate_groups[rate] = rate_groups.get(rate, Decimal("0")) + line.subtotal
             
             for rate, taxable_val in rate_groups.items():
                 ws_cdnr.append([
@@ -607,13 +607,13 @@ def export_gstr1(
                     dn.debit_note_number,
                     dn.issue_date.strftime("%d-%b-%Y") if dn.issue_date else "",
                     "D",
-                    float(dn.total),
+                    dn.total,
                     format_pos(inv.pos_state_code if inv else origin_state_code),
                     "",
                     dn.reason or "Sales Correction",
                     rate,
                     taxable_val,
-                    0.0
+                    Decimal("0")
                 ])
 
     # 4. cdnur sheet
@@ -630,8 +630,8 @@ def export_gstr1(
         if not contact or not contact.gstin:
             rate_groups = {}
             for line in cn.lines:
-                rate = float(line.gst_rate)
-                rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+                rate = line.gst_rate
+                rate_groups[rate] = rate_groups.get(rate, Decimal("0")) + line.subtotal
             
             for rate, taxable_val in rate_groups.items():
                 ws_cdnur.append([
@@ -639,13 +639,13 @@ def export_gstr1(
                     cn.issue_date.strftime("%d-%b-%Y") if cn.issue_date else "",
                     "C",
                     "B2CL" if (inv and inv.total > 250000 and inv.pos_state_code != origin_state_code) else "B2CS",
-                    float(cn.total),
+                    cn.total,
                     format_pos(inv.pos_state_code if inv else origin_state_code),
                     "",
                     cn.reason or "Sales Return",
                     rate,
                     taxable_val,
-                    0.0
+                    Decimal("0")
                 ])
 
     for dn in debit_notes:
@@ -654,8 +654,8 @@ def export_gstr1(
         if not contact or not contact.gstin:
             rate_groups = {}
             for line in dn.lines:
-                rate = float(line.gst_rate)
-                rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+                rate = line.gst_rate
+                rate_groups[rate] = rate_groups.get(rate, Decimal("0")) + line.subtotal
             
             for rate, taxable_val in rate_groups.items():
                 ws_cdnur.append([
@@ -663,13 +663,13 @@ def export_gstr1(
                     dn.issue_date.strftime("%d-%b-%Y") if dn.issue_date else "",
                     "D",
                     "B2CL" if (inv and inv.total > 250000 and inv.pos_state_code != origin_state_code) else "B2CS",
-                    float(dn.total),
+                    dn.total,
                     format_pos(inv.pos_state_code if inv else origin_state_code),
                     "",
                     dn.reason or "Sales Correction",
                     rate,
                     taxable_val,
-                    0.0
+                    Decimal("0")
                 ])
 
     # 5. hsn sheet
@@ -683,13 +683,13 @@ def export_gstr1(
             line.hsn_sac,
             line.description or "",
             line.uom or "PCS-PIECES",
-            float(line.total_quantity),
-            float(line.total_value),
-            float(line.taxable_value),
-            float(line.igst_amount),
-            float(line.cgst_amount),
-            float(line.sgst_amount),
-            float(line.cess_amount)
+            line.total_quantity,
+            line.total_value,
+            line.taxable_value,
+            line.igst_amount,
+            line.cgst_amount,
+            line.sgst_amount,
+            line.cess_amount
         ])
 
     # 6. doc sheet
@@ -792,32 +792,32 @@ def export_gstr2(
                 hsn_groups[hsn] = {
                     "description": desc,
                     "uom": uom,
-                    "total_quantity": 0.0,
-                    "total_value": 0.0,
-                    "taxable_value": 0.0,
-                    "cgst_amount": 0.0,
-                    "sgst_amount": 0.0,
-                    "igst_amount": 0.0,
-                    "cess_amount": 0.0
+                    "total_quantity": Decimal("0"),
+                    "total_value": Decimal("0"),
+                    "taxable_value": Decimal("0"),
+                    "cgst_amount": Decimal("0"),
+                    "sgst_amount": Decimal("0"),
+                    "igst_amount": Decimal("0"),
+                    "cess_amount": Decimal("0")
                 }
-            hsn_groups[hsn]["total_quantity"] += float(line.quantity)
-            hsn_groups[hsn]["total_value"] += float(line.total)
-            hsn_groups[hsn]["taxable_value"] += float(line.subtotal)
-            hsn_groups[hsn]["cgst_amount"] += float(line.cgst_amount)
-            hsn_groups[hsn]["sgst_amount"] += float(line.sgst_amount)
-            hsn_groups[hsn]["igst_amount"] += float(line.igst_amount)
-            hsn_groups[hsn]["cess_amount"] += float(line.cess_amount)
+            hsn_groups[hsn]["total_quantity"] += line.quantity
+            hsn_groups[hsn]["total_value"] += line.total
+            hsn_groups[hsn]["taxable_value"] += line.subtotal
+            hsn_groups[hsn]["cgst_amount"] += line.cgst_amount
+            hsn_groups[hsn]["sgst_amount"] += line.sgst_amount
+            hsn_groups[hsn]["igst_amount"] += line.igst_amount
+            hsn_groups[hsn]["cess_amount"] += line.cess_amount
 
         rate_groups = {}
         for line in b.lines:
-            rate = float(line.gst_rate)
-            rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+            rate = line.gst_rate
+            rate_groups[rate] = rate_groups.get(rate, Decimal("0")) + line.subtotal
 
         for rate, taxable_val in rate_groups.items():
-            tax_multiplier = rate / 100.0
-            cgst_val = taxable_val * tax_multiplier / 2.0 if b.pos_state_code == origin_state_code else 0.0
-            sgst_val = taxable_val * tax_multiplier / 2.0 if b.pos_state_code == origin_state_code else 0.0
-            igst_val = taxable_val * tax_multiplier if b.pos_state_code != origin_state_code else 0.0
+            tax_multiplier = rate / Decimal("100")
+            cgst_val = taxable_val * tax_multiplier / Decimal("2") if b.pos_state_code == origin_state_code else Decimal("0")
+            sgst_val = taxable_val * tax_multiplier / Decimal("2") if b.pos_state_code == origin_state_code else Decimal("0")
+            igst_val = taxable_val * tax_multiplier if b.pos_state_code != origin_state_code else Decimal("0")
 
             if is_registered:
                 ws_b2b.append([
@@ -825,7 +825,7 @@ def export_gstr2(
                     contact.name,
                     b.bill_number,
                     b.issue_date.strftime("%d-%b-%Y") if b.issue_date else "",
-                    float(b.total),
+                    b.total,
                     format_pos(b.pos_state_code),
                     "N",
                     rate,
@@ -833,31 +833,31 @@ def export_gstr2(
                     igst_val,
                     cgst_val,
                     sgst_val,
-                    0.0,
+                    Decimal("0"),
                     "Inputs",
                     igst_val,
                     cgst_val,
                     sgst_val,
-                    0.0
+                    Decimal("0")
                 ])
             else:
                 ws_b2bur.append([
                     contact.name if contact else "Unregistered Vendor",
                     b.bill_number,
                     b.issue_date.strftime("%d-%b-%Y") if b.issue_date else "",
-                    float(b.total),
+                    b.total,
                     format_pos(b.pos_state_code),
                     rate,
                     taxable_val,
                     igst_val,
                     cgst_val,
                     sgst_val,
-                    0.0,
+                    Decimal("0"),
                     "Inputs",
                     igst_val,
                     cgst_val,
                     sgst_val,
-                    0.0
+                    Decimal("0")
                 ])
 
     # 3. CDNR Sheet
@@ -894,14 +894,14 @@ def export_gstr2(
 
         rate_groups = {}
         for line in pr.lines:
-            rate = float(line.gst_rate)
-            rate_groups[rate] = rate_groups.get(rate, 0.0) + float(line.subtotal)
+            rate = line.gst_rate
+            rate_groups[rate] = rate_groups.get(rate, Decimal("0")) + line.subtotal
 
         for rate, taxable_val in rate_groups.items():
-            tax_multiplier = rate / 100.0
-            cgst_val = taxable_val * tax_multiplier / 2.0 if pr.pos_state_code == origin_state_code else 0.0
-            sgst_val = taxable_val * tax_multiplier / 2.0 if pr.pos_state_code == origin_state_code else 0.0
-            igst_val = taxable_val * tax_multiplier if pr.pos_state_code != origin_state_code else 0.0
+            tax_multiplier = rate / Decimal("100")
+            cgst_val = taxable_val * tax_multiplier / Decimal("2") if pr.pos_state_code == origin_state_code else Decimal("0")
+            sgst_val = taxable_val * tax_multiplier / Decimal("2") if pr.pos_state_code == origin_state_code else Decimal("0")
+            igst_val = taxable_val * tax_multiplier if pr.pos_state_code != origin_state_code else Decimal("0")
 
             if is_registered:
                 ws_cdnr.append([
@@ -910,7 +910,7 @@ def export_gstr2(
                     pr.return_number,
                     pr.issue_date.strftime("%d-%b-%Y") if pr.issue_date else "",
                     "D", # Debit note (representing a return on purchase side)
-                    float(pr.total),
+                    pr.total,
                     format_pos(pr.pos_state_code),
                     pr.notes or "Purchase Return",
                     rate,
@@ -918,7 +918,7 @@ def export_gstr2(
                     igst_val,
                     cgst_val,
                     sgst_val,
-                    0.0
+                    Decimal("0")
                 ])
             else:
                 ws_cdnur.append([
@@ -926,7 +926,7 @@ def export_gstr2(
                     pr.return_number,
                     pr.issue_date.strftime("%d-%b-%Y") if pr.issue_date else "",
                     "D",
-                    float(pr.total),
+                    pr.total,
                     format_pos(pr.pos_state_code),
                     pr.notes or "Purchase Return",
                     rate,
@@ -934,7 +934,7 @@ def export_gstr2(
                     igst_val,
                     cgst_val,
                     sgst_val,
-                    0.0
+                    Decimal("0")
                 ])
 
     # 5. HSN Sheet

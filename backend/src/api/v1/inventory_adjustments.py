@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 from decimal import Decimal
+from datetime import date
 from sqlalchemy import func
 
 from src.core.database import get_db_session
@@ -36,6 +37,8 @@ def create_inventory_adjustment(
 
     db_lines = []
     for line in payload.line_items:
+        if line.unit_cost is not None and line.unit_cost < 0:
+            raise HTTPException(status_code=400, detail="Unit cost cannot be negative.")
         total_cost = (line.quantity_change * line.unit_cost) if line.unit_cost else None
         
         db_line = InventoryAdjustmentLine(
@@ -144,6 +147,8 @@ def update_inventory_adjustment(
         
         db_lines = []
         for line in payload.line_items:
+            if line.unit_cost is not None and line.unit_cost < 0:
+                raise HTTPException(status_code=400, detail="Unit cost cannot be negative.")
             total_cost = (line.quantity_change * line.unit_cost) if line.unit_cost else None
             
             db_line = InventoryAdjustmentLine(
@@ -186,8 +191,10 @@ def confirm_inventory_adjustment(
     journal_lines = []
     stock_ledger_entries = []
     for line in adjustment.lines:
+        if line.total_cost is None or line.total_cost <= 0:
+            raise HTTPException(status_code=400, detail=f"Total cost must be positive for product {line.product_id}.")
+        
         # Get or create inventory asset account for this product
-        # In a real implementation, this would be more sophisticated
         inventory_account_id = resolver.resolve(f"assets.inventory.{line.product_id}")
         adjustment_account_id = resolver.resolve("inventory_adjustment")
         
@@ -205,17 +212,6 @@ def confirm_inventory_adjustment(
                 direction="CREDIT",
                 narration=f"Inventory adjustment for product {line.product_id}"
             ))
-            
-            # Create stock ledger entry for stock-in
-            stock_ledger_entries.append(StockLedger(
-                tenant_id=tenant_id,
-                product_id=line.product_id,
-                quantity=line.quantity_change,  # positive for stock-in
-                balance_quantity=0,  # Will be calculated properly in a real system
-                reference_type="INVENTORY_ADJUSTMENT",
-                reference_id=adjustment.id,
-                rate=line.unit_cost
-            ))
         else:
             # Inventory decrease - debit adjustment account, credit inventory
             journal_lines.append(JournalLine(
@@ -230,13 +226,21 @@ def confirm_inventory_adjustment(
                 direction="CREDIT",
                 narration=f"Inventory adjustment for product {line.product_id}"
             ))
-            
-            # Create stock ledger entry for stock-out
+
+        # Update product current_stock
+        product = db.query(Product).filter(
+            Product.id == line.product_id,
+            Product.tenant_id == tenant_id
+        ).with_for_update().first()
+        if product:
+            current_stock = product.current_stock or Decimal("0")
+            product.current_stock = current_stock + line.quantity_change
+            # Create stock ledger entry
             stock_ledger_entries.append(StockLedger(
                 tenant_id=tenant_id,
                 product_id=line.product_id,
-                quantity=line.quantity_change,  # negative for stock-out
-                balance_quantity=0,  # Will be calculated properly in a real system
+                quantity=line.quantity_change,
+                balance_quantity=product.current_stock,
                 reference_type="INVENTORY_ADJUSTMENT",
                 reference_id=adjustment.id,
                 rate=line.unit_cost
@@ -281,8 +285,65 @@ def cancel_inventory_adjustment(
     if not adjustment:
         raise HTTPException(status_code=404, detail="Inventory Adjustment not found.")
 
-    if adjustment.status in ("CONFIRMED", "CANCELLED"):
-        raise HTTPException(status_code=400, detail="Cannot cancel confirmed or already cancelled inventory adjustments.")
+    if adjustment.status == "CANCELLED":
+        raise HTTPException(status_code=400, detail="Inventory adjustment is already cancelled.")
+
+    if adjustment.status == "CONFIRMED":
+        # Reverse journal entries: find and delete the original journal entry
+        original_je = db.query(JournalEntry).filter(
+            JournalEntry.tenant_id == tenant_id,
+            JournalEntry.source_type == "INVENTORY_ADJUSTMENT",
+            JournalEntry.source_id == adjustment.id,
+        ).first()
+        if original_je:
+            # Reverse: swap DEBIT/CREDIT for each line
+            reversal_lines = []
+            for line in original_je.lines:
+                reversal_lines.append(JournalLine(
+                    account_id=line.account_id,
+                    amount=line.amount,
+                    direction="CREDIT" if line.direction == "DEBIT" else "DEBIT",
+                    narration=f"Reversal: {line.narration}"
+                ))
+            reversal_entry = JournalEntry(
+                tenant_id=tenant_id,
+                entry_date=date.today(),
+                reference_number=f"REV-{adjustment.adjustment_number}",
+                description=f"Reversal of inventory adjustment {adjustment.adjustment_number}",
+                source_type="INVENTORY_ADJUSTMENT_REVERSAL",
+                source_id=adjustment.id,
+                lines=reversal_lines
+            )
+            db.add(reversal_entry)
+            # Delete original journal lines and entry
+            db.query(JournalLine).filter(JournalLine.entry_id == original_je.id).delete()
+            db.delete(original_je)
+
+        # Reverse stock changes: update product.current_stock
+        for line in adjustment.lines:
+            product = db.query(Product).filter(
+                Product.id == line.product_id,
+                Product.tenant_id == tenant_id
+            ).with_for_update().first()
+            if product:
+                current_stock = product.current_stock or Decimal("0")
+                product.current_stock = current_stock - line.quantity_change
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    quantity=-line.quantity_change,
+                    balance_quantity=product.current_stock,
+                    reference_type="INVENTORY_ADJUSTMENT_REVERSAL",
+                    reference_id=adjustment.id,
+                    rate=line.unit_cost
+                ))
+
+        # Delete original stock ledger entries
+        db.query(StockLedger).filter(
+            StockLedger.tenant_id == tenant_id,
+            StockLedger.reference_type == "INVENTORY_ADJUSTMENT",
+            StockLedger.reference_id == adjustment.id,
+        ).delete()
 
     adjustment.status = "CANCELLED"
     db.commit()

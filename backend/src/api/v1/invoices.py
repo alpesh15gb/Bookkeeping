@@ -80,6 +80,11 @@ def create_invoice(
     inv_discount = Decimal("0.0000")
 
     for line in payload.line_items:
+        if line.quantity <= 0:
+            raise HTTPException(status_code=400, detail="Line item quantity must be greater than zero.")
+        if line.rate < 0:
+            raise HTTPException(status_code=400, detail="Line item rate cannot be negative.")
+
         # Check product matches tenant context
         product = db.query(Product).filter(
             Product.id == line.product_id,
