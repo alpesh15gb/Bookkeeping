@@ -657,6 +657,41 @@ def update_bill(
         bill.total = rounded_total
         bill.lines = db_lines
 
+    # If bill was already posted, re-post the journal entry with updated amounts
+    if bill.status == "POSTED":
+        if bill.amount_paid and bill.amount_paid > rounded_total:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot reduce bill total below amount already paid ({bill.amount_paid})."
+            )
+
+        # Reverse old journal entry
+        old_je = db.query(JournalEntry).filter(
+            JournalEntry.source_type == "BILL",
+            JournalEntry.source_id == bill.id,
+            JournalEntry.tenant_id == tenant_id,
+        ).first()
+        if old_je:
+            db.query(JournalLine).filter(JournalLine.entry_id == old_je.id).delete()
+            db.delete(old_je)
+
+        # Reverse old stock entries for this bill
+        old_stock_entries = db.query(StockLedger).filter(
+            StockLedger.reference_type == "BILL",
+            StockLedger.reference_id == bill.id,
+            StockLedger.tenant_id == tenant_id,
+        ).all()
+        for entry in old_stock_entries:
+            product = db.query(Product).filter(
+                Product.id == entry.product_id, Product.tenant_id == tenant_id
+            ).with_for_update().first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) - entry.quantity
+            db.delete(entry)
+
+        # Re-post with new amounts (creates new JE + stock entries)
+        auto_post_bill(db, tenant_id, bill)
+
     db.commit()
     db.refresh(bill)
     return bill

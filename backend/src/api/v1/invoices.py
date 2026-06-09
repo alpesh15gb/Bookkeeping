@@ -773,6 +773,16 @@ def finalize_credit_note(
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
+    # Reduce the linked invoice's outstanding by treating the CN as a credit
+    if cn.invoice_id:
+        inv = db.query(Invoice).filter(Invoice.id == cn.invoice_id, Invoice.tenant_id == tenant_id).first()
+        if inv:
+            inv.amount_paid = (inv.amount_paid or Decimal("0.0000")) + cn.total
+            if inv.amount_paid >= inv.total:
+                inv.status = "PAID"
+            elif inv.amount_paid > 0:
+                inv.status = "PARTIALLY_PAID"
+
     cn.status = "POSTED"
     db.commit()
     db.refresh(cn)
@@ -836,6 +846,17 @@ def cancel_credit_note(
     )
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
+
+    # Reverse the outstanding impact on the linked invoice
+    if cn.invoice_id:
+        inv = db.query(Invoice).filter(Invoice.id == cn.invoice_id, Invoice.tenant_id == tenant_id).first()
+        if inv:
+            inv.amount_paid = (inv.amount_paid or Decimal("0.0000")) - cn.total
+            if inv.amount_paid <= 0:
+                inv.amount_paid = Decimal("0.0000")
+                inv.status = "POSTED"
+            elif inv.amount_paid < inv.total:
+                inv.status = "PARTIALLY_PAID"
 
     cn.status = "CANCELLED"
     db.commit()
@@ -1447,23 +1468,39 @@ def update_invoice(
 
     # If invoice was already posted, re-post the journal entry with updated amounts
     if invoice.status == "POSTED":
-        from src.domains.accounting.auto_post import _check_no_existing_posting
-        try:
-            # Reverse old posting
-            old_je = db.query(JournalEntry).filter(
-                JournalEntry.source_type == "INVOICE",
-                JournalEntry.source_id == invoice.id,
-                JournalEntry.tenant_id == tenant_id,
-            ).first()
-            if old_je:
-                db.query(JournalLine).filter(JournalLine.entry_id == old_je.id).delete()
-                db.delete(old_je)
-        except Exception as exc:
-            import logging
-            logging.getLogger(__name__).warning(
-                "Failed to reverse old journal entry for invoice %s: %s", invoice.id, exc
+        if invoice.amount_paid and invoice.amount_paid > rounded_total:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot reduce invoice total below amount already paid ({invoice.amount_paid})."
             )
-        # Re-post with new amounts
+
+        from src.domains.accounting.auto_post import _check_no_existing_posting
+
+        # Reverse old journal entry
+        old_je = db.query(JournalEntry).filter(
+            JournalEntry.source_type == "INVOICE",
+            JournalEntry.source_id == invoice.id,
+            JournalEntry.tenant_id == tenant_id,
+        ).first()
+        if old_je:
+            db.query(JournalLine).filter(JournalLine.entry_id == old_je.id).delete()
+            db.delete(old_je)
+
+        # Reverse old stock entries for this invoice
+        old_stock_entries = db.query(StockLedger).filter(
+            StockLedger.reference_type == "INVOICE",
+            StockLedger.reference_id == invoice.id,
+            StockLedger.tenant_id == tenant_id,
+        ).all()
+        for entry in old_stock_entries:
+            product = db.query(Product).filter(
+                Product.id == entry.product_id, Product.tenant_id == tenant_id
+            ).with_for_update().first()
+            if product:
+                product.current_stock = (product.current_stock or Decimal("0")) - entry.quantity
+            db.delete(entry)
+
+        # Re-post with new amounts (creates new JE + stock entries)
         auto_post_invoice(db, tenant_id, invoice)
 
     db.commit()
