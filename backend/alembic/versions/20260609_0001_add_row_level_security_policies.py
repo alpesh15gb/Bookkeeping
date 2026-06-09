@@ -5,35 +5,32 @@ Revises: 20260608_0001
 Create Date: 2026-06-09
 """
 from alembic import op
+from sqlalchemy import inspect, text
 
 revision = "20260609_0001"
 down_revision = "20260608_0001"
 branch_labels = None
 depends_on = None
 
+# Only tables that have a direct tenant_id column.
+# Line-item tables (invoice_lines, bill_lines, journal_lines, etc.) are excluded
+# because they inherit tenant isolation from their parent tables via FK joins.
 TENANT_SCOPED_TABLES = [
     "accounts",
     "invoices",
-    "invoice_lines",
     "bills",
-    "bill_lines",
     "payments",
     "payment_allocations",
     "bill_payment_allocations",
     "journal_entries",
-    "journal_lines",
     "contacts",
     "products",
     "expenses",
     "expense_categories",
     "estimates",
-    "estimate_lines",
     "credit_notes",
-    "credit_note_lines",
     "debit_notes",
-    "debit_note_lines",
     "purchase_returns",
-    "purchase_return_lines",
     "stock_ledgers",
     "accounting_periods",
     "financial_years",
@@ -51,7 +48,6 @@ TENANT_SCOPED_TABLES = [
     "tenant_documents",
     "period_lock_audits",
     "proforma_invoices",
-    "proforma_invoice_lines",
     "idempotency_keys",
     "tenant_settings",
 ]
@@ -61,15 +57,24 @@ def _is_postgresql() -> bool:
     return op.get_bind().dialect.name == "postgresql"
 
 
+def _column_exists(table: str, column: str) -> bool:
+    try:
+        conn = op.get_bind()
+        inspector = inspect(conn)
+        return column in {c["name"] for c in inspector.get_columns(table)}
+    except Exception:
+        return False
+
+
 def upgrade() -> None:
     if not _is_postgresql():
         return
 
     for table in TENANT_SCOPED_TABLES:
+        if not _column_exists(table, "tenant_id"):
+            continue
         op.execute(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY;")
-        op.execute(
-            f"DROP POLICY IF EXISTS tenant_isolation ON {table};"
-        )
+        op.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {table};")
         op.execute(
             f"CREATE POLICY tenant_isolation ON {table} "
             f"USING (tenant_id::text = current_setting('app.current_tenant_id', true)) "
@@ -82,5 +87,7 @@ def downgrade() -> None:
         return
 
     for table in TENANT_SCOPED_TABLES:
+        if not _column_exists(table, "tenant_id"):
+            continue
         op.execute(f"DROP POLICY IF EXISTS tenant_isolation ON {table};")
         op.execute(f"ALTER TABLE {table} DISABLE ROW LEVEL SECURITY;")
