@@ -227,9 +227,9 @@ class _CashBookViewState extends State<CashBookView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(title, style: AppTextStyles.labelMedium),
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            child: Text(title, style: AppTextStyles.label),
           ),
           const Divider(height: 1),
           SingleChildScrollView(
