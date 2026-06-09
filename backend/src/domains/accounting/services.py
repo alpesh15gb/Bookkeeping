@@ -1015,6 +1015,12 @@ _STANDARD_ACCOUNTS: Dict[str, Dict[str, str]] = {
     "other_income":       {"name": "Other Income",           "code": "5199", "type": "REVENUE", "group": "Other Income"},
 
     # ══════════════════════════════════════════════════════════════════════
+    # PRIOR PERIOD ADJUSTMENTS
+    # ══════════════════════════════════════════════════════════════════════
+
+    "prior_period_adjustment": {"name": "Prior Period Adjustments", "code": "5200", "type": "REVENUE", "group": "Prior Period"},
+
+    # ══════════════════════════════════════════════════════════════════════
     # EXPENSES
     # ══════════════════════════════════════════════════════════════════════
 

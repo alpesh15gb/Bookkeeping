@@ -741,7 +741,28 @@ def finalize_credit_note(
         raise HTTPException(status_code=400, detail="Credit Note must be linked to a contact or invoice for finalization.")
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{contact_id}")
-    sales_revenue_account_id = resolver.resolve("sales_revenue")
+
+    # Determine the correct revenue reversal account:
+    # - Same FY as original invoice → use sales_revenue (normal return)
+    # - Different FY → use prior_period_adjustment (prior period correction)
+    revenue_account_id = resolver.resolve("sales_revenue")
+    if cn.invoice_id:
+        inv = db.query(Invoice).filter(Invoice.id == cn.invoice_id, Invoice.tenant_id == tenant_id).first()
+        if inv:
+            from src.infrastructure.database.models import FinancialYear
+            cn_fy = db.query(FinancialYear).filter(
+                FinancialYear.tenant_id == tenant_id,
+                FinancialYear.start_date <= cn.issue_date,
+                FinancialYear.end_date >= cn.issue_date,
+            ).first()
+            inv_fy = db.query(FinancialYear).filter(
+                FinancialYear.tenant_id == tenant_id,
+                FinancialYear.start_date <= inv.issue_date,
+                FinancialYear.end_date >= inv.issue_date,
+            ).first()
+            if cn_fy and inv_fy and cn_fy.id != inv_fy.id:
+                revenue_account_id = resolver.resolve("prior_period_adjustment")
+
     cgst_account_id = resolver.resolve("cgst_output")
     sgst_account_id = resolver.resolve("sgst_output")
     igst_account_id = resolver.resolve("igst_output")
@@ -755,7 +776,7 @@ def finalize_credit_note(
         credit_note_number=cn.credit_note_number,
         issue_date=cn.issue_date,
         customer_account_id=customer_account_id,
-        sales_revenue_account_id=sales_revenue_account_id,
+        sales_revenue_account_id=revenue_account_id,
         subtotal=cn.subtotal,
         cgst_account_id=cgst_account_id,
         cgst_amount=cn.cgst_amount,

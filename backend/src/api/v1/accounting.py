@@ -763,206 +763,34 @@ def close_year_end(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage"))
 ):
-    """Closes the financial year: posts closing journal, locks period, updates tenant start date."""
-    from src.infrastructure.database.models import Tenant, AccountingPeriod, JournalEntry, JournalLine
-    from src.domains.accounting.services import AccountResolver, update_account_balances
+    """DEPRECATED: Use POST /api/v1/financial-years/{fy_id}/close instead.
 
-    closing_date = payload.closing_date
-
-    # 1. Run readiness check
-    prep = prepare_year_end(closing_date=closing_date, db=db, tenant_id=tenant_id)
-    if not prep.ready:
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot close financial year. Books must be balanced and have no unposted documents."
-        )
-
-    # 2. Get net movements for all REVENUE and EXPENSE accounts in the period [fy_start, closing_date]
-    accounts = db.query(Account).filter(
-        Account.tenant_id == tenant_id,
-        Account.account_type.in_(["REVENUE", "EXPENSE"]),
-        Account.deleted_at == None
-    ).all()
-
-    movements = db.query(
-        JournalLine.account_id,
-        func.coalesce(func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)), 0).label("debits"),
-        func.coalesce(func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)), 0).label("credits")
-    ).join(JournalEntry, JournalLine.entry_id == JournalEntry.id)\
-     .filter(JournalEntry.tenant_id == tenant_id, JournalEntry.entry_date >= prep.financial_year_start, JournalEntry.entry_date <= closing_date)\
-     .group_by(JournalLine.account_id).all()
-
-    movement_map = {row.account_id: (row.debits, row.credits) for row in movements}
-
-    closing_lines = []
-    total_debits = Decimal("0.00")
-    total_credits = Decimal("0.00")
-
-    for account in accounts:
-        debits, credits = movement_map.get(account.id, (Decimal("0.00"), Decimal("0.00")))
-        if account.account_type == "REVENUE":
-            bal = credits - debits
-            if bal != 0:
-                if bal > 0:
-                    closing_lines.append(JournalLine(
-                        account_id=account.id,
-                        amount=abs(bal),
-                        direction="DEBIT",
-                        narration=f"Closing entry: Revenue '{account.name}' to Retained Earnings"
-                    ))
-                    total_debits += abs(bal)
-                else:
-                    closing_lines.append(JournalLine(
-                        account_id=account.id,
-                        amount=abs(bal),
-                        direction="CREDIT",
-                        narration=f"Closing entry: Revenue '{account.name}' to Retained Earnings"
-                    ))
-                    total_credits += abs(bal)
-        elif account.account_type == "EXPENSE":
-            bal = debits - credits
-            if bal != 0:
-                if bal > 0:
-                    closing_lines.append(JournalLine(
-                        account_id=account.id,
-                        amount=abs(bal),
-                        direction="CREDIT",
-                        narration=f"Closing entry: Expense '{account.name}' to Retained Earnings"
-                    ))
-                    total_credits += abs(bal)
-                else:
-                    closing_lines.append(JournalLine(
-                        account_id=account.id,
-                        amount=abs(bal),
-                        direction="DEBIT",
-                        narration=f"Closing entry: Expense '{account.name}' to Retained Earnings"
-                    ))
-                    total_debits += abs(bal)
-
-    # 3. Post net profit/loss to Retained Earnings
-    resolver = AccountResolver(db, tenant_id)
-    retained_account_id = resolver.resolve("equity.retained")
-
-    net_profit = prep.net_profit
-    if net_profit != 0:
-        if net_profit > 0:
-            closing_lines.append(JournalLine(
-                account_id=retained_account_id,
-                amount=abs(net_profit),
-                direction="CREDIT",
-                narration="Closing entry: Net Profit to Retained Earnings"
-            ))
-            total_credits += abs(net_profit)
-        else:
-            closing_lines.append(JournalLine(
-                account_id=retained_account_id,
-                amount=abs(net_profit),
-                direction="DEBIT",
-                narration="Closing entry: Net Loss to Retained Earnings"
-            ))
-            total_debits += abs(net_profit)
-
-    # Validate double entry balancing
-    if abs(total_debits - total_credits) > Decimal("0.01") and len(closing_lines) > 0:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Closing entry out of balance. Debits ({total_debits}) != Credits ({total_credits})."
-        )
-
-    entry_id = uuid.uuid4()
-    ref_num = f"YEC-{closing_date.year}-{(closing_date.year + 1) % 100:02d}"
-
-    journal_entry = None
-    if len(closing_lines) >= 2:
-        journal_entry = JournalEntry(
-            id=entry_id,
-            tenant_id=tenant_id,
-            entry_date=closing_date,
-            reference_number=ref_num,
-            description=f"Year-End closing journal entry for FY {prep.financial_year_start.year}-{closing_date.year % 100:02d}",
-            source_type="YEAR_END",
-            source_id=entry_id,
-            is_locked=True,
-            lines=closing_lines
-        )
-        db.add(journal_entry)
-        db.flush()
-        affected = {line.account_id for line in closing_lines}
-        update_account_balances(db, tenant_id, affected)
-
-    # 5. Lock Accounting Period
-    period_name = f"FY {prep.financial_year_start.year}-{closing_date.year % 100:02d}"
-    period = db.query(AccountingPeriod).filter(
-        AccountingPeriod.tenant_id == tenant_id,
-        AccountingPeriod.period_name == period_name
-    ).first()
-
-    if not period:
-        period = AccountingPeriod(
-            tenant_id=tenant_id,
-            period_name=period_name,
-            start_date=prep.financial_year_start,
-            end_date=closing_date,
-            is_closed=True
-        )
-        db.add(period)
-    else:
-        period.is_closed = True
-
-    # 6. Update Tenant's financial_year_start to closing_date + 1 day
-    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    from datetime import timedelta
-    next_fy_start = closing_date + timedelta(days=1)
-    tenant.financial_year_start = next_fy_start
-
-    db.commit()
-
-    if not journal_entry:
-        return JournalEntryResponse(
-            id=entry_id,
-            tenant_id=tenant_id,
-            entry_date=closing_date,
-            reference_number=ref_num,
-            description="Empty Year-End closing entry (no activity)",
-            source_type="YEAR_END",
-            source_id=entry_id,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc),
-            lines=[]
-        )
-
-    lines_with_acc = db.query(
-        JournalLine.id,
-        JournalLine.account_id,
-        Account.name.label("account_name"),
-        Account.code.label("account_code"),
-        JournalLine.amount,
-        JournalLine.direction,
-        JournalLine.narration
-    ).join(Account, JournalLine.account_id == Account.id)\
-     .filter(JournalLine.entry_id == journal_entry.id, Account.deleted_at == None).all()
-
-    return JournalEntryResponse(
-        id=journal_entry.id,
-        tenant_id=journal_entry.tenant_id,
-        entry_date=journal_entry.entry_date,
-        reference_number=journal_entry.reference_number,
-        description=journal_entry.description,
-        source_type=journal_entry.source_type,
-        source_id=journal_entry.source_id,
-        created_at=journal_entry.created_at,
-        updated_at=journal_entry.updated_at,
-        lines=[
-            JournalLineResponse(
-                id=row.id,
-                account_id=row.account_id,
-                account_name=row.account_name,
-                account_code=row.account_code,
-                amount=row.amount,
-                direction=row.direction,
-                narration=row.narration
-            )
-            for row in lines_with_acc
-        ]
+    This legacy endpoint does NOT create the next financial year,
+    does NOT carry forward balances, and does NOT set FY status.
+    It is kept for backward compatibility only.
+    """
+    import warnings
+    warnings.warn(
+        "POST /api/v1/accounting/year-end/close is deprecated. "
+        "Use POST /api/v1/financial-years/{fy_id}/close instead.",
+        DeprecationWarning,
+        stacklevel=2,
     )
+
+    # Delegate to the proper FY close endpoint
+    from src.infrastructure.database.models import FinancialYear
+    from src.api.v1.financial_years import close_financial_year
+
+    fy = db.query(FinancialYear).filter(
+        FinancialYear.tenant_id == tenant_id,
+        FinancialYear.start_date <= payload.closing_date,
+        FinancialYear.end_date >= payload.closing_date,
+    ).first()
+    if not fy:
+        raise HTTPException(
+            status_code=404,
+            detail="No financial year found for the given closing date. Create a financial year first.",
+        )
+
+    return close_financial_year(fy_id=fy.id, db=db, tenant_id=tenant_id)
 

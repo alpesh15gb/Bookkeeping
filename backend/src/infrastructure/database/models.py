@@ -134,6 +134,7 @@ class Contact(Base):
     state_code = Column(String(2), nullable=False)
     is_active = Column(Boolean, nullable=False, default=True)
     opening_balance = Column(Numeric(15, 4), nullable=False, default=0)
+    credit_balance = Column(Numeric(15, 4), nullable=False, default=0)
     custom_fields = Column(JSON, nullable=False, default=dict)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)

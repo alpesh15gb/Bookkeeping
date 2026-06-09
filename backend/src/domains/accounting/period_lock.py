@@ -31,6 +31,24 @@ def validate_period_open(db: Session, tenant_id: uuid.UUID, entry_date: date) ->
             detail=f"Cannot post: Financial year '{closing_fy.name}' is being closed. Please try again after the close completes.",
         )
 
+    # FY boundary enforcement: reject entries dated before the current FY start
+    current_fy = db.query(FinancialYear).filter(
+        FinancialYear.tenant_id == tenant_id,
+        FinancialYear.status == "CURRENT",
+    ).first()
+
+    if current_fy:
+        if entry_date < current_fy.start_date:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Cannot post to {entry_date}: it falls before the current financial year '{current_fy.name}' ({current_fy.start_date} to {current_fy.end_date}).",
+            )
+        if entry_date > current_fy.end_date:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Cannot post to {entry_date}: it falls after the current financial year '{current_fy.name}' ({current_fy.start_date} to {current_fy.end_date}).",
+            )
+
     # Check AccountingPeriod
     closed = db.query(AccountingPeriod).filter(
         AccountingPeriod.tenant_id == tenant_id,

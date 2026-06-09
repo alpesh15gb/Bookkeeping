@@ -72,11 +72,19 @@ def create_payment_receipt(
             raise HTTPException(status_code=400, detail="Allocation amount must be greater than zero.")
         total_allocated += alloc.amount
     
-    if total_allocated != payload.amount:
+    # Allow total_allocated <= payment.amount (excess becomes credit balance on contact)
+    if total_allocated > payload.amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Sum of allocations ({total_allocated}) must equal payment amount ({payload.amount})."
+            detail=f"Sum of allocations ({total_allocated}) cannot exceed payment amount ({payload.amount})."
         )
+
+    contact = db.query(Contact).filter(
+        Contact.id == payload.contact_id,
+        Contact.tenant_id == tenant_id
+    ).with_for_update().first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found.")
 
     invoice_ids = [alloc.invoice_id for alloc in payload.allocations]
     locked_invoices = db.query(Invoice).filter(
@@ -114,6 +122,11 @@ def create_payment_receipt(
             amount=alloc.amount
         )
         db_allocations.append(db_alloc)
+
+    # Advance payment: excess becomes credit balance on contact
+    advance_amount = payload.amount - total_allocated
+    if advance_amount > 0:
+        contact.credit_balance = (contact.credit_balance or Decimal("0.0000")) + advance_amount
 
     payment = Payment(
         tenant_id=tenant_id,
@@ -326,11 +339,17 @@ def create_vendor_payment(
         db_allocations.append(db_alloc)
         total_allocated += alloc.amount
 
-    if total_allocated != payload.amount:
+    # Allow total_allocated <= payment.amount (excess becomes credit balance on contact)
+    if total_allocated > payload.amount:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Sum of allocations ({total_allocated}) must equal payment amount ({payload.amount})."
+            detail=f"Sum of allocations ({total_allocated}) cannot exceed payment amount ({payload.amount})."
         )
+
+    # Advance payment: excess becomes credit balance on vendor contact
+    advance_amount = payload.amount - total_allocated
+    if advance_amount > 0:
+        contact.credit_balance = (contact.credit_balance or Decimal("0.0000")) + advance_amount
 
     payment = BillPayment(
         tenant_id=tenant_id,
