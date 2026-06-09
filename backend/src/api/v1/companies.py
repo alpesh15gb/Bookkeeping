@@ -552,12 +552,9 @@ def request_purge_otp(
     _, html_body = purge_otp_email(otp, str(tenant_id), user_name=current_user.full_name or "User")
     msg.attach(MIMEText(html_body, "html"))
 
+    from src.common.email_helper import send_email_smtp
     try:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                server.starttls()
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.send_message(msg)
+        send_email_smtp(msg)
     except Exception as e:
         logger.error(f"Failed to send purge OTP email to {current_user.email}: {e}")
         raise HTTPException(

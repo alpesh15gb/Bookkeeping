@@ -4,8 +4,14 @@ All outbound SMTP emails should go through helpers here so branding is consisten
 """
 import base64
 import os
+import smtplib
+import logging
 from pathlib import Path
+from email.mime.multipart import MIMEMultipart
 
+from src.core.config import settings
+
+logger = logging.getLogger(__name__)
 _logo_b64: str | None = None
 
 
@@ -163,3 +169,38 @@ def invoice_email(invoice_number: str, company_name: str = "ApexBooks") -> tuple
       </p>
     """
     return (f"Invoice #{invoice_number} - {company_name}", _wrap("Invoice", body))
+
+
+# ── Shared SMTP sender ────────────────────────────────────────
+
+def send_email_smtp(msg: MIMEMultipart, timeout: int = 30) -> None:
+    """
+    Sends an email via SMTP with proper TLS, EHLO, and timeout handling.
+    Raises RuntimeError on failure so callers can decide to retry.
+    """
+    if not settings.SMTP_HOST:
+        raise RuntimeError("SMTP_HOST is not configured.")
+
+    smtp: smtplib.SMTP | None = None
+    try:
+        smtp = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=timeout)
+        smtp.ehlo()
+        if settings.SMTP_PORT == 587:
+            smtp.starttls()
+            smtp.ehlo()
+        if settings.SMTP_USER and settings.SMTP_PASSWORD:
+            smtp.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
+        smtp.send_message(msg)
+        logger.info("SMTP email sent successfully")
+    except smtplib.SMTPException as exc:
+        logger.error("SMTP send failed: %s", exc)
+        raise RuntimeError(f"SMTP send failed: {exc}") from exc
+    except Exception as exc:
+        logger.error("Unexpected SMTP error: %s", exc)
+        raise RuntimeError(f"Unexpected SMTP error: {exc}") from exc
+    finally:
+        if smtp is not None:
+            try:
+                smtp.quit()
+            except Exception:
+                pass

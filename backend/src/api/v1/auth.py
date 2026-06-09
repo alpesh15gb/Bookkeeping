@@ -452,7 +452,7 @@ def forgot_password(
                 server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.send_message(msg)
     except Exception:
-        pass
+        logger.exception("Failed to send password reset email")
 
     _log_audit(db, "password.reset.requested", user_id=str(user.id), request=request)
     db.commit()

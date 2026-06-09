@@ -91,7 +91,14 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
                       onPressed: () => setState(() => _obscureNew = !_obscureNew),
                     ),
                   ),
-                  validator: (v) => (v == null || v.length < 6) ? 'Minimum 6 characters' : null,
+                  validator: (v) {
+                    if (v == null || v.length < 8) return 'Minimum 8 characters';
+                    if (!RegExp(r'[A-Z]').hasMatch(v)) return 'Must contain an uppercase letter';
+                    if (!RegExp(r'[a-z]').hasMatch(v)) return 'Must contain a lowercase letter';
+                    if (!RegExp(r'\d').hasMatch(v)) return 'Must contain a digit';
+                    if (!RegExp(r'[!@#$%^&*(),.?":{}|<>\-_=+\[\]\\/]').hasMatch(v)) return 'Must contain a special character';
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
                 TextFormField(

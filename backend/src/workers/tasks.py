@@ -4,47 +4,38 @@ import logging
 from typing import Dict, Any
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from celery import Celery
 from celery.schedules import crontab
 
 from src.core.config import settings
+from src.core.celery import celery_app
 
 logger = logging.getLogger(__name__)
 
-celery_app = Celery("accounting_tasks", broker=settings.REDIS_URL, backend=settings.REDIS_URL)
 
-celery_app.conf.update(
-    task_serializer="json",
-    accept_content=["json"],
-    result_serializer="json",
-    timezone="Asia/Kolkata",
-    enable_utc=True,
-    task_acks_late=True,
-    task_reject_on_worker_lost=True,
-    broker_connection_retry_on_startup=True,
-    beat_schedule={
-        "send-overdue-invoice-reminders": {
-            "task": "tasks.send_overdue_invoice_reminders",
-            "schedule": crontab(hour=9, minute=0),  # daily at 9 AM IST
-        },
-        "gst-filing-deadline-alerts": {
-            "task": "tasks.send_gst_filing_alerts",
-            "schedule": crontab(day_of_month="10,20", hour=10, minute=0),  # monthly on 10th, 20th
-        },
-        "generate-monthly-aging-reports": {
-            "task": "tasks.generate_monthly_aging_report",
-            "schedule": crontab(day_of_month=1, hour=2, minute=0),  # 1st of each month at 2 AM
-        },
-        "cleanup-expired-invitations": {
-            "task": "tasks.cleanup_expired_invitations",
-            "schedule": crontab(hour=3, minute=0),  # daily at 3 AM IST
-        },
-        "send-daily-business-summary": {
-            "task": "tasks.send_daily_business_summary",
-            "schedule": crontab(hour=21, minute=0),  # daily at 9 PM IST
-        },
+# Schedule updates to the imported app (idempotent if already set)
+celery_app.conf.beat_schedule = celery_app.conf.beat_schedule or {}
+celery_app.conf.beat_schedule.update({
+    "send-overdue-invoice-reminders": {
+        "task": "tasks.send_overdue_invoice_reminders",
+        "schedule": crontab(hour=9, minute=0),
     },
-)
+    "gst-filing-deadline-alerts": {
+        "task": "tasks.send_gst_filing_alerts",
+        "schedule": crontab(day_of_month="10,20", hour=10, minute=0),
+    },
+    "generate-monthly-aging-reports": {
+        "task": "tasks.generate_monthly_aging_report",
+        "schedule": crontab(day_of_month=1, hour=2, minute=0),
+    },
+    "cleanup-expired-invitations": {
+        "task": "tasks.cleanup_expired_invitations",
+        "schedule": crontab(hour=3, minute=0),
+    },
+    "send-daily-business-summary": {
+        "task": "tasks.send_daily_business_summary",
+        "schedule": crontab(hour=21, minute=0),
+    },
+})
 
 
 @celery_app.task(bind=True, name="tasks.submit_e_invoice_to_irp", max_retries=3, default_retry_delay=60)
@@ -128,15 +119,14 @@ def generate_invoice_pdf(invoice_id: str) -> str:
         raise
 
 
-@celery_app.task(name="tasks.send_invoice_email")
-def send_invoice_email(invoice_id: str, recipient_email: str) -> bool:
+@celery_app.task(bind=True, name="tasks.send_invoice_email", max_retries=3, default_retry_delay=60, time_limit=300, soft_time_limit=280)
+def send_invoice_email(self, invoice_id: str, recipient_email: str) -> bool:
     """Sends the generated PDF invoice to the customer via SMTP."""
     logger.info(f"Sending invoice email to {recipient_email} for Invoice ID: {invoice_id}")
     try:
-        import smtplib
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
-        from src.common.email_helper import invoice_email
+        from src.common.email_helper import invoice_email, send_email_smtp
 
         subject, html_body = invoice_email(invoice_id)
         msg = MIMEMultipart()
@@ -145,17 +135,16 @@ def send_invoice_email(invoice_id: str, recipient_email: str) -> bool:
         msg["Subject"] = subject
         msg.attach(MIMEText(html_body, "html"))
 
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-            if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                server.starttls()
-                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-            server.send_message(msg)
-
+        send_email_smtp(msg)
         logger.info(f"Invoice email dispatched to {recipient_email}")
         return True
-    except Exception as e:
-        logger.error(f"Failed to send invoice email: {e}")
-        return False
+    except Exception as exc:
+        logger.error(f"Failed to send invoice email: {exc}")
+        try:
+            raise self.retry(exc=exc, countdown=2 ** self.request.retries * 60)
+        except self.MaxRetriesExceededError:
+            logger.error(f"Max retries exceeded for invoice email to {recipient_email}")
+            return False
 
 
 # ---------------------------------------------------------------------------
@@ -205,11 +194,7 @@ def send_overdue_invoice_reminders():
                 msg["Subject"] = subject
                 msg.attach(MIMEText(body, "html"))
                 try:
-                    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                        if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                            server.starttls()
-                            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                        server.send_message(msg)
+                    send_email_smtp(msg)
                     logger.info(f"Overdue reminder sent to {contact.email} for invoice {invoice.invoice_number}")
                 except Exception as e:
                     logger.error(f"Failed to send reminder to {contact.email}: {e}")
@@ -257,11 +242,7 @@ def send_gst_filing_alerts():
                         msg["Subject"] = f"GST Filing Alert — {tenant.legal_name}"
                         msg.attach(MIMEText(body, "html"))
                         try:
-                            with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                                if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                                    server.starttls()
-                                    server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                                server.send_message(msg)
+                            send_email_smtp(msg)
                         except Exception as e:
                             logger.error(f"Failed to send GST alert to {owner.email}: {e}")
         finally:
@@ -311,11 +292,7 @@ def generate_monthly_aging_report():
                     msg["Subject"] = f"Monthly Aging Report — {tenant.legal_name}"
                     msg.attach(MIMEText(body, "html"))
                     try:
-                        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                            if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                                server.starttls()
-                                server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                            server.send_message(msg)
+                        send_email_smtp(msg)
                         logger.info(f"Aging report sent to {owner.email}")
                     except Exception as e:
                         logger.error(f"Failed to send aging report to {owner.email}: {e}")
@@ -414,11 +391,7 @@ def send_daily_business_summary():
                 msg["Subject"] = f"Daily Business Summary — {tenant.legal_name}"
                 msg.attach(MIMEText(body, "html"))
                 try:
-                    with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT) as server:
-                        if settings.SMTP_USER and settings.SMTP_PASSWORD:
-                            server.starttls()
-                            server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
-                        server.send_message(msg)
+                    send_email_smtp(msg)
                     logger.info(f"Daily summary sent to {owner.email}")
                 except Exception as e:
                     logger.error(f"Failed to send daily summary to {owner.email}: {e}")
