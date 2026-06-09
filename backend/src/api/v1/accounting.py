@@ -757,7 +757,7 @@ def prepare_year_end(
     )
 
 
-@router.post("/year-end/close", response_model=JournalEntryResponse)
+@router.post("/year-end/close")
 def close_year_end(
     payload: YearEndCloseRequest,
     db: Session = Depends(get_db_session),
@@ -765,9 +765,8 @@ def close_year_end(
 ):
     """DEPRECATED: Use POST /api/v1/financial-years/{fy_id}/close instead.
 
-    This legacy endpoint does NOT create the next financial year,
-    does NOT carry forward balances, and does NOT set FY status.
-    It is kept for backward compatibility only.
+    This legacy endpoint is kept for backward compatibility.
+    It auto-creates a FinancialYear if none exists, then delegates to the proper close.
     """
     import warnings
     warnings.warn(
@@ -777,20 +776,33 @@ def close_year_end(
         stacklevel=2,
     )
 
-    # Delegate to the proper FY close endpoint
     from src.infrastructure.database.models import FinancialYear
     from src.api.v1.financial_years import close_financial_year
 
+    closing_date = payload.closing_date
+    fy_start = closing_date.replace(year=closing_date.year - 1) + __import__("datetime").timedelta(days=1)
+    fy_name = f"{fy_start.year}-{closing_date.year % 100:02d}"
+
     fy = db.query(FinancialYear).filter(
         FinancialYear.tenant_id == tenant_id,
-        FinancialYear.start_date <= payload.closing_date,
-        FinancialYear.end_date >= payload.closing_date,
+        FinancialYear.start_date <= closing_date,
+        FinancialYear.end_date >= closing_date,
     ).first()
+
     if not fy:
-        raise HTTPException(
-            status_code=404,
-            detail="No financial year found for the given closing date. Create a financial year first.",
+        fy = FinancialYear(
+            id=uuid.uuid4(),
+            tenant_id=tenant_id,
+            name=fy_name,
+            start_date=fy_start,
+            end_date=closing_date,
+            status="CURRENT",
+            is_current=True,
+            transaction_count=0,
+            created_by=tenant_id,
         )
+        db.add(fy)
+        db.flush()
 
     return close_financial_year(fy_id=fy.id, db=db, tenant_id=tenant_id)
 

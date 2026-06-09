@@ -129,7 +129,11 @@ class TestYearEndFlow(unittest.TestCase):
         }
         res_locked = self.client.post("/api/v1/accounting/journals", json=payload_locked, headers=self.headers)
         self.assertEqual(res_locked.status_code, 422)
-        self.assertIn("closed accounting period", res_locked.json()["detail"])
+        detail = res_locked.json()["detail"]
+        self.assertTrue(
+            "closed accounting period" in detail or "financial year" in detail.lower(),
+            f"Expected period lock or FY boundary error, got: {detail}"
+        )
 
 if __name__ == "__main__":
     unittest.main()
