@@ -601,6 +601,7 @@ class _ShellViewState extends State<ShellView> {
         backgroundColor: AppColors.bgSidebar,
         foregroundColor: AppColors.textWhite,
         elevation: 0,
+        toolbarHeight: 56,
         leading: Builder(
           builder: (ctx) => IconButton(
             icon: const Icon(Icons.menu_rounded, size: 22),
@@ -636,21 +637,25 @@ class _ShellViewState extends State<ShellView> {
         user: user,
         onLogout: () => context.read<AuthProvider>().logout(),
       ),
-      body: Column(
-        children: [
-          if (!syncManager.isOnline || syncManager.pendingCount > 0)
-            _OfflineBanner(syncManager: syncManager),
-          const _HistoricalYearBanner(),
-          Expanded(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 200),
-              child: KeyedSubtree(
-                key: ValueKey('${_selectedIndex}_${authProvider.activeTenantId ?? ''}_${_activeFYLabel(context)}'),
-                child: _currentView,
+      body: SafeArea(
+        top: true,
+        bottom: false,
+        child: Column(
+          children: [
+            if (!syncManager.isOnline || syncManager.pendingCount > 0)
+              _OfflineBanner(syncManager: syncManager),
+            const _HistoricalYearBanner(),
+            Expanded(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                child: KeyedSubtree(
+                  key: ValueKey('${_selectedIndex}_${authProvider.activeTenantId ?? ''}_${_activeFYLabel(context)}'),
+                  child: _currentView,
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
       floatingActionButton: AppSpeedDial(
         options: [
@@ -698,7 +703,16 @@ class _ShellViewState extends State<ShellView> {
       ),
       bottomNavigationBar: Container(
         padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom),
-        color: AppColors.bgSurface,
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 8,
+              offset: const Offset(0, -2),
+            ),
+          ],
+        ),
         child: BottomNavigationBar(
           currentIndex: _mobileBottomNavIndex,
           onTap: _onMobileBottomNavTap,
