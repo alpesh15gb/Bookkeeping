@@ -18,6 +18,7 @@ import 'package:flutter_client/providers/delivery_challan_provider.dart';
 import 'package:flutter_client/providers/inventory_adjustment_provider.dart';
 import 'package:flutter_client/providers/misc_provider.dart';
 import 'package:flutter_client/providers/sales_analytics_provider.dart';
+import 'package:flutter_client/providers/cash_book_provider.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/providers/financial_year_provider.dart';
@@ -55,6 +56,7 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => InventoryAdjustmentProvider()),
         ChangeNotifierProvider(create: (_) => MiscProvider()),
         ChangeNotifierProvider(create: (_) => SalesAnalyticsProvider()),
+        ChangeNotifierProvider(create: (_) => CashBookProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => FinancialYearProvider()),
         ChangeNotifierProvider(create: (_) => SyncManager()),

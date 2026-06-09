@@ -1341,3 +1341,119 @@ class PartyStatementService:
             summary=summary
         )
 
+
+# ---------------------------------------------------------------------------
+# Cash Book Report
+# ---------------------------------------------------------------------------
+
+class CashBookService:
+    @staticmethod
+    def get(db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date) -> CashBookResponse:
+        from src.schemas.report_schemas import CashBookResponse, CashBookRow, CashBookSummary, CashBookTaxSummary
+        from src.infrastructure.database.models import Expense
+
+        cash_accounts = db.query(Account).filter(
+            Account.tenant_id == tenant_id,
+            Account.deleted_at == None,
+            Account.code.like("CASH%")
+        ).all()
+        cash_account_ids = [a.id for a in cash_accounts]
+        
+        op_bal_base = sum(a.opening_balance for a in cash_accounts)
+        
+        if not cash_account_ids:
+            return CashBookResponse(
+                period_start=start_date,
+                period_end=end_date,
+                opening_balance=ZERO,
+                inflows=[],
+                outflows=[],
+                summary=CashBookSummary(cash_inflow=ZERO, cash_outflow=ZERO, closing_balance=ZERO, actual_cash_in_hand=ZERO, difference=ZERO),
+                tax_summary=CashBookTaxSummary(tax_paid=ZERO, tax_received=ZERO, tax_payable=ZERO)
+            )
+
+        past_journals = db.query(
+            func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)).label("debits"),
+            func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)).label("credits")
+        ).join(JournalEntry, JournalLine.entry_id == JournalEntry.id).filter(
+            JournalLine.account_id.in_(cash_account_ids),
+            JournalEntry.entry_date < start_date
+        ).first()
+        
+        op_debits = _q(past_journals.debits if past_journals and past_journals.debits else 0)
+        op_credits = _q(past_journals.credits if past_journals and past_journals.credits else 0)
+        opening_balance = _q(op_bal_base) + op_debits - op_credits
+        
+        lines = db.query(JournalLine, JournalEntry).join(
+            JournalEntry, JournalLine.entry_id == JournalEntry.id
+        ).filter(
+            JournalLine.account_id.in_(cash_account_ids),
+            JournalEntry.entry_date.between(start_date, end_date)
+        ).order_by(JournalEntry.entry_date.asc(), JournalEntry.created_at.asc()).all()
+        
+        inflows = []
+        outflows = []
+        total_inflow = ZERO
+        total_outflow = ZERO
+        tax_paid = ZERO
+        tax_received = ZERO
+
+        for jl, je in lines:
+            amt = _q(jl.amount)
+            tax_amt = ZERO
+            inv_amt = amt
+            
+            if je.source_type == "INVOICE" and je.source_id:
+                inv = db.query(Invoice).filter_by(id=je.source_id).first()
+                if inv:
+                    tax_amt = _q(inv.cgst_amount) + _q(inv.sgst_amount) + _q(inv.igst_amount) + _q(inv.cess_amount)
+                    inv_amt = _q(inv.total)
+            elif je.source_type == "BILL" and je.source_id:
+                bill = db.query(Bill).filter_by(id=je.source_id).first()
+                if bill:
+                    tax_amt = _q(bill.cgst_amount) + _q(bill.sgst_amount) + _q(bill.igst_amount) + _q(bill.cess_amount)
+                    inv_amt = _q(bill.total)
+            elif je.source_type == "EXPENSE" and je.source_id:
+                exp = db.query(Expense).filter_by(id=je.source_id).first()
+                if exp:
+                    tax_amt = _q(exp.cgst_amount) + _q(exp.sgst_amount) + _q(exp.igst_amount) + _q(exp.cess_amount)
+                    inv_amt = _q(exp.total)
+
+            row = CashBookRow(
+                date=je.entry_date,
+                transaction_details=je.description or je.reference_number or "Cash Transaction",
+                invoice_amount=inv_amt if tax_amt > ZERO else None,
+                tax_amount=tax_amt if tax_amt > ZERO else None,
+                amount=amt
+            )
+
+            if jl.direction == "DEBIT":
+                inflows.append(row)
+                total_inflow += amt
+                tax_received += tax_amt
+            else:
+                outflows.append(row)
+                total_outflow += amt
+                tax_paid += tax_amt
+                
+        closing_balance = opening_balance + total_inflow - total_outflow
+        
+        return CashBookResponse(
+            period_start=start_date,
+            period_end=end_date,
+            opening_balance=opening_balance,
+            inflows=inflows,
+            outflows=outflows,
+            summary=CashBookSummary(
+                cash_inflow=total_inflow,
+                cash_outflow=total_outflow,
+                closing_balance=closing_balance,
+                actual_cash_in_hand=closing_balance,
+                difference=ZERO
+            ),
+            tax_summary=CashBookTaxSummary(
+                tax_paid=tax_paid,
+                tax_received=tax_received,
+                tax_payable=max(ZERO, tax_received - tax_paid)
+            )
+        )

@@ -21,6 +21,9 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
   final TextEditingController _descCtrl = TextEditingController();
   bool _isSaving = false;
 
+  final ScrollController _scrollController = ScrollController();
+  final List<GlobalKey> _fieldKeys = [];
+
   final List<_JournalFormLine> _lines = [];
 
   @override
@@ -36,6 +39,8 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
     _lines.add(_JournalFormLine(direction: 'DEBIT'));
     _lines.add(_JournalFormLine(direction: 'CREDIT'));
 
+    _fieldKeys.addAll([GlobalKey(), GlobalKey(), GlobalKey(), GlobalKey(), GlobalKey()]);
+
     Future.microtask(() {
       context.read<AccountingProvider>().fetchAccounts();
     });
@@ -49,6 +54,7 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
     for (final line in _lines) {
       line.dispose();
     }
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -92,7 +98,16 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
       .fold(0.0, (sum, l) => sum + (double.tryParse(l.amountCtrl.text) ?? 0.0));
 
   void _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(
+          0,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
+      }
+      return;
+    }
 
     // Validation: check if balanced
     final debits = double.parse(_totalDebits.toStringAsFixed(2));
@@ -157,18 +172,53 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
       backgroundColor: AppColors.bgLight,
       appBar: AppBar(
         title: const Text('New Journal Entry'),
-        actions: [
-          TextButton(
-            onPressed: _isSaving ? null : _save,
-            child: _isSaving
-                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                : const Text('SAVE'),
+      ),
+      bottomNavigationBar: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          border: const Border(top: BorderSide(color: AppColors.border)),
+          boxShadow: const [
+            BoxShadow(
+              color: Color(0x0A000000),
+              blurRadius: 8,
+              offset: Offset(0, -2),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          top: false,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              Text(
+                'Balance: ${isBalanced ? 'Balanced' : 'Out of Balance'}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isBalanced ? AppColors.success : AppColors.error,
+                ),
+              ),
+              const Spacer(),
+              ElevatedButton(
+                onPressed: _isSaving ? null : _save,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.brandNavy,
+                  foregroundColor: AppColors.textWhite,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                ),
+                child: _isSaving
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Save Entry', style: TextStyle(fontSize: 13)),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
       body: Form(
         key: _formKey,
         child: ListView(
+          controller: _scrollController,
           padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
           children: [
             // Details Card
@@ -282,9 +332,10 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
                               compact: true,
                               onChanged: (_) => setState(() {}),
                               validator: (v) {
-                                if (v == null || v.isEmpty) return 'Amt';
+                                if (v == null || v.isEmpty) return 'Amount is required';
                                 final amt = double.tryParse(v);
-                                if (amt == null || amt <= 0) return 'Invalid';
+                                if (amt == null) return 'Enter a valid number';
+                                if (amt <= 0) return 'Amount must be greater than zero';
                                 return null;
                               },
                             ),

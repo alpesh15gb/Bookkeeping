@@ -231,6 +231,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   bool _hasRecoveredDraft = false;
   bool _isDirty = false;
 
+  final ScrollController _scrollController = ScrollController();
+
   Future<bool> _onWillPop() async {
     if (!_isDirty) return true;
     final result = await showDialog<bool>(
@@ -545,6 +547,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     for (final l in _lines) {
       l.dispose();
     }
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -895,7 +898,12 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   void _save() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      if (_scrollController.hasClients) {
+        _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+      }
+      return;
+    }
     if (_selectedContact == null && !widget.config.hasLinkedInvoice) {
       _showSnack('Please select a contact', error: true);
       return;
@@ -1381,6 +1389,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         isSaving: _isSaving,
       ),
       body: SingleChildScrollView(
+        controller: _scrollController,
         padding: const EdgeInsets.all(16),
         child: bodyContent,
       ),
@@ -1702,6 +1711,17 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               ),
             ),
           ),
+          // Scroll hint for horizontal overflow
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 3),
+            child: const Row(
+              children: [
+                Icon(Icons.swipe_right_alt_rounded, size: 11, color: AppColors.textMuted),
+                SizedBox(width: 3),
+                Text('Scroll right for more columns', style: TextStyle(fontSize: 9, color: AppColors.textMuted, fontStyle: FontStyle.italic)),
+              ],
+            ),
+          ),
           if (_lines.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
@@ -1777,9 +1797,10 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               textAlign: TextAlign.center,
                               compact: true,
                               validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Req';
+                                if (v == null || v.trim().isEmpty) return 'Required';
                                 final qty = double.tryParse(v);
-                                if (qty == null || qty <= 0) return 'Invalid';
+                                if (qty == null) return 'Enter a valid number';
+                                if (qty <= 0) return 'Qty must be > 0';
                                 return null;
                               },
                               onChanged: (v) {
@@ -1813,9 +1834,10 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               textAlign: TextAlign.right,
                               compact: true,
                               validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Req';
+                                if (v == null || v.trim().isEmpty) return 'Required';
                                 final rate = double.tryParse(v);
-                                if (rate == null || rate < 0) return 'Invalid';
+                                if (rate == null) return 'Enter a valid number';
+                                if (rate < 0) return 'Rate cannot be negative';
                                 return null;
                               },
                               onChanged: (v) {
@@ -1835,7 +1857,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               validator: (v) {
                                 if (v != null && v.trim().isNotEmpty) {
                                   final disc = double.tryParse(v);
-                                  if (disc == null || disc < 0 || disc > 100) return '0-100';
+                                  if (disc == null) return 'Enter a valid number';
+                                  if (disc < 0 || disc > 100) return 'Discount must be 0-100%';
                                 }
                                 return null;
                               },
@@ -2368,9 +2391,10 @@ class _LineItemCardState extends State<_LineItemCard> {
                         widget.onChanged();
                       },
                       validator: (v) {
-                        if (v == null || v.isEmpty) return 'Req';
+                        if (v == null || v.isEmpty) return 'Required';
                         final q = double.tryParse(v);
-                        if (q == null || q <= 0) return 'Invalid';
+                        if (q == null) return 'Valid number';
+                        if (q <= 0) return 'Must be > 0';
                         return null;
                       },
                     ),
@@ -2384,9 +2408,10 @@ class _LineItemCardState extends State<_LineItemCard> {
                         widget.onChanged();
                       },
                       validator: (v) {
-                        if (v == null || v.isEmpty) return 'Req';
+                        if (v == null || v.isEmpty) return 'Required';
                         final r = double.tryParse(v);
-                        if (r == null || r < 0) return 'Invalid';
+                        if (r == null) return 'Valid number';
+                        if (r < 0) return 'Cannot be negative';
                         return null;
                       },
                     ),
@@ -2401,7 +2426,8 @@ class _LineItemCardState extends State<_LineItemCard> {
                       validator: (v) {
                         if (v == null || v.isEmpty) return null;
                         final d = double.tryParse(v);
-                        if (d == null || d < 0 || d > 100) return '0-100';
+                        if (d == null) return 'Valid number';
+                        if (d < 0 || d > 100) return 'Must be 0-100%';
                         return null;
                       },
                     ),

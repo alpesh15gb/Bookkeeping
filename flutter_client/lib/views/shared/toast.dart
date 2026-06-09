@@ -21,12 +21,14 @@ class AppToast {
     );
   }
 
-  static void error(BuildContext context, String message) {
+  static void error(BuildContext context, String message, {VoidCallback? onRetry}) {
     _show(
       context,
       message: message,
       backgroundColor: AppColors.error,
       icon: Icons.error_outline_rounded,
+      duration: const Duration(seconds: 5),
+      onRetry: onRetry,
     );
   }
 
@@ -53,6 +55,8 @@ class AppToast {
     required String message,
     required Color backgroundColor,
     required IconData icon,
+    Duration? duration,
+    VoidCallback? onRetry,
   }) {
     final messenger = ScaffoldMessenger.of(context);
     messenger.hideCurrentSnackBar();
@@ -79,8 +83,15 @@ class AppToast {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        duration: const Duration(seconds: 3),
+        duration: duration ?? const Duration(seconds: 3),
         margin: const EdgeInsets.all(AppSpacing.lg),
+        action: onRetry != null
+            ? SnackBarAction(
+                label: 'RETRY',
+                textColor: AppColors.textWhite,
+                onPressed: onRetry,
+              )
+            : null,
       ),
     );
   }

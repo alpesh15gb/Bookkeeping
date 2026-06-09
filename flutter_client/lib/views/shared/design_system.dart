@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter_client/core/constants.dart';
-import 'package:flutter_client/views/shared/app_components.dart' show StatusBadge, LoadingState, ErrorState;
+import 'package:flutter_client/views/shared/app_components.dart' show StatusBadge, LoadingState, ErrorState, EmptyState;
 
 // ═══════════════════════════════════════════════════════════════════
 // APEXBOOKS DESIGN SYSTEM v4.0
@@ -387,45 +387,50 @@ class AppButton extends StatelessWidget {
         break;
     }
 
-    return Material(
-      color: bg,
-      borderRadius: AppRadius.button,
-      child: InkWell(
-        onTap: isLoading ? null : onTap,
+    return Semantics(
+      button: true,
+      enabled: !isLoading,
+      label: '$label button${isLoading ? ', loading' : ''}',
+      child: Material(
+        color: bg,
         borderRadius: AppRadius.button,
-        child: Container(
-          padding: padding,
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: AppRadius.button,
-            border: border,
-          ),
-          child: isLoading
-              ? SizedBox(
-                  width: iconSize,
-                  height: iconSize,
-                  child: CircularProgressIndicator(strokeWidth: 2, color: fg),
-                )
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    if (icon != null) ...[
-                      Icon(icon, size: iconSize, color: fg),
-                      const SizedBox(width: 6),
-                    ],
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: fontSize,
-                        fontWeight: effectiveVariant == AppButtonVariant.primary || effectiveVariant == AppButtonVariant.danger
-                            ? FontWeight.w600
-                            : FontWeight.w500,
-                        color: fg,
+        child: InkWell(
+          onTap: isLoading ? null : onTap,
+          borderRadius: AppRadius.button,
+          child: Container(
+            padding: padding,
+            decoration: BoxDecoration(
+              color: bg,
+              borderRadius: AppRadius.button,
+              border: border,
+            ),
+            child: isLoading
+                ? SizedBox(
+                    width: iconSize,
+                    height: iconSize,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: fg),
+                  )
+                : Row(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon, size: iconSize, color: fg),
+                        const SizedBox(width: 6),
+                      ],
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: fontSize,
+                          fontWeight: effectiveVariant == AppButtonVariant.primary || effectiveVariant == AppButtonVariant.danger
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          color: fg,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+          ),
         ),
       ),
     );
@@ -866,31 +871,12 @@ class AppEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 40, color: AppColors.border),
-            const SizedBox(height: 12),
-            Text(title, style: AppTextStyles.h3),
-            if (subtitle != null) ...[
-              const SizedBox(height: 4),
-              Text(subtitle!, style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
-            ],
-            if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: 16),
-              AppButton(
-                label: actionLabel!,
-                icon: Icons.add,
-                isPrimary: true,
-                onTap: onAction,
-              ),
-            ],
-          ],
-        ),
-      ),
+    return EmptyState(
+      icon: icon,
+      title: title,
+      subtitle: subtitle,
+      actionLabel: actionLabel,
+      onAction: onAction,
     );
   }
 }
@@ -1639,48 +1625,53 @@ class AppFilterChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isActive ? AppColors.brandNavy : AppColors.bgSurface,
-          borderRadius: AppRadius.pillBorder,
-          border: Border.all(
-            color: isActive ? AppColors.brandNavy : AppColors.borderInput,
-            width: 1,
-          ),
-          boxShadow: isActive ? AppShadows.glow : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: AppTextStyles.tabLabel.copyWith(
-                color: isActive ? AppColors.textWhite : AppColors.textSecondary,
-              ),
+    return Semantics(
+      button: true,
+      selected: isActive,
+      label: '$label${badgeText != null ? ', $badgeText items' : ''}',
+      child: GestureDetector(
+        onTap: onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isActive ? AppColors.brandNavy : AppColors.bgSurface,
+            borderRadius: AppRadius.pillBorder,
+            border: Border.all(
+              color: isActive ? AppColors.brandNavy : AppColors.borderInput,
+              width: 1,
             ),
-            if (badgeText != null) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isActive ? AppColors.goldAccent : AppColors.bgLight,
-                  borderRadius: BorderRadius.circular(10),
+            boxShadow: isActive ? AppShadows.glow : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: AppTextStyles.tabLabel.copyWith(
+                  color: isActive ? AppColors.textWhite : AppColors.textSecondary,
                 ),
-                child: Text(
-                  badgeText!,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: isActive ? AppColors.brandNavy : AppColors.textSecondary,
+              ),
+              if (badgeText != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: isActive ? AppColors.goldAccent : AppColors.bgLight,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    badgeText!,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: isActive ? AppColors.brandNavy : AppColors.textSecondary,
+                    ),
                   ),
                 ),
-              ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );

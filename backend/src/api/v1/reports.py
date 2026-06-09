@@ -1122,3 +1122,62 @@ def outstanding_pdf(
     )
 
 
+# ---------------------------------------------------------------------------
+# Cash Book
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/cash-book",
+    summary="Cash Book",
+    description="Returns the Cash Book tracking cash inflows and outflows."
+)
+def get_cash_book(
+    start_date: date = Query(..., description="Start date of the report"),
+    end_date: date = Query(..., description="End date of the report"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.domains.accounting.report_services import CashBookService
+    return CashBookService.get(db, tenant_id, start_date, end_date)
+
+@router.get("/cash-book/excel")
+def get_cash_book_excel(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from fastapi.responses import Response
+    from src.domains.accounting.report_services import CashBookService
+    from src.domains.accounting.cash_book_export import generate_cash_book_excel
+    
+    data = CashBookService.get(db, tenant_id, start_date, end_date)
+    excel_bytes = generate_cash_book_excel(data)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=CashBook_{start_date}_{end_date}.xlsx"}
+    )
+
+@router.get("/cash-book/pdf")
+def get_cash_book_pdf(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from fastapi.responses import Response
+    from src.domains.accounting.report_services import CashBookService
+    from src.domains.accounting.cash_book_export import generate_cash_book_pdf
+    from src.infrastructure.database.models import Tenant
+    
+    tenant = db.query(Tenant).filter_by(id=tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+    
+    data = CashBookService.get(db, tenant_id, start_date, end_date)
+    pdf_bytes = generate_cash_book_pdf(data, company_name)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=CashBook_{start_date}_{end_date}.pdf"}
+    )

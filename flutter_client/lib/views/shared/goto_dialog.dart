@@ -41,6 +41,7 @@ import 'package:flutter_client/views/reminders/reminder_list_view.dart';
 import 'package:flutter_client/views/returns/returns_list_view.dart';
 import 'package:flutter_client/views/settings/settings_view.dart';
 import 'package:flutter_client/views/sales_analytics/sales_analytics_view.dart';
+import 'package:flutter_client/views/reports/cash_book_view.dart';
 import 'package:flutter_client/views/accounting/year_end_view.dart';
 import 'package:flutter_client/views/financial_years/financial_years_manage_view.dart';
 
@@ -230,6 +231,13 @@ class _GoToDialogState extends State<GoToDialog> {
         icon: Icons.analytics_rounded,
         shellTabIndex: 5,
         builder: (_) => const SalesAnalyticsView(),
+      ),
+      GoToItem(
+        name: 'Cash Book Report',
+        category: 'Reports & Analytics',
+        icon: Icons.book_online_outlined,
+        shellTabIndex: 29,
+        builder: (_) => const CashBookView(),
       ),
       GoToItem(
         name: 'Audit Logs Logbook',

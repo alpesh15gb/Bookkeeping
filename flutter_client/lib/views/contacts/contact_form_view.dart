@@ -321,6 +321,7 @@ class _ContactFormViewState extends State<ContactFormView> {
                               keyboardType: TextInputType.phone,
                               decoration: const InputDecoration(
                                 labelText: 'Phone',
+                                hintText: '10-digit mobile number',
                                 prefixIcon: Icon(Icons.phone_outlined, size: 18),
                               ),
                             ),
@@ -351,6 +352,7 @@ class _ContactFormViewState extends State<ContactFormView> {
                                 textCapitalization: TextCapitalization.characters,
                                 decoration: InputDecoration(
                                   labelText: 'GSTIN',
+                                  hintText: '15-character GSTIN (e.g., 27AAPFU0939F1ZV)',
                                   prefixIcon: const Icon(Icons.pin_outlined, size: 18),
                                   suffixIcon: IconButton(
                                     icon: const Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
@@ -367,7 +369,7 @@ class _ContactFormViewState extends State<ContactFormView> {
                                 controller: _stateCodeController,
                                 decoration: const InputDecoration(labelText: 'State Code *'),
                                 maxLength: 2,
-                                validator: (v) => (v == null || v.length != 2) ? '2 chars' : null,
+                                validator: (v) => (v == null || v.length != 2) ? 'Must be 2 digits' : null,
                               ),
                             ),
                           ],
@@ -437,7 +439,11 @@ class _ContactFormViewState extends State<ContactFormView> {
                           Expanded(
                             child: TextFormField(
                               controller: _pincodeController,
-                              decoration: const InputDecoration(labelText: 'Pincode *'),
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                labelText: 'Pincode *',
+                                hintText: '6-digit pincode',
+                              ),
                               validator: (v) => (v == null || v.isEmpty) ? 'Pincode is required' : null,
                             ),
                           ),

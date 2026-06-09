@@ -39,6 +39,7 @@ import 'package:flutter_client/views/audit/audit_log_list_view.dart';
 import 'package:flutter_client/views/reminders/reminder_list_view.dart';
 import 'package:flutter_client/views/vyapar_import/vyapar_import_view.dart';
 import 'package:flutter_client/views/sales_analytics/sales_analytics_view.dart';
+import 'package:flutter_client/views/reports/cash_book_view.dart';
 import 'package:flutter_client/views/banking/banking_profile_list_view.dart';
 import 'package:flutter_client/views/returns/returns_list_view.dart';
 import 'package:flutter_client/views/tools/backup_restore_view.dart';
@@ -334,6 +335,7 @@ final List<_MenuItem> _flatItems = [
   _MenuItem(name: 'Backup/Restore', icon: Icons.backup_rounded, view: const BackupRestoreView()),
   _MenuItem(name: 'Settings', icon: Icons.settings_rounded, view: const SettingsView()),
   _MenuItem(name: 'Year End Close', icon: Icons.lock_clock_outlined, view: const YearEndCloseView()),
+  _MenuItem(name: 'Cash Book', icon: Icons.book_online_outlined, view: const CashBookView()),
 ];
 
 // ─── Grouped sidebar structure ────────────────────────────────
@@ -362,7 +364,7 @@ final List<_MenuEntry> _sidebarEntries = [
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Reports & Compliance',
     icon: Icons.assessment_outlined,
-    childIndices: [18, 19, 20], // Reports, Statements, E-Way Bills
+    childIndices: [18, 19, 29, 20], // Reports, Statements, Cash Book, E-Way Bills
   )),
   _MenuGroupEntry(_MenuGroupDef(
     label: 'Tools',

@@ -336,3 +336,35 @@ class TrialBalanceResponse(BaseModel):
     total_credits: Decimal
     is_balanced: bool
 
+
+# ---------------------------------------------------------------------------
+# Cash Book
+# ---------------------------------------------------------------------------
+
+class CashBookRow(BaseModel):
+    date: date
+    transaction_details: str
+    invoice_amount: Optional[Decimal] = None
+    tax_amount: Optional[Decimal] = None
+    amount: Decimal
+
+class CashBookSummary(BaseModel):
+    cash_inflow: Decimal
+    cash_outflow: Decimal
+    closing_balance: Decimal
+    actual_cash_in_hand: Decimal
+    difference: Decimal
+
+class CashBookTaxSummary(BaseModel):
+    tax_paid: Decimal
+    tax_received: Decimal
+    tax_payable: Decimal
+
+class CashBookResponse(BaseModel):
+    period_start: date
+    period_end: date
+    opening_balance: Decimal
+    inflows: List[CashBookRow]
+    outflows: List[CashBookRow]
+    summary: CashBookSummary
+    tax_summary: CashBookTaxSummary
