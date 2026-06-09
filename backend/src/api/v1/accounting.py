@@ -392,7 +392,7 @@ def get_trial_balance(
         func.coalesce(func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)), 0).label("debits"),
         func.coalesce(func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)), 0).label("credits")
     ).outerjoin(JournalLine, Account.id == JournalLine.account_id)\
-     .outerjoin(JournalEntry, db.and_(JournalLine.entry_id == JournalEntry.id, JournalEntry.entry_date <= cutoff))\
+     .outerjoin(JournalEntry, and_(JournalLine.entry_id == JournalEntry.id, JournalEntry.entry_date <= cutoff))\
      .filter(
          Account.tenant_id == tenant_id,
          Account.deleted_at == None
