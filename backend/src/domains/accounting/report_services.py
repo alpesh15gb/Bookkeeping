@@ -19,7 +19,8 @@ from sqlalchemy import func, case, and_, cast, Numeric as SaNumeric
 from src.infrastructure.database.models import (
     Invoice, InvoiceLine, Bill, BillLine,
     Contact, Account, JournalEntry, JournalLine,
-    Payment, BillPayment, CreditNote, DebitNote
+    Payment, BillPayment, CreditNote, DebitNote,
+    Expense
 )
 from src.schemas.report_schemas import (
     BalanceSheetSection, BalanceSheetResponse, ReportLineItem,
@@ -33,6 +34,7 @@ from src.schemas.report_schemas import (
     OutstandingARResponse, OutstandingAPResponse,
     PartyStatementRow, PartyStatementSummary, PartyStatementResponse,
     TrialBalanceLine, TrialBalanceResponse,
+    CashBookResponse, CashBookRow, CashBookSummary, CashBookTaxSummary,
 )
 
 D = Decimal
@@ -1349,9 +1351,6 @@ class PartyStatementService:
 class CashBookService:
     @staticmethod
     def get(db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date) -> CashBookResponse:
-        from src.schemas.report_schemas import CashBookResponse, CashBookRow, CashBookSummary, CashBookTaxSummary
-        from src.infrastructure.database.models import Expense
-
         cash_accounts = db.query(Account).filter(
             Account.tenant_id == tenant_id,
             Account.deleted_at == None,
