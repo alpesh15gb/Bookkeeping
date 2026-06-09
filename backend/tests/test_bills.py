@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
-from src.infrastructure.database.models import Contact, Product, Tenant, TenantMembership
+from src.infrastructure.database.models import Contact, Product, Tenant, TenantMembership, User
 
 class TestVendorBills(unittest.TestCase):
     def setUp(self):
@@ -40,15 +40,20 @@ class TestVendorBills(unittest.TestCase):
         token_data = res_login.json()
         self.access_token = token_data["access_token"]
 
-        # Fetch the generated tenant ID
+        # Fetch the generated tenant ID and grant permissions
         db = SessionLocal()
         try:
-            membership = db.query(TenantMembership).first()
+            user = db.query(User).filter(User.email == "owner@company.com").first()
+            membership = db.query(TenantMembership).filter(TenantMembership.user_id == user.id).first()
             self.tenant_id = membership.tenant_id
-
+            
+            # Grant bill:create permission scope to the user
+            membership.permission_scopes = ["bill:create", "bill:read", "bill:update", "bill:delete"]
+            
             # Set tax_mode to GST_REGULAR so GST calculations work
             tenant = db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
             tenant.tax_mode = "GST_REGULAR"
+            db.commit()
 
             # 2. Seed fresh context details under correct tenant_id
             vendor = Contact(

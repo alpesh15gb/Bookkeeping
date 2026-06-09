@@ -66,6 +66,13 @@ def _register_and_login(client, email="verify@test.com", company="VerifyCo", gst
         uid = db.query(User).filter(User.email == email).first().id
         m = db.query(TenantMembership).filter(TenantMembership.user_id == uid).first()
         tenant_id = m.tenant_id
+        
+        # Grant all necessary permission scopes for tests
+        m.permission_scopes = [
+            "bill:create", "bill:read", "bill:update", "bill:delete",
+            "invoice:create", "invoice:read", "invoice:update", "invoice:delete",
+            "payment:create", "payment:read", "payment:update", "payment:delete"
+        ]
 
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
         tenant.financial_year_start = date(2025, 4, 1)
