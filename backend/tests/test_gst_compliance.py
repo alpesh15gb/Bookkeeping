@@ -64,11 +64,25 @@ class TestGSTCompliance(unittest.TestCase):
             self.tenant_a_id = m_a.tenant_id
             tenant_a = db.query(Tenant).filter(Tenant.id == self.tenant_a_id).first()
             tenant_a.tax_mode = "GST_REGULAR"
+            
+            # Grant permission scopes to Tenant A user
+            m_a.permission_scopes = [
+                "bill:create", "bill:read", "bill:update", "bill:delete",
+                "invoice:create", "invoice:read", "invoice:update", "invoice:delete",
+                "payment:create", "payment:read", "payment:update", "payment:delete"
+            ]
 
             m_b = db.query(TenantMembership).filter(TenantMembership.user_id == db.query(User).filter(User.email == "owner_b@company.com").first().id).first()
             self.tenant_b_id = m_b.tenant_id
             tenant_b = db.query(Tenant).filter(Tenant.id == self.tenant_b_id).first()
             tenant_b.tax_mode = "GST_REGULAR"
+            
+            # Grant permission scopes to Tenant B user
+            m_b.permission_scopes = [
+                "bill:create", "bill:read", "bill:update", "bill:delete",
+                "invoice:create", "invoice:read", "invoice:update", "invoice:delete",
+                "payment:create", "payment:read", "payment:update", "payment:delete"
+            ]
 
             # Seed bank details for Tenant A
             bank_a = BankingProfile(

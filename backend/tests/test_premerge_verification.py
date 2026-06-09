@@ -87,6 +87,7 @@ def _register_and_login(client, email="verify@test.com", company="VerifyCo", gst
         if gstin:
             setting.origin_state_code = gstin[:2]
 
+        db.flush()
         db.commit()
     finally:
         db.close()

@@ -53,6 +53,7 @@ class TestVendorBills(unittest.TestCase):
             # Set tax_mode to GST_REGULAR so GST calculations work
             tenant = db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
             tenant.tax_mode = "GST_REGULAR"
+            db.flush()
             db.commit()
 
             # 2. Seed fresh context details under correct tenant_id
