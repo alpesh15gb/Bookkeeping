@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
@@ -136,7 +138,11 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
                             _buildItemsCard(inv),
                             const SizedBox(height: 12),
                             _buildTaxSummary(inv, total),
-                            if (inv?.notes != null && inv!.notes!.isNotEmpty) ...[
+                            if (inv.qrCode != null && inv.qrCode!.isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              _buildQrCodeCard(inv),
+                            ],
+                            if (inv.notes != null && inv.notes!.isNotEmpty) ...[
                               const SizedBox(height: 12),
                               _buildNotesCard(inv.notes!),
                             ],
@@ -376,26 +382,40 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
   }
 
   Widget _buildTaxSummary(InvoiceModel inv, double total) {
+    final currencyInfo = CurrencyInfo.fromCode(inv.currency.isNotEmpty ? inv.currency : 'INR');
+    final isMultiCurrency = inv.currency.isNotEmpty && inv.currency != 'INR';
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('TAX SUMMARY'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
           const SizedBox(height: 12),
-          _buildSummaryRow('Subtotal', AmountFormat.format(inv.subtotal), false),
-          if (inv.cgstAmount > 0) _buildSummaryRow('CGST', AmountFormat.format(inv.cgstAmount), false),
-          if (inv.sgstAmount > 0) _buildSummaryRow('SGST', AmountFormat.format(inv.sgstAmount), false),
-          if (inv.igstAmount > 0) _buildSummaryRow('IGST', AmountFormat.format(inv.igstAmount), false),
-          if (inv.cessAmount > 0) _buildSummaryRow('CESS', AmountFormat.format(inv.cessAmount), false),
-          if (inv.roundOff != 0) _buildSummaryRow('Round Off', AmountFormat.format(inv.roundOff), false),
+          if (isMultiCurrency)
+            _buildSummaryRow('Currency', '${currencyInfo.symbol} ${inv.currency} (${inv.exchangeRate})', false),
+          _buildSummaryRow('Subtotal', AmountFormat.format(inv.subtotal, currency: inv.currency), false),
+          if (inv.tdsRate > 0) _buildSummaryRow('TDS (${inv.tdsRate}%)', AmountFormat.format(inv.tdsAmount, currency: inv.currency), false),
+          if (inv.tcsRate > 0) _buildSummaryRow('TCS (${inv.tcsRate}%)', AmountFormat.format(inv.tcsAmount, currency: inv.currency), false),
+          if (inv.cgstAmount > 0) _buildSummaryRow('CGST', AmountFormat.format(inv.cgstAmount, currency: inv.currency), false),
+          if (inv.sgstAmount > 0) _buildSummaryRow('SGST', AmountFormat.format(inv.sgstAmount, currency: inv.currency), false),
+          if (inv.igstAmount > 0) _buildSummaryRow('IGST', AmountFormat.format(inv.igstAmount, currency: inv.currency), false),
+          if (inv.cessAmount > 0) _buildSummaryRow('CESS', AmountFormat.format(inv.cessAmount, currency: inv.currency), false),
+          if (inv.roundOff != 0) _buildSummaryRow('Round Off', AmountFormat.format(inv.roundOff, currency: inv.currency), false),
           const Divider(height: 20),
           Row(
             children: [
               Text('TOTAL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               const Spacer(),
-              Text(AmountFormat.format(total), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.brandNavy, fontFeatures: const [FontFeature.tabularFigures()])),
+              Text(AmountFormat.format(total, currency: inv.currency), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.brandNavy, fontFeatures: const [FontFeature.tabularFigures()])),
             ],
           ),
+          if (isMultiCurrency)
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                '≈ ${AmountFormat.format(total)} INR',
+                style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+              ),
+            ),
         ],
       ),
     );
@@ -412,6 +432,47 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
         ],
       ),
     );
+  }
+
+  Widget _buildQrCodeCard(InvoiceModel inv) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('UPI PAYMENT'.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
+          const SizedBox(height: 12),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.border),
+              ),
+              child: Image.memory(
+                _decodeBase64(inv.qrCode!),
+                width: 180,
+                height: 180,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              'Scan to pay ${AmountFormat.format(inv.total, currency: inv.currency)}',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Uint8List _decodeBase64(String data) {
+    if (data.contains(',')) {
+      data = data.split(',').last;
+    }
+    return base64Decode(data);
   }
 
   Widget _buildNotesCard(String notes) {

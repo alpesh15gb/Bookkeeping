@@ -18,6 +18,8 @@ import '../../features/banking/banking_screens.dart';
 import '../../features/reports/reports_screens.dart';
 import '../../features/settings/settings_screen.dart';
 import '../../features/others/other_screens.dart';
+import '../../features/recurring_invoices/recurring_invoice_screens.dart';
+import '../../features/terms_templates/terms_templates_screen.dart';
 import 'shell_screen.dart';
 
 final GlobalKey<NavigatorState> _rootNavigatorKey = GlobalKey<NavigatorState>();
@@ -92,6 +94,10 @@ final appRouter = GoRouter(
         GoRoute(path: '/eway-bills', name: 'eway-bills', builder: (context, state) => const EwayBillsScreen()),
         GoRoute(path: '/audit-log', name: 'audit-log', builder: (context, state) => const AuditLogScreen()),
         GoRoute(path: '/settings', name: 'settings', builder: (context, state) => const SettingsScreen()),
+        GoRoute(path: '/recurring-invoices', name: 'recurring-invoices', builder: (context, state) => const RecurringInvoiceListScreen()),
+        GoRoute(path: '/recurring-invoices/create', name: 'create-recurring-invoice', builder: (context, state) => const RecurringInvoiceFormScreen()),
+        GoRoute(path: '/recurring-invoices/:id', name: 'recurring-invoice-detail', builder: (context, state) => RecurringInvoiceDetailScreen(id: state.pathParameters['id']!)),
+        GoRoute(path: '/terms-templates', name: 'terms-templates', builder: (context, state) => const TermsTemplatesScreen()),
       ],
     ),
   ],

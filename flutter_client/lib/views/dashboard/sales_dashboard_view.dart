@@ -229,6 +229,12 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
               ),
               const SizedBox(height: 24),
 
+              // ── Overdue Alerts ──
+              if (d.overdueAlerts.isNotEmpty) ...[
+                _OverdueAlerts(alerts: d.overdueAlerts, format: _fmtFull),
+                const SizedBox(height: 24),
+              ],
+
               // ── Two Column Layout (desktop) / Stacked (mobile) ──
               if (isMobile) ...[
                 _RecentActivity(invoices: d.recentInvoices, format: _fmtFull),
@@ -909,4 +915,85 @@ class _SalesTrend extends StatelessWidget {
   }
 
   Widget _legendDot(Color c) => Container(width: 6, height: 6, decoration: BoxDecoration(color: c, shape: BoxShape.circle));
+}
+
+// ── Overdue Alerts ──
+class _OverdueAlerts extends StatelessWidget {
+  final List<dynamic> alerts;
+  final String Function(double) format;
+
+  const _OverdueAlerts({required this.alerts, required this.format});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.error),
+            const SizedBox(width: 6),
+            Text('Overdue Alerts', style: AppTextStyles.h2.copyWith(fontSize: 20)),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(color: AppColors.error.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
+              child: Text('${alerts.length}', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.error)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+        ...alerts.map((a) {
+          final severity = a['severity']?.toString() ?? 'medium';
+          final daysOverdue = a['days_overdue'] ?? 0;
+          final amount = double.tryParse((a['outstanding_amount'] ?? 0).toString()) ?? 0.0;
+          final contactName = a['contact_name'] ?? 'Unknown';
+          final invoiceNumber = a['invoice_number'] ?? '';
+          final Color color;
+          final IconData icon;
+          if (severity == 'critical') {
+            color = AppColors.error;
+            icon = Icons.error_outline;
+          } else if (severity == 'high') {
+            color = const Color(0xFFF59E0B);
+            icon = Icons.warning_amber_outlined;
+          } else {
+            color = AppColors.textMuted;
+            icon = Icons.info_outline;
+          }
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.bgSurface,
+              borderRadius: AppRadius.card,
+              border: Border.all(color: color.withValues(alpha: 0.3)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(8)),
+                  child: Icon(icon, color: color, size: 18),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(contactName, style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                      Text('$invoiceNumber · $daysOverdue days overdue', style: AppTextStyles.caption),
+                    ],
+                  ),
+                ),
+                Text(format(amount), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color)),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
 }

@@ -66,6 +66,8 @@ class TenantSettingUpdate(BaseModel):
     e_invoice_password: Optional[str] = Field(None, max_length=100)
     e_way_bill_username: Optional[str] = Field(None, max_length=100)
     e_way_bill_password: Optional[str] = Field(None, max_length=100)
+    upi_id: Optional[str] = Field(None, max_length=100)
+    display_settings: Optional[Dict[str, Any]] = None
     origin_state_code: Optional[str] = Field(None, min_length=2, max_length=2, pattern="^[0-9]{2}$")
     extra_settings: Optional[Dict[str, Any]] = None
 
@@ -78,6 +80,8 @@ class TenantSettingResponse(SchemaBase):
     e_invoicing_enabled: bool
     e_invoice_username: Optional[str]
     e_way_bill_username: Optional[str]
+    upi_id: Optional[str]
+    display_settings: Dict[str, Any]
     origin_state_code: Optional[str]
     extra_settings: Dict[str, Any]
     created_at: datetime

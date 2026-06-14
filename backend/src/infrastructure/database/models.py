@@ -260,6 +260,12 @@ class Invoice(Base):
     is_rcm = Column(Boolean, nullable=False, default=False)  # Reverse Charge Mechanism
     is_gst_inclusive = Column(Boolean, nullable=False, default=False)
     supply_type = Column(String(20), nullable=False, default="DOMESTIC")  # DOMESTIC, EXPORT_WITH_TAX, EXPORT_WITHOUT_TAX, SEZ_WITH_TAX, SEZ_WITHOUT_TAX
+    currency = Column(String(10), nullable=False, default="INR")  # ISO 4217 currency code
+    exchange_rate = Column(Numeric(15, 6), nullable=False, default=1)  # Exchange rate to INR
+    tds_rate = Column(Numeric(5, 2), nullable=False, default=0)  # TDS %
+    tds_amount = Column(Numeric(15, 4), nullable=False, default=0)  # TDS deducted
+    tcs_rate = Column(Numeric(5, 2), nullable=False, default=0)  # TCS %
+    tcs_amount = Column(Numeric(15, 4), nullable=False, default=0)  # TCS collected
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
@@ -598,6 +604,8 @@ class TenantSetting(Base):
     e_invoice_password_hash = Column(String(255))
     e_way_bill_username = Column(String(100))
     e_way_bill_password_hash = Column(String(255))
+    upi_id = Column(String(100))  # UPI ID for QR code generation on invoices
+    display_settings = Column(JSON, nullable=False, default=dict)  # Invoice display customization toggles
     extra_settings = Column(JSON, default=dict)
     origin_state_code = Column(String(2))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
@@ -1808,3 +1816,95 @@ class InventoryCarryForward(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
     product = relationship("Product")
+
+
+# ---------------------------------------------------------------------------
+# RECURRING INVOICES
+# ---------------------------------------------------------------------------
+
+class RecurringInvoice(Base):
+    """Templates for auto-generating invoices on a schedule."""
+    __tablename__ = "recurring_invoices"
+    __table_args__ = (
+        Index("ix_recurring_invoices_tenant_active", "tenant_id", "is_active"),
+        Index("ix_recurring_invoices_next_date", "next_date"),
+        CheckConstraint(
+            "frequency IN ('WEEKLY', 'MONTHLY', 'QUARTERLY', 'YEARLY')",
+            name="ck_recurring_invoices_frequency",
+        ),
+        CheckConstraint(
+            "end_mode IN ('NEVER', 'ON_DATE', 'AFTER_N')",
+            name="ck_recurring_invoices_end_mode",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=False)
+    source_invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=True)
+    template_name = Column(String(150), nullable=False)
+    is_active = Column(Boolean, nullable=False, default=True)
+    frequency = Column(String(20), nullable=False, default="MONTHLY")
+    interval_count = Column(Integer, nullable=False, default=1)
+    next_date = Column(Date, nullable=False)
+    end_mode = Column(String(20), nullable=False, default="NEVER")
+    end_date = Column(Date)
+    max_occurrences = Column(Integer)
+    occurrences_created = Column(Integer, nullable=False, default=0)
+    last_generated = Column(Date)
+    currency = Column(String(10), nullable=False, default="INR")
+    exchange_rate = Column(Numeric(15, 6), nullable=False, default=1)
+    pos_state_code = Column(String(2), nullable=False)
+    notes = Column(Text)
+    terms_and_conditions = Column(Text)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    deleted_at = Column(DateTime(timezone=True))
+
+    contact = relationship("Contact")
+    source_invoice = relationship("Invoice")
+    items = relationship("RecurringInvoiceItem", back_populates="recurring_invoice", cascade="all, delete-orphan")
+
+
+class RecurringInvoiceItem(Base):
+    """Line items for recurring invoice templates."""
+    __tablename__ = "recurring_invoice_items"
+    __table_args__ = (
+        Index("ix_recurring_invoice_items_template_id", "recurring_invoice_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    recurring_invoice_id = Column(UUID(as_uuid=True), ForeignKey("recurring_invoices.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
+    description = Column(String(255))
+    quantity = Column(Numeric(12, 4), nullable=False)
+    rate = Column(Numeric(15, 4), nullable=False)
+    discount = Column(Numeric(15, 4), nullable=False, default=0)
+    hsn_sac = Column(String(8), nullable=False)
+    gst_rate = Column(Numeric(5, 2), nullable=False)
+
+    recurring_invoice = relationship("RecurringInvoice", back_populates="items")
+    product = relationship("Product")
+
+
+# ---------------------------------------------------------------------------
+# TERMS & CONDITIONS TEMPLATES
+# ---------------------------------------------------------------------------
+
+class TermsTemplate(Base):
+    """Reusable terms & conditions templates for invoices."""
+    __tablename__ = "terms_templates"
+    __table_args__ = (
+        Index("ix_terms_templates_tenant", "tenant_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=True)  # NULL = global preset
+    name = Column(String(150), nullable=False)
+    content = Column(Text, nullable=False)  # Rich HTML content
+    is_preset = Column(Boolean, nullable=False, default=False)  # True for India-specific presets
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+    tenant = relationship("Tenant")

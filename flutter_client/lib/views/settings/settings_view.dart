@@ -44,6 +44,9 @@ class _SettingsViewState extends State<SettingsView> {
   bool _eInvoicingEnabled = false;
   bool _isUploadingLogo = false;
 
+  // UPI & Display Settings Controllers
+  final _upiIdCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +72,7 @@ class _SettingsViewState extends State<SettingsView> {
     _eInvoicePasswordCtrl.dispose();
     _eWayBillUsernameCtrl.dispose();
     _eWayBillPasswordCtrl.dispose();
+    _upiIdCtrl.dispose();
     super.dispose();
   }
 
@@ -133,6 +137,7 @@ class _SettingsViewState extends State<SettingsView> {
     _emailCtrl.text = extraSettings['company_email'] ?? '';
     _websiteCtrl.text = extraSettings['company_website'] ?? '';
     _termsCtrl.text = extraSettings['terms'] ?? '';
+    _upiIdCtrl.text = settings['upi_id'] ?? '';
   }
 
   Future<void> _openBankProfileForm(Map<String, dynamic>? primaryBank) async {
@@ -411,6 +416,45 @@ class _SettingsViewState extends State<SettingsView> {
         );
       }
     }
+  }
+
+  void _showUpiIdDialog(Map<String, dynamic> settings) {
+    _upiIdCtrl.text = settings['upi_id'] ?? '';
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('UPI ID'),
+        content: TextField(
+          controller: _upiIdCtrl,
+          decoration: const InputDecoration(
+            labelText: 'UPI ID',
+            hintText: 'e.g. yourname@upi or 9876543210@paytm',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final provider = context.read<SettingsProvider>();
+              final success = await provider.saveSettings(
+                companyPayload: {},
+                settingsPayload: {'upi_id': _upiIdCtrl.text.trim()},
+              );
+              if (mounted && success) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('UPI ID saved successfully'), backgroundColor: AppColors.success),
+                );
+              }
+            },
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showPreferencesDialog(
@@ -1383,6 +1427,21 @@ class _SettingsViewState extends State<SettingsView> {
                 title: 'Branch Name',
                 subtitle: bankBranch,
                 onTap: () => _openBankProfileForm(primaryBank),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // UPI & Payment Section
+          SectionedCard(
+            title: 'UPI & Payment',
+            children: [
+              SettingsListTile(
+                icon: Icons.qr_code_outlined,
+                iconColor: Colors.indigo.shade600,
+                title: 'UPI ID',
+                subtitle: settings['upi_id']?.toString().isNotEmpty == true ? settings['upi_id'] : 'Not configured',
+                onTap: () => _showUpiIdDialog(settings),
               ),
             ],
           ),

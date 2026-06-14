@@ -28,6 +28,10 @@ class InvoiceFormView extends StatelessWidget {
         hasShippingAddress: true,
         hasLinkedInvoice: false,
         allowScanning: false,
+        hasCurrencySelector: true,
+        hasTdsTcs: true,
+        defaultCurrency: editInvoice?.currency ?? 'INR',
+        defaultExchangeRate: editInvoice?.exchangeRate ?? 1.0,
         successMessage: editInvoice != null ? 'Invoice updated' : 'Invoice created',
         paymentTermsOptions: const [
           'Due on Receipt',

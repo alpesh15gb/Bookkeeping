@@ -203,11 +203,38 @@ def create_invoice(
         is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive else False,
         is_rcm=payload.is_rcm or False,
         supply_type=payload.supply_type or "DOMESTIC",
+        currency=payload.currency or "INR",
+        exchange_rate=payload.exchange_rate or Decimal("1.000000"),
+        tds_rate=payload.tds_rate or Decimal("0.00"),
+        tcs_rate=payload.tcs_rate or Decimal("0.00"),
         lines=db_lines
     )
 
     db.add(invoice)
     db.flush()
+
+    # Calculate TDS/TCS amounts on the rounded total
+    if invoice.tds_rate > 0:
+        invoice.tds_amount = (rounded_total * invoice.tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
+    if invoice.tcs_rate > 0:
+        invoice.tcs_amount = (rounded_total * invoice.tcs_rate / Decimal("100")).quantize(Decimal("0.0001"))
+
+    # Generate UPI QR code if tenant has UPI ID configured
+    if tenant_settings and tenant_settings.upi_id:
+        try:
+            import qrcode
+            import base64
+            from io import BytesIO
+            upi_string = f"upi://pay?pa={tenant_settings.upi_id}&pn={contact.name}&am={float(rounded_total)}&cur={invoice.currency}"
+            qr = qrcode.QRCode(version=1, box_size=10, border=2)
+            qr.add_data(upi_string)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color="black", back_color="white")
+            buffer = BytesIO()
+            img.save(buffer, format="PNG")
+            invoice.qr_code = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        except Exception:
+            pass  # QR generation is non-critical
 
     # Auto-post: create journal entry immediately
     auto_post_invoice(db, tenant_id, invoice)

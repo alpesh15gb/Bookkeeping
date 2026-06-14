@@ -16,6 +16,7 @@ class DashboardProvider extends ChangeNotifier {
   List<dynamic> _expenseTrend = [];
   List<dynamic> _cashBankBalances = [];
   List<dynamic> _topDebtors = [];
+  List<dynamic> _overdueAlerts = [];
 
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
@@ -26,6 +27,7 @@ class DashboardProvider extends ChangeNotifier {
   List<dynamic> get expenseTrend => _expenseTrend;
   List<dynamic> get cashBankBalances => _cashBankBalances;
   List<dynamic> get topDebtors => _topDebtors;
+  List<dynamic> get overdueAlerts => _overdueAlerts;
 
   double get revenue => _safeDouble(_salesSummary['total_sales']);
   double get cashReceived => _safeDouble(_salesSummary['total_received']);
@@ -166,6 +168,8 @@ class DashboardProvider extends ChangeNotifier {
             .catchError((_) => http.Response('[]', 500)),
         _client.get(_buildUri('${ApiClient.baseUrl}/reports/outstanding/receivables?as_of_date=$dateStr'))
             .catchError((_) => http.Response('{}', 500)),
+        _client.get(_buildUri('${ApiClient.baseUrl}/dashboard/overdue-alerts'))
+            .catchError((_) => http.Response('[]', 500)),
       ]);
 
       if (secondary[0].statusCode == 200) {
@@ -198,6 +202,15 @@ class DashboardProvider extends ChangeNotifier {
         }
       } catch (e) {
         debugPrint('Failed to parse top debtors: $e');
+      }
+
+      try {
+        if (secondary[4].statusCode == 200) {
+          final d = jsonDecode(secondary[4].body);
+          _overdueAlerts = d is List ? d : [];
+        }
+      } catch (e) {
+        debugPrint('Failed to parse overdue alerts: $e');
       }
 
       _isLoading = false;

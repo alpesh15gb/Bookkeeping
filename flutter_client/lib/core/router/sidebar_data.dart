@@ -166,6 +166,21 @@ const sidebarSections = [
     ],
   ),
   SidebarSection(
+    label: 'Templates',
+    items: [
+      SidebarItem(
+        label: 'Recurring Invoices',
+        icon: Icons.repeat,
+        route: '/recurring-invoices',
+      ),
+      SidebarItem(
+        label: 'Terms Templates',
+        icon: Icons.description_outlined,
+        route: '/terms-templates',
+      ),
+    ],
+  ),
+  SidebarSection(
     label: 'Settings',
     items: [
       SidebarItem(

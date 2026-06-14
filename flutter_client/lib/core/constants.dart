@@ -22,10 +22,10 @@ class AppColors {
   static const Color accentBlue = Color(0xFF3B82F6);
 
   // Semantic amount colors (aliases for consistent financial display)
-  static const Color amountPositive = Color(0xFF16A34A);  // same as success
-  static const Color amountNegative = Color(0xFFDC2626);  // same as error
-  static const Color amountReceivable = Color(0xFFD97706); // amber — money owed to you
-  static const Color amountPayable = Color(0xFFDC2626);   // red — money you owe
+  static Color get amountPositive => isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+  static Color get amountNegative => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  static Color get amountReceivable => isDark ? const Color(0xFFE8B94C) : const Color(0xFFD97706); // amber — money owed to you
+  static Color get amountPayable => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);   // red — money you owe
 
   // Theme-aware backgrounds (getters return new instances so Flutter detects changes)
   static Color get bgLight => isDark ? const Color(0xFF0F1117) : const Color(0xFFF8FAFC);
@@ -53,81 +53,118 @@ class AppColors {
   static Color get textWhiteMuted => isDark ? const Color(0xFF818896) : const Color(0xFFB0B8CC);
 
   // Status
-  static const Color success = Color(0xFF16A34A);
-  static const Color successBg = Color(0xFFF0FDF4);
-  static const Color error = Color(0xFFDC2626);
-  static const Color errorBg = Color(0xFFFEF2F2);
-  static const Color warning = Color(0xFFD97706);
-  static const Color warningBg = Color(0xFFFFFBEB);
-  static const Color info = Color(0xFF175CD3);
-  static const Color infoBg = Color(0xFFEFF6FF);
+  static Color get success => isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+  static Color get successBg => isDark ? const Color(0xFF14291D) : const Color(0xFFF0FDF4);
+  static Color get error => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  static Color get errorBg => isDark ? const Color(0xFF2D1515) : const Color(0xFFFEF2F2);
+  static Color get warning => isDark ? const Color(0xFFE8B94C) : const Color(0xFFD97706);
+  static Color get warningBg => isDark ? const Color(0xFF2D2418) : const Color(0xFFFFFBEB);
+  static Color get info => isDark ? const Color(0xFF6B9FE8) : const Color(0xFF175CD3);
+  static Color get infoBg => isDark ? const Color(0xFF1A2744) : const Color(0xFFEFF6FF);
 
   // Type
-  static const Color typeGoods = Color(0xFFE57C00);
-  static const Color typeGoodsBg = Color(0xFFFFF3E0);
-  static const Color typeService = Color(0xFF00897B);
-  static const Color typeServiceBg = Color(0xFFE0F2F1);
-  static const Color typeCustomer = Color(0xFF1565C0);
-  static const Color typeCustomerBg = Color(0xFFE3F2FD);
-  static const Color typeVendor = Color(0xFF2E7D32);
-  static const Color typeVendorBg = Color(0xFFE8F5E9);
-  static const Color typeBoth = Color(0xFF7B1FA2);
-  static const Color typeBothBg = Color(0xFFF3E5F5);
-  static const Color typeDraft = Color(0xFF9CA1AB);
-  static const Color typeDraftBg = Color(0xFFF2F2F4);
-  static const Color typePaid = Color(0xFF16A34A);
-  static const Color typePaidBg = Color(0xFFF0FDF4);
-  static const Color typePending = Color(0xFFD97706);
-  static const Color typePendingBg = Color(0xFFFFFBEB);
+  static Color get typeGoods => isDark ? const Color(0xFFFFB74D) : const Color(0xFFE57C00);
+  static Color get typeGoodsBg => isDark ? const Color(0xFF2D2418) : const Color(0xFFFFF3E0);
+  static Color get typeService => isDark ? const Color(0xFF4DB6AC) : const Color(0xFF00897B);
+  static Color get typeServiceBg => isDark ? const Color(0xFF14292D) : const Color(0xFFE0F2F1);
+  static Color get typeCustomer => isDark ? const Color(0xFF64B5F6) : const Color(0xFF1565C0);
+  static Color get typeCustomerBg => isDark ? const Color(0xFF1A2744) : const Color(0xFFE3F2FD);
+  static Color get typeVendor => isDark ? const Color(0xFF81C784) : const Color(0xFF2E7D32);
+  static Color get typeVendorBg => isDark ? const Color(0xFF14291D) : const Color(0xFFE8F5E9);
+  static Color get typeBoth => isDark ? const Color(0xFFCE93D8) : const Color(0xFF7B1FA2);
+  static Color get typeBothBg => isDark ? const Color(0xFF2D1A33) : const Color(0xFFF3E5F5);
+  static Color get typeDraft => isDark ? const Color(0xFF818896) : const Color(0xFF9CA1AB);
+  static Color get typeDraftBg => isDark ? const Color(0xFF1E2130) : const Color(0xFFF2F2F4);
+  static Color get typePaid => isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+  static Color get typePaidBg => isDark ? const Color(0xFF14291D) : const Color(0xFFF0FDF4);
+  static Color get typePending => isDark ? const Color(0xFFE8B94C) : const Color(0xFFD97706);
+  static Color get typePendingBg => isDark ? const Color(0xFF2D2418) : const Color(0xFFFFFBEB);
 
   // Document status colors (accessibility-safe — no red/green dominance)
-  static const Color statusDraft = Color(0xFF9CA1AB);
-  static const Color statusDraftBg = Color(0xFFF2F2F4);
-  static const Color statusPosted = Color(0xFF175CD3);
-  static const Color statusPostedBg = Color(0xFFEFF6FF);
-  static const Color statusPartiallyPaid = Color(0xFFD97706);
-  static const Color statusPartiallyPaidBg = Color(0xFFFFFBEB);
-  static const Color statusPaid = Color(0xFF16A34A);
-  static const Color statusPaidBg = Color(0xFFF0FDF4);
-  static const Color statusCancelled = Color(0xFFDC2626);
-  static const Color statusCancelledBg = Color(0xFFFEF2F2);
-  static const Color statusOverdue = Color(0xFFDC2626);
-  static const Color statusOverdueBg = Color(0xFFFEF2F2);
+  // Kept as static const for backwards compatibility; prefer the theme-aware getters above
+  static const Color statusDraftConst = Color(0xFF9CA1AB);
+  static const Color statusDraftBgConst = Color(0xFFF2F2F4);
+  static const Color statusPostedConst = Color(0xFF175CD3);
+  static const Color statusPostedBgConst = Color(0xFFEFF6FF);
+  static const Color statusPartiallyPaidConst = Color(0xFFD97706);
+  static const Color statusPartiallyPaidBgConst = Color(0xFFFFFBEB);
+  static const Color statusPaidConst = Color(0xFF16A34A);
+  static const Color statusPaidBgConst = Color(0xFFF0FDF4);
+  static const Color statusCancelledConst = Color(0xFFDC2626);
+  static const Color statusCancelledBgConst = Color(0xFFFEF2F2);
+  static const Color statusOverdueConst = Color(0xFFDC2626);
+  static const Color statusOverdueBgConst = Color(0xFFFEF2F2);
 
   // Action tier colors
-  static const Color actionSafe = Color(0xFF16A34A);
-  static const Color actionSafeBg = Color(0xFFF0FDF4);
-  static const Color actionWarning = Color(0xFFD97706);
-  static const Color actionWarningBg = Color(0xFFFFFBEB);
-  static const Color actionDangerous = Color(0xFFDC2626);
-  static const Color actionDangerousBg = Color(0xFFFEF2F2);
+  static Color get actionSafe => isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+  static Color get actionSafeBg => isDark ? const Color(0xFF14291D) : const Color(0xFFF0FDF4);
+  static Color get actionWarning => isDark ? const Color(0xFFE8B94C) : const Color(0xFFD97706);
+  static Color get actionWarningBg => isDark ? const Color(0xFF2D2418) : const Color(0xFFFFFBEB);
+  static Color get actionDangerous => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  static Color get actionDangerousBg => isDark ? const Color(0xFF2D1515) : const Color(0xFFFEF2F2);
 
   // Immutable / locked
-  static const Color immutableBg = Color(0xFFF9F9FB);
-  static const Color immutableBorder = Color(0xFFE8E8EE);
-  static const Color immutableText = Color(0xFF8B8F9B);
+  static Color get immutableBg => isDark ? const Color(0xFF1A1D26) : const Color(0xFFF9F9FB);
+  static Color get immutableBorder => isDark ? const Color(0xFF2D3139) : const Color(0xFFE8E8EE);
+  static Color get immutableText => isDark ? const Color(0xFF818896) : const Color(0xFF8B8F9B);
 
   // Stale / conflict
-  static const Color staleBg = Color(0xFFFFF8E7);
-  static const Color staleBorder = Color(0xFFFDE3B0);
-  static const Color staleText = Color(0xFFB76E00);
+  static Color get staleBg => isDark ? const Color(0xFF2D2418) : const Color(0xFFFFF8E7);
+  static Color get staleBorder => isDark ? const Color(0xFF5C3D0A) : const Color(0xFFFDE3B0);
+  static Color get staleText => isDark ? const Color(0xFFE8B94C) : const Color(0xFFB76E00);
+
+  // Dark-mode aware status colors
+  static Color get statusDraft => isDark ? const Color(0xFF818896) : const Color(0xFF9CA1AB);
+  static Color get statusDraftBg => isDark ? const Color(0xFF1E2130) : const Color(0xFFF2F2F4);
+  static Color get statusPosted => isDark ? const Color(0xFF6B9FE8) : const Color(0xFF175CD3);
+  static Color get statusPostedBg => isDark ? const Color(0xFF1A2744) : const Color(0xFFEFF6FF);
+  static Color get statusPartiallyPaid => isDark ? const Color(0xFFE8B94C) : const Color(0xFFD97706);
+  static Color get statusPartiallyPaidBg => isDark ? const Color(0xFF2D2418) : const Color(0xFFFFFBEB);
+  static Color get statusPaid => isDark ? const Color(0xFF4ADE80) : const Color(0xFF16A34A);
+  static Color get statusPaidBg => isDark ? const Color(0xFF14291D) : const Color(0xFFF0FDF4);
+  static Color get statusCancelled => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  static Color get statusCancelledBg => isDark ? const Color(0xFF2D1515) : const Color(0xFFFEF2F2);
+  static Color get statusOverdue => isDark ? const Color(0xFFF87171) : const Color(0xFFDC2626);
+  static Color get statusOverdueBg => isDark ? const Color(0xFF2D1515) : const Color(0xFFFEF2F2);
 }
 
 // ─── Amount Formatting ──────────────────────────────────────────
 class AmountFormat {
   /// Formats a monetary value consistently across the app.
-  /// [amount] in rupees, returns "₹1,234.00" or "-₹1,234.00".
+  /// [amount] in the given currency, returns formatted string with symbol.
   /// Handles string inputs gracefully (common with JSON API responses).
-  static String format(num amount) {
+  static String format(num amount, {String currency = 'INR'}) {
+    final info = CurrencyInfo.fromCode(currency);
     final value = amount;
     final abs = value.abs();
-    final formatted = '₹${abs.toStringAsFixed(2)}';
-    // Use minified digit grouping: insert commas in Indian format
-    // e.g. 1234567 → ₹12,34,567.00
+    final formatted = '${info.symbol}${abs.toStringAsFixed(2)}';
+    // Use minified digit grouping for INR, standard for others
+    if (currency == 'INR') {
+      final parts = formatted.split('.');
+      final intPart = parts[0].substring(info.symbol.length);
+      final grouped = _indianGroup(intPart);
+      return value < 0 ? '-${info.symbol}$grouped.${parts[1]}' : '${info.symbol}$grouped.${parts[1]}';
+    }
     final parts = formatted.split('.');
-    final intPart = parts[0].substring(1); // remove ₹
-    final grouped = _indianGroup(intPart);
-    return value < 0 ? '-₹$grouped.${parts[1]}' : '₹$grouped.${parts[1]}';
+    final intPart = parts[0].substring(info.symbol.length);
+    final grouped = _standardGroup(intPart);
+    return value < 0 ? '-${info.symbol}$grouped.${parts[1]}' : '${info.symbol}$grouped.${parts[1]}';
+  }
+
+  /// Formats amount with currency code: "₹1,234.00 INR"
+  static String formatWithCode(num amount, {String currency = 'INR'}) {
+    return '${format(amount, currency: currency)} $currency';
+  }
+
+  /// Short format for compact displays: "₹1.2K", "-₹5Cr"
+  static String short(num amount, {String currency = 'INR'}) {
+    final info = CurrencyInfo.fromCode(currency);
+    final abs = amount.abs();
+    final prefix = amount < 0 ? '-${info.symbol}' : info.symbol;
+    if (abs >= 10000000) return '$prefix${(abs / 10000000).toStringAsFixed(1)}Cr';
+    if (abs >= 100000) return '$prefix${(abs / 100000).toStringAsFixed(1)}L';
+    if (abs >= 1000) return '$prefix${(abs / 1000).toStringAsFixed(1)}K';
+    return '$prefix${abs.toStringAsFixed(0)}';
   }
 
   static String _indianGroup(String digits) {
@@ -145,6 +182,19 @@ class AmountFormat {
     return '$restGrouped,$last3';
   }
 
+  static String _standardGroup(String digits) {
+    if (digits.length <= 3) return digits;
+    final grouped = StringBuffer();
+    for (var i = digits.length - 1; i >= 0; i--) {
+      final pos = digits.length - 1 - i;
+      if (pos > 0 && pos % 3 == 0) {
+        grouped.write(',');
+      }
+      grouped.write(digits[i]);
+    }
+    return grouped.toString().split('').reversed.join();
+  }
+
   /// Short format for compact displays: "₹1.2K", "-₹5Cr"
   static String short(num amount) {
     final abs = amount.abs();
@@ -154,6 +204,49 @@ class AmountFormat {
     if (abs >= 1000) return '${prefix}${(abs / 1000).toStringAsFixed(1)}K';
     return '${prefix}${abs.toStringAsFixed(0)}';
   }
+}
+
+/// Multi-currency support with 22+ countries
+class CurrencyInfo {
+  final String code;
+  final String symbol;
+  final String name;
+  final String taxLabel; // GST, VAT, SST, etc.
+
+  const CurrencyInfo(this.code, this.symbol, this.name, this.taxLabel);
+
+  static const Map<String, CurrencyInfo> _currencies = {
+    'INR': CurrencyInfo('INR', '₹', 'Indian Rupee', 'GST'),
+    'USD': CurrencyInfo('USD', '\$', 'US Dollar', 'Sales Tax'),
+    'EUR': CurrencyInfo('EUR', '€', 'Euro', 'VAT'),
+    'GBP': CurrencyInfo('GBP', '£', 'British Pound', 'VAT'),
+    'AED': CurrencyInfo('AED', 'د.إ', 'UAE Dirham', 'VAT'),
+    'SAR': CurrencyInfo('SAR', '﷼', 'Saudi Riyal', 'VAT'),
+    'SGD': CurrencyInfo('SGD', 'S\$', 'Singapore Dollar', 'GST'),
+    'AUD': CurrencyInfo('AUD', 'A\$', 'Australian Dollar', 'GST'),
+    'CAD': CurrencyInfo('CAD', 'C\$', 'Canadian Dollar', 'GST'),
+    'MYR': CurrencyInfo('MYR', 'RM', 'Malaysian Ringgit', 'SST'),
+    'THB': CurrencyInfo('THB', '฿', 'Thai Baht', 'VAT'),
+    'IDR': CurrencyInfo('IDR', 'Rp', 'Indonesian Rupiah', 'VAT'),
+    'PHP': CurrencyInfo('PHP', '₱', 'Philippine Peso', 'VAT'),
+    'VND': CurrencyInfo('VND', '₫', 'Vietnamese Dong', 'VAT'),
+    'ZAR': CurrencyInfo('ZAR', 'R', 'South African Rand', 'VAT'),
+    'NZD': CurrencyInfo('NZD', 'NZ\$', 'New Zealand Dollar', 'GST'),
+    'JPY': CurrencyInfo('JPY', '¥', 'Japanese Yen', 'Consumption Tax'),
+    'CNY': CurrencyInfo('CNY', '¥', 'Chinese Yuan', 'VAT'),
+    'KWD': CurrencyInfo('KWD', 'د.ك', 'Kuwaiti Dinar', 'VAT'),
+    'QAR': CurrencyInfo('QAR', '﷼', 'Qatari Riyal', 'VAT'),
+    'BHD': CurrencyInfo('BHD', 'ب.د', 'Bahraini Dinar', 'VAT'),
+    'OMR': CurrencyInfo('OMR', '﷼', 'Omani Rial', 'VAT'),
+  };
+
+  static CurrencyInfo fromCode(String code) {
+    return _currencies[code.toUpperCase()] ?? CurrencyInfo(code, code, code, 'Tax');
+  }
+
+  static List<CurrencyInfo> get all => _currencies.values.toList();
+
+  static List<String> get codes => _currencies.keys.toList();
 }
 
 // ─── Spacing Tokens

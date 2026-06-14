@@ -81,6 +81,17 @@ class InvoiceModel {
   final Map<String, dynamic>? shippingAddress;
   final double utgstAmount;
   final double cessAmount;
+  final String currency;
+  final double exchangeRate;
+  final double tdsRate;
+  final double tdsAmount;
+  final double tcsRate;
+  final double tcsAmount;
+  final bool isGstInclusive;
+  final bool isRcm;
+  final String? supplyType;
+  final String? termsAndConditions;
+  final String? referenceNumber;
 
   InvoiceModel({
     required this.id,
@@ -110,6 +121,17 @@ class InvoiceModel {
     this.shippingAddress,
     this.utgstAmount = 0.0,
     this.cessAmount = 0.0,
+    this.currency = 'INR',
+    this.exchangeRate = 1.0,
+    this.tdsRate = 0.0,
+    this.tdsAmount = 0.0,
+    this.tcsRate = 0.0,
+    this.tcsAmount = 0.0,
+    this.isGstInclusive = false,
+    this.isRcm = false,
+    this.supplyType,
+    this.termsAndConditions,
+    this.referenceNumber,
   });
 
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
@@ -148,6 +170,17 @@ class InvoiceModel {
       shippingAddress: json['shipping_address'] is Map ? Map<String, dynamic>.from(json['shipping_address']) : null,
       utgstAmount: double.tryParse((json['utgst_amount'] ?? 0.0).toString()) ?? 0.0,
       cessAmount: double.tryParse((json['cess_amount'] ?? 0.0).toString()) ?? 0.0,
+      currency: json['currency'] ?? 'INR',
+      exchangeRate: double.tryParse((json['exchange_rate'] ?? 1.0).toString()) ?? 1.0,
+      tdsRate: double.tryParse((json['tds_rate'] ?? 0.0).toString()) ?? 0.0,
+      tdsAmount: double.tryParse((json['tds_amount'] ?? 0.0).toString()) ?? 0.0,
+      tcsRate: double.tryParse((json['tcs_rate'] ?? 0.0).toString()) ?? 0.0,
+      tcsAmount: double.tryParse((json['tcs_amount'] ?? 0.0).toString()) ?? 0.0,
+      isGstInclusive: json['is_gst_inclusive'] ?? false,
+      isRcm: json['is_rcm'] ?? false,
+      supplyType: json['supply_type'],
+      termsAndConditions: json['terms_and_conditions'],
+      referenceNumber: json['reference_number'],
     );
   }
 
@@ -178,6 +211,35 @@ class InvoiceModel {
       'shipping_address': shippingAddress,
       'utgst_amount': utgstAmount,
       'cess_amount': cessAmount,
+      'currency': currency,
+      'exchange_rate': exchangeRate,
+      'tds_rate': tdsRate,
+      'tds_amount': tdsAmount,
+      'tcs_rate': tcsRate,
+      'tcs_amount': tcsAmount,
+      'is_gst_inclusive': isGstInclusive,
+      'is_rcm': isRcm,
+      'supply_type': supplyType,
+      'terms_and_conditions': termsAndConditions,
+      'reference_number': referenceNumber,
     };
+  }
+
+  /// Balance amount yet to be paid
+  double get balance => total - amountPaid;
+
+  /// Whether the invoice is overdue
+  bool get isOverdue {
+    if (status == 'PAID' || status == 'CANCELLED') return false;
+    final due = DateTime.tryParse(dueDate);
+    if (due == null) return false;
+    return due.isBefore(DateTime.now());
+  }
+
+  /// Days overdue (0 if not overdue)
+  int get daysOverdue {
+    if (!isOverdue) return 0;
+    final due = DateTime.parse(dueDate);
+    return DateTime.now().difference(due).inDays;
   }
 }

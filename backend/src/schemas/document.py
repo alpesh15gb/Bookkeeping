@@ -94,6 +94,8 @@ class InvoiceBase(SchemaBase):
     pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
     billing_address: Optional[dict] = None
     shipping_address: Optional[dict] = None
+    currency: Optional[str] = Field(default="INR", max_length=10)
+    exchange_rate: Optional[Decimal] = Field(default=Decimal("1.000000"), ge=0)
 
 class InvoiceCreate(InvoiceBase):
     line_items: List[InvoiceLineCreate]
@@ -106,6 +108,8 @@ class InvoiceCreate(InvoiceBase):
     is_gst_inclusive: Optional[bool] = False
     is_rcm: Optional[bool] = False
     supply_type: Optional[str] = Field(default="DOMESTIC", pattern="^(DOMESTIC|EXPORT_WITH_TAX|EXPORT_WITHOUT_TAX|SEZ_WITH_TAX|SEZ_WITHOUT_TAX)$")
+    tds_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    tcs_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
 
 class InvoicePreviewRequest(SchemaBase):
     pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
@@ -128,6 +132,10 @@ class InvoiceUpdate(SchemaBase):
     reference_number: Optional[str] = None
     sales_person_id: Optional[uuid.UUID] = None
     is_gst_inclusive: Optional[bool] = None
+    currency: Optional[str] = None
+    exchange_rate: Optional[Decimal] = None
+    tds_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    tcs_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
 
 class InvoiceResponse(InvoiceBase):
     id: uuid.UUID
@@ -136,6 +144,12 @@ class InvoiceResponse(InvoiceBase):
     is_gst_inclusive: Optional[bool] = False
     is_rcm: Optional[bool] = False
     supply_type: Optional[str] = "DOMESTIC"
+    currency: str = "INR"
+    exchange_rate: Decimal = Decimal("1.000000")
+    tds_rate: Decimal = Decimal("0.00")
+    tds_amount: Decimal = Decimal("0.0000")
+    tcs_rate: Decimal = Decimal("0.00")
+    tcs_amount: Decimal = Decimal("0.0000")
     subtotal: Decimal
     discount_total: Decimal
     cgst_amount: Decimal
@@ -169,6 +183,8 @@ class InvoiceListResponse(SchemaBase):
     is_gst_inclusive: Optional[bool] = False
     is_rcm: Optional[bool] = False
     supply_type: Optional[str] = "DOMESTIC"
+    currency: str = "INR"
+    exchange_rate: Decimal = Decimal("1.000000")
     total: Decimal
     amount_paid: Decimal
     contact_name: str
@@ -464,3 +480,114 @@ class PurchaseReturnListResponse(SchemaBase):
     status: str
     total: Decimal
     contact_name: Optional[str] = None
+
+
+# ── RECURRING INVOICE SCHEMAS ──
+class RecurringInvoiceItemCreate(SchemaBase):
+    product_id: uuid.UUID
+    description: Optional[str] = None
+    quantity: Decimal = Field(..., gt=0)
+    rate: Decimal = Field(..., ge=0)
+    discount: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
+    hsn_sac: str = Field(..., pattern="^[0-9]{4,8}$")
+    gst_rate: Decimal = Field(..., ge=0, le=100)
+
+class RecurringInvoiceItemResponse(SchemaBase):
+    id: uuid.UUID
+    product_id: Optional[uuid.UUID] = None
+    description: Optional[str] = None
+    quantity: Decimal
+    rate: Decimal
+    discount: Decimal
+    hsn_sac: str
+    gst_rate: Decimal
+
+class RecurringInvoiceCreate(SchemaBase):
+    contact_id: uuid.UUID
+    template_name: str = Field(..., min_length=1, max_length=150)
+    frequency: str = Field(default="MONTHLY", pattern="^(WEEKLY|MONTHLY|QUARTERLY|YEARLY)$")
+    interval_count: int = Field(default=1, ge=1, le=12)
+    next_date: date
+    end_mode: str = Field(default="NEVER", pattern="^(NEVER|ON_DATE|AFTER_N)$")
+    end_date: Optional[date] = None
+    max_occurrences: Optional[int] = Field(default=None, ge=1)
+    currency: Optional[str] = Field(default="INR", max_length=10)
+    exchange_rate: Optional[Decimal] = Field(default=Decimal("1.000000"), ge=0)
+    pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
+    notes: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+    items: List[RecurringInvoiceItemCreate]
+
+class RecurringInvoiceUpdate(SchemaBase):
+    contact_id: Optional[uuid.UUID] = None
+    template_name: Optional[str] = Field(None, min_length=1, max_length=150)
+    is_active: Optional[bool] = None
+    frequency: Optional[str] = Field(None, pattern="^(WEEKLY|MONTHLY|QUARTERLY|YEARLY)$")
+    interval_count: Optional[int] = Field(None, ge=1, le=12)
+    next_date: Optional[date] = None
+    end_mode: Optional[str] = Field(None, pattern="^(NEVER|ON_DATE|AFTER_N)$")
+    end_date: Optional[date] = None
+    max_occurrences: Optional[int] = Field(None, ge=1)
+    currency: Optional[str] = None
+    exchange_rate: Optional[Decimal] = None
+    pos_state_code: Optional[str] = None
+    notes: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+    items: Optional[List[RecurringInvoiceItemCreate]] = None
+
+class RecurringInvoiceResponse(SchemaBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    contact_id: uuid.UUID
+    template_name: str
+    is_active: bool
+    frequency: str
+    interval_count: int
+    next_date: date
+    end_mode: str
+    end_date: Optional[date]
+    max_occurrences: Optional[int]
+    occurrences_created: int
+    last_generated: Optional[date]
+    currency: str
+    exchange_rate: Decimal
+    pos_state_code: str
+    notes: Optional[str]
+    terms_and_conditions: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    items: List[RecurringInvoiceItemResponse]
+    contact: Optional[ContactResponse] = None
+
+class RecurringInvoiceListResponse(SchemaBase):
+    id: uuid.UUID
+    contact_id: uuid.UUID
+    template_name: str
+    is_active: bool
+    frequency: str
+    next_date: date
+    occurrences_created: int
+    currency: str
+    created_at: datetime
+    contact_name: Optional[str] = None
+
+
+# ── TERMS TEMPLATE SCHEMAS ──
+class TermsTemplateCreate(SchemaBase):
+    name: str = Field(..., min_length=1, max_length=150)
+    content: str = Field(..., min_length=1)
+
+class TermsTemplateUpdate(SchemaBase):
+    name: Optional[str] = Field(None, min_length=1, max_length=150)
+    content: Optional[str] = Field(None, min_length=1)
+    is_active: Optional[bool] = None
+
+class TermsTemplateResponse(SchemaBase):
+    id: uuid.UUID
+    tenant_id: Optional[uuid.UUID]
+    name: str
+    content: str
+    is_preset: bool
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime

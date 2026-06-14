@@ -159,6 +159,52 @@ def dashboard_kpis(
         "overdue": float(overdue),
         "net_profit": float(round(total_invoiced - total_expenses, 2)),
     }
+
+
+@router.get("/overdue-alerts")
+def get_overdue_alerts(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+):
+    """Returns list of overdue invoices for dashboard alert display."""
+    from src.infrastructure.database.models import Invoice, Contact
+    from sqlalchemy import func
+
+    today = date.today()
+    overdue_invoices = db.query(
+        Invoice.id,
+        Invoice.invoice_number,
+        Invoice.total,
+        Invoice.amount_paid,
+        Invoice.due_date,
+        Contact.name.label("contact_name"),
+    ).join(Contact, Invoice.contact_id == Contact.id).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None,
+        Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
+        Invoice.due_date < today,
+    ).order_by(Invoice.due_date.asc()).limit(20).all()
+
+    alerts = []
+    for inv in overdue_invoices:
+        days_overdue = (today - inv.due_date).days
+        balance = float(inv.total - inv.amount_paid)
+        alerts.append({
+            "id": str(inv.id),
+            "invoice_number": inv.invoice_number,
+            "contact_name": inv.contact_name,
+            "balance": balance,
+            "due_date": inv.due_date.isoformat(),
+            "days_overdue": days_overdue,
+            "severity": "critical" if days_overdue > 90 else "high" if days_overdue > 30 else "medium",
+        })
+
+    total_overdue_amount = sum(a["balance"] for a in alerts)
+    return {
+        "alerts": alerts,
+        "total_overdue_amount": total_overdue_amount,
+        "count": len(alerts),
+    }
 @router.get("/expense-trend")
 def get_expense_trend(
     date_from: Optional[str] = Query(None),

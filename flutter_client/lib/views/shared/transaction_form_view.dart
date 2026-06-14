@@ -82,6 +82,10 @@ class TransactionConfig {
   final bool hasShippingAddress;
   final bool hasLinkedInvoice;
   final bool allowScanning;
+  final bool hasCurrencySelector;
+  final bool hasTdsTcs;
+  final String defaultCurrency;
+  final double defaultExchangeRate;
   final String successMessage;
   final List<String>? paymentTermsOptions;
 
@@ -107,6 +111,10 @@ class TransactionConfig {
     this.hasShippingAddress = false,
     this.hasLinkedInvoice = false,
     this.allowScanning = false,
+    this.hasCurrencySelector = false,
+    this.hasTdsTcs = false,
+    this.defaultCurrency = 'INR',
+    this.defaultExchangeRate = 1.0,
     required this.successMessage,
     required this.onSave,
     this.onPreview,
@@ -225,6 +233,10 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   bool _isSaving = false;
   bool _isScanning = false;
   bool _isGstInclusive = false;
+  String _selectedCurrency = 'INR';
+  double _exchangeRate = 1.0;
+  double _tdsRate = 0.0;
+  double _tcsRate = 0.0;
   String? _scannedVendorName;
   Timer? _previewDebounce;
   bool _isPreviewLoading = false;
@@ -620,6 +632,86 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     }
   }
 
+  Widget _buildCurrencyDropdown() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        border: Border.all(color: AppColors.borderInput),
+        borderRadius: AppRadius.input,
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: _selectedCurrency,
+          isDense: true,
+          style: AppTextStyles.bodySmall,
+          items: CurrencyInfo.all.map((c) => DropdownMenuItem(
+            value: c.code,
+            child: Text('${c.symbol} ${c.code}', style: AppTextStyles.bodySmall),
+          )).toList(),
+          onChanged: (val) {
+            if (val != null) {
+              setState(() {
+                _selectedCurrency = val;
+              });
+              _triggerPreview();
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTdsTcsInputs() {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 80,
+          child: TextField(
+            controller: TextEditingController(text: _tdsRate > 0 ? _tdsRate.toString() : ''),
+            keyboardType: TextInputType.number,
+            style: AppTextStyles.bodySmall,
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              border: OutlineInputBorder(borderRadius: AppRadius.input, borderSide: BorderSide(color: AppColors.borderInput)),
+              enabledBorder: OutlineInputBorder(borderRadius: AppRadius.input, borderSide: BorderSide(color: AppColors.borderInput)),
+              focusedBorder: OutlineInputBorder(borderRadius: AppRadius.input, borderSide: BorderSide(color: AppColors.brandNavy, width: 1.5)),
+              hintText: 'TDS %',
+              hintStyle: TextStyle(fontSize: 10, color: AppColors.textMuted),
+            ),
+            onChanged: (val) {
+              _tdsRate = double.tryParse(val) ?? 0.0;
+              _triggerPreview();
+            },
+          ),
+        ),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 80,
+          child: TextField(
+            controller: TextEditingController(text: _tcsRate > 0 ? _tcsRate.toString() : ''),
+            keyboardType: TextInputType.number,
+            style: AppTextStyles.bodySmall,
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+              border: OutlineInputBorder(borderRadius: AppRadius.input, borderSide: BorderSide(color: AppColors.borderInput)),
+              enabledBorder: OutlineInputBorder(borderRadius: AppRadius.input, borderSide: BorderSide(color: AppColors.borderInput)),
+              focusedBorder: OutlineInputBorder(borderRadius: AppRadius.input, borderSide: BorderSide(color: AppColors.brandNavy, width: 1.5)),
+              hintText: 'TCS %',
+              hintStyle: TextStyle(fontSize: 10, color: AppColors.textMuted),
+            ),
+            onChanged: (val) {
+              _tcsRate = double.tryParse(val) ?? 0.0;
+              _triggerPreview();
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
   void _triggerPreview() {
     _previewDebounce?.cancel();
     _saveDraftToDisk();
@@ -794,6 +886,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           ? _posStateCode
           : '27',
       'notes': _notesCtrl.text.trim(),
+      'currency': _selectedCurrency,
+      'exchange_rate': _exchangeRate,
       'line_items': _lines
           .map(
             (l) => {
@@ -816,6 +910,10 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       payload['contact_id'] = _selectedContact!.id;
     }
     payload['is_gst_inclusive'] = _isGstInclusive;
+    if (widget.config.hasTdsTcs) {
+      payload['tds_rate'] = _tdsRate;
+      payload['tcs_rate'] = _tcsRate;
+    }
     if (_poNumberCtrl.text.trim().isNotEmpty) {
       payload['reference_number'] = _poNumberCtrl.text.trim();
     }
@@ -1461,6 +1559,14 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                 const Text('GST Inclusive', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
               ],
             ),
+          if (widget.config.hasCurrencySelector) ...[
+            const SizedBox(width: 16),
+            _buildCurrencyDropdown(),
+          ],
+          if (widget.config.hasTdsTcs) ...[
+            const SizedBox(width: 16),
+            _buildTdsTcsInputs(),
+          ],
         ],
       );
     }

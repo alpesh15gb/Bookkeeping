@@ -94,6 +94,8 @@ from src.api.v1.reminders import router as reminders_router
 from src.api.v1.expenses import router as expenses_router
 from src.api.v1.returns import router as returns_router
 from src.api.v1.financial_years import router as financial_years_router
+from src.api.v1.recurring_invoices import router as recurring_invoices_router
+from src.api.v1.terms_templates import router as terms_templates_router
 from src.schemas.document import ContactResponse, ProductResponse
 from src.infrastructure.database.models import Contact, Product
 from src.infrastructure.database.idempotency import IdempotencyRecord  # noqa: F401
@@ -398,6 +400,8 @@ app.include_router(tally_router,         prefix="/api/v1")
 app.include_router(bill_scan_router,     prefix="/api/v1")
 app.include_router(returns_router,       prefix="/api/v1")
 app.include_router(financial_years_router, prefix="/api/v1")
+app.include_router(recurring_invoices_router, prefix="/api/v1")
+app.include_router(terms_templates_router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------
