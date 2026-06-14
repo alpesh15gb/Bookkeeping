@@ -142,7 +142,7 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
                                         color: AppColors.brandNavy.withValues(alpha: 0.1),
                                         borderRadius: BorderRadius.circular(4),
                                       ),
-                                      child: const Text(
+                                      child: Text(
                                         'ACTIVE',
                                         style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.brandNavy),
                                       ),
@@ -167,7 +167,7 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
                               const SizedBox(height: 4),
                               Text(
                                 year.dateRange,
-                                style: const TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                                style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                               ),
                             ],
                           ),
@@ -216,7 +216,7 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
                             onPressed: () => provider.setActiveYear(year),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: AppColors.brandNavy,
-                              side: const BorderSide(color: AppColors.border),
+                              side: BorderSide(color: AppColors.border),
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             ),
                             child: const Text('Switch'),
@@ -255,7 +255,7 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(fontSize: 10, color: AppColors.textMuted)),
+            Text(label, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
             Text(
               value,
               style: TextStyle(

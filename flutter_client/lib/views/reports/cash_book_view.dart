@@ -238,7 +238,7 @@ class _CashBookViewState extends State<CashBookView> {
               headingRowColor: WidgetStateProperty.all(AppColors.bgLight),
               dataRowMinHeight: 40,
               dataRowMaxHeight: 50,
-              columns: const [
+              columns: [
                 DataColumn(label: Text('Date', style: AppTextStyles.caption)),
                 DataColumn(label: Text('Details', style: AppTextStyles.caption)),
                 DataColumn(label: Text('Inv Amt', style: AppTextStyles.caption), numeric: true),

@@ -296,7 +296,18 @@ class FinancialYearProvider extends ChangeNotifier {
   Future<void> setActiveYear(FinancialYear year) async {
     if (_activeYear?.id == year.id) return;
 
-    // Try backend switch
+    final oldActiveYear = _activeYear;
+    
+    // 1. Optimistically switch active year locally
+    _activeYear = year;
+    ApiClient.setFYParams(activeDateRangeParams);
+    notifyListeners();
+
+    // 2. Persist preference locally
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, year.id);
+
+    // 3. Notify backend asynchronously
     try {
       final response = await _client.post(
         Uri.parse('${ApiClient.baseUrl}/financial-years/switch'),
@@ -306,24 +317,24 @@ class FinancialYearProvider extends ChangeNotifier {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         final switched = FinancialYear.fromJson(data);
         _activeYear = switched;
-        // Update in list
+        
+        // Update the item in available years list
         final idx = _availableYears.indexWhere((y) => y.id == switched.id);
-        if (idx >= 0) _availableYears[idx] = switched;
+        if (idx >= 0) {
+          _availableYears[idx] = switched;
+        }
+        notifyListeners();
       } else {
-        // Server rejected — don't update locally
-        return;
+        // Server rejected the switch - revert state
+        _activeYear = oldActiveYear;
+        ApiClient.setFYParams(activeDateRangeParams);
+        await prefs.setString(_prefsKey, oldActiveYear?.id ?? '');
+        notifyListeners();
       }
     } catch (_) {
-      // Offline — queue the switch for later, don't diverge client from server
+      // Offline/timeout - queue switch
       _pendingFySwitch = year.id;
-      _activeYear = year;
     }
-
-    notifyListeners();
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, _activeYear!.id);
-    ApiClient.setFYParams(activeDateRangeParams);
-    await _loadYears();
   }
 
   Map<String, String> get activeDateRangeParams {
@@ -440,6 +451,33 @@ class FinancialYearProvider extends ChangeNotifier {
     _isLoading = false;
     notifyListeners();
     return null;
+  }
+
+  /// Reopen a locked financial year via the backend.
+  Future<bool> reopenFinancialYear(String fyId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final response = await _client.post(
+        Uri.parse('${ApiClient.baseUrl}/financial-years/$fyId/reopen'),
+      );
+      if (response.statusCode == 200) {
+        await _loadYears();
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      } else {
+        final data = jsonDecode(response.body);
+        _errorMessage = data['detail'] ?? 'Failed to reopen financial year';
+      }
+    } catch (_) {
+      _errorMessage = 'An error occurred';
+    }
+    _isLoading = false;
+    notifyListeners();
+    return false;
   }
 
   /// Refresh from backend.

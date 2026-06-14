@@ -3,41 +3,54 @@ import 'package:google_fonts/google_fonts.dart';
 
 // ─── Color Tokens ───────────────────────────────────────────────
 class AppColors {
+  static bool isDark = false;
+
   // Brand
-  static const Color brandNavy = Color(0xFF0F234A);
+  static Color get brandNavy => isDark ? const Color(0xFF6B8CC7) : const Color(0xFF0F234A);
   static const Color brandNavyLight = Color(0xFF1A335C);
   static const Color brandNavyDark = Color(0xFF0A1A3A);
 
-  // Accent
+  // Primary action accent (Electric Indigo) — used for CTAs, active states on light bg
+  static Color get brandIndigo => isDark ? const Color(0xFF818CF8) : const Color(0xFF4F46E5);
+  static Color get brandIndigoBg => isDark ? const Color(0xFF1E1B4B) : const Color(0xFFEEF2FF);
+  static Color get brandIndigoBorder => isDark ? const Color(0xFF3730A3) : const Color(0xFFC7D2FE);
+
+  // Accent (Gold — sidebar active state, FAB, highlights)
   static const Color goldAccent = Color(0xFFDCA035);
   static const Color goldAccentLight = Color(0xFFE8B94C);
   static const Color goldAccentDark = Color(0xFFB88728);
   static const Color accentBlue = Color(0xFF3B82F6);
 
-  // Backgrounds
-  static const Color bgLight = Color(0xFFF8FAFC);
-  static const Color bgSurface = Color(0xFFFFFFFF);
-  static const Color bgSidebar = Color(0xFF0F234A);
-  static const Color bgSidebarHover = Color(0xFF1A335C);
+  // Semantic amount colors (aliases for consistent financial display)
+  static const Color amountPositive = Color(0xFF16A34A);  // same as success
+  static const Color amountNegative = Color(0xFFDC2626);  // same as error
+  static const Color amountReceivable = Color(0xFFD97706); // amber — money owed to you
+  static const Color amountPayable = Color(0xFFDC2626);   // red — money you owe
+
+  // Theme-aware backgrounds (getters return new instances so Flutter detects changes)
+  static Color get bgLight => isDark ? const Color(0xFF0F1117) : const Color(0xFFF8FAFC);
+  static Color get bgSurface => isDark ? const Color(0xFF1A1D26) : const Color(0xFFFFFFFF);
+  static Color get bgSidebar => isDark ? const Color(0xFF0F1117) : const Color(0xFF0F234A);
+  static Color get bgSidebarHover => isDark ? const Color(0xFF1E293B) : const Color(0xFF1A335C);
   static const Color bgSidebarActive = Color(0xFFD4A036);
-  static const Color bgSidebarSection = Color(0xFF162A54);
+  static Color get bgSidebarSection => isDark ? const Color(0xFF1E293B) : const Color(0xFF162A54);
   static const Color cardGradientTop = Color(0xFFDCA035);
 
   // Overlays
   static const Color overlayLight = Color(0x33000000);
   static const Color overlayDark = Color(0x99000000);
 
-  // Borders
-  static const Color border = Color(0xFFE5E7EB);
-  static const Color borderLight = Color(0xFFF0F2F7);
-  static const Color borderInput = Color(0xFFD1D5DC);
+  // Theme-aware borders
+  static Color get border => isDark ? const Color(0xFF2D3139) : const Color(0xFFE5E7EB);
+  static Color get borderLight => isDark ? const Color(0xFF242831) : const Color(0xFFF0F2F7);
+  static Color get borderInput => isDark ? const Color(0xFF3B404D) : const Color(0xFFD1D5DC);
 
-  // Text
-  static const Color textPrimary = Color(0xFF131620);
-  static const Color textSecondary = Color(0xFF5F6572);
-  static const Color textMuted = Color(0xFF9CA1AB);
+  // Theme-aware text
+  static Color get textPrimary => isDark ? const Color(0xFFECEFF4) : const Color(0xFF131620);
+  static Color get textSecondary => isDark ? const Color(0xFFB2B9C8) : const Color(0xFF5F6572);
+  static Color get textMuted => isDark ? const Color(0xFF818896) : const Color(0xFF9CA1AB);
   static const Color textWhite = Color(0xFFFFFFFF);
-  static const Color textWhiteMuted = Color(0xFFB0B8CC);
+  static Color get textWhiteMuted => isDark ? const Color(0xFF818896) : const Color(0xFFB0B8CC);
 
   // Status
   static const Color success = Color(0xFF16A34A);
@@ -212,6 +225,20 @@ class AppShadows {
     ),
   ];
 
+  /// Used for KPI/financial cards — subtle 2dp lift to signal importance
+  static const List<BoxShadow> financialCard = [
+    BoxShadow(
+      color: Color(0x0A000000),
+      blurRadius: 6,
+      offset: Offset(0, 2),
+    ),
+    BoxShadow(
+      color: Color(0x05000000),
+      blurRadius: 12,
+      offset: Offset(0, 4),
+    ),
+  ];
+
   static const List<BoxShadow> elevated = [
     BoxShadow(
       color: Color(0x0C000000),
@@ -285,31 +312,29 @@ class AppTextStyles {
     height: 1.5,
   );
 
-  static const TextStyle bodySmall = TextStyle(
+  // Theme-aware text styles (getters so colors update when isDark changes)
+  static TextStyle get bodySmall => TextStyle(
     fontSize: 13,
     fontWeight: FontWeight.w400,
     color: AppColors.textSecondary,
     height: 1.45,
   );
 
-  // Party names (500 weight for better readability)
-  static const TextStyle partyName = TextStyle(
+  static TextStyle get partyName => TextStyle(
     fontSize: 13,
     fontWeight: FontWeight.w500,
     color: AppColors.textPrimary,
     height: 1.3,
   );
 
-  // Date text (smaller, lighter)
-  static const TextStyle dateText = TextStyle(
+  static TextStyle get dateText => TextStyle(
     fontSize: 10,
     fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
     height: 1.3,
   );
 
-  // Labels
-  static const TextStyle label = TextStyle(
+  static TextStyle get label => TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w600,
     color: AppColors.textSecondary,
@@ -317,7 +342,7 @@ class AppTextStyles {
     height: 1.4,
   );
 
-  static const TextStyle labelSmall = TextStyle(
+  static TextStyle get labelSmall => TextStyle(
     fontSize: 11,
     fontWeight: FontWeight.w600,
     color: AppColors.textMuted,
@@ -325,7 +350,7 @@ class AppTextStyles {
     height: 1.4,
   );
 
-  // Numeric / tabular
+  // Numeric / tabular (no dynamic colors, keep const)
   static const TextStyle numeric = TextStyle(
     fontSize: 14,
     fontWeight: FontWeight.w600,
@@ -339,11 +364,6 @@ class AppTextStyles {
   );
 
   // ─── Financial Amounts ────────────────────────────────────
-  // Neutral toned — never red/green for accessibility.
-  // Sign is conveyed via prefix (-) not via color.
-
-  /// Standard amount in ledgers, tables, line items.
-  /// Right-aligned by default — use [TextAlign.right] in parent.
   static const TextStyle amount = TextStyle(
     fontSize: 14,
     fontWeight: FontWeight.w600,
@@ -351,7 +371,6 @@ class AppTextStyles {
     letterSpacing: 0.2,
   );
 
-  /// Large totals, dashboard metrics, invoice grand totals.
   static const TextStyle amountLarge = TextStyle(
     fontSize: 22,
     fontWeight: FontWeight.w700,
@@ -359,8 +378,6 @@ class AppTextStyles {
     letterSpacing: 0.3,
   );
 
-  /// Negative/debit amounts. Uses the same neutral color as positive;
-  /// the sign is always shown with a leading minus sign.
   static const TextStyle amountNegative = TextStyle(
     fontSize: 14,
     fontWeight: FontWeight.w600,
@@ -368,7 +385,6 @@ class AppTextStyles {
     letterSpacing: 0.2,
   );
 
-  /// Small amount for compact table cells, sub-ledgers.
   static const TextStyle amountSmall = TextStyle(
     fontSize: 12,
     fontWeight: FontWeight.w600,
@@ -376,8 +392,7 @@ class AppTextStyles {
     letterSpacing: 0.1,
   );
 
-  /// Unit-only style for headers, column labels in ledgers.
-  static const TextStyle amountLabel = TextStyle(
+  static TextStyle get amountLabel => TextStyle(
     fontSize: 10,
     fontWeight: FontWeight.w600,
     color: AppColors.textMuted,
@@ -385,15 +400,14 @@ class AppTextStyles {
     letterSpacing: 0.5,
   );
 
-  // Caption / metadata
-  static const TextStyle caption = TextStyle(
+  static TextStyle get caption => TextStyle(
     fontSize: 11,
     fontWeight: FontWeight.w400,
     color: AppColors.textMuted,
     height: 1.4,
   );
 
-  // Button
+  // Button (no dynamic colors, keep const)
   static const TextStyle button = TextStyle(
     fontSize: 13,
     fontWeight: FontWeight.w600,
@@ -408,7 +422,7 @@ class AppTextStyles {
     height: 1.2,
   );
 
-  static const TextStyle overline = TextStyle(
+  static TextStyle get overline => TextStyle(
     fontSize: 9,
     fontWeight: FontWeight.w600,
     letterSpacing: 0.8,
@@ -435,12 +449,12 @@ class AppTheme {
         error: AppColors.error,
       ),
       fontFamily: GoogleFonts.inter().fontFamily,
-      dividerTheme: const DividerThemeData(
+      dividerTheme: DividerThemeData(
         color: AppColors.borderLight,
         thickness: 1,
         space: 1,
       ),
-      appBarTheme: const AppBarTheme(
+      appBarTheme: AppBarTheme(
         backgroundColor: AppColors.bgSurface,
         foregroundColor: AppColors.textPrimary,
         elevation: 0,
@@ -452,7 +466,7 @@ class AppTheme {
         color: AppColors.bgSurface,
         shape: RoundedRectangleBorder(
           borderRadius: AppRadius.card,
-          side: const BorderSide(color: AppColors.border),
+          side: BorderSide(color: AppColors.border),
         ),
         clipBehavior: Clip.antiAlias,
         margin: EdgeInsets.zero,
@@ -473,7 +487,7 @@ class AppTheme {
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.textPrimary,
-          side: const BorderSide(color: AppColors.borderInput),
+          side: BorderSide(color: AppColors.borderInput),
           elevation: 0,
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 13),
           shape: RoundedRectangleBorder(
@@ -498,15 +512,15 @@ class AppTheme {
         contentPadding: AppSpacing.inputPadding,
         border: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.borderInput),
+          borderSide: BorderSide(color: AppColors.borderInput),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.borderInput),
+          borderSide: BorderSide(color: AppColors.borderInput),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.brandNavy, width: 1.5),
+          borderSide: BorderSide(color: AppColors.brandNavy, width: 1.5),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
@@ -518,7 +532,7 @@ class AppTheme {
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.borderLight),
+          borderSide: BorderSide(color: AppColors.borderLight),
         ),
         labelStyle: AppTextStyles.bodySmall,
         hintStyle: TextStyle(
@@ -540,7 +554,7 @@ class AppTheme {
               color: AppColors.error,
             );
           }
-          return const TextStyle(
+          return TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
             color: AppColors.brandNavy,
@@ -554,15 +568,15 @@ class AppTheme {
           contentPadding: AppSpacing.inputPadding,
           border: OutlineInputBorder(
             borderRadius: AppRadius.input,
-            borderSide: const BorderSide(color: AppColors.borderInput),
+            borderSide: BorderSide(color: AppColors.borderInput),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: AppRadius.input,
-            borderSide: const BorderSide(color: AppColors.borderInput),
+            borderSide: BorderSide(color: AppColors.borderInput),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: AppRadius.input,
-            borderSide: const BorderSide(color: AppColors.brandNavy, width: 1.5),
+            borderSide: BorderSide(color: AppColors.brandNavy, width: 1.5),
           ),
         ),
       ),
@@ -589,14 +603,14 @@ class AppTheme {
           borderRadius: BorderRadius.circular(AppRadius.lg),
         ),
       ),
-      tabBarTheme: const TabBarThemeData(
+      tabBarTheme: TabBarThemeData(
         indicatorColor: AppColors.goldAccent,
         labelColor: AppColors.brandNavy,
         unselectedLabelColor: AppColors.textMuted,
         labelStyle: AppTextStyles.button,
         unselectedLabelStyle: AppTextStyles.button,
       ),
-      bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      bottomNavigationBarTheme: BottomNavigationBarThemeData(
         backgroundColor: AppColors.bgSurface,
         selectedItemColor: AppColors.goldAccentDark,
         unselectedItemColor: AppColors.textMuted,
@@ -605,7 +619,7 @@ class AppTheme {
         selectedLabelStyle: AppTextStyles.labelSmall,
         unselectedLabelStyle: AppTextStyles.labelSmall,
       ),
-      progressIndicatorTheme: const ProgressIndicatorThemeData(
+      progressIndicatorTheme: ProgressIndicatorThemeData(
         color: AppColors.goldAccent,
         linearTrackColor: AppColors.borderLight,
       ),

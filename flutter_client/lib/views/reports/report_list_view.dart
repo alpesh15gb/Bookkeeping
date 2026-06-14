@@ -224,15 +224,15 @@ class _ReportListViewState extends State<ReportListView> {
                           contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 10),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: AppColors.border),
+                            borderSide: BorderSide(color: AppColors.border),
                           ),
                           enabledBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: AppColors.border),
+                            borderSide: BorderSide(color: AppColors.border),
                           ),
                           focusedBorder: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(8),
-                            borderSide: const BorderSide(color: AppColors.brandNavy, width: 1.5),
+                            borderSide: BorderSide(color: AppColors.brandNavy, width: 1.5),
                           ),
                           fillColor: AppColors.bgLight,
                           filled: true,

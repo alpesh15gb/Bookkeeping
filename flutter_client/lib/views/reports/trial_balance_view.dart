@@ -126,7 +126,7 @@ class _TrialBalanceViewState extends State<TrialBalanceView> {
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columnSpacing: 20,
-                columns: const [
+                columns: [
                   DataColumn(label: Text('Account Name', style: AppTextStyles.labelSmall)),
                   DataColumn(label: Text('Code', style: AppTextStyles.labelSmall)),
                   DataColumn(label: Text('Debit', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),

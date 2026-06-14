@@ -50,9 +50,9 @@ class AppCard extends StatelessWidget {
         border: border ?? (accentColor != null
             ? Border(
                 top: BorderSide(color: accentColor!, width: 3),
-                left: const BorderSide(color: AppColors.border),
-                right: const BorderSide(color: AppColors.border),
-                bottom: const BorderSide(color: AppColors.border),
+                left: BorderSide(color: AppColors.border),
+                right: BorderSide(color: AppColors.border),
+                bottom: BorderSide(color: AppColors.border),
               )
             : Border.all(color: AppColors.border)),
       ),
@@ -478,15 +478,15 @@ class AppInput extends StatelessWidget {
         contentPadding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
         border: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.borderInput),
+          borderSide: BorderSide(color: AppColors.borderInput),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.borderInput),
+          borderSide: BorderSide(color: AppColors.borderInput),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.brandNavy, width: 1.5),
+          borderSide: BorderSide(color: AppColors.brandNavy, width: 1.5),
         ),
         filled: true,
         fillColor: AppColors.bgSurface,
@@ -1398,28 +1398,16 @@ class DocumentPreviewScreen extends StatelessWidget {
       ),
       body: isMobile
           ? SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.fromLTRB(12, 12, 12, 24),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   hero,
-                  const SizedBox(height: 16),
-                  ...sections,
+                  const SizedBox(height: 12),
+                  ...sections.expand((s) => [s, const SizedBox(height: 12)]),
                   if (actions != null) ...[
-                    const SizedBox(height: 16),
-                    AppCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Text(
-                            'Actions'.toUpperCase(),
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5),
-                          ),
-                          const SizedBox(height: 12),
-                          ...actions!,
-                        ],
-                      ),
-                    ),
+                    const SizedBox(height: 8),
+                    ...actions!,
                   ],
                 ],
               ),
@@ -1430,13 +1418,13 @@ class DocumentPreviewScreen extends StatelessWidget {
                 Expanded(
                   flex: 3,
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.fromLTRB(24, 20, 16, 24),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         hero,
                         const SizedBox(height: 16),
-                        ...sections,
+                        ...sections.expand((s) => [s, const SizedBox(height: 16)]),
                       ],
                     ),
                   ),
@@ -1444,14 +1432,14 @@ class DocumentPreviewScreen extends StatelessWidget {
                 if (actions != null)
                   Container(
                     width: 260,
-                    margin: const EdgeInsets.only(right: 24, top: 24, bottom: 24),
+                    margin: const EdgeInsets.only(right: 24, top: 20, bottom: 24),
                     child: AppCard(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            'Actions'.toUpperCase(),
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5),
+                            'ACTIONS',
+                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: AppColors.textMuted, letterSpacing: 0.8),
                           ),
                           const SizedBox(height: 12),
                           ...actions!,
@@ -2018,6 +2006,208 @@ class AppStickyBottomBar extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: children,
+        ),
+      ),
+    );
+  }
+}
+
+// ─── KPI TILE (financial metric card) ────────────────────────────
+/// A premium financial KPI card with:
+/// - Semantic 3px top-border accent
+/// - Full-amount tooltip (never hides precision)
+/// - Optional trend arrow (↑/↓ vs prior period)
+/// - Tabular figures enforced
+class AppKpiTile extends StatefulWidget {
+  final String label;
+  /// Short-formatted amount string, e.g. "₹24.5L" — for compact display.
+  final String amountShort;
+  /// Full-formatted amount string, e.g. "₹24,56,789.00" — shown in tooltip.
+  final String amountFull;
+  /// Semantic accent color for the top border and icon.
+  final Color accentColor;
+  final IconData icon;
+  /// If true, amount text is colored with [accentColor]. If false, uses textPrimary.
+  final bool colorizeAmount;
+  /// +1 = up (positive trend), -1 = down (negative trend), 0 = no arrow.
+  final int trendDirection;
+  final VoidCallback? onTap;
+
+  const AppKpiTile({
+    super.key,
+    required this.label,
+    required this.amountShort,
+    required this.amountFull,
+    required this.accentColor,
+    required this.icon,
+    this.colorizeAmount = false,
+    this.trendDirection = 0,
+    this.onTap,
+  });
+
+  @override
+  State<AppKpiTile> createState() => _AppKpiTileState();
+}
+
+class _AppKpiTileState extends State<AppKpiTile> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final amtColor = widget.colorizeAmount ? widget.accentColor : AppColors.textPrimary;
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: widget.onTap != null ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? widget.accentColor.withValues(alpha: 0.03)
+                : AppColors.bgSurface,
+            borderRadius: AppRadius.card,
+            border: Border(
+              top: BorderSide(color: widget.accentColor, width: 3),
+              left: BorderSide(color: AppColors.border),
+              right: BorderSide(color: AppColors.border),
+              bottom: BorderSide(color: AppColors.border),
+            ),
+            boxShadow: AppShadows.financialCard,
+          ),
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Label row with icon
+              Row(
+                children: [
+                  Icon(widget.icon, size: 13, color: widget.accentColor),
+                  const SizedBox(width: 5),
+                  Expanded(
+                    child: Text(
+                      widget.label.toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 9,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textMuted,
+                        letterSpacing: 0.6,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (widget.trendDirection != 0)
+                    Icon(
+                      widget.trendDirection > 0
+                          ? Icons.trending_up_rounded
+                          : Icons.trending_down_rounded,
+                      size: 13,
+                      color: widget.trendDirection > 0
+                          ? AppColors.amountPositive
+                          : AppColors.amountNegative,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Amount — always has full tooltip
+              Tooltip(
+                message: widget.amountFull,
+                waitDuration: const Duration(milliseconds: 300),
+                child: Text(
+                  widget.amountShort,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    color: amtColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    letterSpacing: 0.1,
+                    height: 1.15,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─── QUICK ACTION CARD (dashboard shortcut) ───────────────────────
+/// A labelled shortcut tile used in the desktop dashboard Quick Actions row.
+class AppQuickActionCard extends StatefulWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final VoidCallback onTap;
+
+  const AppQuickActionCard({
+    super.key,
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  State<AppQuickActionCard> createState() => _AppQuickActionCardState();
+}
+
+class _AppQuickActionCardState extends State<AppQuickActionCard> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 130),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: _hovered
+                ? widget.color.withValues(alpha: 0.08)
+                : AppColors.bgSurface,
+            borderRadius: AppRadius.card,
+            border: Border.all(
+              color: _hovered
+                  ? widget.color.withValues(alpha: 0.4)
+                  : AppColors.border,
+            ),
+            boxShadow: _hovered ? AppShadows.card : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  color: widget.color.withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(AppRadius.sm),
+                ),
+                child: Icon(widget.icon, size: 14, color: widget.color),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                widget.label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

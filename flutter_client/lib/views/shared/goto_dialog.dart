@@ -570,7 +570,7 @@ class _GoToDialogState extends State<GoToDialog> {
                 // Results list
                 Expanded(
                   child: _filteredItems.isEmpty
-                      ? const Center(
+                      ? Center(
                           child: Text(
                             'No matches found',
                             style: TextStyle(color: AppColors.textMuted),
@@ -595,7 +595,7 @@ class _GoToDialogState extends State<GoToDialog> {
                                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
                                     child: Text(
                                       item.category.toUpperCase(),
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
                                         color: AppColors.brandNavy,
@@ -638,7 +638,7 @@ class _GoToDialogState extends State<GoToDialog> {
                                           ),
                                         ),
                                         if (isSelected)
-                                          const Text(
+                                          Text(
                                             '⏎ Enter',
                                             style: TextStyle(
                                               fontSize: 11,
@@ -662,12 +662,12 @@ class _GoToDialogState extends State<GoToDialog> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
+                      Text(
                         'Use Alt+G or Ctrl+G to open anywhere',
                         style: TextStyle(fontSize: 11, color: AppColors.textMuted),
                       ),
                       Row(
-                        children: const [
+                        children: [
                           Icon(Icons.arrow_upward, size: 12, color: AppColors.textMuted),
                           Icon(Icons.arrow_downward, size: 12, color: AppColors.textMuted),
                           SizedBox(width: 4),

@@ -50,7 +50,7 @@ class AuthProvider extends ChangeNotifier {
         if (memResponse.statusCode == 200) {
           final memData = jsonDecode(memResponse.body);
           final List memItems = memData is Map ? (memData['items'] ?? []) : (memData is List ? memData : []);
-          _memberships = memItems.whereType<Map<String, dynamic>>().map((e) => TenantMembership.fromJson(e)).toList();
+          _memberships = memItems.map((e) => e is Map ? Map<String, dynamic>.from(e) : null).whereType<Map<String, dynamic>>().map((e) => TenantMembership.fromJson(e)).toList();
           _activeTenantId = ApiClient.tenantId;
           if (_activeTenantId == null && _memberships.isNotEmpty) {
             _activeTenantId = _memberships[0].tenantId;
@@ -101,7 +101,7 @@ class AuthProvider extends ChangeNotifier {
         if (memResponse.statusCode == 200) {
           final memData2 = jsonDecode(memResponse.body);
           final List memItems2 = memData2 is Map ? (memData2['items'] ?? []) : (memData2 is List ? memData2 : []);
-          _memberships = memItems2.whereType<Map<String, dynamic>>().map((e) => TenantMembership.fromJson(e)).toList();
+          _memberships = memItems2.map((e) => e is Map ? Map<String, dynamic>.from(e) : null).whereType<Map<String, dynamic>>().map((e) => TenantMembership.fromJson(e)).toList();
           if (_memberships.isNotEmpty) {
             _activeTenantId = _memberships[0].tenantId;
             ApiClient.setTenantId(_activeTenantId);

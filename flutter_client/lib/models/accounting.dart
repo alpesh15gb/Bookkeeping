@@ -85,6 +85,7 @@ class JournalEntryModel {
       isLocked: json['is_locked'] ?? false,
       createdAt: json['created_at'] ?? '',
       lines: (json['lines'] is List ? json['lines'] as List : [])
+          .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
           .whereType<Map<String, dynamic>>()
           .map((l) => JournalLineModel.fromJson(l))
           .toList(),

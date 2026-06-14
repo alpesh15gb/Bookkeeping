@@ -262,7 +262,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
           title: 'B2B Supplies (Registered Customers)',
           count: b2b.length,
           child: b2b.isEmpty
-              ? const Padding(padding: EdgeInsets.all(16), child: Text('No registered supplies', style: AppTextStyles.caption))
+              ? Padding(padding: const EdgeInsets.all(16), child: Text('No registered supplies', style: AppTextStyles.caption))
               : Column(
                   children: b2b.map((item) {
                     return ListTile(
@@ -281,7 +281,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
           title: 'B2CS Supplies (Consumer Sales)',
           count: b2cs.length,
           child: b2cs.isEmpty
-              ? const Padding(padding: EdgeInsets.all(16), child: Text('No consumer supplies', style: AppTextStyles.caption))
+              ? Padding(padding: const EdgeInsets.all(16), child: Text('No consumer supplies', style: AppTextStyles.caption))
                 : Column(
                   children: b2cs.map((item) {
                     final rate = item['gst_rate'] ?? 0;
@@ -302,7 +302,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
           title: 'HSN Wise Summary',
           count: hsn.length,
           child: hsn.isEmpty
-              ? const Padding(padding: EdgeInsets.all(16), child: Text('No HSN data', style: AppTextStyles.caption))
+              ? Padding(padding: const EdgeInsets.all(16), child: Text('No HSN data', style: AppTextStyles.caption))
               : Column(
                   children: hsn.map((item) {
                     return ListTile(
@@ -332,7 +332,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
           title: 'B2B Inward Supplies (Registered Suppliers)',
           count: b2b.length,
           child: b2b.isEmpty
-              ? const Padding(padding: EdgeInsets.all(16), child: Text('No registered supplies', style: AppTextStyles.caption))
+              ? Padding(padding: const EdgeInsets.all(16), child: Text('No registered supplies', style: AppTextStyles.caption))
               : Column(
                   children: b2b.map((item) {
                     return ListTile(
@@ -351,7 +351,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
           title: 'B2BUR Inward Supplies (Unregistered Reverse Charge)',
           count: b2bur.length,
           child: b2bur.isEmpty
-              ? const Padding(padding: EdgeInsets.all(16), child: Text('No unregistered reverse-charge supplies', style: AppTextStyles.caption))
+              ? Padding(padding: const EdgeInsets.all(16), child: Text('No unregistered reverse-charge supplies', style: AppTextStyles.caption))
               : Column(
                   children: b2bur.map((item) {
                     return ListTile(
@@ -370,7 +370,7 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
           title: 'HSN Wise Inward Summary',
           count: hsn.length,
           child: hsn.isEmpty
-              ? const Padding(padding: EdgeInsets.all(16), child: Text('No HSN data', style: AppTextStyles.caption))
+              ? Padding(padding: const EdgeInsets.all(16), child: Text('No HSN data', style: AppTextStyles.caption))
               : Column(
                   children: hsn.map((item) {
                     return ListTile(

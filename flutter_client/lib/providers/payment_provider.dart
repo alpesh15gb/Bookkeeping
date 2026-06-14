@@ -35,7 +35,7 @@ class PaymentProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
-        _receipts = items.whereType<Map<String, dynamic>>().map((x) => PaymentModel.fromJson(x)).toList();
+        _receipts = items.map((e) => e is Map ? Map<String, dynamic>.from(e) : null).whereType<Map<String, dynamic>>().map((x) => PaymentModel.fromJson(x)).toList();
       }
     } catch (_) {
       _errorMessage = 'Failed to load receipts';
@@ -54,7 +54,7 @@ class PaymentProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
-        _disbursements = items.whereType<Map<String, dynamic>>().map((x) => BillPaymentModel.fromJson(x)).toList();
+        _disbursements = items.map((e) => e is Map ? Map<String, dynamic>.from(e) : null).whereType<Map<String, dynamic>>().map((x) => BillPaymentModel.fromJson(x)).toList();
       }
     } catch (_) {
       _errorMessage = 'Failed to load disbursements';

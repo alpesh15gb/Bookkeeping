@@ -58,7 +58,7 @@ class _AccountFormViewState extends State<AccountFormView> {
           children: [
             Row(
               children: [
-                const Icon(Icons.account_balance_outlined, color: AppColors.brandNavy, size: 22),
+                Icon(Icons.account_balance_outlined, color: AppColors.brandNavy, size: 22),
                 const SizedBox(width: 10),
                 Text(widget.editAccount != null ? 'Edit Account' : 'New Account', style: AppTextStyles.h2),
               ],

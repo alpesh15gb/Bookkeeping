@@ -177,7 +177,7 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.bgSurface,
-          border: const Border(top: BorderSide(color: AppColors.border)),
+          border: Border(top: BorderSide(color: AppColors.border)),
           boxShadow: const [
             BoxShadow(
               color: Color(0x0A000000),

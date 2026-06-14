@@ -148,7 +148,7 @@ class _QuickCreateProductSheetState extends State<_QuickCreateProductSheet> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close,
                       size: 20,
                       color: AppColors.textMuted,

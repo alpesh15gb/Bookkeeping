@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart' show StatusBadge, AppConfirmDialog, AppToast, HeroSummaryCard;
-import 'package:flutter_client/views/shared/design_system.dart';
+import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/design_system.dart' hide AppCard;
+import 'package:flutter_client/views/shared/document_list_view.dart';
 import 'package:flutter_client/views/shared/toast.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/transaction_form_view.dart';
 
 class ReturnsListView extends StatefulWidget {
@@ -17,6 +17,7 @@ class ReturnsListView extends StatefulWidget {
 
 class _ReturnsListViewState extends State<ReturnsListView> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  final _searchCtrl = TextEditingController();
   List<dynamic> _salesReturns = [];
   List<dynamic> _purchaseReturns = [];
   bool _isLoading = true;
@@ -26,6 +27,13 @@ class _ReturnsListViewState extends State<ReturnsListView> with SingleTickerProv
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
     _fetch();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _fetch() async {
@@ -63,83 +71,132 @@ class _ReturnsListViewState extends State<ReturnsListView> with SingleTickerProv
     ).then((_) => _fetch());
   }
 
+  List<dynamic> _filterList(List<dynamic> list) {
+    final query = _searchCtrl.text.trim().toLowerCase();
+    if (query.isEmpty) return list;
+    return list.where((item) {
+      final number = (item['return_number'] ?? '').toString().toLowerCase();
+      final contact = (item['contact_name'] ?? '').toString().toLowerCase();
+      return number.contains(query) || contact.contains(query);
+    }).toList();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Returns'),
-        bottom: TabBar(
-          controller: _tabController,
-          tabs: const [
-            Tab(text: 'Sales Returns'),
-            Tab(text: 'Purchase Returns'),
-          ],
-        ),
-        actions: [
-          IconButton(icon: const Icon(Icons.refresh), onPressed: _fetch),
-        ],
-      ),
+      backgroundColor: AppColors.bgLight,
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showForm(_tabController.index == 0),
         child: const Icon(Icons.add),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : TabBarView(
+      body: Column(
+        children: [
+          Container(
+            color: AppColors.bgSurface,
+            child: TabBar(
               controller: _tabController,
-              children: [
-                _buildList(_salesReturns, true),
-                _buildList(_purchaseReturns, false),
+              labelColor: AppColors.brandNavy,
+              unselectedLabelColor: AppColors.textSecondary,
+              indicatorColor: AppColors.goldAccent,
+              indicatorWeight: 3,
+              labelStyle: AppTextStyles.tabLabel.copyWith(fontWeight: FontWeight.w700),
+              unselectedLabelStyle: AppTextStyles.tabLabel,
+              onTap: (_) => setState(() {}),
+              tabs: const [
+                Tab(text: 'SALES RETURNS'),
+                Tab(text: 'PURCHASE RETURNS'),
               ],
             ),
+          ),
+          Expanded(
+            child: _isLoading
+                ? const LoadingState(message: 'Loading returns...')
+                : TabBarView(
+                    controller: _tabController,
+                    children: [
+                      _buildTab(_salesReturns, true),
+                      _buildTab(_purchaseReturns, false),
+                    ],
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildList(List<dynamic> items, bool isSales) {
-    if (items.isEmpty) return const AppEmptyState(icon: Icons.assignment_return_outlined, title: 'No returns found');
+  Widget _buildTab(List<dynamic> allItems, bool isSales) {
+    final filtered = _filterList(allItems);
+
+    final totalCount = allItems.length;
+    final draftCount = allItems.where((e) => e['status'] == 'DRAFT').length;
+    final postedCount = allItems.where((e) => e['status'] == 'POSTED').length;
+    final cancelledCount = allItems.where((e) => e['status'] == 'CANCELLED').length;
+
     num totalAmount = 0;
-    for (final item in items) {
+    for (final item in allItems) {
       totalAmount += double.tryParse((item['total'] ?? 0).toString()) ?? 0;
     }
-    return ListView.builder(
-      padding: const EdgeInsets.only(top: 8, left: 12, right: 12, bottom: 80),
-      itemCount: items.length + 1,
-      itemBuilder: (context, index) {
-        if (index == 0) {
-          return Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: HeroSummaryCard(
-              title: isSales ? 'Total Sales Returns' : 'Total Purchase Returns',
-              amount: totalAmount,
-              subtitle: '${items.length} returns',
-              icon: Icons.assignment_return_outlined,
-            ),
-          );
-        }
-        final item = items[index - 1];
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: AppCard(
-            child: AppListTile(
-              leadingText: (item['return_number'] ?? 'R')[0].toString().toUpperCase(),
-              title: item['return_number'] ?? 'N/A',
-              subtitle: '${item['contact_name'] ?? 'N/A'} | ${AppDate.format(item['issue_date'])}',
-              badge: StatusBadge(label: item['status'] ?? 'DRAFT'),
-              hoverActions: item['status'] == 'POSTED'
+
+    final items = filtered.map((item) {
+      return DocumentItemData(
+        id: item['id'].toString(),
+        docNumber: item['return_number'] ?? 'RET',
+        partyName: item['contact_name'] ?? 'N/A',
+        date: item['issue_date']?.toString(),
+        amount: double.tryParse((item['total'] ?? 0).toString()) ?? 0,
+        status: item['status'] ?? 'DRAFT',
+      );
+    }).toList();
+
+    return DocumentListView(
+      title: isSales ? 'Sales Returns' : 'Purchase Returns',
+      searchController: _searchCtrl,
+      searchHint: 'Search returns...',
+      onSearchChanged: (_) => setState(() {}),
+      filterTabs: [
+        FilterTab('ALL', totalCount),
+        FilterTab('DRAFT', draftCount),
+        FilterTab('POSTED', postedCount),
+        FilterTab('CANCELLED', cancelledCount),
+      ],
+      activeFilter: 'ALL',
+      onFilterChanged: (_) {},
+      summary: ListSummaryData(totalAmount: totalAmount.toDouble(), totalCount: totalCount),
+      items: items,
+      isLoading: false,
+      onRefresh: () async => _fetch(),
+      emptyTitle: 'No ${isSales ? "Sales" : "Purchase"} Returns',
+      emptySubtitle: '${isSales ? "Sales" : "Purchase"} returns will appear here once created',
+      emptyIcon: Icons.assignment_return_outlined,
+      detailBuilder: (ctx, item) {
+        final match = allItems.firstWhere((e) => e['id'].toString() == item.id, orElse: () => {});
+        return ReturnsDetailView(item: match, isSalesReturn: isSales);
+      },
+      itemBuilder: (context, item, index) {
+        return AppCard(
+          child: AppListTile(
+            leadingText: item.docNumber[0].toUpperCase(),
+            title: item.docNumber,
+            subtitle: '${item.partyName} · ${item.date != null ? AppDate.format(item.date) : ""}',
+            badge: StatusBadge(label: item.status),
+            hoverActions: item.status == 'POSTED'
                 ? [
                     IconButton(
                       icon: const Icon(Icons.cancel_outlined, size: 18, color: AppColors.error),
-                      onPressed: () => _cancelItem(item, isSales),
+                      onPressed: () {
+                        final match = allItems.firstWhere((e) => e['id'].toString() == item.id, orElse: () => {});
+                        _cancelItem(match, isSales);
+                      },
                     ),
                   ]
                 : null,
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => ReturnsDetailView(item: item, isSalesReturn: isSales)),
-                ).then((_) => _fetch());
-              },
-            ),
+            onTap: () {
+              final match = allItems.firstWhere((e) => e['id'].toString() == item.id, orElse: () => {});
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => ReturnsDetailView(item: match, isSalesReturn: isSales)),
+              ).then((_) => _fetch());
+            },
           ),
         );
       },
@@ -218,7 +275,10 @@ class ReturnsDetailView extends StatelessWidget {
           AppSection(
             title: 'Line Items',
             child: Column(
-              children: ((m['lines'] is List ? m['lines'] as List : [])).whereType<Map<String, dynamic>>().map((l) => AppCard(
+              children: ((m['lines'] is List ? m['lines'] as List : []))
+                  .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
+                  .whereType<Map<String, dynamic>>()
+                  .map((l) => AppCard(
                 child: AppListTile(
                   title: '${l['product_name'] ?? 'Product'}',
                   subtitle: 'Qty: ${l['quantity'] ?? 0} @ ${AmountFormat.format(double.tryParse((l['rate'] ?? 0).toString()) ?? 0)}',

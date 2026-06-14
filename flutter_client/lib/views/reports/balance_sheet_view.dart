@@ -115,7 +115,7 @@ class _BalanceSheetViewState extends State<BalanceSheetView> {
             borderRadius: AppRadius.card,
             border: Border.all(color: AppColors.border),
           ),
-          child: const Center(
+          child: Center(
             child: Text(
               'Assets = Liabilities + Equity',
               style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: AppColors.brandNavy),
@@ -179,8 +179,8 @@ class _BalanceSheetViewState extends State<BalanceSheetView> {
           ),
           const Divider(height: 1),
           if (items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
+            Padding(
+              padding: const EdgeInsets.all(24),
               child: Center(child: Text('No accounts in this section', style: AppTextStyles.bodySmall)),
             )
           else

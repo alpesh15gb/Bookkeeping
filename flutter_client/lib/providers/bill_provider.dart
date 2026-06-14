@@ -46,8 +46,9 @@ class BillProvider extends ChangeNotifier {
       final response = await _client.get(_buildUri('${ApiClient.baseUrl}/bills$queryString'));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final List items = data is Map ? (data['items'] ?? []) : data;
+        final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
         final newBills = items
+            .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
             .whereType<Map<String, dynamic>>()
             .map((x) => BillModel.fromJson(x))
             .toList();

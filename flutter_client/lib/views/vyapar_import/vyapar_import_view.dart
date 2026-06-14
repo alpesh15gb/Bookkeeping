@@ -140,7 +140,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                 color: AppColors.brandNavy.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(36),
               ),
-              child: const Center(
+              child: Center(
                 child: CircularProgressIndicator(
                   strokeWidth: 2.5,
                   color: AppColors.brandNavy,
@@ -167,7 +167,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.folder_zip_outlined, size: 16, color: AppColors.textMuted),
+                    Icon(Icons.folder_zip_outlined, size: 16, color: AppColors.textMuted),
                     const SizedBox(width: 8),
                     Text(_selectedFileName!, style: AppTextStyles.caption),
                   ],
@@ -351,13 +351,13 @@ class _VyaparImportViewState extends State<VyaparImportView> {
               color: AppColors.brandNavy.withValues(alpha: 0.07),
               borderRadius: BorderRadius.circular(40),
             ),
-            child: const Icon(Icons.file_upload_outlined, size: 40, color: AppColors.brandNavy),
+            child: Icon(Icons.file_upload_outlined, size: 40, color: AppColors.brandNavy),
           ),
         ),
         const SizedBox(height: 20),
         const Center(child: Text('Import from Vyapar', style: AppTextStyles.h2)),
         const SizedBox(height: 8),
-        const Center(
+        Center(
           child: Text(
             'Select a .vyb backup file exported from Vyapar to import\nyour contacts, products, invoices, payments, stock and more.',
             style: AppTextStyles.bodySmall,
@@ -394,7 +394,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
           onPressed: _pickAndImport,
         ),
         const SizedBox(height: 12),
-        const Center(
+        Center(
           child: Text(
             'Supported format: Vyapar backup (.vyb)\nDuplicate contacts and products will be skipped.',
             style: AppTextStyles.caption,

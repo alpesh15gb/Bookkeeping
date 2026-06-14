@@ -156,13 +156,13 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
                 itemBuilder: (_) => products.map((p) => PopupMenuItem(value: p, child: Text(p.name))).toList(),
               ),
               child: _lines.isEmpty
-                  ? const Padding(padding: EdgeInsets.symmetric(vertical: 32), child: Center(child: Text('Add products to adjust', style: AppTextStyles.bodySmall)))
+                  ? Padding(padding: const EdgeInsets.symmetric(vertical: 32), child: Center(child: Text('Add products to adjust', style: AppTextStyles.bodySmall)))
                   : Column(
                       children: [
                         Container(
                           padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
                           decoration: BoxDecoration(color: AppColors.borderLight, borderRadius: BorderRadius.circular(AppRadius.sm)),
-                          child: const Row(children: [
+                          child: Row(children: [
                             Expanded(flex: 3, child: Text('PRODUCT', style: AppTextStyles.labelSmall)),
                             Expanded(flex: 1, child: Text('QTY', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
                             Expanded(flex: 2, child: Text('COST/UNIT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),

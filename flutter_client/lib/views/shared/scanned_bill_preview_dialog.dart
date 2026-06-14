@@ -87,6 +87,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
     final rawLines = widget.previewData['line_items'];
     if (rawLines is List) {
       _lineItems = rawLines
+          .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
           .whereType<Map<String, dynamic>>()
           .map((e) {
             final copy = Map<String, dynamic>.from(e);
@@ -405,7 +406,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
         children: [
           Row(
             children: [
-              const Icon(Icons.storefront_outlined, size: 18, color: AppColors.brandNavy),
+              Icon(Icons.storefront_outlined, size: 18, color: AppColors.brandNavy),
               const SizedBox(width: 8),
               Text('VENDOR', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
               const Spacer(),
@@ -525,7 +526,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
         children: [
           Row(
             children: [
-              const Icon(Icons.receipt_outlined, size: 18, color: AppColors.brandNavy),
+              Icon(Icons.receipt_outlined, size: 18, color: AppColors.brandNavy),
               const SizedBox(width: 8),
               Text('BILL DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
               const Spacer(),
@@ -626,7 +627,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
             ),
           ),
           if (_lineItems.isEmpty)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(32),
               child: Center(child: Text('No items found', style: TextStyle(color: AppColors.textMuted))),
             )
@@ -645,7 +646,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
 
                 return Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     border: Border(bottom: BorderSide(color: AppColors.border)),
                   ),
                   child: Row(
@@ -798,7 +799,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
             children: [
               const Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               Text('₹${_total.toStringAsFixed(2)}',
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.brandNavy)),
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.brandNavy)),
             ],
           ),
         ],

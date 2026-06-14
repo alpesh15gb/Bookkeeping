@@ -95,7 +95,7 @@ class _RegisterViewState extends State<RegisterView> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       "Enter your business details to get started",
                       style: AppTextStyles.bodySmall,
                       textAlign: TextAlign.center,
@@ -103,7 +103,7 @@ class _RegisterViewState extends State<RegisterView> {
                     const SizedBox(height: 28),
 
                     // Section: Business Information
-                    const Text(
+                    Text(
                       'BUSINESS INFORMATION',
                       style: AppTextStyles.labelSmall,
                     ),

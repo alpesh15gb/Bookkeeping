@@ -18,7 +18,7 @@ class InvoiceFormView extends StatelessWidget {
       editEntity: editInvoice,
       initialData: initialData,
       config: TransactionConfig(
-        title: 'GST Tax Invoice',
+        title: 'Create Invoice',
         contactLabel: 'Customer',
         contactType: 'CUSTOMER',
         numberLabel: 'Invoice Number',
@@ -29,6 +29,14 @@ class InvoiceFormView extends StatelessWidget {
         hasLinkedInvoice: false,
         allowScanning: false,
         successMessage: editInvoice != null ? 'Invoice updated' : 'Invoice created',
+        paymentTermsOptions: const [
+          'Due on Receipt',
+          'Net 15',
+          'Net 30',
+          'Net 45',
+          'Net 60',
+          'Net 90',
+        ],
         onSave: (ctx, payload) async {
           final provider = ctx.read<InvoiceProvider>();
           final success = editInvoice != null

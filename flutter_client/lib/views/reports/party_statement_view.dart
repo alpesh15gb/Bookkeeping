@@ -345,7 +345,7 @@ class _PartyStatementViewState extends State<PartyStatementView> {
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 columnSpacing: 16,
-                columns: const [
+                columns: [
                   DataColumn(label: Text('Date', style: AppTextStyles.labelSmall)),
                   DataColumn(label: Text('Particulars', style: AppTextStyles.labelSmall)),
                   DataColumn(label: Text('Voucher Type', style: AppTextStyles.labelSmall)),

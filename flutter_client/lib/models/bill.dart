@@ -93,6 +93,7 @@ class BillModel {
   factory BillModel.fromJson(Map<String, dynamic> json) {
     var rawLines = (json['lines'] is List ? json['lines'] as List : []);
     List<BillLineModel> linesList = rawLines
+        .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
         .whereType<Map<String, dynamic>>()
         .map((x) => BillLineModel.fromJson(x))
         .toList();

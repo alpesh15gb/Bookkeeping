@@ -557,6 +557,9 @@ def request_purge_otp(
         send_email_smtp(msg)
     except Exception as e:
         logger.error(f"Failed to send purge OTP email to {current_user.email}: {e}")
+        if settings.APP_ENV == "development":
+            logger.warning(f"===== DEVELOPMENT PURGE OTP: {otp} =====")
+            return {"detail": f"OTP email failed. Development OTP code: {otp}"}
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to send OTP email. Please ensure SMTP configuration is correct."

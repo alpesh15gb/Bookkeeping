@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/auth_provider.dart';
+import 'package:flutter_client/providers/dashboard_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/models/auth.dart';
@@ -130,7 +131,7 @@ void _showFYSidebarPicker(BuildContext context, FinancialYearProvider provider) 
                         children: [
                           Text(
                             year.dateRange,
-                            style: const TextStyle(fontSize: 11, color: AppColors.textWhiteMuted),
+                            style: TextStyle(fontSize: 11, color: AppColors.textWhiteMuted),
                           ),
                           const SizedBox(width: 6),
                           Container(
@@ -832,6 +833,15 @@ class _GroupedNavState extends State<_GroupedNav> {
           final isExpanded = _expandedGroups.contains(i);
           final hasActiveChild = visibleChildren.contains(widget.selectedIndex);
 
+          String? metricText;
+          if (group.label == 'Sales') {
+            final salesVal = context.watch<DashboardProvider>().revenue;
+            metricText = AmountFormat.short(salesVal);
+          } else if (group.label == 'Purchases') {
+            final purchasesVal = context.watch<DashboardProvider>().purchases;
+            metricText = AmountFormat.short(purchasesVal);
+          }
+
           return _buildGroupItem(
             group: group,
             isExpanded: isExpanded,
@@ -850,6 +860,7 @@ class _GroupedNavState extends State<_GroupedNav> {
             selectedIndex: widget.selectedIndex,
             onItemSelected: widget.onItemSelected,
             visibleChildIndices: gstEnabled ? null : visibleChildren,
+            metricText: metricText,
           );
         }
 
@@ -876,22 +887,44 @@ class _GroupedNavState extends State<_GroupedNav> {
           hoverColor: Colors.white.withOpacity(0.04),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: itemPadV),
+            padding: EdgeInsets.only(
+              // When selected, 3px left border eats into padding — offset to keep text aligned
+              left: isSelected ? 9 : 12,
+              right: 12,
+              top: itemPadV,
+              bottom: itemPadV,
+            ),
             decoration: BoxDecoration(
-              color: isSelected ? AppColors.goldAccent.withValues(alpha: 0.15) : Colors.transparent,
+              color: isSelected
+                  ? AppColors.brandIndigo.withValues(alpha: 0.14)
+                  : Colors.transparent,
               borderRadius: AppRadius.sidebar,
+              border: isSelected
+                  ? Border(
+                      left: BorderSide(color: AppColors.brandIndigo, width: 3),
+                    )
+                  : null,
             ),
             child: Row(
               children: [
-                Icon(item.icon, size: iconSize, color: isSelected ? AppColors.goldAccent : AppColors.textWhiteMuted),
+                Icon(
+                  item.icon,
+                  size: iconSize,
+                  color: isSelected
+                      ? AppColors.brandIndigo
+                      : AppColors.textWhiteMuted,
+                ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     item.name,
                     style: TextStyle(
-                      color: isSelected ? AppColors.goldAccent : Colors.white,
+                      color: isSelected
+                          ? Colors.white
+                          : Colors.white.withOpacity(0.75),
                       fontSize: fontSize,
-                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.w400,
                     ),
                   ),
                 ),
@@ -915,6 +948,7 @@ class _GroupedNavState extends State<_GroupedNav> {
     required int selectedIndex,
     required ValueChanged<int> onItemSelected,
     List<int>? visibleChildIndices,
+    String? metricText,
   }) {
     final childIndices = visibleChildIndices ?? group.childIndices;
     final groupTextColor = hasActiveChild ? AppColors.goldAccent : Colors.white;
@@ -947,6 +981,26 @@ class _GroupedNavState extends State<_GroupedNav> {
                         ),
                       ),
                     ),
+                    if (metricText != null) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.06),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.white.withOpacity(0.12), width: 0.8),
+                        ),
+                        child: Text(
+                          metricText,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: hasActiveChild ? AppColors.goldAccent.withOpacity(0.9) : Colors.white70,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     AnimatedRotation(
                       turns: isExpanded ? 0.5 : 0,
                       duration: const Duration(milliseconds: 200),
@@ -1047,7 +1101,7 @@ class _Sidebar extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const SizedBox(height: 2),
-                      const Text(
+                      Text(
                         'Accounting Suite',
                         style: TextStyle(
                           color: AppColors.textWhiteMuted,
@@ -1189,7 +1243,7 @@ class _Sidebar extends StatelessWidget {
                                     ),
                                     subtitle: Text(
                                       m.role.toUpperCase(),
-                                      style: const TextStyle(color: AppColors.textWhiteMuted, fontSize: 11),
+                                      style: TextStyle(color: AppColors.textWhiteMuted, fontSize: 11),
                                     ),
                                     onTap: () {
                                       authProvider.switchTenant(m.tenantId);
@@ -1212,7 +1266,7 @@ class _Sidebar extends StatelessWidget {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.business, size: 16, color: AppColors.textWhiteMuted),
+                            Icon(Icons.business, size: 16, color: AppColors.textWhiteMuted),
                             const SizedBox(width: 8),
                             Expanded(
                               child: Text(
@@ -1228,7 +1282,7 @@ class _Sidebar extends StatelessWidget {
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            const Icon(Icons.expand_more, size: 16, color: AppColors.textWhiteMuted),
+                            Icon(Icons.expand_more, size: 16, color: AppColors.textWhiteMuted),
                           ],
                         ),
                       ),
@@ -1241,7 +1295,7 @@ class _Sidebar extends StatelessWidget {
                       backgroundColor: AppColors.goldAccent,
                       child: Text(
                         user?.fullName.isNotEmpty == true ? user!.fullName[0].toUpperCase() : 'U',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: AppColors.brandNavy,
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -1265,7 +1319,7 @@ class _Sidebar extends StatelessWidget {
                           ),
                           Text(
                             user?.email ?? '',
-                            style: const TextStyle(
+                            style: TextStyle(
                               color: AppColors.textWhiteMuted,
                               fontSize: 10,
                             ),
@@ -1287,7 +1341,7 @@ class _Sidebar extends StatelessWidget {
                       borderRadius: AppRadius.sidebar,
                       border: Border.all(color: Colors.white12),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
                         Icon(Icons.logout_rounded, size: 14, color: AppColors.textWhiteMuted),
@@ -1403,15 +1457,15 @@ class _FYSelector extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
+                padding: EdgeInsets.all(16),
+                decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(color: AppColors.border)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.brandNavy),
+                    Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.brandNavy),
                     const SizedBox(width: 8),
-                    const Expanded(
+                    Expanded(
                       child: Text(
                         'Financial Years',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
@@ -1437,7 +1491,7 @@ class _FYSelector extends StatelessWidget {
                     return Container(
                       decoration: BoxDecoration(
                         color: isActive ? AppColors.brandNavy.withValues(alpha: 0.04) : null,
-                        border: const Border(bottom: BorderSide(color: AppColors.borderLight)),
+                        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1485,7 +1539,7 @@ class _FYSelector extends StatelessWidget {
                             children: [
                               Text(
                                 year.dateRange,
-                                style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                               ),
                               const SizedBox(width: 8),
                               Container(
@@ -1504,17 +1558,17 @@ class _FYSelector extends StatelessWidget {
                                 ),
                               ),
                               if (year.transactionCount > 0) ...[
-                                const SizedBox(width: 8),
+                                SizedBox(width: 8),
                                 Text(
                                   '${year.transactionCount} txn${year.transactionCount == 1 ? '' : 's'}',
-                                  style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
                                 ),
                               ],
                             ],
                           ),
                         ),
                         trailing: isActive
-                            ? const Icon(Icons.check_circle, size: 18, color: AppColors.brandNavy)
+                            ? Icon(Icons.check_circle, size: 18, color: AppColors.brandNavy)
                             : null,
                         onTap: () {
                           provider.setActiveYear(year);
@@ -1527,7 +1581,7 @@ class _FYSelector extends StatelessWidget {
               ),
               Container(
                 padding: const EdgeInsets.all(12),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   border: Border(top: BorderSide(color: AppColors.border)),
                 ),
                 child: Row(
@@ -1544,10 +1598,10 @@ class _FYSelector extends StatelessWidget {
                           );
                         },
                         icon: const Icon(Icons.settings_outlined, size: 14),
-                        label: const Text('Manage Financial Years'),
+                        label: Text('Manage Financial Years'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppColors.brandNavy,
-                          side: const BorderSide(color: AppColors.border),
+                          side: BorderSide(color: AppColors.border),
                           padding: const EdgeInsets.symmetric(vertical: 10),
                         ),
                       ),
@@ -1654,7 +1708,7 @@ class _HistoricalYearBanner extends StatelessWidget {
   }
 }
 
-// ─── Top Bar ──────────────────────────────────────────────────
+// ─── Top Bar ──────────────────────────────────────────────
 class _TopBar extends StatelessWidget {
   final String title;
   final VoidCallback? onSearch;
@@ -1666,7 +1720,10 @@ class _TopBar extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: 52,
-      color: AppColors.bgSurface,
+      decoration: BoxDecoration(
+        color: AppColors.bgSurface,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 24),
       child: Row(
         children: [
@@ -1677,28 +1734,176 @@ class _TopBar extends StatelessWidget {
               padding: const EdgeInsets.only(right: 8),
               child: TextButton.icon(
                 onPressed: onGoTo,
-                icon: const Icon(Icons.explore_outlined, size: 16),
-                label: const Text('Go To (Alt+G)'),
+                icon: const Icon(Icons.explore_outlined, size: 15),
+                label: const Text('Go To'),
                 style: TextButton.styleFrom(
-                  foregroundColor: AppColors.brandNavy,
+                  foregroundColor: AppColors.textSecondary,
                   backgroundColor: AppColors.borderLight,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(AppRadius.sm),
                   ),
+                  textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                 ),
               ),
             ),
           if (onSearch != null)
             IconButton(
-              icon: const Icon(Icons.search_rounded, size: 20, color: AppColors.textSecondary),
+              icon: Icon(Icons.search_rounded, size: 20, color: AppColors.textSecondary),
               onPressed: onSearch,
               tooltip: 'Search (Ctrl+F)',
               padding: const EdgeInsets.all(8),
               constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
             ),
           const _FYSelector(),
+          const SizedBox(width: 12),
+          const _NewActionButton(),
         ],
+      ),
+    );
+  }
+}
+
+/// Compact "+ New" overlay button for the desktop top bar.
+class _NewActionButton extends StatefulWidget {
+  const _NewActionButton();
+  @override
+  State<_NewActionButton> createState() => _NewActionButtonState();
+}
+
+class _NewActionButtonState extends State<_NewActionButton> {
+  final _layerLink = LayerLink();
+  OverlayEntry? _overlay;
+
+  void _open() {
+    if (_overlay != null) { _close(); return; }
+    final renderBox = context.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+    _overlay = OverlayEntry(
+      builder: (ctx) => Stack(
+        children: [
+          Positioned.fill(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _close)),
+          CompositedTransformFollower(
+            link: _layerLink,
+            showWhenUnlinked: false,
+            offset: Offset(-190 + size.width, size.height + 6),
+            child: Material(
+              elevation: 8,
+              shadowColor: Colors.black26,
+              borderRadius: BorderRadius.circular(AppRadius.lg),
+              color: AppColors.bgSurface,
+              child: Container(
+                width: 240,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AppRadius.lg),
+                  border: Border.all(color: AppColors.border),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 6),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildItem(Icons.description_rounded, 'Sales Invoice', 'Bill your customer', AppColors.brandIndigo, () {
+                      _close();
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const InvoiceFormView()));
+                    }),
+                    Divider(color: AppColors.borderLight, height: 1),
+                    _buildItem(Icons.receipt_rounded, 'Purchase Bill', 'Record vendor bill', AppColors.warning, () {
+                      _close();
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const BillFormView()));
+                    }),
+                    Divider(color: AppColors.borderLight, height: 1),
+                    _buildItem(Icons.money_off_rounded, 'Expense', 'Record a business cost', AppColors.error, () {
+                      _close();
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => const ExpenseFormView()));
+                    }),
+                    Divider(color: AppColors.borderLight, height: 1),
+                    _buildItem(Icons.payments_rounded, 'Payment Receipt', 'Record received payment', AppColors.success, () {
+                      _close();
+                      showDialog(context: context, builder: (dCtx) => Dialog(
+                        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 40),
+                        shape: RoundedRectangleBorder(borderRadius: AppRadius.dialog),
+                        child: PaymentFormView(mode: 'receipt', onSuccess: () => Navigator.of(dCtx).pop()),
+                      ));
+                    }),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    Overlay.of(context).insert(_overlay!);
+    setState(() {});
+  }
+
+  void _close() {
+    _overlay?.remove();
+    _overlay = null;
+    if (mounted) setState(() {});
+  }
+
+  Widget _buildItem(IconData icon, String title, String subtitle, Color color, VoidCallback onTap) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(AppRadius.sm)),
+                child: Icon(icon, size: 17, color: color),
+              ),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                  Text(subtitle, style: TextStyle(fontSize: 10, color: AppColors.textMuted)),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() { _close(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final isOpen = _overlay != null;
+    return CompositedTransformTarget(
+      link: _layerLink,
+      child: Material(
+        color: AppColors.brandIndigo,
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: InkWell(
+          onTap: _open,
+          borderRadius: BorderRadius.circular(AppRadius.sm),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.add, size: 16, color: Colors.white),
+                const SizedBox(width: 5),
+                const Text('New', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white)),
+                const SizedBox(width: 4),
+                AnimatedRotation(
+                  turns: isOpen ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 150),
+                  child: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: Colors.white70),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1743,7 +1948,7 @@ class _MobileDrawer extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Column(
+                  Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('Apex Books', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700)),
@@ -1885,7 +2090,7 @@ class _MobileDrawer extends StatelessWidget {
                                         ),
                                         subtitle: Text(
                                           m.role.toUpperCase(),
-                                          style: const TextStyle(color: AppColors.textWhiteMuted, fontSize: 11),
+                                          style: TextStyle(color: AppColors.textWhiteMuted, fontSize: 11),
                                         ),
                                         onTap: () {
                                           auth.switchTenant(m.tenantId);
@@ -1909,7 +2114,7 @@ class _MobileDrawer extends StatelessWidget {
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.business, size: 16, color: AppColors.textWhiteMuted),
+                                Icon(Icons.business, size: 16, color: AppColors.textWhiteMuted),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
@@ -1925,7 +2130,7 @@ class _MobileDrawer extends StatelessWidget {
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ),
-                                const Icon(Icons.expand_more, size: 16, color: AppColors.textWhiteMuted),
+                                Icon(Icons.expand_more, size: 16, color: AppColors.textWhiteMuted),
                               ],
                             ),
                           ),
@@ -1940,7 +2145,7 @@ class _MobileDrawer extends StatelessWidget {
                         backgroundColor: AppColors.goldAccent,
                         child: Text(
                           user?.fullName.isNotEmpty == true ? user!.fullName[0].toUpperCase() : 'U',
-                          style: const TextStyle(color: AppColors.brandNavy, fontSize: 12, fontWeight: FontWeight.w700),
+                          style: TextStyle(color: AppColors.brandNavy, fontSize: 12, fontWeight: FontWeight.w700),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -1949,7 +2154,7 @@ class _MobileDrawer extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(user?.fullName ?? 'User', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600), maxLines: 1, overflow: TextOverflow.ellipsis),
-                            Text(user?.email ?? '', style: const TextStyle(color: AppColors.textWhiteMuted, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
+                            Text(user?.email ?? '', style: TextStyle(color: AppColors.textWhiteMuted, fontSize: 10), maxLines: 1, overflow: TextOverflow.ellipsis),
                           ],
                         ),
                       ),
@@ -1966,11 +2171,11 @@ class _MobileDrawer extends StatelessWidget {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.white12),
                       ),
-                      child: const Row(
+                      child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(Icons.logout_rounded, size: 14, color: AppColors.textWhiteMuted),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Text('Sign Out', style: TextStyle(color: AppColors.textWhiteMuted, fontSize: 12, fontWeight: FontWeight.w500)),
                         ],
                       ),

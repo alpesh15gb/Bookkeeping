@@ -116,7 +116,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                   color: AppColors.borderLight,
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
-                child: const Icon(Icons.account_balance_rounded, size: 18, color: AppColors.textSecondary),
+                child: Icon(Icons.account_balance_rounded, size: 18, color: AppColors.textSecondary),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -150,7 +150,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
     }
     final List lines = _tbData!['lines'] ?? [];
     if (lines.isEmpty) {
-      return const Center(child: Text('No trial balance lines', style: AppTextStyles.bodySmall));
+      return Center(child: Text('No trial balance lines', style: AppTextStyles.bodySmall));
     }
     return SingleChildScrollView(
       padding: AppSpacing.pagePadding,
@@ -321,7 +321,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
     final List assets = _bsData!['assets'] ?? [];
     final List liabilities = _bsData!['liabilities'] ?? [];
     if (assets.isEmpty && liabilities.isEmpty) {
-      return const Center(child: Text('No balance sheet data', style: AppTextStyles.bodySmall));
+      return Center(child: Text('No balance sheet data', style: AppTextStyles.bodySmall));
     }
     return SingleChildScrollView(
       padding: AppSpacing.pagePadding,

@@ -83,6 +83,7 @@ class TransactionConfig {
   final bool hasLinkedInvoice;
   final bool allowScanning;
   final String successMessage;
+  final List<String>? paymentTermsOptions;
 
   final Future<bool> Function(
     BuildContext context,
@@ -109,6 +110,7 @@ class TransactionConfig {
     required this.successMessage,
     required this.onSave,
     this.onPreview,
+    this.paymentTermsOptions,
   });
 }
 
@@ -219,6 +221,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   final TextEditingController _invoiceNoCtrl = TextEditingController();
   String? _selectedInvoiceId;
   String _posStateCode = '27';
+  String _paymentTerms = 'Due on Receipt';
   bool _isSaving = false;
   bool _isScanning = false;
   bool _isGstInclusive = false;
@@ -1264,6 +1267,22 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               child: AppDraftIndicator(onRecover: _recoverDraft),
             ),
           
+          // Currency info
+          if (!isDesktop)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Text(
+                    'All amounts are in INR (₹)',
+                    style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.info_outline, size: 13, color: AppColors.textMuted),
+                ],
+              ),
+            ),
+          
           if (isDesktop)
             // Desktop Split Layout
             Row(
@@ -1362,7 +1381,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           if (widget.config.allowScanning)
             IconButton(
               icon: _isScanning
-                  ? const SizedBox(
+                  ? SizedBox(
                       width: 16,
                       height: 16,
                       child: CircularProgressIndicator(
@@ -1398,112 +1417,167 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   Widget _buildDocInfoCard(bool isDesktop) {
-    final headerRow = Row(
-      children: [
-        const Icon(Icons.description_outlined, size: 14, color: AppColors.brandNavy),
-        const SizedBox(width: 6),
-        Text('DOCUMENT DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
-        const Spacer(),
-        if (_gstEnabled)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Checkbox(
-                value: _isGstInclusive,
-                activeColor: AppColors.brandNavy,
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() {
-                      _isGstInclusive = val;
-                    });
-                    _triggerPreview();
-                  }
-                },
-              ),
-              const Text('GST Inclusive', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-            ],
-          ),
-      ],
-    );
-
-    final fields = <Widget>[
-      Expanded(
-        child: AppTextField(
-          controller: _invoiceNoCtrl,
-          label: widget.config.numberLabel ?? 'Document Number',
-          prefixIcon: Icons.tag,
-          hintText: _nextNumberPlaceholder ?? 'Auto-generated',
-        ),
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: AppDateField(
-          controller: _issueDateCtrl,
-          label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
-          onTap: () => _pickDate(_issueDateCtrl),
-        ),
-      ),
-      const SizedBox(width: 12),
-      Expanded(
-        child: AppDateField(
-          controller: _dueDateCtrl,
-          label: 'Due Date',
-          onTap: () => _pickDate(_dueDateCtrl),
-        ),
-      ),
-      if (_gstEnabled) ...[
-        const SizedBox(width: 12),
-        Expanded(
-          child: AppDropdown<String>(
-            value: _posStateCode,
-            label: 'Place of Supply *',
-            prefixIcon: Icons.map_outlined,
-            items: _gstStateNames.entries
-                .map(
-                  (e) => DropdownMenuItem<String>(
-                    value: e.key,
-                    child: Text(e.value),
-                  ),
-                )
-                .toList(),
-            onChanged: (val) {
-              if (val != null) {
-                setState(() => _posStateCode = val);
-                _triggerPreview();
-              }
-            },
-          ),
-        ),
-      ],
-      const SizedBox(width: 12),
-      Expanded(
-        child: AppTextField(
-          controller: _poNumberCtrl,
-          label: 'PO / Reference #',
-          prefixIcon: Icons.receipt_long_outlined,
-        ),
-      ),
+    final paymentTermsOptions = widget.config.paymentTermsOptions ?? const [
+      'Due on Receipt',
+      'Net 15',
+      'Net 30',
+      'Net 45',
+      'Net 60',
+      'Net 90',
     ];
 
-    return AppCard(
-      padding: const EdgeInsets.all(12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    Widget buildSectionHeader() {
+      return Row(
         children: [
-          headerRow,
-          const SizedBox(height: 10),
-          if (isDesktop)
-            Row(children: fields)
-          else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: fields.where((w) => w is! SizedBox).map((w) {
-                if (w is Expanded) return w.child;
-                return w;
-              }).toList().expand((w) => [w, const SizedBox(height: 8)]).toList()..removeLast(),
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppColors.brandNavy.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.description_outlined, size: 16, color: AppColors.brandNavy),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '2. Invoice Info',
+            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
+          ),
+          const Spacer(),
+          if (_gstEnabled)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Checkbox(
+                  value: _isGstInclusive,
+                  activeColor: AppColors.brandNavy,
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _isGstInclusive = val);
+                      _triggerPreview();
+                    }
+                  },
+                ),
+                const Text('GST Inclusive', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+              ],
             ),
         ],
-      ),
+      );
+    }
+
+    if (isDesktop) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          buildSectionHeader(),
+          const SizedBox(height: 12),
+          AppCard(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: AppTextField(
+                    controller: _invoiceNoCtrl,
+                    label: widget.config.numberLabel ?? 'Invoice No. *',
+                    hintText: _nextNumberPlaceholder ?? 'Auto-generated',
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppDateField(
+                    controller: _issueDateCtrl,
+                    label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
+                    onTap: () => _pickDate(_issueDateCtrl),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: AppDateField(
+                    controller: _dueDateCtrl,
+                    label: 'Due Date',
+                    onTap: () => _pickDate(_dueDateCtrl),
+                  ),
+                ),
+                if (widget.config.hasReferenceNo) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: AppTextField(
+                      controller: _poNumberCtrl,
+                      label: 'Reference (Optional)',
+                      hintText: 'Enter reference',
+                      prefixIcon: Icons.receipt_long_outlined,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Mobile layout
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        buildSectionHeader(),
+        const SizedBox(height: 12),
+        AppCard(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: AppTextField(
+                      controller: _invoiceNoCtrl,
+                      label: widget.config.numberLabel ?? 'Invoice Number *',
+                      hintText: _nextNumberPlaceholder ?? 'Auto-generated',
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: AppDateField(
+                      controller: _issueDateCtrl,
+                      label: widget.config.isPurchase ? 'Bill Date *' : 'Invoice Date *',
+                      onTap: () => _pickDate(_issueDateCtrl),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              if (_gstEnabled)
+                AppDropdown<String>(
+                  value: _posStateCode,
+                  label: 'Place of Supply *',
+                  prefixIcon: Icons.map_outlined,
+                  items: _gstStateNames.entries
+                      .map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value)))
+                      .toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() => _posStateCode = val);
+                      _triggerPreview();
+                    }
+                  },
+                ),
+              if (_gstEnabled) const SizedBox(height: 10),
+              AppDropdown<String>(
+                value: _paymentTerms,
+                label: 'Payment Terms (Optional)',
+                prefixIcon: Icons.access_time_outlined,
+                items: paymentTermsOptions
+                    .map((e) => DropdownMenuItem<String>(value: e, child: Text(e)))
+                    .toList(),
+                onChanged: (val) {
+                  if (val != null) setState(() => _paymentTerms = val);
+                },
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 
@@ -1512,62 +1586,347 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         ? _gstStateNames[_selectedContact!.stateCode]
         : _selectedContact?.stateCode;
 
-    final billToWidget = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AppPartySelector(
-          label: widget.config.contactLabel,
-          partyName: _selectedContact?.name,
-          gstin: _selectedContact?.gstin,
-          state: billingStateName,
-          onTap: _openContactSearch,
-        ),
-        if (widget.config.hasShippingAddress) ...[
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              Checkbox(
-                value: _shipToSameAsBilling,
-                activeColor: AppColors.brandNavy,
-                onChanged: (val) {
-                  if (val != null) {
-                    setState(() {
-                      _shipToSameAsBilling = val;
-                      if (_shipToSameAsBilling && _selectedContact != null) {
-                        final addr = _selectedContact!.shippingAddress ?? _selectedContact!.billingAddress;
-                        _shippingAddrCtrl.text = _flattenAddress(addr);
-                      } else if (!_shipToSameAsBilling) {
-                        _shippingAddrCtrl.clear();
-                      }
-                    });
-                  }
-                },
-              ),
-              const Text(
-                'Shipping same as billing',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-              ),
-            ],
+    final hasContact = _selectedContact != null && _selectedContact!.name.isNotEmpty;
+
+    Widget buildSectionHeader() {
+      return Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppColors.brandNavy.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(widget.config.contactType == 'CUSTOMER' ? Icons.person_outline : Icons.business_outlined, size: 16, color: AppColors.brandNavy),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '1. ${widget.config.contactLabel} Details',
+            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
           ),
         ],
-      ],
-    );
+      );
+    }
 
-    final shipToWidget = widget.config.hasShippingAddress && !_shipToSameAsBilling
-        ? Padding(
-            padding: const EdgeInsets.only(top: 8),
-            child: AppCard(
-              padding: const EdgeInsets.all(12),
+    Widget buildSearchField() {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text.rich(
+            TextSpan(
+              text: '${widget.config.contactLabel} ',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+              children: const [
+                TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          GestureDetector(
+            onTap: _openContactSearch,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+              decoration: BoxDecoration(
+                border: Border.all(color: AppColors.borderInput),
+                borderRadius: AppRadius.input,
+                color: AppColors.bgSurface,
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.search, size: 18, color: AppColors.textMuted),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Search by name, GSTIN or Mobile',
+                      style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                    ),
+                  ),
+                  Icon(Icons.arrow_drop_down, size: 20, color: AppColors.textMuted),
+                ],
+              ),
+            ),
+          ),
+        ],
+      );
+    }
+
+    Widget buildCustomerCard() {
+      if (!hasContact) return const SizedBox.shrink();
+      final c = _selectedContact!;
+      final initials = c.name.length >= 2 ? c.name.substring(0, 2).toUpperCase() : c.name.toUpperCase();
+      final isRegistered = c.gstin != null && c.gstin!.isNotEmpty;
+      final address = c.billingAddress != null ? _flattenAddress(c.billingAddress!) : '';
+
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          borderRadius: AppRadius.card,
+          border: Border.all(color: AppColors.brandNavy.withValues(alpha: 0.2), width: 1),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: AppColors.brandNavy,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Center(
+                child: Text(
+                  initials,
+                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.local_shipping_outlined, color: AppColors.brandNavy, size: 14),
-                      const SizedBox(width: 6),
-                      Text('SHIPPING DETAILS', style: AppTextStyles.labelSmall.copyWith(color: AppColors.brandNavy)),
+                      Flexible(
+                        child: Text(
+                          c.name,
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      if (isRegistered) ...[
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.successBg,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            'Registered',
+                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: AppColors.success),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      if (c.gstin != null && c.gstin!.isNotEmpty) ...[
+                        Text(c.gstin!, style: TextStyle(fontSize: 11, color: AppColors.textMuted, fontWeight: FontWeight.w500)),
+                        Text('  ·  ', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                      ],
+                      if (c.phone != null && c.phone!.isNotEmpty)
+                        Text(c.phone!, style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                    ],
+                  ),
+                  if (address.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      address,
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            Icon(Icons.keyboard_arrow_down_rounded, size: 20, color: AppColors.textMuted),
+          ],
+        ),
+      );
+    }
+
+    if (isDesktop) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          buildSectionHeader(),
+          const SizedBox(height: 12),
+          AppCard(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(flex: 2, child: buildSearchField()),
+                    if (hasContact) ...[
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                text: 'GSTIN ',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                                children: const [
+                                  TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppColors.borderInput),
+                                borderRadius: AppRadius.input,
+                                color: AppColors.bgSurface,
+                              ),
+                              child: Text(
+                                _selectedContact!.gstin ?? 'Enter GSTIN',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: (_selectedContact!.gstin != null && _selectedContact!.gstin!.isNotEmpty)
+                                      ? AppColors.textPrimary
+                                      : AppColors.textMuted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: AppDropdown<String>(
+                          value: _posStateCode,
+                          label: 'Place of Supply *',
+                          items: _gstStateNames.entries
+                              .map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 12))))
+                              .toList(),
+                          onChanged: (val) {
+                            if (val != null) {
+                              setState(() => _posStateCode = val);
+                              _triggerPreview();
+                            }
+                          },
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                if (!hasContact) ...[
+                  const SizedBox(height: 10),
+                  buildSearchField(),
+                ],
+                if (hasContact) ...[
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                text: 'Billing Address ',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                                children: const [
+                                  TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppColors.borderInput),
+                                borderRadius: AppRadius.input,
+                                color: AppColors.bgSurface,
+                              ),
+                              child: Text(
+                                _selectedContact!.billingAddress != null
+                                    ? _flattenAddress(_selectedContact!.billingAddress!)
+                                    : 'Enter billing address',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: _selectedContact!.billingAddress != null ? AppColors.textPrimary : AppColors.textMuted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                text: 'State ',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                                children: const [
+                                  TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            AppDropdown<String>(
+                              value: _posStateCode,
+                              items: _gstStateNames.entries
+                                  .map((e) => DropdownMenuItem<String>(value: e.key, child: Text(e.value, style: const TextStyle(fontSize: 12))))
+                                  .toList(),
+                              onChanged: (val) {
+                                if (val != null) {
+                                  setState(() => _posStateCode = val);
+                                  _triggerPreview();
+                                }
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text.rich(
+                              TextSpan(
+                                text: 'PIN Code ',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                                children: const [
+                                  TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+                              decoration: BoxDecoration(
+                                border: Border.all(color: AppColors.borderInput),
+                                borderRadius: AppRadius.input,
+                                color: AppColors.bgSurface,
+                              ),
+                              child: Text(
+                                (_selectedContact!.billingAddress != null && _selectedContact!.billingAddress!['pincode'] != null)
+                                    ? _selectedContact!.billingAddress!['pincode'].toString()
+                                    : 'Enter PIN Code',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: (_selectedContact!.billingAddress != null && _selectedContact!.billingAddress!['pincode'] != null)
+                                      ? AppColors.textPrimary
+                                      : AppColors.textMuted,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (widget.config.hasShippingAddress && !_shipToSameAsBilling) ...[
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: _shippingAddrCtrl,
@@ -1585,357 +1944,538 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                     },
                   ),
                 ],
-              ),
-            ),
-          )
-        : const SizedBox.shrink();
-
-    if (isDesktop) {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: billToWidget),
-              if (widget.config.hasShippingAddress && !_shipToSameAsBilling) ...[
-                const SizedBox(width: 16),
-                Expanded(child: shipToWidget),
               ],
-            ],
+            ),
           ),
+          if (widget.config.hasShippingAddress) ...[
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Checkbox(
+                  value: _shipToSameAsBilling,
+                  activeColor: AppColors.brandNavy,
+                  onChanged: (val) {
+                    if (val != null) {
+                      setState(() {
+                        _shipToSameAsBilling = val;
+                        if (_shipToSameAsBilling && _selectedContact != null) {
+                          final addr = _selectedContact!.shippingAddress ?? _selectedContact!.billingAddress;
+                          _shippingAddrCtrl.text = _flattenAddress(addr);
+                        } else if (!_shipToSameAsBilling) {
+                          _shippingAddrCtrl.clear();
+                        }
+                      });
+                    }
+                  },
+                ),
+                const Text('Shipping same as billing', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          ],
         ],
       );
     }
 
+    // Mobile layout
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        billToWidget,
-        shipToWidget,
+        buildSectionHeader(),
+        const SizedBox(height: 12),
+        AppCard(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (!hasContact)
+                buildSearchField()
+              else ...[
+                buildCustomerCard(),
+                if (widget.config.hasShippingAddress) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Checkbox(
+                        value: _shipToSameAsBilling,
+                        activeColor: AppColors.brandNavy,
+                        onChanged: (val) {
+                          if (val != null) {
+                            setState(() {
+                              _shipToSameAsBilling = val;
+                              if (_shipToSameAsBilling && _selectedContact != null) {
+                                final addr = _selectedContact!.shippingAddress ?? _selectedContact!.billingAddress;
+                                _shippingAddrCtrl.text = _flattenAddress(addr);
+                              } else if (!_shipToSameAsBilling) {
+                                _shippingAddrCtrl.clear();
+                              }
+                            });
+                          }
+                        },
+                      ),
+                      const Text('Shipping same as billing', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ],
+                if (widget.config.hasShippingAddress && !_shipToSameAsBilling) ...[
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _shippingAddrCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Shipping Address *',
+                      hintText: 'Enter full shipping address',
+                      floatingLabelBehavior: FloatingLabelBehavior.always,
+                    ),
+                    validator: (v) {
+                      if (!_shipToSameAsBilling && (v == null || v.trim().isEmpty)) {
+                        return 'Shipping address is required';
+                      }
+                      return null;
+                    },
+                  ),
+                ],
+              ],
+            ],
+          ),
+        ),
       ],
     );
   }
 
   Widget _buildLineItemsSection(bool isDesktop) {
-    if (!isDesktop) {
-      return Column(
-        children:
-            _lines
-                .asMap()
-                .entries
-                .map((e) => _buildMobileLineCard(e.key, e.value))
-                .toList() +
-            [
-              const SizedBox(height: 12),
-              ElevatedButton.icon(
-                onPressed: _addEmptyLine,
-                icon: const Icon(Icons.add),
-                label: const Text('Add Row'),
-              ),
-            ],
+    Widget buildSectionHeader() {
+      return Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: AppColors.brandNavy.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(Icons.shopping_cart_outlined, size: 16, color: AppColors.brandNavy),
+          ),
+          const SizedBox(width: 8),
+          Text(
+            '3. ${_lines.isEmpty ? 'Add Items' : 'Items (${_lines.length})'}',
+            style: AppTextStyles.h3.copyWith(color: AppColors.textPrimary),
+          ),
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: _addEmptyLine,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Add Item', style: TextStyle(fontSize: 12)),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandNavy,
+              side: BorderSide(color: AppColors.brandNavy.withValues(alpha: 0.3)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ],
       );
     }
 
-    return AppCard(
-      padding: EdgeInsets.zero,
-      child: Column(
+    // Mobile: scrollable table layout
+    if (!isDesktop) {
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Navy header row - horizontally scrollable
-          Container(
-            color: AppColors.brandNavyLight,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: SizedBox(
-                width: _gstEnabled ? 992 : 708,
+          buildSectionHeader(),
+          const SizedBox(height: 12),
+          AppCard(
+            padding: EdgeInsets.zero,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Table header
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgLight,
+                    border: Border(bottom: BorderSide(color: AppColors.border)),
+                  ),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _mobileHeaderCell('#', 28),
+                        _mobileHeaderCell('Description', 130),
+                        if (_gstEnabled) _mobileHeaderCell('HSN/SAC', 70),
+                        _mobileHeaderCell('Qty', 45),
+                        _mobileHeaderCell('Rate (₹)', 70, right: true),
+                        if (_gstEnabled) _mobileHeaderCell('GST %', 50),
+                        _mobileHeaderCell('Amount (₹)', 80, right: true),
+                      ],
+                    ),
+                  ),
+                ),
+                // Table rows
+                if (_lines.isEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Center(
+                      child: Text('No items added yet. Tap "Add Item" to begin.',
+                          style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                    ),
+                  )
+                else
+                  ...(_lines.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final line = entry.value;
+                    final double lineGross = line.quantity * line.rate * (1 - line.discount / 100);
+                    final double amount = _isGstInclusive
+                        ? (lineGross / (1 + line.gstRate / 100))
+                        : lineGross;
+                    return _buildMobileLineRow(index, line, amount);
+                  })),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Desktop: full table layout
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        buildSectionHeader(),
+        const SizedBox(height: 12),
+        AppCard(
+          padding: EdgeInsets.zero,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Header row
+              Container(
+                color: AppColors.brandNavyLight,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                 child: Row(
                   children: [
-                    SizedBox(
-                      width: 36,
-                      child: Text('S.No', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 200,
-                      child: Text('Item Description *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
-                    ),
-                    if (_gstEnabled) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      SizedBox(
-                        width: 90,
-                        child: Text('HSN/SAC *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
-                      ),
-                    ],
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 60,
-                      child: Text('Qty *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 60,
-                      child: Text('Unit', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11)),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 90,
-                      child: Text('Rate (₹) *', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 70,
-                      child: Text('Disc %', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    SizedBox(
-                      width: 100,
-                      child: Text('Taxable (₹)', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
-                    ),
-                    if (_gstEnabled) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      SizedBox(
-                        width: 70,
-                        child: Text('GST %', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.center),
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      SizedBox(
-                        width: 100,
-                        child: Text('GST Amt (₹)', style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11), textAlign: TextAlign.right),
-                      ),
-                    ],
-                    const SizedBox(width: AppSpacing.sm),
+                    _desktopHeaderCell('#', 32),
+                    _desktopHeaderCell('Description *', 180),
+                    if (_gstEnabled) _desktopHeaderCell('HSN Code', 80),
+                    _desktopHeaderCell('Qty *', 55, center: true),
+                    _desktopHeaderCell('Unit', 55),
+                    _desktopHeaderCell('Rate (₹) *', 80, right: true),
+                    _desktopHeaderCell('GST % *', 65, center: true),
+                    _desktopHeaderCell('Amount (₹)', 90, right: true),
                     const SizedBox(width: 36),
                   ],
                 ),
               ),
-            ),
+              // Rows
+              if (_lines.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Center(
+                    child: Text('No items added yet. Click "Add Item" to begin.',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                  ),
+                )
+              else
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: _lines.length,
+                  itemBuilder: (context, index) {
+                    final line = _lines[index];
+                    final double lineGross = line.quantity * line.rate * (1 - line.discount / 100);
+                    final double amount = _isGstInclusive
+                        ? (lineGross / (1 + line.gstRate / 100))
+                        : lineGross;
+                    return _buildDesktopLineRow(index, line, amount);
+                  },
+                ),
+            ],
           ),
-          // Scroll hint for horizontal overflow
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 3),
-            child: const Row(
+        ),
+        const SizedBox(height: 8),
+        // Amount in words
+        if (_total > 0)
+          AppCard(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.swipe_right_alt_rounded, size: 11, color: AppColors.textMuted),
-                SizedBox(width: 3),
-                Text('Scroll right for more columns', style: TextStyle(fontSize: 9, color: AppColors.textMuted, fontStyle: FontStyle.italic)),
+                Text('Amount in Words', style: AppTextStyles.caption),
+                const SizedBox(height: 4),
+                Text(
+                  'Rupees ${_convertToWords(_total)}',
+                  style: AppTextStyles.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.brandNavy,
+                  ),
+                ),
               ],
             ),
           ),
-          if (_lines.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
-              child: Center(
-                child: Text('No items added yet', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+      ],
+    );
+  }
+
+  Widget _mobileHeaderCell(String label, double width, {bool right = false}) {
+    return SizedBox(
+      width: width,
+      child: Text(
+        label,
+        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.3),
+        textAlign: right ? TextAlign.right : TextAlign.left,
+      ),
+    );
+  }
+
+  Widget _desktopHeaderCell(String label, double width, {bool right = false, bool center = false}) {
+    return SizedBox(
+      width: width,
+      child: Text(
+        label,
+        style: AppTextStyles.button.copyWith(color: Colors.white, fontSize: 11),
+        textAlign: right ? TextAlign.right : (center ? TextAlign.center : TextAlign.left),
+      ),
+    );
+  }
+
+  Widget _buildMobileLineRow(int index, TransactionLineItem line, double amount) {
+    return GestureDetector(
+      onTap: () => _openProductSearch(index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              SizedBox(
+                width: 28,
+                child: Text('${index + 1}', style: TextStyle(fontSize: 12, color: AppColors.textSecondary)),
               ),
-            )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _lines.length,
-              itemBuilder: (context, index) {
-                final line = _lines[index];
-                final double lineGross = line.quantity * line.rate * (1 - line.discount / 100);
-                final double taxableValue = _isGstInclusive
-                    ? (lineGross / (1 + line.gstRate / 100))
-                    : lineGross;
-                final double gstAmount = _isGstInclusive
-                    ? (lineGross - taxableValue)
-                    : (taxableValue * (line.gstRate / 100));
-                return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
-                  decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.border))),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: SizedBox(
-                      width: _gstEnabled ? 992 : 708,
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 36,
-                            child: Text('${index + 1}', style: AppTextStyles.bodyMedium),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 200,
-                            child: GestureDetector(
-                              onTap: () => _openProductSearch(index),
-                              child: Container(
-                                padding: AppSpacing.inputPaddingCompact,
-                                decoration: BoxDecoration(
-                                  border: Border.all(color: AppColors.border),
-                                  borderRadius: AppRadius.input,
-                                ),
-                                child: Text(
-                                  line.productName.isNotEmpty ? line.productName : 'Select product...',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: line.productName.isNotEmpty ? AppColors.textPrimary : AppColors.textMuted,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ),
-                          ),
-                          if (_gstEnabled) ...[
-                            const SizedBox(width: AppSpacing.sm),
-                            SizedBox(
-                              width: 90,
-                              child: AppTextField(
-                                controller: line.hsnCtrl,
-                                onChanged: (v) { line.hsnSac = v; _markDirty(); },
-                                compact: true,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 60,
-                            child: AppTextField(
-                              controller: line.qtyCtrl,
-                              textAlign: TextAlign.center,
-                              compact: true,
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Required';
-                                final qty = double.tryParse(v);
-                                if (qty == null) return 'Enter a valid number';
-                                if (qty <= 0) return 'Qty must be > 0';
-                                return null;
-                              },
-                              onChanged: (v) {
-                                line.quantity = double.tryParse(v) ?? 1;
-                                _markDirty();
-                                _triggerPreview();
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 60,
-                            child: AppDropdown<String>(
-                              value: line.unit,
-                              compact: true,
-                              items: const [
-                                DropdownMenuItem(value: 'Nos', child: Text('Nos')),
-                                DropdownMenuItem(value: 'Pcs', child: Text('Pcs')),
-                                DropdownMenuItem(value: 'Box', child: Text('Box')),
-                              ],
-                              onChanged: (v) {
-                                if (v != null) { setState(() => line.unit = v); _markDirty(); }
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 90,
-                            child: AppTextField(
-                              controller: line.rateCtrl,
-                              textAlign: TextAlign.right,
-                              compact: true,
-                              validator: (v) {
-                                if (v == null || v.trim().isEmpty) return 'Required';
-                                final rate = double.tryParse(v);
-                                if (rate == null) return 'Enter a valid number';
-                                if (rate < 0) return 'Rate cannot be negative';
-                                return null;
-                              },
-                              onChanged: (v) {
-                                line.rate = double.tryParse(v) ?? 0;
-                                _markDirty();
-                                _triggerPreview();
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 70,
-                            child: AppTextField(
-                              controller: line.discCtrl,
-                              textAlign: TextAlign.center,
-                              compact: true,
-                              validator: (v) {
-                                if (v != null && v.trim().isNotEmpty) {
-                                  final disc = double.tryParse(v);
-                                  if (disc == null) return 'Enter a valid number';
-                                  if (disc < 0 || disc > 100) return 'Discount must be 0-100%';
-                                }
-                                return null;
-                              },
-                              onChanged: (v) {
-                                line.discount = double.tryParse(v) ?? 0;
-                                _markDirty();
-                                _triggerPreview();
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 100,
-                            child: Text(
-                              '₹${taxableValue.toStringAsFixed(2)}',
-                              textAlign: TextAlign.right,
-                              style: AppTextStyles.amount,
-                            ),
-                          ),
-                          if (_gstEnabled) ...[
-                            const SizedBox(width: AppSpacing.sm),
-                            SizedBox(
-                              width: 70,
-                              child: AppDropdown<String>(
-                                value: line.gstRate.toStringAsFixed(0),
-                                compact: true,
-                                items: const [
-                                  DropdownMenuItem(value: '28', child: Text('28%')),
-                                  DropdownMenuItem(value: '18', child: Text('18%')),
-                                  DropdownMenuItem(value: '12', child: Text('12%')),
-                                  DropdownMenuItem(value: '5', child: Text('5%')),
-                                  DropdownMenuItem(value: '3', child: Text('3%')),
-                                  DropdownMenuItem(value: '0', child: Text('0%')),
-                                ],
-                                onChanged: (v) {
-                                  if (v != null) {
-                                    setState(() => line.gstRate = double.tryParse(v) ?? 18);
-                                    _markDirty();
-                                    _triggerPreview();
-                                  }
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            SizedBox(
-                              width: 100,
-                              child: Text(
-                                '₹${gstAmount.toStringAsFixed(2)}',
-                                textAlign: TextAlign.right,
-                                style: AppTextStyles.amount,
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: AppSpacing.sm),
-                          SizedBox(
-                            width: 36,
-                            child: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
-                              onPressed: () => _removeLine(index),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                            ),
-                          ),
-                        ],
+              SizedBox(
+                width: 130,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      line.productName.isNotEmpty ? line.productName : 'Select item...',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: line.productName.isNotEmpty ? AppColors.textPrimary : AppColors.textMuted,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (line.productName.isNotEmpty)
+                      Text(
+                        '${line.quantity.toStringAsFixed(0)} × ₹${line.rate.toStringAsFixed(0)}',
+                        style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                      ),
+                  ],
+                ),
+              ),
+              if (_gstEnabled)
+                SizedBox(
+                  width: 70,
+                  child: GestureDetector(
+                    onTap: () => _openProductSearch(index),
+                    child: Text(
+                      line.hsnSac.isNotEmpty ? line.hsnSac : '-',
+                      style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
                     ),
                   ),
-                );
+                ),
+              SizedBox(
+                width: 45,
+                child: GestureDetector(
+                  onTap: () => _showQtyEditDialog(index),
+                  child: Text(
+                    line.quantity.toStringAsFixed(0),
+                    style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+              SizedBox(
+                width: 70,
+                child: GestureDetector(
+                  onTap: () => _showRateEditDialog(index),
+                  child: Text(
+                    '₹${line.rate.toStringAsFixed(0)}',
+                    style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ),
+              if (_gstEnabled)
+                SizedBox(
+                  width: 50,
+                  child: GestureDetector(
+                    onTap: () => _showGstEditDialog(index),
+                    child: Text(
+                      '${line.gstRate.toStringAsFixed(0)}%',
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                ),
+              SizedBox(
+                width: 80,
+                child: Text(
+                  AmountFormat.format(amount),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+                  textAlign: TextAlign.right,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDesktopLineRow(int index, TransactionLineItem line, double amount) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: AppColors.borderLight)),
+      ),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 32,
+            child: Text('${index + 1}', style: AppTextStyles.bodyMedium),
+          ),
+          SizedBox(
+            width: 180,
+            child: GestureDetector(
+              onTap: () => _openProductSearch(index),
+              child: Container(
+                padding: AppSpacing.inputPaddingCompact,
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.border),
+                  borderRadius: AppRadius.input,
+                ),
+                child: Text(
+                  line.productName.isNotEmpty ? line.productName : 'Select product...',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: line.productName.isNotEmpty ? AppColors.textPrimary : AppColors.textMuted,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+          if (_gstEnabled) ...[
+            const SizedBox(width: 8),
+            SizedBox(
+              width: 80,
+              child: AppTextField(
+                controller: line.hsnCtrl,
+                onChanged: (v) { line.hsnSac = v; _markDirty(); },
+                compact: true,
+              ),
+            ),
+          ],
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 55,
+            child: AppTextField(
+              controller: line.qtyCtrl,
+              textAlign: TextAlign.center,
+              compact: true,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return '!';
+                final qty = double.tryParse(v);
+                if (qty == null || qty <= 0) return '!';
+                return null;
+              },
+              onChanged: (v) {
+                line.quantity = double.tryParse(v) ?? 1;
+                _markDirty();
+                _triggerPreview();
               },
             ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: AppSpacing.sm),
-            child: ActionButton(
-              label: 'Add Row',
-              icon: Icons.add,
-              tier: ActionTier.safe,
-              onPressed: _addEmptyLine,
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 55,
+            child: AppDropdown<String>(
+              value: line.unit,
+              compact: true,
+              items: const [
+                DropdownMenuItem(value: 'Nos', child: Text('Nos')),
+                DropdownMenuItem(value: 'Pcs', child: Text('Pcs')),
+                DropdownMenuItem(value: 'Box', child: Text('Box')),
+                DropdownMenuItem(value: 'BAG', child: Text('BAG')),
+                DropdownMenuItem(value: 'MT', child: Text('MT')),
+              ],
+              onChanged: (v) {
+                if (v != null) { setState(() => line.unit = v); _markDirty(); }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 80,
+            child: AppTextField(
+              controller: line.rateCtrl,
+              textAlign: TextAlign.right,
+              compact: true,
+              validator: (v) {
+                if (v == null || v.trim().isEmpty) return '!';
+                final rate = double.tryParse(v);
+                if (rate == null || rate < 0) return '!';
+                return null;
+              },
+              onChanged: (v) {
+                line.rate = double.tryParse(v) ?? 0;
+                _markDirty();
+                _triggerPreview();
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 65,
+            child: AppDropdown<String>(
+              value: line.gstRate.toStringAsFixed(0),
+              compact: true,
+              items: const [
+                DropdownMenuItem(value: '28', child: Text('28%')),
+                DropdownMenuItem(value: '18', child: Text('18%')),
+                DropdownMenuItem(value: '12', child: Text('12%')),
+                DropdownMenuItem(value: '5', child: Text('5%')),
+                DropdownMenuItem(value: '3', child: Text('3%')),
+                DropdownMenuItem(value: '0', child: Text('0%')),
+              ],
+              onChanged: (v) {
+                if (v != null) {
+                  setState(() => line.gstRate = double.tryParse(v) ?? 18);
+                  _markDirty();
+                  _triggerPreview();
+                }
+              },
+            ),
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 90,
+            child: Text(
+              AmountFormat.format(amount),
+              textAlign: TextAlign.right,
+              style: AppTextStyles.amount,
+            ),
+          ),
+          SizedBox(
+            width: 36,
+            child: IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
+              onPressed: () => _removeLine(index),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             ),
           ),
         ],
@@ -1943,59 +2483,122 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     );
   }
 
-  Widget _buildMobileLineCard(int index, TransactionLineItem line) {
-    return _LineItemCard(
-      index: index,
-      line: line,
-      onPickProduct: () => _openProductSearch(index),
-      onChanged: () { _markDirty(); _triggerPreview(); },
-      onRemove: () => _removeLine(index),
-      gstEnabled: _gstEnabled,
+  Future<void> _showQtyEditDialog(int index) async {
+    final line = _lines[index];
+    final ctrl = TextEditingController(text: line.quantity.toStringAsFixed(0));
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Quantity'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: TextInputType.number,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Enter quantity'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              final v = double.tryParse(ctrl.text);
+              if (v != null && v > 0) Navigator.pop(ctx, v);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
     );
+    if (result != null && mounted) {
+      setState(() {
+        line.quantity = result;
+        line.qtyCtrl.text = result.toStringAsFixed(0);
+      });
+      _markDirty();
+      _triggerPreview();
+    }
+  }
+
+  Future<void> _showRateEditDialog(int index) async {
+    final line = _lines[index];
+    final ctrl = TextEditingController(text: line.rate.toStringAsFixed(2));
+    final result = await showDialog<double>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rate'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Enter rate'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              final v = double.tryParse(ctrl.text);
+              if (v != null && v >= 0) Navigator.pop(ctx, v);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        line.rate = result;
+        line.rateCtrl.text = result.toStringAsFixed(2);
+      });
+      _markDirty();
+      _triggerPreview();
+    }
+  }
+
+  Future<void> _showGstEditDialog(int index) async {
+    final line = _lines[index];
+    final options = ['0', '3', '5', '12', '18', '28'];
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('GST Rate'),
+        children: options.map((rate) => SimpleDialogOption(
+          onPressed: () => Navigator.pop(ctx, rate),
+          child: Text('$rate%'),
+        )).toList(),
+      ),
+    );
+    if (result != null && mounted) {
+      setState(() {
+        line.gstRate = double.tryParse(result) ?? 18;
+        line.gstCtrl.text = result;
+      });
+      _markDirty();
+      _triggerPreview();
+    }
   }
 
   Widget _buildAttachmentsAndNotesCard() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        AppCard(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Total Amount in Words',
-                style: AppTextStyles.caption.copyWith(color: AppColors.textMuted),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                _total > 0
-                    ? 'Rupees ${_convertToWords(_total)} Only'
-                    : 'Zero Rupees Only',
-                style: AppTextStyles.bodySmall.copyWith(
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.brandNavy,
-                ),
-              ),
-            ],
+    return AppCard(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Remarks (Optional)',
+            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
           ),
-        ),
-        const SizedBox(height: 10),
-        AppCard(
-          padding: const EdgeInsets.all(12),
-          child: TextField(
+          const SizedBox(height: 8),
+          TextField(
             controller: _notesCtrl,
-            maxLines: 2,
+            maxLines: 3,
             style: const TextStyle(fontSize: 13),
             decoration: const InputDecoration(
-              labelText: 'Notes (Optional)',
               border: InputBorder.none,
-              hintText: 'Enter notes...',
+              hintText: 'Enter remarks...',
               isDense: true,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -2010,18 +2613,21 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   Widget _buildTotalSummaryCard() {
+    final gstRate = _posStateCode == '27' ? 9.0 : 9.0;
     return AppCard(
       padding: const EdgeInsets.all(12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SummaryRow('Taxable Value', _subtotal),
+          _SummaryRow('Taxable Amount', _subtotal),
+          if (_cgst > 0) _SummaryRow('CGST (${_getGstLabel(_cgst, _subtotal)}%)', _cgst),
+          if (_sgst > 0) _SummaryRow('SGST (${_getGstLabel(_sgst, _subtotal)}%)', _sgst),
+          if (_igst > 0) _SummaryRow('IGST (${_getGstLabel(_igst, _subtotal)}%)', _igst),
+          if (_utgst > 0) _SummaryRow('UTGST', _utgst),
+          if (_cess > 0) _SummaryRow('Cess', _cess),
+          _SummaryRow('Total GST', _cgst + _sgst + _igst + _utgst + _cess),
           if (_discountTotal.abs() > 0.001)
             _SummaryRow('Discount', -_discountTotal, color: AppColors.success),
-          _SummaryRow(
-            'Tax',
-            _cgst + _sgst + _igst + _utgst + _cess,
-          ),
           if (_roundOff.abs() > 0.001) _SummaryRow('Round Off', _roundOff),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 6),
@@ -2030,16 +2636,17 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'Total',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+              Text(
+                'Grand Total',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: AppColors.textPrimary),
               ),
               Text(
-                '₹${_total.toStringAsFixed(2)}',
-                style: const TextStyle(
+                AmountFormat.format(_total),
+                style: TextStyle(
                   fontWeight: FontWeight.w800,
-                  fontSize: 16,
+                  fontSize: 18,
                   color: AppColors.brandNavy,
+                  fontFeatures: const [FontFeature.tabularFigures()],
                 ),
               ),
             ],
@@ -2055,7 +2662,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.error),
                 ),
                 Text(
-                  '₹${(_total - _amountPaid).clamp(0, double.infinity).toStringAsFixed(2)}',
+                  AmountFormat.format((_total - _amountPaid).clamp(0, double.infinity)),
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
@@ -2070,8 +2677,10 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     );
   }
 
-  Widget _buildTotalsAndBreakdownSection(bool isDesktop) {
-    return const SizedBox.shrink();
+  String _getGstLabel(double amount, double taxable) {
+    if (taxable <= 0) return '0';
+    final rate = (amount / taxable * 100);
+    return rate.toStringAsFixed(0);
   }
 
   String _convertToWords(double val) {
@@ -2126,32 +2735,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
 // ══════════════════════════════════════════════════════════════════════════════
 // MODULAR WIDGETS
 // ══════════════════════════════════════════════════════════════════════════════
-
-class _DateField extends StatelessWidget {
-  final TextEditingController ctrl;
-  final String label;
-  final VoidCallback onTap;
-  const _DateField({
-    required this.ctrl,
-    required this.label,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextFormField(
-      controller: ctrl,
-      readOnly: true,
-      onTap: onTap,
-      validator: (v) => (v == null || v.isEmpty) ? 'Required' : null,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: const Icon(Icons.calendar_today_outlined, size: 16),
-        suffixIcon: const Icon(Icons.arrow_drop_down_rounded, size: 20),
-      ),
-    );
-  }
-}
 
 class _SummaryRow extends StatelessWidget {
   final String label;
@@ -2208,327 +2791,265 @@ class _LineItemCardState extends State<_LineItemCard> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin: const EdgeInsets.only(bottom: 10),
       decoration: BoxDecoration(
         color: AppColors.bgSurface,
         borderRadius: AppRadius.card,
         border: Border.all(
           color: _hasProduct
-              ? AppColors.brandNavy.withValues(alpha: 0.18)
-              : AppColors.border,
+              ? AppColors.brandNavy.withValues(alpha: 0.15)
+              : AppColors.borderLight,
           width: _hasProduct ? 1.5 : 1,
         ),
         boxShadow: [
-          if (_hasProduct)
-            BoxShadow(
-              color: AppColors.brandNavy.withValues(alpha: 0.06),
-              blurRadius: 6,
-              offset: const Offset(0, 2),
-            ),
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Header: Index badge + product name + amount + delete
           Container(
-            padding: const EdgeInsets.fromLTRB(10, 7, 10, 7),
-            decoration: BoxDecoration(
-              color: _hasProduct
-                  ? AppColors.brandNavy.withValues(alpha: 0.04)
-                  : AppColors.borderLight,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(10),
-              ),
-            ),
+            padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
             child: Row(
               children: [
-                const Icon(
-                  Icons.drag_handle_rounded,
-                  size: 18,
-                  color: AppColors.textMuted,
-                ),
-                const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 7,
-                    vertical: 2,
-                  ),
+                  width: 28,
+                  height: 28,
                   decoration: BoxDecoration(
-                    color: _hasProduct ? AppColors.brandNavy : AppColors.border,
-                    borderRadius: BorderRadius.circular(20),
+                    color: _hasProduct
+                        ? AppColors.brandNavy
+                        : AppColors.border,
+                    borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(
-                    '#${(widget.index + 1).toString().padLeft(2, '0')}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w700,
+                  child: Center(
+                    child: Text(
+                      '${widget.index + 1}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
-                const Spacer(),
-                InkWell(
-                  onTap: () => setState(() => _showDetails = !_showDetails),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 3,
-                    ),
-                    child: Row(
+                const SizedBox(width: 10),
+                Expanded(
+                  child: GestureDetector(
+                    onTap: widget.onPickProduct,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          _showDetails ? 'Less' : 'Details',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textMuted,
+                          _hasProduct ? line.productName : 'Tap to select item',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: _hasProduct
+                                ? AppColors.textPrimary
+                                : AppColors.textMuted,
                           ),
-                        ),
-                        Icon(
-                          _showDetails
-                              ? Icons.expand_less_rounded
-                              : Icons.expand_more_rounded,
-                          size: 16,
-                          color: AppColors.textMuted,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 4),
-                InkWell(
-                  onTap: widget.onRemove,
-                  borderRadius: BorderRadius.circular(4),
-                  child: const Padding(
-                    padding: EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.delete_outline_rounded,
-                      size: 16,
-                      color: AppColors.error,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                GestureDetector(
-                  onTap: widget.onPickProduct,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _hasProduct
-                          ? AppColors.brandNavy.withValues(alpha: 0.04)
-                          : AppColors.bgLight,
-                      border: Border.all(
-                        color: _hasProduct
-                            ? AppColors.brandNavy.withValues(alpha: 0.25)
-                            : AppColors.border,
-                      ),
-                      borderRadius: BorderRadius.circular(AppRadius.md),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          _hasProduct
-                              ? Icons.inventory_2_outlined
-                              : Icons.search_rounded,
-                          size: 16,
-                          color: _hasProduct
-                              ? AppColors.brandNavy
-                              : AppColors.textMuted,
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            _hasProduct
-                                ? line.productName
-                                : 'Search or type a product name...',
-                            style: _hasProduct
-                                ? AppTextStyles.bodyMedium.copyWith(
-                                    color: AppColors.brandNavy,
-                                    fontWeight: FontWeight.w600,
-                                  )
-                                : AppTextStyles.body.copyWith(
-                                    color: AppColors.textMuted,
-                                  ),
-                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         if (_hasProduct) ...[
+                          const SizedBox(height: 2),
                           Text(
-                            'change',
-                            style: AppTextStyles.caption.copyWith(
+                            '${line.quantity.toStringAsFixed(0)} × ${AmountFormat.format(line.rate)}',
+                            style: TextStyle(
+                              fontSize: 11,
                               color: AppColors.textMuted,
                             ),
-                          ),
-                          const SizedBox(width: 2),
-                          const Icon(
-                            Icons.swap_horiz_rounded,
-                            size: 14,
-                            color: AppColors.textMuted,
                           ),
                         ],
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    _SmallField(
-                      label: 'Qty',
-                      ctrl: line.qtyCtrl,
-                      onChanged: (v) {
-                        line.quantity = double.tryParse(v) ?? 1;
-                        widget.onChanged();
-                      },
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Required';
-                        final q = double.tryParse(v);
-                        if (q == null) return 'Valid number';
-                        if (q <= 0) return 'Must be > 0';
-                        return null;
-                      },
+                if (_hasProduct) ...[
+                  Text(
+                    AmountFormat.format(line.amount),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brandNavy,
+                      fontFeatures: const [FontFeature.tabularFigures()],
                     ),
-                    const SizedBox(width: 6),
-                    _SmallField(
-                      label: 'Rate (₹)',
-                      ctrl: line.rateCtrl,
-                      flex: 2,
-                      onChanged: (v) {
-                        line.rate = double.tryParse(v) ?? 0;
-                        widget.onChanged();
-                      },
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Required';
-                        final r = double.tryParse(v);
-                        if (r == null) return 'Valid number';
-                        if (r < 0) return 'Cannot be negative';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(width: 6),
-                    _SmallField(
-                      label: 'Disc %',
-                      ctrl: line.discCtrl,
-                      onChanged: (v) {
-                        line.discount = double.tryParse(v) ?? 0;
-                        widget.onChanged();
-                      },
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return null;
-                        final d = double.tryParse(v);
-                        if (d == null) return 'Valid number';
-                        if (d < 0 || d > 100) return 'Must be 0-100%';
-                        return null;
-                      },
-                    ),
-                    if (widget.gstEnabled) ...[
-                      const SizedBox(width: 6),
-                      _SmallField(
-                        label: 'GST %',
-                        ctrl: line.gstCtrl,
-                        onChanged: (v) {
-                          line.gstRate = double.tryParse(v) ?? 0;
-                          widget.onChanged();
-                        },
-                        validator: (v) {
-                          if (v == null || v.isEmpty) return null;
-                          final g = double.tryParse(v);
-                          if (g == null || g < 0) return 'Invalid';
-                          return null;
-                        },
-                      ),
-                    ],
-                  ],
-                ),
-                if (widget.gstEnabled && _showDetails) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: line.hsnCtrl,
-                          style: const TextStyle(fontSize: 12),
-                          onChanged: (v) => line.hsnSac = v,
-                          decoration: const InputDecoration(
-                            labelText: 'HSN / SAC',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        flex: 2,
-                        child: TextField(
-                          controller: line.descCtrl,
-                          style: const TextStyle(fontSize: 12),
-                          decoration: const InputDecoration(
-                            labelText: 'Item Description',
-                            isDense: true,
-                            contentPadding: EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 8,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
                   ),
+                  const SizedBox(width: 6),
                 ],
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _hasProduct
-                          ? AppColors.brandNavy.withValues(alpha: 0.08)
-                          : AppColors.borderLight,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'Amount: ',
-                          style: AppTextStyles.caption.copyWith(
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        Text(
-                          '₹${line.amount.toStringAsFixed(2)}',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: _hasProduct
-                                ? AppColors.brandNavy
-                                : AppColors.textMuted,
-                            fontFeatures: const [FontFeature.tabularFigures()],
-                          ),
-                        ),
-                      ],
+                InkWell(
+                  onTap: widget.onRemove,
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.close_rounded,
+                      size: 18,
+                      color: AppColors.textMuted,
                     ),
                   ),
                 ),
               ],
             ),
           ),
+          // Fields row: qty, rate, disc, gst
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+            child: Row(
+              children: [
+                _SmallField(
+                  label: 'QTY',
+                  ctrl: line.qtyCtrl,
+                  onChanged: (v) {
+                    line.quantity = double.tryParse(v) ?? 1;
+                    widget.onChanged();
+                  },
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return '!';
+                    final q = double.tryParse(v);
+                    if (q == null || q <= 0) return '!';
+                    return null;
+                  },
+                ),
+                const SizedBox(width: 8),
+                _SmallField(
+                  label: 'RATE',
+                  ctrl: line.rateCtrl,
+                  flex: 2,
+                  onChanged: (v) {
+                    line.rate = double.tryParse(v) ?? 0;
+                    widget.onChanged();
+                  },
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return '!';
+                    final r = double.tryParse(v);
+                    if (r == null || r < 0) return '!';
+                    return null;
+                  },
+                ),
+                const SizedBox(width: 8),
+                _SmallField(
+                  label: 'DISC%',
+                  ctrl: line.discCtrl,
+                  onChanged: (v) {
+                    line.discount = double.tryParse(v) ?? 0;
+                    widget.onChanged();
+                  },
+                  validator: (v) {
+                    if (v == null || v.isEmpty) return null;
+                    final d = double.tryParse(v);
+                    if (d == null || d < 0 || d > 100) return '!';
+                    return null;
+                  },
+                ),
+                if (widget.gstEnabled) ...[
+                  const SizedBox(width: 8),
+                  _SmallField(
+                    label: 'GST%',
+                    ctrl: line.gstCtrl,
+                    onChanged: (v) {
+                      line.gstRate = double.tryParse(v) ?? 0;
+                      widget.onChanged();
+                    },
+                    validator: (v) {
+                      if (v == null || v.isEmpty) return null;
+                      final g = double.tryParse(v);
+                      if (g == null || g < 0) return '!';
+                      return null;
+                    },
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Expandable detail fields
+          if (widget.gstEnabled && _showDetails)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: line.hsnCtrl,
+                      style: const TextStyle(fontSize: 12),
+                      onChanged: (v) => line.hsnSac = v,
+                      decoration: InputDecoration(
+                        hintText: 'HSN / SAC',
+                        hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: AppColors.borderLight),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: line.descCtrl,
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'Description',
+                        hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                        isDense: true,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: AppColors.border),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(6),
+                          borderSide: BorderSide(color: AppColors.borderLight),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          // Details toggle
+          if (_hasProduct && widget.gstEnabled)
+            InkWell(
+              onTap: () => setState(() => _showDetails = !_showDetails),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.bgLight,
+                  border: Border(
+                    top: BorderSide(color: AppColors.borderLight, width: 0.5),
+                  ),
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(10)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _showDetails ? 'Less details' : 'More details (HSN)',
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      _showDetails ? Icons.expand_less_rounded : Icons.expand_more_rounded,
+                      size: 14,
+                      color: AppColors.textMuted,
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -2559,23 +3080,39 @@ class _SmallField extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(
-              fontSize: 9,
-              fontWeight: FontWeight.w500,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
               color: AppColors.textMuted,
+              letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(height: 2),
+          const SizedBox(height: 3),
           TextFormField(
             controller: ctrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             onChanged: onChanged,
             validator: validator,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               isDense: true,
-              contentPadding: EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-              border: OutlineInputBorder(),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 9),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: AppColors.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: AppColors.borderLight),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: AppColors.brandNavy, width: 1.5),
+              ),
+              errorBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(6),
+                borderSide: BorderSide(color: AppColors.error),
+              ),
             ),
           ),
         ],

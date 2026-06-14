@@ -3,9 +3,9 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/expense_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
+import 'package:flutter_client/views/shared/design_system.dart';
+import 'package:flutter_client/views/shared/document_list_view.dart';
 import 'package:flutter_client/views/shared/toast.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
-import 'package:flutter_client/views/shared/design_system.dart' as ds;
 import 'package:flutter_client/views/expenses/expense_form_view.dart';
 import 'package:flutter_client/views/expenses/expense_detail_view.dart';
 import 'package:flutter_client/views/shared/pagination_controls.dart';
@@ -18,6 +18,8 @@ class ExpenseListView extends StatefulWidget {
 }
 
 class _ExpenseListViewState extends State<ExpenseListView> {
+  final _searchCtrl = TextEditingController();
+  String _statusFilter = 'ALL';
   Set<String> _selectedIds = {};
   bool _isSelectionMode = false;
 
@@ -25,6 +27,12 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   void initState() {
     super.initState();
     Future.microtask(() => context.read<ExpenseProvider>().fetchExpenses());
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   void _toggleSelection(String id) {
@@ -94,9 +102,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
         final ok = await provider.cancelExpense(id);
         if (ok) successCount++;
       }
-      if (mounted) {
-        AppToast.info(context, '$successCount of ${cancellable.length} expenses cancelled');
-      }
+      if (mounted) AppToast.info(context, '$successCount of ${cancellable.length} expenses cancelled');
       _clearSelection();
       provider.fetchExpenses(page: provider.currentPage);
     }
@@ -105,9 +111,7 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   void _showForm({Map<String, dynamic>? expense}) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ExpenseFormView(editExpense: expense),
-      ),
+      MaterialPageRoute(builder: (_) => ExpenseFormView(editExpense: expense)),
     ).then((updated) {
       if (updated == true) context.read<ExpenseProvider>().fetchExpenses();
     });
@@ -116,12 +120,8 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   void _showDetail(String id) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (_) => ExpenseDetailView(expenseId: id),
-      ),
-    ).then((_) {
-      context.read<ExpenseProvider>().fetchExpenses();
-    });
+      MaterialPageRoute(builder: (_) => ExpenseDetailView(expenseId: id)),
+    ).then((_) => context.read<ExpenseProvider>().fetchExpenses());
   }
 
   Future<void> _deleteExpense(String id) async {
@@ -140,256 +140,104 @@ class _ExpenseListViewState extends State<ExpenseListView> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<ExpenseProvider>();
-    final isMobile = AdaptiveLayout.isMobile(context);
     final items = provider.items;
+
+    final totalCount = items.length;
+    final draftCount = items.where((e) => e['status'] == 'DRAFT').length;
+    final postedCount = items.where((e) => e['status'] == 'POSTED').length;
+    final cancelledCount = items.where((e) => e['status'] == 'CANCELLED').length;
 
     num totalAmount = 0;
     for (final e in items) {
-      totalAmount += double.tryParse((e['amount'] ?? 0).toString()) ?? 0;
+      if (e['status'] != 'CANCELLED') {
+        totalAmount += double.tryParse((e['amount'] ?? 0).toString()) ?? 0;
+      }
     }
 
-    if (isMobile) {
-      return Scaffold(
-        backgroundColor: AppColors.bgLight,
-        floatingActionButton: _isSelectionMode
-            ? null
-            : FloatingActionButton(
-                onPressed: () => _showForm(),
-                child: const Icon(Icons.add),
-              ),
-        body: Column(
-          children: [
-            AppStatusTabBar(
-              tabs: const ['ALL', 'DRAFT', 'POSTED', 'CANCELLED'],
-              activeTab: 'ALL',
-              onTabChanged: (_) {},
-              badges: {
-                'ALL': items.length,
-                'DRAFT': items.where((e) => e['status'] == 'DRAFT').length,
-                'POSTED': items.where((e) => e['status'] == 'POSTED').length,
-                'CANCELLED': items.where((e) => e['status'] == 'CANCELLED').length,
-              },
-            ),
-            Expanded(
-              child: provider.isLoading && items.isEmpty
-                  ? const LoadingState(message: 'Loading expenses...')
-                  : items.isEmpty
-                      ? AppEmptyState(
-                          icon: Icons.money_off_outlined,
-                          title: 'No expenses recorded',
-                          subtitle: 'Expenses you record will appear here',
-                          actionLabel: 'Record Expense',
-                          onAction: () => _showForm(),
-                        )
-                      : RefreshIndicator(
-                          onRefresh: () async => provider.fetchExpenses(page: provider.currentPage),
-                          child: ListView.separated(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            itemCount: items.length,
-                            separatorBuilder: (context, _) => const SizedBox(height: 6),
-                            itemBuilder: (context, i) {
-                              final exp = items[i];
-                              final id = exp['id'].toString();
-                              final isSelected = _selectedIds.contains(id);
-                              final category = exp['category_name'] ?? exp['category']?['name'] ?? 'N/A';
-                              final amount = double.tryParse((exp['amount'] ?? 0).toString()) ?? 0.0;
+    final filteredItems = items.where((e) {
+      final matchesStatus = _statusFilter == 'ALL' || e['status'] == _statusFilter;
+      final query = _searchCtrl.text.trim().toLowerCase();
+      if (query.isEmpty) return matchesStatus;
+      final number = (e['expense_number'] ?? '').toString().toLowerCase();
+      final category = (e['category_name'] ?? e['category']?['name'] ?? '').toString().toLowerCase();
+      return matchesStatus && (number.contains(query) || category.contains(query));
+    }).toList();
 
-                              return GestureDetector(
-                                onTap: () {
-                                  if (_isSelectionMode) {
-                                    _toggleSelection(id);
-                                  } else {
-                                    _showDetail(exp['id']);
-                                  }
-                                },
-                                onLongPress: () {
-                                  if (!_isSelectionMode) {
-                                    setState(() {
-                                      _isSelectionMode = true;
-                                      _selectedIds.add(id);
-                                    });
-                                  }
-                                },
-                                child: CompactDocumentCard(
-                                  docNumber: exp['expense_number'] ?? 'EXP',
-                                  partyName: category,
-                                  date: exp['expense_date'],
-                                  amount: amount,
-                                  status: exp['status'] ?? 'POSTED',
-                                  isSelected: isSelected,
-                                  isSelectionMode: _isSelectionMode,
-                                ),
-                              );
-                            },
-                          ),
-                        ),
-            ),
-          ],
-        ),
+    final docItems = filteredItems.map((exp) {
+      return DocumentItemData(
+        id: exp['id'].toString(),
+        docNumber: exp['expense_number'] ?? 'EXP',
+        partyName: exp['category_name'] ?? exp['category']?['name'] ?? 'N/A',
+        date: exp['expense_date']?.toString(),
+        amount: double.tryParse((exp['amount'] ?? 0).toString()) ?? 0,
+        status: exp['status'] ?? 'POSTED',
       );
-    }
+    }).toList();
 
     return Scaffold(
       backgroundColor: AppColors.bgLight,
+      floatingActionButton: _isSelectionMode
+          ? null
+          : FloatingActionButton(
+              onPressed: () => _showForm(),
+              child: const Icon(Icons.add),
+            ),
       body: Column(
         children: [
-          AppCommandBar(
-            title: 'Expenses',
-            actions: [
-              AppButton(
-                label: 'Record Expense',
-                icon: Icons.add,
-                isPrimary: true,
-                onTap: () => _showForm(),
-              ),
-            ],
-          ),
-          AppStatusTabBar(
-            tabs: const ['ALL', 'DRAFT', 'POSTED', 'CANCELLED'],
-            activeTab: 'ALL',
-            onTabChanged: (_) {},
-            badges: {
-              'ALL': items.length,
-              'DRAFT': items.where((e) => e['status'] == 'DRAFT').length,
-              'POSTED': items.where((e) => e['status'] == 'POSTED').length,
-              'CANCELLED': items.where((e) => e['status'] == 'CANCELLED').length,
-            },
-          ),
           Expanded(
-            child: provider.isLoading && items.isEmpty
-                ? const LoadingState(message: 'Loading expenses...')
-                : items.isEmpty
-                    ? AppEmptyState(
-                        icon: Icons.money_off_outlined,
-                        title: 'No expenses recorded',
-                        subtitle: 'Expenses you record will appear here',
-                        actionLabel: 'Record Expense',
-                        onAction: () => _showForm(),
-                      )
-                    : Column(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                            decoration: const BoxDecoration(
-                              color: AppColors.bgSurface,
-                              border: Border(bottom: BorderSide(color: AppColors.border)),
-                            ),
-                            child: Row(
-                              children: [
-                                SizedBox(
-                                  width: 40,
-                                  child: Checkbox(
-                                    value: _selectedIds.length == items.length && items.isNotEmpty,
-                                    onChanged: (_) => _selectAll(),
-                                  ),
-                                ),
-                                const Expanded(flex: 2, child: Text('DATE', style: AppTextStyles.labelSmall)),
-                                const Expanded(flex: 2, child: Text('NUMBER', style: AppTextStyles.labelSmall)),
-                                const Expanded(flex: 4, child: Text('CATEGORY', style: AppTextStyles.labelSmall)),
-                                const Expanded(flex: 3, child: Text('AMOUNT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
-                                const Expanded(flex: 2, child: Text('STATUS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
-                                const SizedBox(width: 120, child: Text('ACTIONS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: ListView.separated(
-                              padding: EdgeInsets.zero,
-                              itemCount: items.length,
-                              separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderLight),
-                              itemBuilder: (context, index) {
-                                final exp = items[index];
-                                final id = exp['id'].toString();
-                                final isSelected = _selectedIds.contains(id);
-                                final category = exp['category_name'] ?? exp['category']?['name'] ?? 'N/A';
-                                final amount = double.tryParse((exp['amount'] ?? 0).toString()) ?? 0.0;
+            child: DocumentListView(
+              title: 'Expenses',
+              searchController: _searchCtrl,
+              searchHint: 'Search expenses...',
+              onSearchChanged: (_) => setState(() {}),
+              filterTabs: [
+                FilterTab('ALL', totalCount),
+                FilterTab('DRAFT', draftCount),
+                FilterTab('POSTED', postedCount),
+                FilterTab('CANCELLED', cancelledCount),
+              ],
+              activeFilter: _statusFilter,
+              onFilterChanged: (tab) => setState(() => _statusFilter = tab),
+              summary: ListSummaryData(totalAmount: totalAmount.toDouble(), totalCount: totalCount),
+              items: docItems,
+              isLoading: provider.isLoading && items.isEmpty,
+              onRefresh: () async => provider.fetchExpenses(page: provider.currentPage),
+              emptyTitle: 'No expenses recorded',
+              emptySubtitle: 'Expenses you record will appear here',
+              emptyIcon: Icons.money_off_outlined,
+              detailBuilder: (ctx, item) => ExpenseDetailView(expenseId: item.id),
+              itemBuilder: (context, item, index) {
+                final id = item.id;
+                final isSelected = _selectedIds.contains(id);
 
-                                return InkWell(
-                                  onTap: () => _showDetail(exp['id']),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                    color: isSelected ? AppColors.bgLight : Colors.transparent,
-                                    child: Row(
-                                      children: [
-                                        SizedBox(
-                                          width: 40,
-                                          child: Checkbox(
-                                            value: isSelected,
-                                            onChanged: (_) => _toggleSelection(id),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(
-                                            AppDate.format(exp['expense_date']),
-                                            style: AppTextStyles.bodySmall,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 2,
-                                          child: Text(
-                                            exp['expense_number'] ?? 'EXP',
-                                            style: AppTextStyles.bodyMedium.copyWith(
-                                              color: AppColors.brandNavy,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 4,
-                                          child: Text(
-                                            category,
-                                            style: AppTextStyles.partyName,
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 3,
-                                          child: Text(
-                                            AmountFormat.format(amount),
-                                            style: AppTextStyles.amount,
-                                            textAlign: TextAlign.right,
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 2,
-                                          child: Center(
-                                            child: AppInlineStatus(status: exp['status'] ?? 'POSTED'),
-                                          ),
-                                        ),
-                                        SizedBox(
-                                          width: 120,
-                                          child: AppRowActions(
-                                            children: [
-                                              IconButton(
-                                                icon: const Icon(Icons.visibility_outlined, size: 16),
-                                                onPressed: () => _showDetail(exp['id']),
-                                                tooltip: 'View Detail',
-                                              ),
-                                              if (exp['status'] == 'DRAFT')
-                                                IconButton(
-                                                  icon: const Icon(Icons.edit_outlined, size: 16),
-                                                  onPressed: () => _showForm(expense: exp),
-                                                  tooltip: 'Edit',
-                                                ),
-                                              IconButton(
-                                                icon: const Icon(Icons.delete_outline, size: 16),
-                                                onPressed: () => _deleteExpense(exp['id']),
-                                                tooltip: 'Delete',
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
+                return GestureDetector(
+                  onTap: () {
+                    if (_isSelectionMode) {
+                      _toggleSelection(id);
+                    } else {
+                      _showDetail(id);
+                    }
+                  },
+                  onLongPress: () {
+                    if (!_isSelectionMode) {
+                      setState(() {
+                        _isSelectionMode = true;
+                        _selectedIds.add(id);
+                      });
+                    }
+                  },
+                  child: CompactDocumentCard(
+                    docNumber: item.docNumber,
+                    partyName: item.partyName,
+                    date: item.date,
+                    amount: item.amount,
+                    status: item.status,
+                    isSelected: isSelected,
+                    isSelectionMode: _isSelectionMode,
+                  ),
+                );
+              },
+            ),
           ),
           if (_selectedIds.isNotEmpty)
             AppStickyBottomBar(

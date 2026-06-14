@@ -62,9 +62,9 @@ class _ContactSearchSheetState extends State<ContactSearchSheet> {
       maxChildSize: 0.95,
       minChildSize: 0.4,
       builder: (_, scrollCtrl) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           children: [
@@ -116,12 +116,12 @@ class _ContactSearchSheetState extends State<ContactSearchSheet> {
                       onTap: () => widget.onCreateNew(query),
                     ),
                   if (_filtered.isEmpty && query.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(
                         children: [
                           Icon(Icons.people_outline, size: 40, color: AppColors.textMuted),
-                          SizedBox(height: 12),
+                          const SizedBox(height: 12),
                           Text('No contacts found', style: AppTextStyles.bodySmall),
                         ],
                       ),
@@ -132,7 +132,7 @@ class _ContactSearchSheetState extends State<ContactSearchSheet> {
                           radius: 18,
                           child: Text(
                             c.name[0].toUpperCase(),
-                            style: const TextStyle(color: AppColors.brandNavy, fontWeight: FontWeight.w700, fontSize: 13),
+                            style: TextStyle(color: AppColors.brandNavy, fontWeight: FontWeight.w700, fontSize: 13),
                           ),
                         ),
                         title: Text(c.name, style: AppTextStyles.bodyMedium),
@@ -210,9 +210,9 @@ class _ProductSearchSheetState extends State<ProductSearchSheet> {
       maxChildSize: 0.95,
       minChildSize: 0.4,
       builder: (_, scrollCtrl) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: AppColors.bgSurface,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
         ),
         child: Column(
           children: [
@@ -260,16 +260,16 @@ class _ProductSearchSheetState extends State<ProductSearchSheet> {
                         'Create "$query"',
                         style: AppTextStyles.bodyMedium.copyWith(color: const Color(0xFF2E7D32), fontWeight: FontWeight.w600),
                       ),
-                      subtitle: const Text('Add as new product or service', style: AppTextStyles.caption),
+                      subtitle: Text('Add as new product or service', style: AppTextStyles.caption),
                       onTap: () => widget.onCreateNew(query),
                     ),
                   if (_filtered.isEmpty && query.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(
                         children: [
                           Icon(Icons.inventory_2_outlined, size: 40, color: AppColors.textMuted),
-                          SizedBox(height: 12),
+                          const SizedBox(height: 12),
                           Text('No products found', style: AppTextStyles.bodySmall),
                         ],
                       ),

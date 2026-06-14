@@ -296,7 +296,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                        icon: const Icon(Icons.add_circle_outline, color: AppColors.brandNavy),
+                        icon: Icon(Icons.add_circle_outline, color: AppColors.brandNavy),
                         onPressed: _addNewCategoryDialog,
                         tooltip: 'Add category',
                       ),

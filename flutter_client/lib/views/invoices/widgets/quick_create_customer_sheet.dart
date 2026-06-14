@@ -360,7 +360,7 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close,
                       size: 20,
                       color: AppColors.textMuted,
@@ -426,7 +426,7 @@ class _QuickCreateCustomerSheetState extends State<_QuickCreateCustomerSheet> {
                   counterText: '',
                   suffixIcon: _gstinCtrl.text.trim().length == 15
                       ? IconButton(
-                          icon: const Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
+                          icon: Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
                           onPressed: _verifyGstin,
                           tooltip: 'Verify GSTIN',
                         )

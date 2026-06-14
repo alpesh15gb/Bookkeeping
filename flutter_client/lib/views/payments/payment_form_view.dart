@@ -105,7 +105,10 @@ class _PaymentFormViewState extends State<PaymentFormView> {
 
         if (!mounted) return;
         setState(() {
-          _openDocs = filtered.whereType<Map<String, dynamic>>().toList();
+          _openDocs = filtered
+              .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
+              .whereType<Map<String, dynamic>>()
+              .toList();
           for (final doc in _openDocs) {
             final id = doc['id'].toString();
             final total = double.tryParse((doc['total'] ?? 0).toString()) ?? 0;

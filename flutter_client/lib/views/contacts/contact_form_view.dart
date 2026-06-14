@@ -118,7 +118,7 @@ class _ContactFormViewState extends State<ContactFormView> {
     final gstin = _gstinController.text.trim().toUpperCase();
     if (gstin.length != 15) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid 15-character GSTIN first'), backgroundColor: AppColors.warning),
+        SnackBar(content: const Text('Enter a valid 15-character GSTIN first'), backgroundColor: AppColors.warning),
       );
       return;
     }
@@ -127,7 +127,7 @@ class _ContactFormViewState extends State<ContactFormView> {
     final captchaData = await provider.fetchGstCaptcha();
     if (captchaData == null || !mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not fetch captcha from GST portal'), backgroundColor: AppColors.error),
+        SnackBar(content: const Text('Could not fetch captcha from GST portal'), backgroundColor: AppColors.error),
       );
       return;
     }
@@ -149,7 +149,7 @@ class _ContactFormViewState extends State<ContactFormView> {
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white,
+                color: AppColors.bgSurface,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppColors.border),
               ),
@@ -355,7 +355,7 @@ class _ContactFormViewState extends State<ContactFormView> {
                                   hintText: '15-character GSTIN (e.g., 27AAPFU0939F1ZV)',
                                   prefixIcon: const Icon(Icons.pin_outlined, size: 18),
                                   suffixIcon: IconButton(
-                                    icon: const Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
+                                    icon: Icon(Icons.verified_outlined, size: 18, color: AppColors.brandNavy),
                                     onPressed: _verifyGstin,
                                     tooltip: 'Verify GSTIN',
                                   ),
@@ -399,7 +399,7 @@ class _ContactFormViewState extends State<ContactFormView> {
                           color: AppColors.borderLight,
                           borderRadius: BorderRadius.circular(AppRadius.sm),
                         ),
-                        child: const Text('BILLING ADDRESS', style: AppTextStyles.labelSmall),
+                        child: Text('BILLING ADDRESS', style: AppTextStyles.labelSmall),
                       ),
                       const SizedBox(height: 12),
 

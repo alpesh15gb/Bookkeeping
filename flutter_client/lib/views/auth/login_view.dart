@@ -83,7 +83,7 @@ class _LoginViewState extends State<LoginView> {
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 6),
-                    const Text(
+                    Text(
                       'Enter your credentials to access your account',
                       style: AppTextStyles.bodySmall,
                       textAlign: TextAlign.center,

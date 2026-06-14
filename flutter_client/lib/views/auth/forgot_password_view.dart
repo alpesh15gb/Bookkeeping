@@ -58,7 +58,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
                   const SizedBox(height: 16),
                   const Text('Check your email', style: AppTextStyles.h2, textAlign: TextAlign.center),
                   const SizedBox(height: 8),
-                  const Text('If an account exists with that email, you will receive a password reset link.', style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
+                  Text('If an account exists with that email, you will receive a password reset link.', style: AppTextStyles.bodySmall, textAlign: TextAlign.center),
                   const SizedBox(height: 24),
                   SizedBox(
                     height: 44,

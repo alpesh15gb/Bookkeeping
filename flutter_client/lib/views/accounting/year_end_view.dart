@@ -430,7 +430,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
                   child: Row(
                     children: [
                       Expanded(
-                        child: Column(children: const [
+                        child: Column(children: [
                           Icon(Icons.account_tree_outlined, color: AppColors.brandNavy),
                           SizedBox(height: 4),
                           Text('Revenue & Expense\n(Balances to zero)', textAlign: TextAlign.center,
@@ -471,7 +471,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  children: const [
+                  children: [
                     Icon(Icons.lock_outline_rounded, color: AppColors.brandNavy, size: 28),
                     SizedBox(width: 12),
                     Text('Lock Confirmation', style: AppTextStyles.h1),
@@ -599,7 +599,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppColors.bgSurface,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),

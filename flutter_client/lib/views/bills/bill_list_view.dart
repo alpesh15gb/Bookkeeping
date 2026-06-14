@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/models/bill.dart';
 import 'package:flutter_client/providers/bill_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
-import 'package:flutter_client/views/shared/design_system.dart' as ds;
-import 'package:flutter_client/views/bills/bill_form_view.dart';
+import 'package:flutter_client/views/shared/document_list_view.dart';
 import 'package:flutter_client/views/bills/bill_detail_view.dart';
 import 'package:flutter_client/utils/haptic_helper.dart';
-import 'package:flutter_client/core/print_share_helper.dart';
-import 'package:flutter_client/views/shared/skeleton_loading.dart';
-import 'package:flutter_client/views/shared/toast.dart';
 
 class BillListView extends StatefulWidget {
   const BillListView({super.key});
@@ -22,16 +16,12 @@ class BillListView extends StatefulWidget {
 
 class _BillListViewState extends State<BillListView> {
   final _searchCtrl = TextEditingController();
-  Set<String> _selectedIds = {};
-  bool _isSelectionMode = false;
-  final Map<String, double> _swipeProgress = {};
+  String _statusFilter = 'ALL';
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<BillProvider>().fetchBills();
-    });
+    Future.microtask(() => _fetch());
   }
 
   @override
@@ -40,128 +30,8 @@ class _BillListViewState extends State<BillListView> {
     super.dispose();
   }
 
-  void _toggleSelection(String id) {
-    setState(() {
-      if (_selectedIds.contains(id)) {
-        _selectedIds.remove(id);
-        if (_selectedIds.isEmpty) _isSelectionMode = false;
-      } else {
-        _selectedIds.add(id);
-      }
-    });
-  }
-
-  void _selectAll() {
-    final provider = context.read<BillProvider>();
-    setState(() {
-      if (_selectedIds.length == provider.bills.length) {
-        _selectedIds.clear();
-      } else {
-        _selectedIds = provider.bills.map((e) => e.id.toString()).toSet();
-      }
-    });
-  }
-
-  void _clearSelection() {
-    setState(() {
-      _selectedIds.clear();
-      _isSelectionMode = false;
-    });
-  }
-
-  void _bulkDelete() async {
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Delete ${_selectedIds.length} bills?',
-      message: 'This action cannot be undone.',
-    );
-    if (confirm == true) {
-      final provider = context.read<BillProvider>();
-      for (final id in _selectedIds) {
-        await provider.deleteBill(id);
-      }
-      HapticHelper.delete();
-      _clearSelection();
-      provider.fetchBills();
-    }
-  }
-
-  void _bulkCancel() async {
-    final provider = context.read<BillProvider>();
-    final cancellable = _selectedIds.where((id) {
-      final match = provider.bills.where((b) => b.id.toString() == id);
-      if (match.isEmpty) return false;
-      return match.first.status == 'POSTED' || match.first.status == 'PARTIALLY_PAID';
-    }).toList();
-    if (cancellable.isEmpty) {
-      AppToast.info(context, 'No cancellable bills selected (only Posted/Partial can be cancelled)');
-      return;
-    }
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Cancel ${cancellable.length} bills?',
-      message: 'This will reverse ledger entries for each selected bill.',
-    );
-    if (confirm == true) {
-      int successCount = 0;
-      for (final id in cancellable) {
-        final ok = await provider.cancelBill(id);
-        if (ok) successCount++;
-      }
-      HapticHelper.medium();
-      if (mounted) {
-        AppToast.info(context, '$successCount of ${cancellable.length} bills cancelled');
-      }
-      _clearSelection();
-      provider.fetchBills();
-    }
-  }
-
-  void _showForm({BillModel? bill}) async {
-    BillModel? fullBill = bill;
-    if (bill != null) {
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => const Center(child: CircularProgressIndicator()),
-      );
-      fullBill = await context.read<BillProvider>().fetchBillDetail(bill.id);
-      if (mounted) Navigator.pop(context);
-      if (fullBill == null) {
-        if (mounted) {
-          AppToast.error(context, 'Failed to load bill details');
-        }
-        return;
-      }
-    }
-    if (mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (_) => BillFormView(editBill: fullBill)),
-      ).then((_) => context.read<BillProvider>().fetchBills());
-    }
-  }
-
-  void _showDetail(String id) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => BillDetailView(billId: id)),
-    ).then((_) => context.read<BillProvider>().fetchBills());
-  }
-
-  Future<void> _cancelBill(String id) async {
-    final confirm = await AppConfirmDialog.show(
-      context,
-      title: 'Cancel Bill?',
-      message: 'Cancel this vendor bill?',
-    );
-    if (confirm == true) {
-      final provider = context.read<BillProvider>();
-      final success = await provider.cancelBill(id);
-      if (!success && mounted) {
-        AppToast.error(context, provider.errorMessage ?? 'Cancel failed');
-      }
-    }
+  void _fetch() {
+    context.read<BillProvider>().fetchBills();
   }
 
   String _balanceLabel(BillModel bill) {
@@ -170,587 +40,73 @@ class _BillListViewState extends State<BillListView> {
     return 'Unpaid';
   }
 
-  num _balanceAmount(BillModel bill) {
-    return bill.total - bill.amountPaid;
-  }
+  num _balanceAmount(BillModel bill) => bill.total - bill.amountPaid;
 
   @override
   Widget build(BuildContext context) {
-    final isMobile = AdaptiveLayout.isMobile(context);
-    final billProvider = context.watch<BillProvider>();
-    final allBills = billProvider.bills;
-    final search = _searchCtrl.text.trim().toLowerCase();
-    final bills = search.isEmpty
-        ? allBills
-        : allBills.where((b) {
-            return b.billNumber.toLowerCase().contains(search) ||
-                (b.contact?.name ?? '').toLowerCase().contains(search);
-          }).toList();
+    final provider = context.watch<BillProvider>();
+    final bills = provider.bills;
 
-    final draftCount = allBills.where((b) => b.status == 'DRAFT').length;
-    final paidCount = allBills.where((b) => b.status == 'PAID').length;
-    final partialCount = allBills.where((b) => b.status == 'PARTIALLY_PAID').length;
-    final cancelledCount = allBills.where((b) => b.status == 'CANCELLED').length;
-    final totalCount = allBills.length;
+    final totalCount = bills.length;
+    final draftCount = bills.where((b) => b.status == 'DRAFT').length;
+    final postedCount = bills.where((b) => b.status == 'POSTED').length;
+    final paidCount = bills.where((b) => b.status == 'PAID').length;
+    final partialCount = bills.where((b) => b.status == 'PARTIALLY_PAID').length;
+    final cancelledCount = bills.where((b) => b.status == 'CANCELLED').length;
 
-    num totalAmount = 0;
-    num paidAmount = 0;
-    num outstandingAmount = 0;
-    for (final b in allBills) {
+    num totalAmount = 0, paidAmount = 0, outstandingAmount = 0;
+    for (final b in bills) {
       totalAmount += b.total;
       paidAmount += b.amountPaid;
       final bal = b.total - b.amountPaid;
       if (bal > 0) outstandingAmount += bal;
     }
 
-    if (isMobile) {
-      return Scaffold(
-        backgroundColor: AppColors.bgLight,
-        floatingActionButton: FloatingActionButton(
-          onPressed: () => _showForm(),
-          child: const Icon(Icons.add),
-        ),
-        body: Column(
-          children: [
-            AppCard(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              child: AppInput(
-                controller: _searchCtrl,
-                hint: 'Search bills...',
-                prefix: const Icon(Icons.search_rounded, size: 18),
-                suffix: _searchCtrl.text.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.close, size: 16),
-                        onPressed: () {
-                          _searchCtrl.clear();
-                          setState(() {});
-                        },
-                      )
-                    : null,
-                onChanged: (_) => setState(() {}),
-                onSubmitted: (_) => setState(() {}),
-              ),
-            ),
-            AppStatusTabBar(
-              tabs: const ['ALL', 'DRAFT', 'PAID', 'PARTIALLY_PAID', 'CANCELLED'],
-              activeTab: 'ALL',
-              onTabChanged: (_) {},
-              badges: {
-                'ALL': totalCount,
-                'DRAFT': draftCount,
-                'PAID': paidCount,
-                'PARTIALLY_PAID': partialCount,
-                'CANCELLED': cancelledCount,
-              },
-            ),
-            Expanded(
-              child: billProvider.isLoading && bills.isEmpty
-                  ? const ListSkeleton()
-                  : billProvider.errorMessage != null && bills.isEmpty
-                      ? ErrorState(message: billProvider.errorMessage!, onRetry: () => billProvider.fetchBills())
-                      : bills.isEmpty
-                          ? AppEmptyState(
-                              icon: Icons.receipt_long_outlined,
-                              title: 'No vendor bills yet',
-                              subtitle: 'Vendor bills will appear here once added',
-                              actionLabel: 'Add Bill',
-                              onAction: () => _showForm(),
-                            )
-                          : RefreshIndicator(
-                              onRefresh: () async => billProvider.fetchBills(),
-                              child: ListView.separated(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                itemCount: bills.length,
-                                separatorBuilder: (_, __) => const SizedBox(height: 6),
-                                itemBuilder: (context, i) {
-                                  final bill = bills[i];
-                                  final id = bill.id.toString();
-                                  final isSelected = _selectedIds.contains(id);
-                                  final partyName = bill.contact?.name ?? '';
-                                  final bal = _balanceAmount(bill);
-
-                                  return _buildSwipeableBill(
-                                    bill,
-                                    CompactDocumentCard(
-                                      docNumber: bill.billNumber,
-                                      partyName: partyName.isNotEmpty ? partyName : null,
-                                      date: bill.billDate,
-                                      amount: bill.total.toDouble(),
-                                      status: bill.status,
-                                      balanceLabel: _balanceLabel(bill),
-                                      balanceAmount: bal > 0 ? bal.toDouble() : null,
-                                      isSelected: isSelected,
-                                      isSelectionMode: _isSelectionMode,
-                                      onTap: () {
-                                        if (_isSelectionMode) {
-                                          _toggleSelection(id);
-                                        } else {
-                                          _showDetail(bill.id);
-                                        }
-                                      },
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: AppColors.bgLight,
-      body: Column(
-        children: [
-          AppCommandBar(
-            title: 'Vendor Bills',
-            searchWidget: AppInput(
-              controller: _searchCtrl,
-              hint: 'Search bills...',
-              prefix: const Icon(Icons.search_rounded, size: 18),
-              onChanged: (_) => setState(() {}),
-              onSubmitted: (_) => setState(() {}),
-            ),
-            actions: [
-              AppButton(
-                label: 'Create Bill',
-                icon: Icons.add,
-                isPrimary: true,
-                onTap: () => _showForm(),
-              ),
-            ],
-          ),
-          AppStatusTabBar(
-            tabs: const ['ALL', 'DRAFT', 'PAID', 'PARTIALLY_PAID', 'CANCELLED'],
-            activeTab: 'ALL',
-            onTabChanged: (_) {},
-            badges: {
-              'ALL': totalCount,
-              'DRAFT': draftCount,
-              'PAID': paidCount,
-              'PARTIALLY_PAID': partialCount,
-              'CANCELLED': cancelledCount,
-            },
-          ),
-          Expanded(
-            child: billProvider.isLoading && bills.isEmpty
-                ? const ListSkeleton()
-                : billProvider.errorMessage != null && bills.isEmpty
-                    ? ErrorState(message: billProvider.errorMessage!, onRetry: () => billProvider.fetchBills())
-                    : bills.isEmpty
-                        ? AppEmptyState(
-                            icon: Icons.receipt_long_outlined,
-                            title: 'No vendor bills yet',
-                            subtitle: 'Vendor bills will appear here once added',
-                            actionLabel: 'Add Bill',
-                            onAction: () => _showForm(),
-                          )
-                        : Column(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: const BoxDecoration(
-                                  color: AppColors.bgSurface,
-                                  border: Border(bottom: BorderSide(color: AppColors.border)),
-                                ),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 40,
-                                      child: Checkbox(
-                                        value: _selectedIds.length == bills.length && bills.isNotEmpty,
-                                        onChanged: (_) => _selectAll(),
-                                      ),
-                                    ),
-                                    const Expanded(flex: 2, child: Text('DATE', style: AppTextStyles.labelSmall)),
-                                    const Expanded(flex: 2, child: Text('NUMBER', style: AppTextStyles.labelSmall)),
-                                    const Expanded(flex: 4, child: Text('VENDOR / PARTY', style: AppTextStyles.labelSmall)),
-                                    const Expanded(flex: 3, child: Text('AMOUNT', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
-                                    const Expanded(flex: 3, child: Text('BALANCE', style: AppTextStyles.labelSmall, textAlign: TextAlign.right)),
-                                    const Expanded(flex: 2, child: Text('STATUS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
-                                    const SizedBox(width: 120, child: Text('ACTIONS', style: AppTextStyles.labelSmall, textAlign: TextAlign.center)),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                child: ListView.separated(
-                                  padding: EdgeInsets.zero,
-                                  itemCount: bills.length,
-                                  separatorBuilder: (_, __) => const Divider(height: 1, color: AppColors.borderLight),
-                                  itemBuilder: (context, index) {
-                                    final bill = bills[index];
-                                    final id = bill.id.toString();
-                                    final isSelected = _selectedIds.contains(id);
-                                    final partyName = bill.contact?.name ?? 'Vendor';
-                                    final bal = _balanceAmount(bill);
-
-                                    return InkWell(
-                                      onTap: () => _showDetail(bill.id),
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                                        color: isSelected ? AppColors.bgLight : Colors.transparent,
-                                        child: Row(
-                                          children: [
-                                            SizedBox(
-                                              width: 40,
-                                              child: Checkbox(
-                                                value: isSelected,
-                                                onChanged: (_) => _toggleSelection(id),
-                                              ),
-                                            ),
-                                            Expanded(
-                                              flex: 2,
-                                              child: Text(
-                                                AppDate.format(bill.billDate),
-                                                style: AppTextStyles.bodySmall,
-                                              ),
-                                            ),
-                                            Expanded(
-                                              flex: 2,
-                                              child: Text(
-                                                bill.billNumber,
-                                                style: AppTextStyles.bodyMedium.copyWith(
-                                                  color: AppColors.brandNavy,
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                            Expanded(
-                                              flex: 4,
-                                              child: Row(
-                                                children: [
-                                                  AppAvatar(name: partyName, size: 24),
-                                                  const SizedBox(width: 8),
-                                                  Expanded(
-                                                    child: Text(
-                                                      partyName,
-                                                      style: AppTextStyles.partyName,
-                                                      maxLines: 1,
-                                                      overflow: TextOverflow.ellipsis,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Expanded(
-                                              flex: 3,
-                                              child: Text(
-                                                AmountFormat.format(bill.total),
-                                                style: AppTextStyles.amount,
-                                                textAlign: TextAlign.right,
-                                              ),
-                                            ),
-                                            Expanded(
-                                              flex: 3,
-                                              child: Text(
-                                                AmountFormat.format(bal),
-                                                style: AppTextStyles.amount.copyWith(
-                                                  color: bal > 0 ? AppColors.warning : AppColors.success,
-                                                ),
-                                                textAlign: TextAlign.right,
-                                              ),
-                                            ),
-                                            Expanded(
-                                              flex: 2,
-                                              child: Center(
-                                                child: AppInlineStatus(status: bill.status),
-                                              ),
-                                            ),
-                                            SizedBox(
-                                              width: 120,
-                                              child: AppRowActions(
-                                                children: [
-                                                  IconButton(
-                                                    icon: const Icon(Icons.visibility_outlined, size: 16),
-                                                    onPressed: () => _showDetail(bill.id),
-                                                    tooltip: 'View Detail',
-                                                  ),
-                                                  if (bill.status == 'DRAFT')
-                                                    IconButton(
-                                                      icon: const Icon(Icons.edit_outlined, size: 16),
-                                                      onPressed: () => _showForm(bill: bill),
-                                                      tooltip: 'Edit',
-                                                    ),
-                                                  if (bill.status != 'CANCELLED')
-                                                    IconButton(
-                                                      icon: const Icon(Icons.cancel_outlined, size: 16),
-                                                      onPressed: () => _cancelBill(bill.id),
-                                                      tooltip: 'Cancel',
-                                                    ),
-                                                ],
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                              ),
-                            ],
-                          ),
-          ),
-          if (_selectedIds.isNotEmpty)
-            AppStickyBottomBar(
-              children: [
-                Text(
-                  '${_selectedIds.length} selected',
-                  style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
-                ),
-                Row(
-                  children: [
-                    AppButton(
-                      label: 'Cancel Selected',
-                      icon: Icons.cancel_outlined,
-                      onTap: _bulkCancel,
-                      color: AppColors.error,
-                      isSmall: true,
-                    ),
-                    const SizedBox(width: 8),
-                    AppButton(
-                      label: 'Delete Selected',
-                      icon: Icons.delete_outline,
-                      onTap: _bulkDelete,
-                      color: AppColors.error,
-                      isSmall: true,
-                    ),
-                  ],
-                ),
-              ],
-            )
-          else
-            AppStickyBottomBar(
-              children: [
-                Text(
-                  'Total Purchase: ${AmountFormat.format(totalAmount)}',
-                  style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  'Paid Amount: ${AmountFormat.format(paidAmount)}',
-                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.success, fontWeight: FontWeight.w700),
-                ),
-                Text(
-                  'Outstanding: ${AmountFormat.format(outstandingAmount)}',
-                  style: AppTextStyles.bodyMedium.copyWith(color: AppColors.warning, fontWeight: FontWeight.w700),
-                ),
-              ],
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSwipeableBill(BillModel bill, Widget child) {
-    if (_isSelectionMode) return child;
-    final billId = bill.id.toString();
-
-    return Dismissible(
-      key: Key('bill_dismiss_$billId'),
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        color: Colors.green[700],
-        child: const Row(
-          children: [
-            Icon(Icons.payment, color: Colors.white),
-            SizedBox(width: 8),
-            Text('Record Payment', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          ],
-        ),
-      ),
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: (_swipeProgress[billId] ?? 0) > 0.70 ? AppColors.error : AppColors.info,
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.end,
-          children: [
-            Text(
-              (_swipeProgress[billId] ?? 0) > 0.70 ? 'Delete Bill' : 'Share PDF',
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(width: 8),
-            Icon((_swipeProgress[billId] ?? 0) > 0.70 ? Icons.delete : Icons.share, color: Colors.white),
-          ],
-        ),
-      ),
-      onUpdate: (details) {
-        setState(() {
-          _swipeProgress[billId] = details.progress;
-        });
-      },
-      confirmDismiss: (direction) async {
-        if (direction == DismissDirection.startToEnd) {
-          _showRecordPaymentDialog(bill);
-          return false;
-        } else if (direction == DismissDirection.endToStart) {
-          if ((_swipeProgress[billId] ?? 0) > 0.70) {
-            final confirm = await AppConfirmDialog.show(
-              context,
-              title: 'Delete Bill?',
-              message: 'Delete bill ${bill.billNumber}? This action cannot be undone. Only DRAFT bills can be deleted.',
-            );
-            if (confirm == true) {
-              _deleteSingleBill(bill);
-              return true;
-            }
-            return false;
-          } else {
-            PrintShareHelper.showShareSheet(
-              context,
-              docLabel: 'Bill',
-              docNumber: bill.billNumber,
-              docType: 'bills',
-              docId: bill.id,
-            );
-            return false;
-          }
-        }
-        return false;
-      },
-      child: child,
-    );
-  }
-
-  void _showRecordPaymentDialog(BillModel bill) {
-    final remaining = bill.total - bill.amountPaid;
-    if (remaining <= 0) {
-      AppToast.error(context, 'Bill is already fully paid');
-      return;
-    }
-    final amountCtrl = TextEditingController(text: remaining.toStringAsFixed(2));
-    final refCtrl = TextEditingController();
-    String mode = 'BANK';
-    DateTime payDate = DateTime.now();
-
-    showDialog(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setDialogState) {
-            final formattedDate =
-                '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
-            return AlertDialog(
-              title: Text('Record Payment for ${bill.billNumber}'),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    TextField(
-                      controller: amountCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                        labelText: 'Amount (₹)',
-                        prefixIcon: Icon(Icons.currency_rupee_outlined, size: 16),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    InkWell(
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: payDate,
-                          firstDate: DateTime.now().subtract(const Duration(days: 365 * 10)),
-                          lastDate: DateTime.now().add(const Duration(days: 365 * 10)),
-                        );
-                        if (picked != null) setDialogState(() => payDate = picked);
-                      },
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Payment Date',
-                          prefixIcon: Icon(Icons.calendar_today_outlined, size: 16),
-                          suffixIcon: Icon(Icons.arrow_drop_down, size: 18),
-                        ),
-                        child: Text(formattedDate, style: const TextStyle(fontSize: 14)),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      value: mode,
-                      decoration: const InputDecoration(labelText: 'Payment Mode'),
-                      items: const [
-                        DropdownMenuItem(value: 'BANK', child: Text('Bank Transfer / Cheque')),
-                        DropdownMenuItem(value: 'CASH', child: Text('Cash')),
-                        DropdownMenuItem(value: 'UPI', child: Text('UPI')),
-                        DropdownMenuItem(value: 'POS', child: Text('Card / POS')),
-                        DropdownMenuItem(value: 'OTHER', child: Text('Other')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) setDialogState(() => mode = val);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: refCtrl,
-                      decoration: const InputDecoration(labelText: 'Reference Number (e.g. Txn ID)'),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: const Text('CANCEL'),
-                ),
-                TextButton(
-                  onPressed: () async {
-                    final amt = double.tryParse(amountCtrl.text) ?? 0.0;
-                    if (amt <= 0) {
-                      AppToast.error(context, 'Please enter a valid amount');
-                      return;
-                    }
-                    Navigator.pop(context);
-
-                    final formattedPayDate =
-                        '${payDate.year}-${payDate.month.toString().padLeft(2, '0')}-${payDate.day.toString().padLeft(2, '0')}';
-                    final payload = {
-                      'contact_id': bill.contactId,
-                      'payment_date': formattedPayDate,
-                      'payment_mode': mode,
-                      'amount': amt,
-                      if (refCtrl.text.isNotEmpty) 'reference_number': refCtrl.text,
-                      'description': 'Payment for bill ${bill.billNumber}',
-                      'allocations': [
-                        {
-                          'bill_id': bill.id,
-                          'amount': amt,
-                        }
-                      ]
-                    };
-
-                    final provider = context.read<BillProvider>();
-                    final success = await provider.recordPayment(bill.id, payload);
-                    if (mounted) {
-                      if (success) {
-                        HapticHelper.success();
-                        provider.fetchBills();
-                      } else {
-                        HapticHelper.error();
-                        AppToast.error(context, provider.errorMessage ?? 'Failed to record payment');
-                      }
-                    }
-                  },
-                  child: const Text('SAVE'),
-                ),
-              ],
-            );
-          },
+    return DocumentListView(
+      title: 'Vendor Bills',
+      detailBuilder: (ctx, item) => BillDetailView(billId: item.id),
+      items: bills.map((bill) {
+        final partyName = bill.contact?.name ?? '';
+        final bal = _balanceAmount(bill);
+        return DocumentItemData(
+          id: bill.id.toString(),
+          docNumber: bill.billNumber,
+          partyName: partyName.isNotEmpty ? partyName : null,
+          date: bill.billDate,
+          amount: bill.total,
+          status: bill.status,
+          balanceLabel: _balanceLabel(bill),
+          balanceAmount: bal > 0 ? bal : null,
         );
+      }).toList(),
+      filterTabs: [
+        FilterTab('ALL', totalCount),
+        FilterTab('DRAFT', draftCount),
+        FilterTab('POSTED', postedCount),
+        FilterTab('PAID', paidCount),
+        FilterTab('PARTIALLY_PAID', partialCount),
+        FilterTab('CANCELLED', cancelledCount),
+      ],
+      activeFilter: _statusFilter,
+      onFilterChanged: (tab) {
+        setState(() => _statusFilter = tab);
       },
-    ).whenComplete(() {
-      amountCtrl.dispose();
-      refCtrl.dispose();
-    });
-  }
-
-  void _deleteSingleBill(BillModel bill) async {
-    final provider = context.read<BillProvider>();
-    final success = await provider.deleteBill(bill.id);
-    if (success) {
-      HapticHelper.delete();
-      provider.fetchBills();
-      AppToast.info(context, 'Bill ${bill.billNumber} deleted');
-    }
+      summary: ListSummaryData(
+        totalAmount: totalAmount.toDouble(),
+        paidAmount: paidAmount.toDouble(),
+        pendingAmount: outstandingAmount.toDouble(),
+        totalCount: totalCount,
+      ),
+      searchController: _searchCtrl,
+      searchHint: 'Search bills...',
+      onSearchChanged: (_) {},
+      onRefresh: () async => _fetch(),
+      isLoading: provider.isLoading && bills.isEmpty,
+      emptyTitle: 'No bills found',
+      emptySubtitle: _statusFilter != 'ALL' || _searchCtrl.text.isNotEmpty
+          ? 'Try clearing your filters'
+          : 'Create your first bill to get started',
+      emptyIcon: Icons.receipt_long_outlined,
+    );
   }
 }

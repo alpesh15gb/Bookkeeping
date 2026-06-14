@@ -1,11 +1,14 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:http/http.dart' as http;
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/banking_profile_provider.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
+import 'package:flutter_client/providers/financial_year_provider.dart';
 import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/views/banking/banking_profile_form_view.dart';
 import 'package:flutter_client/views/shared/app_components.dart' hide AppCard, AppEmptyState;
@@ -33,6 +36,14 @@ class _SettingsViewState extends State<SettingsView> {
   final _websiteCtrl = TextEditingController();
   final _termsCtrl = TextEditingController();
 
+  // E-Invoicing & E-Way Bill Controllers
+  final _eInvoiceUsernameCtrl = TextEditingController();
+  final _eInvoicePasswordCtrl = TextEditingController();
+  final _eWayBillUsernameCtrl = TextEditingController();
+  final _eWayBillPasswordCtrl = TextEditingController();
+  bool _eInvoicingEnabled = false;
+  bool _isUploadingLogo = false;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +65,10 @@ class _SettingsViewState extends State<SettingsView> {
     _emailCtrl.dispose();
     _websiteCtrl.dispose();
     _termsCtrl.dispose();
+    _eInvoiceUsernameCtrl.dispose();
+    _eInvoicePasswordCtrl.dispose();
+    _eWayBillUsernameCtrl.dispose();
+    _eWayBillPasswordCtrl.dispose();
     super.dispose();
   }
 
@@ -103,6 +118,12 @@ class _SettingsViewState extends State<SettingsView> {
     _gstinCtrl.text = company['gstin'] ?? '';
     _panCtrl.text = company['pan'] ?? '';
     _stateCodeCtrl.text = settings['origin_state_code'] ?? '';
+
+    _eInvoiceUsernameCtrl.text = settings['e_invoice_username'] ?? '';
+    _eInvoicePasswordCtrl.text = '';
+    _eWayBillUsernameCtrl.text = settings['e_way_bill_username'] ?? '';
+    _eWayBillPasswordCtrl.text = '';
+    _eInvoicingEnabled = settings['e_invoicing_enabled'] ?? false;
 
     final extraSettings =
         settings['extra_settings'] is Map ? Map<String, dynamic>.from(settings['extra_settings']) : <String, dynamic>{};
@@ -535,6 +556,559 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
+  Future<void> _pickAndUploadLogo() async {
+    FilePickerResult? result;
+    try {
+      result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+        dialogTitle: 'Select Company Logo (PNG/JPG)',
+        withData: true,
+      );
+    } catch (e) {
+      _showError('Could not open file picker: $e');
+      return;
+    }
+
+    if (result == null || result.files.isEmpty) return;
+
+    final picked = result.files.first;
+    final fileBytes = picked.bytes;
+    if (fileBytes == null || fileBytes.isEmpty) {
+      _showError('Could not read the selected image file.');
+      return;
+    }
+
+    setState(() => _isUploadingLogo = true);
+
+    try {
+      final uri = Uri.parse('${ApiClient.baseUrl}/settings/logo');
+      final request = http.MultipartRequest('POST', uri);
+
+      request.headers['Authorization'] = 'Bearer ${ApiClient.accessToken ?? ''}';
+      request.headers['X-Tenant-ID'] = ApiClient.tenantId ?? '';
+
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        fileBytes,
+        filename: picked.name,
+      ));
+
+      final streamed = await ApiClient().send(request);
+      final response = await http.Response.fromStream(streamed);
+
+      if (!mounted) return;
+
+      if (response.statusCode == 200) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Logo uploaded successfully'), backgroundColor: AppColors.success),
+        );
+        await context.read<SettingsProvider>().fetchAllSettings();
+      } else {
+        String msg = 'Logo upload failed';
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map) msg = body['detail']?.toString() ?? msg;
+        } catch (_) {}
+        _showError(msg);
+      }
+    } catch (e) {
+      _showError('Upload error: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingLogo = false);
+      }
+    }
+  }
+
+  void _showEInvoicingDialog(Map<String, dynamic> settings) {
+    final settingsProvider = context.read<SettingsProvider>();
+    _populateControllers(settingsProvider.company, settings);
+    bool localEnabled = _eInvoicingEnabled;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('E-Invoicing & E-Way Bill Config'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Enable E-Invoicing'),
+                  subtitle: const Text('Generate IRN via NIC sandbox portal'),
+                  value: localEnabled,
+                  onChanged: (v) {
+                    setDialogState(() {
+                      localEnabled = v;
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                const Text('E-Invoice Portal Credentials:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _eInvoiceUsernameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'E-Invoice Username',
+                    hintText: 'Portal API username',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _eInvoicePasswordCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'E-Invoice Password',
+                    hintText: 'Leave blank to keep existing',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text('E-Way Bill Portal Credentials:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _eWayBillUsernameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'E-Way Bill Username',
+                    hintText: 'Portal API username',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _eWayBillPasswordCtrl,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'E-Way Bill Password',
+                    hintText: 'Leave blank to keep existing',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                final settingsPayload = <String, dynamic>{
+                  'e_invoicing_enabled': localEnabled,
+                };
+                if (_eInvoiceUsernameCtrl.text.isNotEmpty) {
+                  settingsPayload['e_invoice_username'] = _eInvoiceUsernameCtrl.text;
+                }
+                if (_eInvoicePasswordCtrl.text.isNotEmpty) {
+                  settingsPayload['e_invoice_password'] = _eInvoicePasswordCtrl.text;
+                }
+                if (_eWayBillUsernameCtrl.text.isNotEmpty) {
+                  settingsPayload['e_way_bill_username'] = _eWayBillUsernameCtrl.text;
+                }
+                if (_eWayBillPasswordCtrl.text.isNotEmpty) {
+                  settingsPayload['e_way_bill_password'] = _eWayBillPasswordCtrl.text;
+                }
+
+                setState(() => _eInvoicingEnabled = localEnabled);
+
+                final provider = context.read<SettingsProvider>();
+                final success = await provider.saveSettings(
+                  companyPayload: {},
+                  settingsPayload: settingsPayload,
+                );
+
+                if (mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('E-Invoicing settings saved successfully'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  } else {
+                    final err = provider.errorMessage ?? 'Failed to save settings';
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(err), backgroundColor: AppColors.error),
+                    );
+                  }
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCreateSeriesDialog() {
+    String selectedDocType = 'INVOICE';
+    final prefixCtrl = TextEditingController();
+    final nextNumberCtrl = TextEditingController(text: '1');
+    final paddingCtrl = TextEditingController(text: '4');
+    final suffixCtrl = TextEditingController();
+
+    final docTypes = [
+      {'value': 'INVOICE', 'label': 'Sales Invoice'},
+      {'value': 'BILL', 'label': 'Vendor Bill'},
+      {'value': 'PAYMENT', 'label': 'Customer Payment'},
+      {'value': 'JOURNAL', 'label': 'Journal Entry'},
+      {'value': 'RECEIPT', 'label': 'Receipt'},
+      {'value': 'DISBURSEMENT', 'label': 'Disbursement'},
+      {'value': 'CREDIT_NOTE', 'label': 'Credit Note'},
+      {'value': 'DEBIT_NOTE', 'label': 'Debit Note'},
+      {'value': 'PURCHASE_ORDER', 'label': 'Purchase Order'},
+      {'value': 'SALES_ORDER', 'label': 'Sales Order'},
+      {'value': 'DELIVERY_CHALLAN', 'label': 'Delivery Challan'},
+      {'value': 'PROFORMA_INVOICE', 'label': 'Estimate / Proforma Invoice'},
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Add Numbering Series'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  value: selectedDocType,
+                  decoration: const InputDecoration(labelText: 'Document Type *'),
+                  items: docTypes
+                      .map((d) => DropdownMenuItem(
+                            value: d['value'],
+                            child: Text(d['label']!),
+                          ))
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) {
+                      setDialogState(() => selectedDocType = v);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: prefixCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Prefix *',
+                    hintText: 'e.g. INV/2026/',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: nextNumberCtrl,
+                  decoration: const InputDecoration(labelText: 'Next Number *'),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: paddingCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Padding Digits * (e.g. 4 for 0001)',
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: suffixCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Suffix (Optional)',
+                    hintText: 'e.g. /A',
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final prefix = prefixCtrl.text.trim();
+                final nextVal = int.tryParse(nextNumberCtrl.text);
+                final padVal = int.tryParse(paddingCtrl.text);
+                final suffix = suffixCtrl.text.trim().isNotEmpty
+                    ? suffixCtrl.text.trim()
+                    : null;
+
+                if (prefix.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Prefix is required'), backgroundColor: AppColors.error),
+                  );
+                  return;
+                }
+
+                if (nextVal == null || nextVal < 1) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Next Number must be 1 or greater'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                  return;
+                }
+
+                if (padVal == null || padVal < 1 || padVal > 10) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Padding Digits must be between 1 and 10'),
+                      backgroundColor: AppColors.error,
+                    ),
+                  );
+                  return;
+                }
+
+                Navigator.pop(context);
+                final success = await context.read<SettingsProvider>().createNumberingSeries({
+                  'document_type': selectedDocType,
+                  'prefix': prefix,
+                  'next_number': nextVal,
+                  'padding_digits': padVal,
+                  'suffix': suffix,
+                });
+
+                if (mounted) {
+                  if (success) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Numbering series created successfully'),
+                        backgroundColor: AppColors.success,
+                      ),
+                    );
+                  } else {
+                    final err = context.read<SettingsProvider>().errorMessage ?? 'Creation failed';
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(err), backgroundColor: AppColors.error),
+                    );
+                  }
+                }
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(() {
+      prefixCtrl.dispose();
+      nextNumberCtrl.dispose();
+      paddingCtrl.dispose();
+      suffixCtrl.dispose();
+    });
+  }
+
+  void _showFormatPreferencesDialog(Map<String, dynamic> settings) {
+    final extraSettings = settings['extra_settings'] is Map
+        ? Map<String, dynamic>.from(settings['extra_settings'])
+        : <String, dynamic>{};
+
+    final signeeNameCtrl = TextEditingController(text: extraSettings['signee_name'] ?? '');
+    final signeeDesigCtrl = TextEditingController(text: extraSettings['signee_designation'] ?? '');
+    bool showBank = extraSettings['show_bank_details'] is! bool || extraSettings['show_bank_details'] == true;
+    bool showUpi = extraSettings['show_upi_qr'] is! bool || extraSettings['show_upi_qr'] == true;
+    bool showHsn = extraSettings['show_hsn'] is! bool || extraSettings['show_hsn'] == true;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Invoice Format Customization'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: signeeNameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Signature Label / Company Name',
+                    hintText: 'e.g. for Settings Tester Co.',
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: signeeDesigCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Signee Designation',
+                    hintText: 'e.g. Director / Authorised Signatory',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Show Bank Details'),
+                  subtitle: const Text('Include primary bank account info on PDF'),
+                  value: showBank,
+                  onChanged: (v) => setDialogState(() => showBank = v!),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Show UPI Scan-to-Pay QR'),
+                  subtitle: const Text('Render dynamic payment QR on PDF'),
+                  value: showUpi,
+                  onChanged: (v) => setDialogState(() => showUpi = v!),
+                ),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Show HSN/SAC Column'),
+                  subtitle: const Text('Display HSN codes for line items'),
+                  value: showHsn,
+                  onChanged: (v) => setDialogState(() => showHsn = v!),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                final provider = context.read<SettingsProvider>();
+                final currentExtra = provider.settings['extra_settings'] is Map
+                    ? Map<String, dynamic>.from(provider.settings['extra_settings'])
+                    : <String, dynamic>{};
+
+                final updatedExtra = {
+                  ...currentExtra,
+                  'signee_name': signeeNameCtrl.text.trim(),
+                  'signee_designation': signeeDesigCtrl.text.trim(),
+                  'show_bank_details': showBank,
+                  'show_upi_qr': showUpi,
+                  'show_hsn': showHsn,
+                };
+
+                final success = await provider.saveSettings(
+                  companyPayload: {},
+                  settingsPayload: {'extra_settings': updatedExtra},
+                );
+
+                if (mounted && success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Layout formatting saved successfully'), backgroundColor: AppColors.success),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    ).whenComplete(() {
+      signeeNameCtrl.dispose();
+      signeeDesigCtrl.dispose();
+    });
+  }
+
+  void _showTransactionPreferencesDialog(Map<String, dynamic> settings) {
+    final extraSettings = settings['extra_settings'] is Map
+        ? Map<String, dynamic>.from(settings['extra_settings'])
+        : <String, dynamic>{};
+
+    bool taxInclusive = extraSettings['tax_inclusive_rates'] == true;
+    int priceDec = extraSettings['price_decimals'] is int ? extraSettings['price_decimals'] : 2;
+    int qtyDec = extraSettings['qty_decimals'] is int ? extraSettings['qty_decimals'] : 2;
+    String paymentTerms = extraSettings['default_payment_terms']?.toString() ?? 'Due on Receipt';
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Transaction Preferences'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Tax Inclusive Rates'),
+                  subtitle: const Text('Product unit rates include tax by default'),
+                  value: taxInclusive,
+                  onChanged: (v) => setDialogState(() => taxInclusive = v),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  value: priceDec,
+                  decoration: const InputDecoration(labelText: 'Price Decimal Precision'),
+                  items: const [
+                    DropdownMenuItem(value: 2, child: Text('2 Decimals (e.g. 10.50)')),
+                    DropdownMenuItem(value: 3, child: Text('3 Decimals (e.g. 10.500)')),
+                    DropdownMenuItem(value: 4, child: Text('4 Decimals (e.g. 10.5000)')),
+                  ],
+                  onChanged: (v) => setDialogState(() => priceDec = v!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<int>(
+                  value: qtyDec,
+                  decoration: const InputDecoration(labelText: 'Quantity Decimal Precision'),
+                  items: const [
+                    DropdownMenuItem(value: 0, child: Text('0 Decimals (e.g. 5)')),
+                    DropdownMenuItem(value: 2, child: Text('2 Decimals (e.g. 5.00)')),
+                    DropdownMenuItem(value: 3, child: Text('3 Decimals (e.g. 5.000)')),
+                  ],
+                  onChanged: (v) => setDialogState(() => qtyDec = v!),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  value: paymentTerms,
+                  decoration: const InputDecoration(labelText: 'Default Payment Terms'),
+                  items: const [
+                    DropdownMenuItem(value: 'Due on Receipt', child: Text('Due on Receipt')),
+                    DropdownMenuItem(value: 'Net 15', child: Text('Net 15 Days')),
+                    DropdownMenuItem(value: 'Net 30', child: Text('Net 30 Days')),
+                    DropdownMenuItem(value: 'Net 60', child: Text('Net 60 Days')),
+                  ],
+                  onChanged: (v) => setDialogState(() => paymentTerms = v!),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                final provider = context.read<SettingsProvider>();
+                final currentExtra = provider.settings['extra_settings'] is Map
+                    ? Map<String, dynamic>.from(provider.settings['extra_settings'])
+                    : <String, dynamic>{};
+
+                final updatedExtra = {
+                  ...currentExtra,
+                  'tax_inclusive_rates': taxInclusive,
+                  'price_decimals': priceDec,
+                  'qty_decimals': qtyDec,
+                  'default_payment_terms': paymentTerms,
+                };
+
+                final success = await provider.saveSettings(
+                  companyPayload: {},
+                  settingsPayload: {'extra_settings': updatedExtra},
+                );
+
+                if (mounted && success) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Transaction preferences saved successfully'), backgroundColor: AppColors.success),
+                  );
+                }
+              },
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
@@ -566,12 +1140,25 @@ class _SettingsViewState extends State<SettingsView> {
     final extraSettings =
         settings['extra_settings'] is Map ? Map<String, dynamic>.from(settings['extra_settings']) : <String, dynamic>{};
     final pdfTemplate = extraSettings['pdf_template'] ?? 'professional';
+    final showBank = extraSettings['show_bank_details'] is! bool || extraSettings['show_bank_details'] == true;
+    final showUpi = extraSettings['show_upi_qr'] is! bool || extraSettings['show_upi_qr'] == true;
+    final showHsn = extraSettings['show_hsn'] is! bool || extraSettings['show_hsn'] == true;
+    final signeeName = extraSettings['signee_name']?.toString() ?? 'Default Signature';
+    final signeeDesig = extraSettings['signee_designation']?.toString() ?? 'Authorised Signatory';
+
+    final taxInclusive = extraSettings['tax_inclusive_rates'] == true;
+    final priceDec = extraSettings['price_decimals'] is int ? extraSettings['price_decimals'] : 2;
+    final qtyDec = extraSettings['qty_decimals'] is int ? extraSettings['qty_decimals'] : 2;
+    final paymentTerms = extraSettings['default_payment_terms']?.toString() ?? 'Due on Receipt';
 
     final companyAddress = extraSettings['company_address'] ?? 'Not configured';
     final companyPhone = extraSettings['company_phone'] ?? 'Not configured';
     final companyEmail = extraSettings['company_email'] ?? 'Not configured';
     final companyWebsite = extraSettings['company_website'] ?? 'Not configured';
-    final bankProfiles = bankingProvider.profiles.whereType<Map<String, dynamic>>().toList();
+    final bankProfiles = bankingProvider.profiles
+        .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
+        .whereType<Map<String, dynamic>>()
+        .toList();
     Map<String, dynamic>? primaryBank;
     for (final p in bankProfiles) {
       if (p['is_primary'] == true && p['is_active'] != false) {
@@ -623,6 +1210,53 @@ class _SettingsViewState extends State<SettingsView> {
           SectionedCard(
             title: 'Company Profile',
             children: [
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 60,
+                      height: 60,
+                      decoration: BoxDecoration(
+                        color: AppColors.bgLight,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: settings['logo_url'] != null
+                          ? ClipRRect(
+                              borderRadius: BorderRadius.circular(7),
+                              child: Image.network(
+                                settings['logo_url'],
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => const Icon(Icons.business, size: 30),
+                              ),
+                            )
+                          : const Icon(Icons.business, size: 30, color: AppColors.textMuted),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Company Logo', style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.bold)),
+                          Text(
+                            settings['logo_url'] != null ? 'Click to change logo' : 'No logo uploaded',
+                            style: AppTextStyles.caption,
+                          ),
+                        ],
+                      ),
+                    ),
+                    _isUploadingLogo
+                        ? const CircularProgressIndicator()
+                        : OutlinedButton.icon(
+                            onPressed: _pickAndUploadLogo,
+                            icon: const Icon(Icons.upload, size: 16),
+                            label: Text(settings['logo_url'] != null ? 'Change' : 'Upload'),
+                          ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
               SettingsListTile(
                 icon: Icons.business_outlined,
                 iconColor: Colors.blue.shade700,
@@ -706,6 +1340,13 @@ class _SettingsViewState extends State<SettingsView> {
                         ? 'Composition Scheme'
                         : 'Non-GST Business',
                 onTap: () => _showTaxModeDialog(taxMode),
+              ),
+              SettingsListTile(
+                icon: Icons.electric_bolt_outlined,
+                iconColor: Colors.purple.shade600,
+                title: 'E-Invoicing & E-Way Bill',
+                subtitle: settings['e_invoicing_enabled'] == true ? 'Enabled' : 'Disabled',
+                onTap: () => _showEInvoicingDialog(settings),
               ),
             ],
           ),
@@ -800,6 +1441,118 @@ class _SettingsViewState extends State<SettingsView> {
           ),
           const SizedBox(height: 12),
 
+          // Invoice Layout Customization Section
+          SectionedCard(
+            title: 'Invoice Layout Customization',
+            children: [
+              SettingsListTile(
+                icon: Icons.border_color_outlined,
+                iconColor: Colors.blue.shade600,
+                title: 'Signatory & Labels',
+                subtitle: 'Name: "$signeeName" | Desig: "$signeeDesig"',
+                onTap: () => _showFormatPreferencesDialog(settings),
+              ),
+              SettingsListTile(
+                icon: Icons.visibility_outlined,
+                iconColor: Colors.teal.shade600,
+                title: 'Visibility Toggles',
+                subtitle: 'Bank Details: ${showBank ? "Show" : "Hide"} | UPI QR: ${showUpi ? "Show" : "Hide"} | HSN: ${showHsn ? "Show" : "Hide"}',
+                onTap: () => _showFormatPreferencesDialog(settings),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Pricing & Transaction Preferences Section
+          SectionedCard(
+            title: 'Pricing & Transactions',
+            children: [
+              SettingsListTile(
+                icon: Icons.price_change_outlined,
+                iconColor: Colors.orange.shade600,
+                title: 'Tax Inclusivity',
+                subtitle: 'Rates include tax: ${taxInclusive ? "Yes" : "No (Tax Exclusive)"}',
+                onTap: () => _showTransactionPreferencesDialog(settings),
+              ),
+              SettingsListTile(
+                icon: Icons.settings_input_component_outlined,
+                iconColor: Colors.indigo.shade600,
+                title: 'Decimal Precision',
+                subtitle: 'Price Decimals: $priceDec | Quantity Decimals: $qtyDec',
+                onTap: () => _showTransactionPreferencesDialog(settings),
+              ),
+              SettingsListTile(
+                icon: Icons.rule_folder_outlined,
+                iconColor: Colors.amber.shade700,
+                title: 'Default Payment Terms',
+                subtitle: paymentTerms,
+                onTap: () => _showTransactionPreferencesDialog(settings),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // Accounting Period Lock Section
+          Consumer<FinancialYearProvider>(
+            builder: (context, fyProvider, _) {
+              final activeFy = fyProvider.activeYear;
+              if (activeFy == null) return const SizedBox.shrink();
+              final isLocked = activeFy.isClosedOrLocked;
+
+              return SectionedCard(
+                title: 'Accounting Period Lock',
+                children: [
+                  SettingsListTile(
+                    icon: isLocked ? Icons.lock_outline : Icons.lock_open_outlined,
+                    iconColor: isLocked ? Colors.red.shade700 : Colors.green.shade700,
+                    title: 'Status: ${isLocked ? "LOCKED" : "OPEN"}',
+                    subtitle: 'Active Period: FY ${activeFy.name} (${activeFy.dateRange})',
+                    trailing: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: isLocked ? AppColors.brandNavy : Colors.red.shade700,
+                        foregroundColor: AppColors.textWhite,
+                      ),
+                      onPressed: () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: Text(isLocked ? 'Unlock Period?' : 'Lock Period (Close FY)?'),
+                            content: Text(isLocked
+                                ? 'Reopening the financial period allows users to create, edit, or delete transactions in this year context. Do you want to proceed?'
+                                : 'Locking the period creates a closing journal entry, transfers inventory balances, and locks all transactions in this year from any further modification. Do you want to proceed?'),
+                            actions: [
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                              ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isLocked ? 'Unlock' : 'Lock & Close')),
+                            ],
+                          ),
+                        );
+                        if (confirm == true) {
+                          if (isLocked) {
+                            final ok = await fyProvider.reopenFinancialYear(activeFy.id);
+                            if (mounted && ok) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Financial year reopened successfully'), backgroundColor: AppColors.success),
+                              );
+                            }
+                          } else {
+                            final res = await fyProvider.closeFinancialYear(activeFy.id);
+                            if (mounted && res != null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Financial year locked successfully'), backgroundColor: AppColors.success),
+                              );
+                            }
+                          }
+                        }
+                      },
+                      child: Text(isLocked ? 'Unlock' : 'Lock'),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+
           // Offline & Sync Section
           AppCard(
             child: AppSection(
@@ -838,7 +1591,7 @@ class _SettingsViewState extends State<SettingsView> {
                           padding: const EdgeInsets.only(top: 8, left: 16, right: 16),
                           child: Text(
                             sync.lastSyncMessage!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               color: AppColors.textMuted,
                             ),
@@ -884,9 +1637,31 @@ class _SettingsViewState extends State<SettingsView> {
           // Numbering Series Section
           SectionedCard(
             title: 'Numbering Series',
+            action: InkWell(
+              onTap: _showCreateSeriesDialog,
+              borderRadius: BorderRadius.circular(4),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.add, size: 14, color: AppColors.brandNavy),
+                    const SizedBox(width: 4),
+                    Text(
+                      'Add Series',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.brandNavy,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             children: settingsProvider.numberingSeries.isEmpty
               ? [
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                     child: Text(
                       'No numbering series configured',
@@ -910,7 +1685,7 @@ class _SettingsViewState extends State<SettingsView> {
             title: 'Branches',
             children: settingsProvider.branches.isEmpty
               ? [
-                  const Padding(
+                  Padding(
                     padding: EdgeInsets.symmetric(vertical: 16, horizontal: 16),
                     child: Text(
                       'No branches configured',
@@ -1128,7 +1903,20 @@ class _SettingsViewState extends State<SettingsView> {
       );
 
       if (response.statusCode == 200) {
-        _showOtpVerifyDialog();
+        String? devOtp;
+        try {
+          final body = jsonDecode(response.body);
+          if (body is Map && body['detail'] != null) {
+            final detail = body['detail'].toString();
+            if (detail.contains('Development OTP code:')) {
+              devOtp = detail.split('Development OTP code:').last.trim();
+            }
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(detail), duration: const Duration(seconds: 8)),
+            );
+          }
+        } catch (_) {}
+        _showOtpVerifyDialog(prefilledOtp: devOtp);
       } else {
         String msg = 'Failed to request OTP';
         try {
@@ -1142,8 +1930,8 @@ class _SettingsViewState extends State<SettingsView> {
     }
   }
 
-  Future<void> _showOtpVerifyDialog() {
-    final otpCtrl = TextEditingController();
+  Future<void> _showOtpVerifyDialog({String? prefilledOtp}) {
+    final otpCtrl = TextEditingController(text: prefilledOtp ?? '');
     bool verifying = false;
 
     return showDialog(

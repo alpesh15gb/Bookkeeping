@@ -115,6 +115,7 @@ class InvoiceModel {
   factory InvoiceModel.fromJson(Map<String, dynamic> json) {
     var rawLines = (json['lines'] is List ? json['lines'] as List : []);
     List<InvoiceLineModel> linesList = rawLines
+        .map((e) => e is Map ? Map<String, dynamic>.from(e) : null)
         .whereType<Map<String, dynamic>>()
         .map((x) => InvoiceLineModel.fromJson(x))
         .toList();

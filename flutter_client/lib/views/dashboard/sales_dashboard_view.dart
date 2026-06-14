@@ -18,6 +18,7 @@ import 'package:flutter_client/utils/haptic_helper.dart';
 import 'package:flutter_client/views/shared/skeleton_loading.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/views/dashboard/mobile_home_view.dart';
+import 'package:flutter_client/views/shared/design_system.dart';
 
 class SalesDashboardView extends StatefulWidget {
   const SalesDashboardView({super.key});
@@ -134,14 +135,14 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
     }
 
     if (d.isLoading) {
-      return const Scaffold(backgroundColor: AppColors.bgLight, body: DashboardSkeleton());
+      return Scaffold(backgroundColor: AppColors.bgLight, body: DashboardSkeleton());
     }
     if (d.errorMessage != null) {
       return ErrorState(message: d.errorMessage!, onRetry: () => d.fetchDashboard());
     }
 
     if (isMobile) {
-      return const Scaffold(
+      return Scaffold(
         backgroundColor: AppColors.bgLight,
         body: MobileHomeView(),
       );
@@ -203,13 +204,15 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
                 subtitle: 'Create your first invoice or add a party to get started',
               )
             else ...[
-              _BusinessSnapshot(
+              _KpiStrip(
                 revenue: d.revenue,
                 receivables: d.receivables,
                 payables: d.payables,
                 cashReceived: d.cashReceived,
                 gstLiability: d.totalGstLiability,
                 netProfit: d.netProfit,
+                revenueTrend: d.revenueTrend,
+                expenseTrend: d.expenseTrend,
                 format: _fmt,
                 formatFull: _fmtFull,
                 gstEnabled: context.watch<SettingsProvider>().gstEnabled,
@@ -328,135 +331,105 @@ class _PeriodChip extends StatelessWidget {
   }
 }
 
-// ── Business Snapshot ──
-class _BusinessSnapshot extends StatelessWidget {
+// ── KPI Strip ──
+/// Premium scrollable strip of financial KPI tiles.
+class _KpiStrip extends StatelessWidget {
   final double revenue, receivables, payables, cashReceived, gstLiability, netProfit;
+  final List<dynamic> revenueTrend;
+  final List<dynamic> expenseTrend;
   final String Function(double) format;
   final String Function(double) formatFull;
   final bool gstEnabled;
 
-  const _BusinessSnapshot({
+  const _KpiStrip({
     required this.revenue,
     required this.receivables,
     required this.payables,
     required this.cashReceived,
     required this.gstLiability,
     required this.netProfit,
+    required this.revenueTrend,
+    required this.expenseTrend,
     required this.format,
     required this.formatFull,
     this.gstEnabled = true,
   });
 
-  @override
-  Widget build(BuildContext context) {
-    final isMobile = AdaptiveLayout.isMobile(context);
-    final metrics = [
-      _Metric('Revenue', revenue, AppColors.brandNavy, Icons.trending_up_rounded),
-      _Metric('Receivables', receivables, AppColors.warning, Icons.arrow_circle_left_rounded),
-      _Metric('Payables', payables, AppColors.error, Icons.arrow_circle_right_rounded),
-      _Metric('Cash Received', cashReceived, AppColors.success, Icons.payments_rounded),
-      if (gstEnabled)
-        _Metric('GST Due', gstLiability, AppColors.info, Icons.receipt_rounded),
-      _Metric('Net Profit', netProfit, netProfit >= 0 ? AppColors.success : AppColors.error, Icons.account_balance_wallet_rounded),
-    ];
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text('Business Snapshot', style: AppTextStyles.h2.copyWith(fontSize: 20)),
-        const SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.bgSurface,
-            borderRadius: AppRadius.card,
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Column(
-            children: [
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    for (int i = 0; i < metrics.length && i < (isMobile ? 2 : 3); i++) ...[
-                      if (i > 0) _vertDivider(),
-                      Expanded(child: _MetricCell(metric: metrics[i], format: format, formatFull: formatFull)),
-                    ],
-                  ],
-                ),
-              ),
-              if (metrics.length > (isMobile ? 2 : 3)) ...[
-                Divider(color: AppColors.borderLight, height: 1),
-                IntrinsicHeight(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      for (int i = isMobile ? 2 : 3; i < metrics.length; i++) ...[
-                        if (i > (isMobile ? 2 : 3)) _vertDivider(),
-                        Expanded(child: _MetricCell(metric: metrics[i], format: format, formatFull: formatFull)),
-                      ],
-                    ],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
+  /// Returns +1 (up), -1 (down), or 0 (flat) by comparing the last two trend points.
+  int _trend(List<dynamic> trend) {
+    if (trend.length < 2) return 0;
+    final last = double.tryParse(trend.last['value']?.toString() ?? '0') ?? 0;
+    final prev = double.tryParse(trend[trend.length - 2]['value']?.toString() ?? '0') ?? 0;
+    if (last > prev) return 1;
+    if (last < prev) return -1;
+    return 0;
   }
 
-  Widget _vertDivider() => Container(width: 1, color: AppColors.borderLight);
-}
-
-class _Metric {
-  final String label;
-  final double value;
-  final Color color;
-  final IconData icon;
-  _Metric(this.label, this.value, this.color, this.icon);
-}
-
-class _MetricCell extends StatelessWidget {
-  final _Metric metric;
-  final String Function(double) format;
-  final String Function(double) formatFull;
-
-  const _MetricCell({required this.metric, required this.format, required this.formatFull});
-
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(metric.icon, size: 14, color: metric.color),
-              const SizedBox(width: 6),
-              Text(
-                metric.label.toUpperCase(),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w500, color: AppColors.textMuted, letterSpacing: 0.5),
-              ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Tooltip(
-            message: formatFull(metric.value),
-            child: Text(
-              '₹${format(metric.value)}',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: metric.color,
-                fontFeatures: const [FontFeature.tabularFigures()],
-                letterSpacing: 0.1,
-                height: 1.2,
-              ),
-            ),
-          ),
-        ],
+    final revTrend = _trend(revenueTrend);
+
+    final tiles = [
+      AppKpiTile(
+        label: 'Revenue',
+        amountShort: '\u20b9${format(revenue)}',
+        amountFull: formatFull(revenue),
+        accentColor: AppColors.brandIndigo,
+        icon: Icons.trending_up_rounded,
+        trendDirection: revTrend,
+      ),
+      AppKpiTile(
+        label: 'Receivables',
+        amountShort: '\u20b9${format(receivables)}',
+        amountFull: formatFull(receivables),
+        accentColor: AppColors.amountReceivable,
+        icon: Icons.arrow_circle_left_rounded,
+        colorizeAmount: receivables > 0,
+      ),
+      AppKpiTile(
+        label: 'Payables',
+        amountShort: '\u20b9${format(payables)}',
+        amountFull: formatFull(payables),
+        accentColor: AppColors.amountPayable,
+        icon: Icons.arrow_circle_right_rounded,
+        colorizeAmount: payables > 0,
+      ),
+      AppKpiTile(
+        label: 'Cash Received',
+        amountShort: '\u20b9${format(cashReceived)}',
+        amountFull: formatFull(cashReceived),
+        accentColor: AppColors.success,
+        icon: Icons.payments_rounded,
+        trendDirection: revTrend,
+      ),
+      if (gstEnabled)
+        AppKpiTile(
+          label: 'GST Due',
+          amountShort: '\u20b9${format(gstLiability)}',
+          amountFull: formatFull(gstLiability),
+          accentColor: AppColors.info,
+          icon: Icons.receipt_rounded,
+          colorizeAmount: gstLiability > 0,
+        ),
+      AppKpiTile(
+        label: 'Net Profit',
+        amountShort: '\u20b9${format(netProfit.abs())}',
+        amountFull: (netProfit < 0 ? '-' : '') + formatFull(netProfit.abs()),
+        accentColor: netProfit >= 0 ? AppColors.amountPositive : AppColors.amountNegative,
+        icon: Icons.account_balance_wallet_rounded,
+        colorizeAmount: true,
+        trendDirection: netProfit >= 0 ? (revTrend != -1 ? 1 : -1) : -1,
+      ),
+    ];
+
+    return SizedBox(
+      height: 96,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        itemCount: tiles.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 12),
+        itemBuilder: (_, i) => SizedBox(width: 160, child: tiles[i]),
       ),
     );
   }
@@ -478,8 +451,8 @@ class _QuickActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final isMobile = AdaptiveLayout.isMobile(context);
     final actions = [
-      _Action('New Invoice', Icons.description_rounded, onNewInvoice, AppColors.brandNavy),
-      _Action('New Purchase', Icons.receipt_rounded, onNewBill, AppColors.textSecondary),
+      _Action('New Invoice', Icons.description_rounded, onNewInvoice, AppColors.brandIndigo),
+      _Action('New Purchase', Icons.receipt_rounded, onNewBill, AppColors.warning),
       _Action('Receive Payment', Icons.payments_rounded, onPayment, AppColors.success),
       _Action('Add Expense', Icons.money_off_rounded, onNewExpense, AppColors.error),
       _Action('Add Party', Icons.person_add_rounded, onAddParty, AppColors.info),
@@ -488,13 +461,39 @@ class _QuickActions extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Quick Actions', style: AppTextStyles.h2.copyWith(fontSize: 20)),
-        const SizedBox(height: 10),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: actions.map((a) => _ActionButton(action: a)).toList(),
+        Row(
+          children: [
+            Text('Quick Actions', style: AppTextStyles.h3),
+            const Spacer(),
+          ],
         ),
+        const SizedBox(height: 10),
+        if (isMobile)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: actions.map((a) => AppQuickActionCard(
+              label: a.label,
+              icon: a.icon,
+              color: a.color,
+              onTap: a.onTap,
+            )).toList(),
+          )
+        else
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: actions.map((a) => Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: AppQuickActionCard(
+                  label: a.label,
+                  icon: a.icon,
+                  color: a.color,
+                  onTap: a.onTap,
+                ),
+              )).toList(),
+            ),
+          ),
       ],
     );
   }
@@ -506,41 +505,6 @@ class _Action {
   final VoidCallback onTap;
   final Color color;
   _Action(this.label, this.icon, this.onTap, this.color);
-}
-
-class _ActionButton extends StatelessWidget {
-  final _Action action;
-  const _ActionButton({required this.action});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: action.onTap,
-        borderRadius: AppRadius.button,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: AppColors.bgSurface,
-            borderRadius: AppRadius.button,
-            border: Border.all(color: AppColors.border),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(action.icon, size: 14, color: action.color),
-              const SizedBox(width: 6),
-              Text(
-                action.label,
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 // ── Recent Activity ──
@@ -555,7 +519,21 @@ class _RecentActivity extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Recent Activity', style: AppTextStyles.h2.copyWith(fontSize: 20)),
+        Row(
+          children: [
+            Text('Recent Activity', style: AppTextStyles.h3),
+            const Spacer(),
+            TextButton(
+              onPressed: null, // navigates to invoice list
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandIndigo,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+              ),
+              child: const Text('View All'),
+            ),
+          ],
+        ),
         const SizedBox(height: 10),
         Container(
           decoration: BoxDecoration(
@@ -612,7 +590,7 @@ class _InvoiceRowState extends State<_InvoiceRow> {
           }
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           decoration: BoxDecoration(
             color: _hovered ? AppColors.bgLight : Colors.transparent,
             border: Border(bottom: BorderSide(color: AppColors.borderLight)),

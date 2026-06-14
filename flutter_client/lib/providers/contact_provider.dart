@@ -35,7 +35,7 @@ class ContactProvider extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final List items = data is Map ? (data['items'] ?? []) : (data is List ? data : []);
-        _contacts = items.whereType<Map<String, dynamic>>().map((x) => ContactModel.fromJson(x)).toList();
+        _contacts = items.map((e) => e is Map ? Map<String, dynamic>.from(e) : null).whereType<Map<String, dynamic>>().map((x) => ContactModel.fromJson(x)).toList();
         await SyncManager.instance?.cacheGetResponse('/masters/contacts', data);
       } else {
         _errorMessage = 'Failed to load contacts';

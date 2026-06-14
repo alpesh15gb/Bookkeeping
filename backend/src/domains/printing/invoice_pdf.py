@@ -103,6 +103,10 @@ def generate_invoice_pdf(
     bank_branch = None
     terms = None
     origin_state_code = None
+    show_bank_details = True
+    show_upi_qr = True
+    signee_name = None
+    signee_designation = None
 
     if db and tenant_id:
         from src.infrastructure.database.models import Tenant, TenantSetting, BankingProfile
@@ -121,6 +125,10 @@ def generate_invoice_pdf(
             company_email = extra.get("company_email")
             company_website = extra.get("company_website")
             terms = extra.get("terms")
+            show_bank_details = extra.get("show_bank_details", True) is not False
+            show_upi_qr = extra.get("show_upi_qr", True) is not False
+            signee_name = extra.get("signee_name")
+            signee_designation = extra.get("signee_designation")
 
         bank = db.query(BankingProfile).filter(
             BankingProfile.tenant_id == tenant_id,
@@ -286,7 +294,7 @@ def generate_invoice_pdf(
 
     # UPI Payload String
     upi_payload = f"upi://pay?pa={bank_ifsc or 'ICIC0006525'}@icici&pn={company_name}&am={total}&cu=INR"
-    qr_drawing = build_qr_code(upi_payload, size=65.0)
+    qr_drawing = build_qr_code(upi_payload, size=65.0) if show_upi_qr else Paragraph("", normal_style)
 
     # Render Thermal / POS Layout
     if template == "thermal":
@@ -444,7 +452,10 @@ def generate_invoice_pdf(
         elements.append(Spacer(1, 4*mm))
 
         # Summary Block (Bank Details, Scan to Pay, Totals)
-        bank_details_str = f"<b>Company's Bank Details:</b><br/>Bank: {bank_name or 'N/A'}<br/>A/c No: {bank_account_no or 'N/A'}<br/>IFSC: {bank_ifsc or 'N/A'}<br/>Branch: {bank_branch or 'N/A'}"
+        if show_bank_details:
+            bank_details_str = f"<b>Company's Bank Details:</b><br/>Bank: {bank_name or 'N/A'}<br/>A/c No: {bank_account_no or 'N/A'}<br/>IFSC: {bank_ifsc or 'N/A'}<br/>Branch: {bank_branch or 'N/A'}"
+        else:
+            bank_details_str = ""
         
         totals_col = [
             [Paragraph("Subtotal:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
@@ -477,7 +488,9 @@ def generate_invoice_pdf(
         # Terms and signatory
         elements.append(Spacer(1, 4*mm))
         terms_str = f"<b>Terms & Conditions:</b><br/>{terms or '1. Goods once sold will not be taken back.'}"
-        sign_block = f"<br/><br/><br/>for <b>{company_name}</b><br/><br/>Authorised Signatory"
+        sign_label = signee_name if (signee_name and signee_name.strip()) else f"for <b>{company_name}</b>"
+        sign_desig = signee_designation if (signee_designation and signee_designation.strip()) else "Authorised Signatory"
+        sign_block = f"<br/><br/><br/>{sign_label}<br/><br/>{sign_desig}"
         
         bottom_table = Table([[Paragraph(terms_str, caption_style), Paragraph(sign_block, center_style)]], colWidths=[120*mm, 66*mm], style=[
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -726,9 +739,15 @@ def generate_invoice_pdf(
         elements.append(gst_analysis_table)
         
         # Bank Details, Terms & Conditions, Authorized Signatory Block
-        bank_details_str = f"<b>Bank Details</b><br/>Name : {bank_name or 'N/A'}<br/>Account No. : {bank_account_no or 'N/A'}<br/>IFSC code : {bank_ifsc or 'N/A'}<br/>Account holder's name : {company_name}"
+        if show_bank_details:
+            bank_details_str = f"<b>Bank Details</b><br/>Name : {bank_name or 'N/A'}<br/>Account No. : {bank_account_no or 'N/A'}<br/>IFSC code : {bank_ifsc or 'N/A'}<br/>Account holder's name : {company_name}"
+        else:
+            bank_details_str = ""
         terms_str = f"<b>Terms and conditions</b><br/>{terms or 'Thanks for doing business with us!'}"
-        sign_block = f"For : {company_name}<br/><br/><br/><br/><b>Authorized Signatory</b>"
+        
+        sign_label = signee_name if (signee_name and signee_name.strip()) else f"For : {company_name}"
+        sign_desig = signee_designation if (signee_designation and signee_designation.strip()) else "Authorized Signatory"
+        sign_block = f"{sign_label}<br/><br/><br/><br/><b>{sign_desig}</b>"
         
         bottom_grid = Table([
             [Paragraph(bank_details_str, normal_style), Paragraph(terms_str, normal_style), Paragraph(sign_block, center_style)]

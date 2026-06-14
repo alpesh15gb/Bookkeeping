@@ -474,7 +474,7 @@ class VersionInfo extends StatelessWidget {
     }
     return Text(
       parts.join(' · '),
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 10,
         fontWeight: FontWeight.w400,
         color: AppColors.textMuted,
@@ -1151,7 +1151,7 @@ class AppPartySelector extends StatelessWidget {
                 Container(
                   width: 6,
                   height: 6,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppColors.brandNavy,
                     shape: BoxShape.circle,
                   ),
@@ -1164,7 +1164,7 @@ class AppPartySelector extends StatelessWidget {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+                Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
               ],
             ),
             const SizedBox(height: 6),
@@ -1195,14 +1195,14 @@ class AppPartySelector extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 4),
               child: Row(
                 children: [
-                  const Icon(Icons.person_add_alt_1_outlined, size: 16, color: AppColors.textMuted),
+                  Icon(Icons.person_add_alt_1_outlined, size: 16, color: AppColors.textMuted),
                   const SizedBox(width: 8),
                   Text(
                     'Select $label',
                     style: AppTextStyles.bodySmall.copyWith(color: AppColors.textMuted),
                   ),
                   const Spacer(),
-                  const Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
+                  Icon(Icons.chevron_right, size: 16, color: AppColors.textMuted),
                 ],
               ),
             ),
@@ -1326,102 +1326,109 @@ class AppBottomTotalBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bool isMobile = MediaQuery.of(context).size.width < 600;
-    
-    final summaryWidget = Row(
-      children: [
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('Subtotal: ${AmountFormat.format(subtotal)} | Tax: ${AmountFormat.format(tax)}', style: AppTextStyles.caption),
-            const SizedBox(height: 2),
-            AppAmountWidget(value: total, large: true),
-          ],
-        ),
-      ],
-    );
-
-    final actionsWidget = Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        if (onSaveDraft != null) ...[
-          OutlinedButton(
-            onPressed: isSaving ? null : onSaveDraft,
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            ),
-            child: const Text('Save Draft', style: TextStyle(fontSize: 12)),
-          ),
-          const SizedBox(width: 8),
-        ],
-        ElevatedButton(
-          onPressed: isSaving ? null : onSave,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppColors.brandNavy,
-            foregroundColor: AppColors.textWhite,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-          ),
-          child: isSaving
-              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-              : const Text('Save', style: TextStyle(fontSize: 12)),
-        ),
-      ],
-    );
 
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 20, vertical: isMobile ? 10 : 12),
       decoration: BoxDecoration(
-        color: AppColors.bgSurface,
-        border: const Border(top: BorderSide(color: AppColors.border)),
+        color: AppColors.brandNavy,
         boxShadow: AppShadows.elevated,
       ),
-      child: isMobile
-          ? SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
+      child: SafeArea(
+        child: isMobile
+            ? Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('Total', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                      AppAmountWidget(value: total, large: true),
+                      Text(
+                        'Grand Total',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.7)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        AmountFormat.format(total),
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  Row(
+                  ElevatedButton.icon(
+                    onPressed: isSaving ? null : onSave,
+                    icon: isSaving
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.save_outlined, size: 18),
+                    label: const Text('Save Invoice', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: AppColors.brandNavy,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    ),
+                  ),
+                ],
+              )
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      if (onSaveDraft != null)
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: isSaving ? null : onSaveDraft,
-                            child: const Text('Draft', style: TextStyle(fontSize: 12)),
-                          ),
+                      Text(
+                        'Grand Total',
+                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.white.withValues(alpha: 0.7)),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        AmountFormat.format(total),
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                          fontFeatures: const [FontFeature.tabularFigures()],
                         ),
-                      if (onSaveDraft != null) const SizedBox(width: 8),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: isSaving ? null : onSave,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.brandNavy,
-                            foregroundColor: AppColors.textWhite,
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (onSaveDraft != null) ...[
+                        OutlinedButton(
+                          onPressed: isSaving ? null : onSaveDraft,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.white,
+                            side: BorderSide(color: Colors.white.withValues(alpha: 0.3)),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                           ),
-                          child: isSaving
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                              : const Text('Save', style: TextStyle(fontSize: 12)),
+                          child: const Text('Save Draft', style: TextStyle(fontSize: 12)),
+                        ),
+                        const SizedBox(width: 8),
+                      ],
+                      ElevatedButton.icon(
+                        onPressed: isSaving ? null : onSave,
+                        icon: isSaving
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                            : const Icon(Icons.save_outlined, size: 18),
+                        label: const Text('Save Invoice', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.white,
+                          foregroundColor: AppColors.brandNavy,
+                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-            )
-          : Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                summaryWidget,
-                actionsWidget,
-              ],
-            ),
+      ),
     );
   }
 }
@@ -1449,7 +1456,7 @@ class AppSearchBar extends StatelessWidget {
         onChanged: onChanged,
         decoration: InputDecoration(
           hintText: hintText,
-          prefixIcon: const Icon(Icons.search, size: 20, color: AppColors.brandNavy),
+          prefixIcon: Icon(Icons.search, size: 20, color: AppColors.brandNavy),
           suffixIcon: onClear != null
               ? IconButton(
                   icon: const Icon(Icons.clear, size: 18),
@@ -1460,15 +1467,15 @@ class AppSearchBar extends StatelessWidget {
           fillColor: AppColors.bgSurface,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppRadius.lg),
-            borderSide: const BorderSide(color: AppColors.border),
+            borderSide: BorderSide(color: AppColors.border),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppRadius.lg),
-            borderSide: const BorderSide(color: AppColors.border),
+            borderSide: BorderSide(color: AppColors.border),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(AppRadius.lg),
-            borderSide: const BorderSide(color: AppColors.brandNavy, width: 1.5),
+            borderSide: BorderSide(color: AppColors.brandNavy, width: 1.5),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
@@ -1517,7 +1524,7 @@ class AppAttachmentWidget extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('ATTACHMENTS', style: AppTextStyles.label),
+              Text('ATTACHMENTS', style: AppTextStyles.label),
               TextButton.icon(
                 onPressed: onAddAttachment,
                 icon: const Icon(Icons.add, size: 16),
@@ -1526,8 +1533,8 @@ class AppAttachmentWidget extends StatelessWidget {
             ],
           ),
           if (fileNames.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16),
               child: Center(
                 child: Text('No attachments yet', style: TextStyle(color: AppColors.textMuted)),
               ),
@@ -1927,7 +1934,7 @@ class AppQuickActionsBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
         color: AppColors.bgSurface,
-        border: const Border(bottom: BorderSide(color: AppColors.border)),
+        border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -1967,7 +1974,7 @@ class _ActionButton extends StatelessWidget {
       padding: const EdgeInsets.only(right: 12),
       child: ActionChip(
         avatar: Icon(icon, size: 16, color: AppColors.brandNavy),
-        label: Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.brandNavy)),
+        label: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.brandNavy)),
         onPressed: onTap,
         backgroundColor: AppColors.bgLight,
         side: BorderSide.none,
@@ -2053,151 +2060,95 @@ class _CompactDocumentCardState extends State<CompactDocumentCard> {
                 ? [BoxShadow(color: Colors.black.withOpacity(0.06), blurRadius: 12, offset: const Offset(0, 4))]
                 : [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 6, offset: const Offset(0, 2))],
           ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (widget.isSelectionMode)
                 Padding(
-                  padding: const EdgeInsets.only(right: 12, top: 4),
+                  padding: const EdgeInsets.only(right: 10),
                   child: Icon(
                     widget.isSelected ? Icons.check_circle : Icons.circle_outlined,
                     size: 20,
                     color: widget.isSelected ? AppColors.brandNavy : AppColors.textMuted,
                   ),
                 ),
+              // Avatar
+              Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: AppColors.brandNavy.withValues(alpha: 0.08),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Center(
+                  child: Text(
+                    (widget.partyName ?? widget.docNumber).isNotEmpty
+                        ? (widget.partyName ?? widget.docNumber)[0].toUpperCase()
+                        : '?',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: AppColors.brandNavy),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              // Content
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Top row: Party name + Doc Number & Date
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (widget.partyName != null && widget.partyName!.isNotEmpty)
-                          Expanded(
-                            child: Text(
-                              widget.partyName!,
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.brandNavy,
-                                height: 1.3,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
+                        Expanded(
+                          child: Text(
+                            widget.partyName ?? widget.docNumber,
+                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary, height: 1.2),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text(
-                              '#${widget.docNumber}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textMuted,
-                              ),
-                            ),
-                            if (widget.date != null && widget.date!.isNotEmpty) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                _formatDate(widget.date),
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  color: AppColors.textMuted,
-                                ),
-                              ),
-                            ],
-                          ],
+                        ),
+                        Text(
+                          AmountFormat.format(widget.amount),
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontFeatures: const [FontFeature.tabularFigures()]),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 6),
-                    // Middle row: Voucher Type badge
+                    const SizedBox(height: 4),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
+                        Row(
+                          children: [
+                            Text('#${widget.docNumber}', style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                            if (widget.date != null && widget.date!.isNotEmpty) ...[
+                              Padding(padding: const EdgeInsets.symmetric(horizontal: 6), child: Text('·', style: TextStyle(fontSize: 11, color: AppColors.textMuted))),
+                              Text(_formatDate(widget.date), style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                            ],
+                          ],
+                        ),
                         StatusBadge(label: widget.status),
                       ],
                     ),
-                    const SizedBox(height: 10),
-                    // Bottom row: Total & Balance amounts + Actions
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        // Total
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Total'.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textMuted,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              AmountFormat.format(widget.amount),
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                                color: AppColors.textPrimary,
-                                fontFeatures: const [FontFeature.tabularFigures()],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(width: 20),
-                        // Balance
-                        if (widget.balanceLabel != null)
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                widget.balanceLabel!.toUpperCase(),
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textMuted,
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                AmountFormat.format(widget.balanceAmount ?? 0),
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                  color: (widget.balanceAmount != null && widget.balanceAmount! > 0)
-                                      ? AppColors.error
-                                      : AppColors.success,
-                                  fontFeatures: const [FontFeature.tabularFigures()],
-                                ),
-                              ),
-                            ],
+                    if (widget.balanceLabel != null && widget.balanceAmount != null && widget.balanceAmount! > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Text(
+                            widget.balanceLabel!.toUpperCase(),
+                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.error, letterSpacing: 0.5),
                           ),
-                        const Spacer(),
-                        // Actions
-                        if (widget.actions != null && widget.actions!.isNotEmpty)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: widget.actions!,
-                          )
-                        else if (_isHovered && widget.hoverActions != null && widget.hoverActions!.isNotEmpty)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: widget.hoverActions!,
+                          const SizedBox(width: 4),
+                          Text(
+                            AmountFormat.format(widget.balanceAmount!),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.error, fontFeatures: const [FontFeature.tabularFigures()]),
                           ),
-                      ],
-                    ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),
+              const SizedBox(width: 4),
+              Icon(Icons.chevron_right_rounded, size: 18, color: AppColors.textMuted.withValues(alpha: 0.5)),
             ],
           ),
         ),
@@ -2553,7 +2504,7 @@ class BottomActionBar extends StatelessWidget {
       padding: padding,
       decoration: BoxDecoration(
         color: AppColors.bgSurface,
-        border: const Border(top: BorderSide(color: AppColors.border)),
+        border: Border(top: BorderSide(color: AppColors.border)),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.04),
@@ -2672,7 +2623,7 @@ class SettingsListTile extends StatelessWidget {
               if (trailing != null)
                 trailing!
               else if (onTap != null)
-                const Icon(Icons.chevron_right, size: 20, color: AppColors.textMuted),
+                Icon(Icons.chevron_right, size: 20, color: AppColors.textMuted),
             ],
           ),
         ),
@@ -2689,12 +2640,14 @@ class SectionedCard extends StatelessWidget {
   final String? title;
   final List<Widget> children;
   final EdgeInsets padding;
+  final Widget? action;
 
   const SectionedCard({
     super.key,
     this.title,
     required this.children,
     this.padding = const EdgeInsets.symmetric(vertical: 8),
+    this.action,
   });
 
   @override
@@ -2707,14 +2660,20 @@ class SectionedCard extends StatelessWidget {
           if (title != null)
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Text(
-                title!.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textMuted,
-                  letterSpacing: 0.8,
-                ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title!.toUpperCase(),
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textMuted,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                  if (action != null) action!,
+                ],
               ),
             ),
           ...children,

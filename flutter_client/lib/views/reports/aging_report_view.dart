@@ -226,11 +226,11 @@ class _AgingReportViewState extends State<AgingReportView> with SingleTickerProv
                 columnSpacing: 14,
                 columns: [
                   DataColumn(label: Text(partyLabel, style: AppTextStyles.labelSmall)),
-                  const DataColumn(label: Text('Total', style: AppTextStyles.labelSmall)),
-                  const DataColumn(label: Text('0-30 days', style: AppTextStyles.labelSmall)),
-                  const DataColumn(label: Text('31-60 days', style: AppTextStyles.labelSmall)),
-                  const DataColumn(label: Text('61-90 days', style: AppTextStyles.labelSmall)),
-                  const DataColumn(label: Text('91+ days', style: AppTextStyles.labelSmall)),
+                  DataColumn(label: Text('Total', style: AppTextStyles.labelSmall)),
+                  DataColumn(label: Text('0-30 days', style: AppTextStyles.labelSmall)),
+                  DataColumn(label: Text('31-60 days', style: AppTextStyles.labelSmall)),
+                  DataColumn(label: Text('61-90 days', style: AppTextStyles.labelSmall)),
+                  DataColumn(label: Text('91+ days', style: AppTextStyles.labelSmall)),
                 ],
                 rows: items.map((item) {
                   final contactName = item['contact_name'] ?? 'N/A';

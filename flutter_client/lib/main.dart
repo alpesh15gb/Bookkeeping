@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/auth_provider.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
@@ -24,7 +25,8 @@ import 'package:flutter_client/providers/theme_provider.dart';
 import 'package:flutter_client/providers/financial_year_provider.dart';
 import 'package:flutter_client/core/sync_manager.dart';
 import 'package:flutter_client/views/auth/login_view.dart';
-import 'package:flutter_client/views/shared/shell_view.dart';
+import 'core/router/app_router.dart';
+import 'core/theme/app_theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -61,71 +63,40 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => FinancialYearProvider()),
         ChangeNotifierProvider(create: (_) => SyncManager()),
       ],
-      child: const MainAppShell(),
+      child: const AppRoot(),
     );
   }
 }
 
-class MainAppShell extends StatefulWidget {
-  const MainAppShell({super.key});
+class AppRoot extends StatefulWidget {
+  const AppRoot({super.key});
 
   @override
-  State<MainAppShell> createState() => _MainAppShellState();
+  State<AppRoot> createState() => _AppRootState();
 }
 
-class _MainAppShellState extends State<MainAppShell> {
-  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
-
+class _AppRootState extends State<AppRoot> {
   @override
   void initState() {
     super.initState();
     ApiClient.onSessionExpired = () {
       if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _navigatorKey.currentState?.pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const LoginView()),
-              (route) => false,
-            );
-          }
-        });
+        appRouter.go('/login');
       }
     };
   }
 
   @override
   Widget build(BuildContext context) {
-    final authProvider = context.watch<AuthProvider>();
     final themeProvider = context.watch<ThemeProvider>();
-    final fyProvider = context.read<FinancialYearProvider>();
 
-    // Initialize FY provider once user is authenticated
-    if (authProvider.isAuthenticated && !fyProvider.isLoading && fyProvider.activeYear == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        fyProvider.init();
-      });
-    }
-
-    return MaterialApp(
-      navigatorKey: _navigatorKey,
-      title: 'Apex Books',
+    return MaterialApp.router(
+      title: 'ApexBooks',
       debugShowCheckedModeBanner: false,
-      theme: themeProvider.lightTheme,
-      darkTheme: themeProvider.darkTheme,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       themeMode: themeProvider.themeMode,
-      home: authProvider.isLoading
-          ? const Scaffold(
-              body: Center(
-                child: SizedBox(
-                  width: 32,
-                  height: 32,
-                  child: CircularProgressIndicator(strokeWidth: 3),
-                ),
-              ),
-            )
-          : authProvider.isAuthenticated
-              ? const ShellView()
-              : const LoginView(),
+      routerConfig: appRouter,
     );
   }
 }

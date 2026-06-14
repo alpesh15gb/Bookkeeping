@@ -168,7 +168,7 @@ class _BankingProfileFormViewState extends State<BankingProfileFormView> {
                 children: [
                   SwitchListTile(
                     title: const Text('Primary Account', style: AppTextStyles.h3),
-                    subtitle: const Text('Used for GST invoices and default payments', style: AppTextStyles.caption),
+                    subtitle: Text('Used for GST invoices and default payments', style: AppTextStyles.caption),
                     value: _isPrimary,
                     onChanged: (v) => setState(() => _isPrimary = v),
                     contentPadding: EdgeInsets.zero,

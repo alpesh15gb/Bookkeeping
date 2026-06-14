@@ -77,12 +77,12 @@ class _InventoryAdjustmentDetailViewState extends State<InventoryAdjustmentDetai
               child: AppSection(
                 title: 'ADJUSTMENTS',
                 child: lines.isEmpty
-                  ? const Text('No adjustments', style: TextStyle(color: AppColors.textMuted))
+                  ? Text('No adjustments', style: TextStyle(color: AppColors.textMuted))
                   : AppDataTable(
                       columns: const ['Product', 'Quantity'],
                       rows: lines.map((l) => [
-                        Text(l['product_name'] ?? 'N/A', style: const TextStyle(fontSize: 13, color: AppColors.textPrimary)),
-                        Text('${l['quantity']} ${l['uom'] ?? 'nos'}', style: const TextStyle(fontSize: 13, color: AppColors.textSecondary)),
+                        Text(l['product_name'] ?? 'N/A', style: TextStyle(fontSize: 13, color: AppColors.textPrimary)),
+                        Text('${l['quantity']} ${l['uom'] ?? 'nos'}', style: TextStyle(fontSize: 13, color: AppColors.textSecondary)),
                       ]).toList(),
                     ),
               ),

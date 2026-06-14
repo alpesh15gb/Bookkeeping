@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/banking_profile_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart' show LoadingState;
+import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/design_system.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
+import 'package:flutter_client/views/shared/document_list_view.dart';
 import 'package:flutter_client/views/banking/banking_profile_form_view.dart';
 
 class BankingProfileListView extends StatefulWidget {
@@ -15,12 +15,20 @@ class BankingProfileListView extends StatefulWidget {
 }
 
 class _BankingProfileListViewState extends State<BankingProfileListView> {
+  final _searchCtrl = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<BankingProfileProvider>().fetchBankingProfiles();
     });
+  }
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
   }
 
   String _formatAccountNumber(String? raw) {
@@ -33,30 +41,53 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
   Widget build(BuildContext context) {
     final provider = context.watch<BankingProfileProvider>();
     final profiles = provider.profiles;
-    final isMobile = AdaptiveLayout.isMobile(context);
 
-    if (provider.isLoading && profiles.isEmpty) {
-      return const LoadingState(message: 'Loading profiles...');
-    }
-
-    Widget listContent;
-    if (profiles.isEmpty) {
-      listContent = ListView(
-        children: const [
-          SizedBox(height: 120),
-          AppEmptyState(
-            icon: Icons.account_balance,
-            title: 'No Bank Accounts',
-            subtitle: 'Add a bank account for payment records, tracking, and GST printouts',
-          )
-        ],
+    final items = profiles.where((p) {
+      final query = _searchCtrl.text.trim().toLowerCase();
+      if (query.isEmpty) return true;
+      final bank = (p['bank_name'] ?? '').toString().toLowerCase();
+      final branch = (p['branch_name'] ?? '').toString().toLowerCase();
+      final account = (p['account_number'] ?? '').toString().toLowerCase();
+      return bank.contains(query) || branch.contains(query) || account.contains(query);
+    }).map((p) {
+      return DocumentItemData(
+        id: p['id'].toString(),
+        docNumber: p['bank_name'] ?? 'Bank',
+        partyName: p['branch_name'] ?? '',
+        amount: 0,
+        status: p['is_primary'] == true ? 'PRIMARY' : (p['is_active'] == false ? 'INACTIVE' : 'ACTIVE'),
       );
-    } else {
-      listContent = ListView.builder(
-        padding: isMobile ? AppSpacing.pagePaddingMobile : AppSpacing.pagePadding,
-        itemCount: profiles.length,
-        itemBuilder: (context, i) {
-          final p = profiles[i];
+    }).toList();
+
+    return Scaffold(
+      backgroundColor: AppColors.bgLight,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const BankingProfileFormView()),
+        ).then((_) => provider.fetchBankingProfiles()),
+        child: const Icon(Icons.add),
+      ),
+      body: DocumentListView(
+        title: 'Bank Accounts',
+        searchController: _searchCtrl,
+        searchHint: 'Search bank accounts...',
+        onSearchChanged: (_) => setState(() {}),
+        filterTabs: const [],
+        activeFilter: '',
+        onFilterChanged: (_) {},
+        items: items,
+        isLoading: provider.isLoading && profiles.isEmpty,
+        onRefresh: () async => provider.fetchBankingProfiles(),
+        emptyTitle: 'No Bank Accounts',
+        emptySubtitle: 'Add a bank account for payment records, tracking, and GST printouts',
+        emptyIcon: Icons.account_balance,
+        detailBuilder: (ctx, item) {
+          final profile = profiles.firstWhere((p) => p['id'].toString() == item.id, orElse: () => {});
+          return BankingProfileFormView(profile: profile);
+        },
+        itemBuilder: (context, item, index) {
+          final p = profiles.firstWhere((pw) => pw['id'].toString() == item.id, orElse: () => {});
           final isPrimary = p['is_primary'] == true;
 
           return Container(
@@ -64,7 +95,7 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: isPrimary
-                    ? [AppColors.brandNavy, AppColors.brandNavy.withOpacity(0.85)]
+                    ? [AppColors.brandNavy, AppColors.brandNavy.withValues(alpha: 0.85)]
                     : [AppColors.bgSurface, AppColors.bgSurface],
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
@@ -76,7 +107,7 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
               ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
+                  color: Colors.black.withValues(alpha: 0.03),
                   blurRadius: 8,
                   offset: const Offset(0, 4),
                 ),
@@ -97,8 +128,8 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
                             height: 38,
                             decoration: BoxDecoration(
                               color: isPrimary
-                                  ? AppColors.goldAccent.withOpacity(0.15)
-                                  : AppColors.brandNavy.withOpacity(0.05),
+                                  ? AppColors.goldAccent.withValues(alpha: 0.15)
+                                  : AppColors.brandNavy.withValues(alpha: 0.05),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
@@ -124,7 +155,7 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
                                   p['branch_name'],
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: isPrimary ? AppColors.textWhite.withOpacity(0.7) : AppColors.textMuted,
+                                    color: isPrimary ? AppColors.textWhite.withValues(alpha: 0.7) : AppColors.textMuted,
                                   ),
                                 ),
                             ],
@@ -140,7 +171,7 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
                                 color: AppColors.goldAccent,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'PRIMARY',
                                 style: TextStyle(
                                   fontSize: 9,
@@ -190,7 +221,7 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
                             'IFSC CODE',
                             style: TextStyle(
                               fontSize: 9,
-                              color: isPrimary ? AppColors.textWhite.withOpacity(0.6) : AppColors.textMuted,
+                              color: isPrimary ? AppColors.textWhite.withValues(alpha: 0.6) : AppColors.textMuted,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -209,7 +240,7 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: AppColors.error.withOpacity(0.1),
+                            color: AppColors.error.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: const Text(
@@ -224,65 +255,6 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
             ),
           );
         },
-      );
-    }
-
-    return Scaffold(
-      backgroundColor: AppColors.bgLight,
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(56),
-        child: Container(
-          decoration: BoxDecoration(
-            color: AppColors.bgSurface,
-            border: Border(bottom: BorderSide(color: AppColors.border)),
-          ),
-          child: SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Row(
-                children: [
-                  Text('Bank Accounts', style: AppTextStyles.h3.copyWith(fontWeight: FontWeight.bold)),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: RefreshIndicator(
-              onRefresh: () async => provider.fetchBankingProfiles(),
-              child: listContent,
-            ),
-          ),
-          // Sticky Bottom Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.bgSurface,
-              border: const Border(top: BorderSide(color: AppColors.border)),
-            ),
-            child: SafeArea(
-              top: false,
-              child: Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      label: 'Add Bank Account',
-                      icon: Icons.add_rounded,
-                      isPrimary: true,
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const BankingProfileFormView()),
-                      ).then((_) => provider.fetchBankingProfiles()),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

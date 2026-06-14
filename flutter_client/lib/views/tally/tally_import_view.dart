@@ -234,7 +234,7 @@ class _TallyImportViewState extends State<TallyImportView> {
                     padding: const EdgeInsets.only(bottom: 12),
                     child: Row(
                       children: [
-                        const Icon(Icons.insert_drive_file_outlined, size: 16, color: AppColors.textMuted),
+                        Icon(Icons.insert_drive_file_outlined, size: 16, color: AppColors.textMuted),
                         const SizedBox(width: 6),
                         Text(_selectedFileName!, style: AppTextStyles.caption),
                       ],

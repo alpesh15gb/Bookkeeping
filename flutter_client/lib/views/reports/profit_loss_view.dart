@@ -182,8 +182,8 @@ class _ProfitLossViewState extends State<ProfitLossView> {
           ),
           const Divider(height: 1),
           if (items.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(24),
+            Padding(
+              padding: const EdgeInsets.all(24),
               child: Center(child: Text('No accounts in this section', style: AppTextStyles.bodySmall)),
             )
           else

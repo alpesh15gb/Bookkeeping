@@ -300,7 +300,7 @@ class _BackupRestoreViewState extends State<BackupRestoreView> {
                       ),
                     )),
                     const SizedBox(height: 12),
-                    const Text(
+                    Text(
                       'Existing records with the same ID will be skipped. This action cannot be undone.',
                       style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                     ),

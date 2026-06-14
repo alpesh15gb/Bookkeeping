@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_client/core/constants.dart';
 
 class ThemeProvider extends ChangeNotifier {
   bool _isDarkMode = false;
@@ -12,6 +13,7 @@ class ThemeProvider extends ChangeNotifier {
   Future<void> _loadTheme() async {
     final prefs = await SharedPreferences.getInstance();
     _isDarkMode = prefs.getBool('dark_mode') ?? false;
+    AppColors.isDark = _isDarkMode;
     notifyListeners();
   }
 
@@ -19,6 +21,7 @@ class ThemeProvider extends ChangeNotifier {
     _isDarkMode = !_isDarkMode;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool('dark_mode', _isDarkMode);
+    AppColors.isDark = _isDarkMode;
     notifyListeners();
   }
 
@@ -84,6 +87,13 @@ class ThemeProvider extends ChangeNotifier {
       backgroundColor: _surfaceLight,
       modalBarrierColor: Colors.black54,
     ),
+    bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+      backgroundColor: _surfaceLight,
+      selectedItemColor: _goldAccent,
+      unselectedItemColor: Colors.black54,
+      type: BottomNavigationBarType.fixed,
+      elevation: 8,
+    ),
     dialogTheme: DialogThemeData(
       backgroundColor: _surfaceLight,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -144,6 +154,10 @@ class ThemeProvider extends ChangeNotifier {
     ),
     bottomNavigationBarTheme: const BottomNavigationBarThemeData(
       backgroundColor: _surfaceDark,
+      selectedItemColor: Color(0xFFDCA035),
+      unselectedItemColor: Colors.white70,
+      type: BottomNavigationBarType.fixed,
+      elevation: 8,
     ),
     drawerTheme: const DrawerThemeData(
       backgroundColor: _sidebarDark,

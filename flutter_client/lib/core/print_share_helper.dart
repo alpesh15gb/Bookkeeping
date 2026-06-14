@@ -88,7 +88,7 @@ class PrintShareHelper {
               ),
               const Divider(height: 1),
               ListTile(
-                leading: const Icon(Icons.picture_as_pdf_outlined, color: AppColors.brandNavy),
+                leading: Icon(Icons.picture_as_pdf_outlined, color: AppColors.brandNavy),
                 title: const Text('Export to PDF / Print'),
                 subtitle: const Text('View or print using default browser pdf reader'),
                 onTap: () {
