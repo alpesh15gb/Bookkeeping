@@ -5,6 +5,9 @@ from typing import List, Optional
 import uuid
 from decimal import Decimal
 from datetime import date, datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 from src.core.database import get_db_session
@@ -220,7 +223,13 @@ def create_invoice(
         invoice.tcs_amount = (rounded_total * invoice.tcs_rate / Decimal("100")).quantize(Decimal("0.0001"))
 
     # Generate UPI QR code if tenant has UPI ID configured
-    if tenant_settings and tenant_settings.upi_id:
+    tenant_settings = None
+    try:
+        tenant_settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    except Exception as e:
+        logger.warning(f"Failed to fetch tenant settings for UPI/e-invoice: {e}")
+    
+    if tenant_settings and getattr(tenant_settings, "upi_id", None):
         try:
             import qrcode
             import base64
@@ -240,8 +249,7 @@ def create_invoice(
     auto_post_invoice(db, tenant_id, invoice)
 
     # Trigger background e-invoice generation if tenant has e-invoicing enabled
-    tenant_settings = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
-    if tenant_settings and tenant_settings.e_invoicing_enabled:
+    if tenant_settings and getattr(tenant_settings, "e_invoice_enabled", None):
         try:
             import logging as _logging
             from src.workers.tasks import submit_e_invoice_to_irp
