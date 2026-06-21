@@ -595,7 +595,9 @@ class TenantSetting(Base):
     __tablename__ = "tenant_settings"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False, unique=True)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    name = Column(String(100), nullable=True)  # Setting name/key (optional for backward compat)
+    value = Column(String(255))  # Setting value
     logo_url = Column(String(255))
     currency = Column(String(10), nullable=False, default="INR")
     gst_enabled = Column(Boolean, nullable=False, default=True)
@@ -604,14 +606,23 @@ class TenantSetting(Base):
     e_invoice_password_hash = Column(String(255))
     e_way_bill_username = Column(String(100))
     e_way_bill_password_hash = Column(String(255))
-    upi_id = Column(String(100))  # UPI ID for QR code generation on invoices
-    display_settings = Column(JSON, nullable=False, default=dict)  # Invoice display customization toggles
+    upi_id = Column(String(100))
+    display_settings = Column(JSON, nullable=False, default=dict)
     extra_settings = Column(JSON, default=dict)
     origin_state_code = Column(String(2))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
 
     tenant = relationship("Tenant")
+
+    @property
+    def key(self):
+        """Alias for name - allows constructing TenantSetting(key=...) for dynamic settings."""
+        return getattr(self, "name", None)
+
+    @key.setter
+    def key(self, value):
+        setattr(self, "name", value)
 
 
 class NumberingSeries(Base):

@@ -26,6 +26,8 @@ class Permissions:
     # Company Profiles
     TENANT_VIEW = "tenant:view"
     TENANT_UPDATE = "tenant:update"
+    SETTINGS_VIEW = "settings:view"
+    SETTINGS_UPDATE = "settings:update"
 
     # Contact Context
     CONTACT_CREATE = "contact:create"
@@ -80,53 +82,54 @@ class Permissions:
     BILL_UPDATE = "bill:update"
     BILL_DELETE = "bill:delete"
 
-
 ROLE_PERMISSIONS = {
-    "superadmin": [perm for name, perm in Permissions.__dict__.items() if not name.startswith("__")],
-    "owner": [
-        Permissions.TENANT_VIEW, Permissions.TENANT_UPDATE,
-        Permissions.CONTACT_CREATE, Permissions.CONTACT_VIEW,
-        Permissions.CONTACT_UPDATE, Permissions.CONTACT_DELETE,
-        Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW,
-        Permissions.INVOICE_UPDATE, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_DELETE,
-        Permissions.PAYMENT_CREATE, Permissions.PAYMENT_VIEW, Permissions.PAYMENT_DELETE, Permissions.PAYMENT_CANCEL,
-        Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
-        Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
-        Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
-        Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
-        Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
-        Permissions.EXPENSE_CREATE, Permissions.EXPENSE_VIEW,
-        Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
-        Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
-    ],
-    "accountant": [
-        Permissions.TENANT_VIEW,
-        Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
-        Permissions.INVOICE_VIEW, Permissions.INVOICE_FINALIZE,
-        Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE, Permissions.PAYMENT_CANCEL,
-        Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
-        Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
-        Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
-        Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
-        Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
-        Permissions.EXPENSE_VIEW, Permissions.EXPENSE_CREATE, Permissions.EXPENSE_FINALIZE,
-        Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
-    ],
-    "salesperson": [
-        Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
-        Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW, Permissions.INVOICE_UPDATE,
-        Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE,
-    ],
-    "auditor": [
-        Permissions.TENANT_VIEW,
-        Permissions.CONTACT_VIEW,
-        Permissions.INVOICE_VIEW,
-        Permissions.PAYMENT_VIEW,
-        Permissions.LEDGER_VIEW,
-        Permissions.GST_REPORT_VIEW,
-        Permissions.CREDIT_NOTE_VIEW, Permissions.DEBIT_NOTE_VIEW,
-        Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
-    ],
+
+"owner": [
+    Permissions.TENANT_VIEW, Permissions.TENANT_UPDATE,
+    Permissions.SETTINGS_VIEW, Permissions.SETTINGS_UPDATE,
+    Permissions.CONTACT_CREATE, Permissions.CONTACT_VIEW,
+    Permissions.CONTACT_UPDATE, Permissions.CONTACT_DELETE,
+    Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW,
+    Permissions.INVOICE_UPDATE, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_DELETE,
+    Permissions.PAYMENT_CREATE, Permissions.PAYMENT_VIEW, Permissions.PAYMENT_DELETE, Permissions.PAYMENT_CANCEL,
+    Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
+    Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
+    Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
+    Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
+    Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+    Permissions.EXPENSE_CREATE, Permissions.EXPENSE_VIEW,
+    Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
+    Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
+],
+"accountant": [
+    Permissions.TENANT_VIEW,
+    Permissions.SETTINGS_VIEW, Permissions.SETTINGS_UPDATE,
+    Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
+    Permissions.INVOICE_VIEW, Permissions.INVOICE_FINALIZE,
+    Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE, Permissions.PAYMENT_CANCEL,
+    Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
+    Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
+    Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
+    Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
+    Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+    Permissions.EXPENSE_VIEW, Permissions.EXPENSE_CREATE, Permissions.EXPENSE_FINALIZE,
+    Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
+],
+"salesperson": [
+    Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
+    Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW, Permissions.INVOICE_UPDATE,
+    Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE,
+],
+"auditor": [
+    Permissions.TENANT_VIEW,
+    Permissions.CONTACT_VIEW,
+    Permissions.INVOICE_VIEW,
+    Permissions.PAYMENT_VIEW,
+    Permissions.LEDGER_VIEW,
+    Permissions.GST_REPORT_VIEW,
+    Permissions.CREDIT_NOTE_VIEW, Permissions.DEBIT_NOTE_VIEW,
+    Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+],
 }
 
 
