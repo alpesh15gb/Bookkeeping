@@ -223,17 +223,36 @@ def tenant(db_session):
     return tenant
 
 @pytest.fixture
+def admin_user(db_session, tenant):
+    """Create a test admin user with tenant membership."""
+    user_id = uuid.uuid4()
+    user = User(
+        id=user_id,
+        email="admin@test.com",
+        password_hash=get_password_hash("testpassword"),
+        full_name="Test Admin",
+    )
+    db_session.add(user)
+    membership = TenantMembership(
+        user_id=user_id,
+        tenant_id=tenant.id,
+        role="OWNER",
+    )
+    db_session.add(membership)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+@pytest.fixture
 def tenant_headers(tenant):
     """Return headers with tenant ID."""
     return {"X-Tenant-ID": str(tenant.id)}
 
 @pytest.fixture
-def auth_headers():
+def auth_headers(admin_user):
     """Return a function to generate auth headers for a given role."""
-    def _auth_headers(role: str = "OWNER", user_id: uuid.UUID = None, email: str = "test@example.com"):
-        if user_id is None:
-            user_id = uuid.uuid4()
-        access_token = create_access_token(user_id=str(user_id))
+    def _auth_headers(role: str = "OWNER", user_id: uuid.UUID = None, email: str = "admin@test.com"):
+        access_token = create_access_token(user_id=str(admin_user.id))
         return {"Authorization": f"Bearer {access_token}"}
     return _auth_headers
 
