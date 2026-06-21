@@ -136,12 +136,12 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
                             _buildItemsCard(lines),
                             const SizedBox(height: 12),
                             _buildTaxSummary(subtotal, est, total),
-                            if (est?['notes'] != null && est!['notes'].toString().isNotEmpty) ...[
+                            if (est['notes'] != null && est['notes'].toString().isNotEmpty) ...[
                               const SizedBox(height: 12),
-                              _buildNotesCard(est!['notes'].toString()),
+                              _buildNotesCard(est['notes'].toString()),
                             ],
                             const SizedBox(height: 12),
-                            _buildTimeline(est!, status),
+                            _buildTimeline(est, status),
                           ],
                         ),
                       ),
@@ -420,7 +420,7 @@ class _EstimateDetailViewState extends State<EstimateDetailView> {
               const Spacer(),
               Text(
                 AmountFormat.format(total),
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.brandNavy, fontFeatures: const [FontFeature.tabularFigures()]),
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.brandNavy, fontFeatures: [FontFeature.tabularFigures()]),
               ),
             ],
           ),

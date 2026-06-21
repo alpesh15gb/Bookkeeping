@@ -82,7 +82,7 @@ class AppButton extends StatelessWidget {
           ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.md),
-            side: const BorderSide(color: AppColors.gray200),
+            side: BorderSide(color: AppColors.gray200),
           ),
         );
       case AppButtonStyle.ghost:

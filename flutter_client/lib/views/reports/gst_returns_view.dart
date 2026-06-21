@@ -396,7 +396,6 @@ class _GstReturnsViewState extends State<GstReturnsView> with SingleTickerProvid
     final outwardSgst = double.tryParse((_gstr3bData!['outward_taxable_supplies']?['state_ut_tax'] ?? _gstr3bData!['outward_taxable_supplies']?['sgst_amount'] ?? 0).toString()) ?? 0.0;
 
     final itcData = _gstr3bData!['inward_supplies_itc'] ?? _gstr3bData!['eligible_itc'];
-    final itcVal = double.tryParse((itcData?['taxable_value'] ?? 0).toString()) ?? 0.0;
     final itcIgst = double.tryParse((itcData?['integrated_tax'] ?? itcData?['igst_amount'] ?? 0).toString()) ?? 0.0;
     final itcCgst = double.tryParse((itcData?['central_tax'] ?? itcData?['cgst_amount'] ?? 0).toString()) ?? 0.0;
     final itcSgst = double.tryParse((itcData?['state_ut_tax'] ?? itcData?['sgst_amount'] ?? 0).toString()) ?? 0.0;

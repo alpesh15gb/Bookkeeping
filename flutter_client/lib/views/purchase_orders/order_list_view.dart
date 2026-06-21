@@ -26,8 +26,6 @@ class _OrderListViewState extends State<OrderListView> {
   List<dynamic> _allOrders = [];
   bool _isLoading = true;
 
-  final _statusOptions = ['ALL', 'DRAFT', 'CONFIRMED', 'DELIVERED', 'RECEIVED', 'CANCELLED'];
-
   @override
   void initState() {
     super.initState();
@@ -70,16 +68,6 @@ class _OrderListViewState extends State<OrderListView> {
         if (_selectedIds.isEmpty) _isSelectionMode = false;
       } else {
         _selectedIds.add(id);
-      }
-    });
-  }
-
-  void _selectAll(List<dynamic> visibleOrders) {
-    setState(() {
-      if (_selectedIds.length == visibleOrders.length) {
-        _selectedIds.clear();
-      } else {
-        _selectedIds = visibleOrders.map((e) => e['id'].toString()).toSet();
       }
     });
   }

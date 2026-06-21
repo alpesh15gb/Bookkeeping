@@ -214,7 +214,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                   color: AppColors.success.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(22),
                 ),
-                child: const Icon(Icons.check_circle_outline, color: AppColors.success, size: 24),
+                child: Icon(Icons.check_circle_outline, color: AppColors.success, size: 24),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -259,7 +259,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.warning),
+                    Icon(Icons.warning_amber_outlined, size: 16, color: AppColors.warning),
                     const SizedBox(width: 6),
                     Text(
                       '${errors.length} Warning(s)',
@@ -332,7 +332,7 @@ class _VyaparImportViewState extends State<VyaparImportView> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                Icon(Icons.error_outline, color: AppColors.error, size: 20),
                 const SizedBox(width: 12),
                 Expanded(child: Text(_error!, style: AppTextStyles.bodySmall)),
                 TextButton(

@@ -195,16 +195,7 @@ class AmountFormat {
     return grouped.toString().split('').reversed.join();
   }
 
-  /// Short format for compact displays: "₹1.2K", "-₹5Cr"
-  static String short(num amount) {
-    final abs = amount.abs();
-    final prefix = amount < 0 ? '-₹' : '₹';
-    if (abs >= 10000000) return '${prefix}${(abs / 10000000).toStringAsFixed(1)}Cr';
-    if (abs >= 100000) return '${prefix}${(abs / 100000).toStringAsFixed(1)}L';
-    if (abs >= 1000) return '${prefix}${(abs / 1000).toStringAsFixed(1)}K';
-    return '${prefix}${abs.toStringAsFixed(0)}';
   }
-}
 
 /// Multi-currency support with 22+ countries
 class CurrencyInfo {
@@ -617,11 +608,11 @@ class AppTheme {
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.error, width: 1),
+          borderSide: BorderSide(color: AppColors.error, width: 1),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
-          borderSide: const BorderSide(color: AppColors.error, width: 1.5),
+          borderSide: BorderSide(color: AppColors.error, width: 1.5),
         ),
         disabledBorder: OutlineInputBorder(
           borderRadius: AppRadius.input,
@@ -633,7 +624,7 @@ class AppTheme {
           fontWeight: FontWeight.w400,
           color: AppColors.textMuted,
         ),
-        errorStyle: const TextStyle(
+        errorStyle: TextStyle(
           fontSize: 11,
           fontWeight: FontWeight.w500,
           color: AppColors.error,
@@ -641,7 +632,7 @@ class AppTheme {
         ),
         floatingLabelStyle: WidgetStateTextStyle.resolveWith((states) {
           if (states.contains(WidgetState.error)) {
-            return const TextStyle(
+            return TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: AppColors.error,

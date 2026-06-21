@@ -71,8 +71,8 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
 
   void _save() async {
     if (!_formKey.currentState!.validate()) return;
-    if (_lines.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Add at least one product'), backgroundColor: AppColors.error)); return; }
-    if (_lines.any((l) => l.quantityChange == 0)) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Quantity change cannot be 0 for any item'), backgroundColor: AppColors.error)); return; }
+    if (_lines.isEmpty) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Add at least one product'), backgroundColor: AppColors.error)); return; }
+    if (_lines.any((l) => l.quantityChange == 0)) { ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Quantity change cannot be 0 for any item'), backgroundColor: AppColors.error)); return; }
 
     setState(() => _isSaving = true);
     final payload = {
@@ -205,7 +205,7 @@ class _InventoryAdjustmentFormViewState extends State<InventoryAdjustmentFormVie
                                   ),
                                 ),
                               ),
-                              IconButton(icon: const Icon(Icons.close, size: 14, color: AppColors.error), onPressed: () => _removeLine(e.key), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
+                              IconButton(icon: Icon(Icons.close, size: 14, color: AppColors.error), onPressed: () => _removeLine(e.key), padding: EdgeInsets.zero, constraints: const BoxConstraints()),
                             ]),
                           );
                         }),

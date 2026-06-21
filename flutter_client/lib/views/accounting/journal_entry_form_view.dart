@@ -178,7 +178,7 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
         decoration: BoxDecoration(
           color: AppColors.bgSurface,
           border: Border(top: BorderSide(color: AppColors.border)),
-          boxShadow: const [
+          boxShadow: [
             BoxShadow(
               color: Color(0x0A000000),
               blurRadius: 8,
@@ -346,7 +346,7 @@ class _JournalEntryFormViewState extends State<JournalEntryFormView> {
                           Container(
                             margin: const EdgeInsets.only(top: 8),
                             child: IconButton(
-                              icon: const Icon(Icons.close, size: 16, color: AppColors.error),
+                              icon: Icon(Icons.close, size: 16, color: AppColors.error),
                               onPressed: () => _removeLine(i),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
@@ -423,7 +423,7 @@ class _JournalFormLine {
   final TextEditingController amountCtrl = TextEditingController();
   final TextEditingController narrationCtrl = TextEditingController();
 
-  _JournalFormLine({this.accountId, this.direction = 'DEBIT'});
+  _JournalFormLine({this.direction = 'DEBIT'});
 
   void dispose() {
     amountCtrl.dispose();

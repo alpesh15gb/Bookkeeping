@@ -2,10 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/models/bill.dart';
 import 'package:flutter_client/providers/bill_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/document_list_view.dart';
 import 'package:flutter_client/views/bills/bill_detail_view.dart';
-import 'package:flutter_client/utils/haptic_helper.dart';
 
 class BillListView extends StatefulWidget {
   const BillListView({super.key});

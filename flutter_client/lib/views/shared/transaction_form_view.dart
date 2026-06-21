@@ -11,10 +11,12 @@ import 'package:flutter_client/providers/contact_provider.dart';
 import 'package:flutter_client/providers/product_provider.dart';
 import 'package:flutter_client/providers/invoice_provider.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
+import 'package:flutter_client/providers/terms_template_provider.dart';
 import 'package:flutter_client/models/contact.dart';
 import 'package:flutter_client/models/product.dart';
 import 'package:flutter_client/models/invoice.dart';
 import 'package:flutter_client/models/bill.dart';
+import 'package:flutter_client/models/terms_template.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 import 'package:flutter_client/views/shared/search_sheets.dart';
@@ -224,6 +226,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   late TextEditingController _issueDateCtrl;
   late TextEditingController _dueDateCtrl;
   final TextEditingController _notesCtrl = TextEditingController();
+  final TextEditingController _termsCtrl = TextEditingController();
   final TextEditingController _poNumberCtrl = TextEditingController();
   final TextEditingController _shippingAddrCtrl = TextEditingController();
   final TextEditingController _invoiceNoCtrl = TextEditingController();
@@ -237,7 +240,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   double _exchangeRate = 1.0;
   double _tdsRate = 0.0;
   double _tcsRate = 0.0;
-  String? _scannedVendorName;
   Timer? _previewDebounce;
   bool _isPreviewLoading = false;
   String? _nextNumberPlaceholder;
@@ -387,6 +389,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     _issueDateCtrl.addListener(_markDirty);
     _dueDateCtrl.addListener(_markDirty);
     _notesCtrl.addListener(_markDirty);
+    _termsCtrl.addListener(_markDirty);
     _poNumberCtrl.addListener(_markDirty);
     _shippingAddrCtrl.addListener(_markDirty);
     _invoiceNoCtrl.addListener(_markDirty);
@@ -425,6 +428,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       _issueDateCtrl.text = entity.issueDate;
       _dueDateCtrl.text = entity.dueDate;
       _notesCtrl.text = entity.notes ?? '';
+      _termsCtrl.text = entity.termsAndConditions ?? '';
       _posStateCode = _gstStateNames.containsKey(entity.posStateCode)
           ? entity.posStateCode
           : '27';
@@ -479,6 +483,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       _issueDateCtrl.text = entity['issue_date'] ?? _issueDateCtrl.text;
       _dueDateCtrl.text = entity['due_date'] ?? _dueDateCtrl.text;
       _notesCtrl.text = entity['notes'] ?? '';
+      _termsCtrl.text = entity['terms_and_conditions'] ?? '';
       _reasonCtrl.text = entity['reason'] ?? '';
       final psc = entity['pos_state_code']?.toString();
       _posStateCode = _gstStateNames.containsKey(psc) ? psc! : '27';
@@ -547,6 +552,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     _issueDateCtrl.removeListener(_markDirty);
     _dueDateCtrl.removeListener(_markDirty);
     _notesCtrl.removeListener(_markDirty);
+    _termsCtrl.removeListener(_markDirty);
     _poNumberCtrl.removeListener(_markDirty);
     _shippingAddrCtrl.removeListener(_markDirty);
     _invoiceNoCtrl.removeListener(_markDirty);
@@ -554,6 +560,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
     _issueDateCtrl.dispose();
     _dueDateCtrl.dispose();
     _notesCtrl.dispose();
+    _termsCtrl.dispose();
     _poNumberCtrl.dispose();
     _shippingAddrCtrl.dispose();
     _invoiceNoCtrl.dispose();
@@ -600,6 +607,9 @@ class _TransactionFormViewState extends State<TransactionFormView> {
         data['challan_number'];
     if (reference != null) _poNumberCtrl.text = reference.toString();
     if (data['notes'] != null) _notesCtrl.text = data['notes'].toString();
+    if (data['terms_and_conditions'] != null) {
+      _termsCtrl.text = data['terms_and_conditions'].toString();
+    }
 
     final rawLines = data['lines'] ?? data['line_items'];
     if (rawLines is List) {
@@ -886,6 +896,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           ? _posStateCode
           : '27',
       'notes': _notesCtrl.text.trim(),
+      'terms_and_conditions': _termsCtrl.text.trim(),
       'currency': _selectedCurrency,
       'exchange_rate': _exchangeRate,
       'line_items': _lines
@@ -1688,10 +1699,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   Widget _buildPartiesRow(bool isDesktop) {
-    final billingStateName = _selectedContact != null && _gstStateNames.containsKey(_selectedContact!.stateCode)
-        ? _gstStateNames[_selectedContact!.stateCode]
-        : _selectedContact?.stateCode;
-
     final hasContact = _selectedContact != null && _selectedContact!.name.isNotEmpty;
 
     Widget buildSectionHeader() {
@@ -1723,7 +1730,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             TextSpan(
               text: '${widget.config.contactLabel} ',
               style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-              children: const [
+              children: [
                 TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
               ],
             ),
@@ -1762,7 +1769,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
       final c = _selectedContact!;
       final initials = c.name.length >= 2 ? c.name.substring(0, 2).toUpperCase() : c.name.toUpperCase();
       final isRegistered = c.gstin != null && c.gstin!.isNotEmpty;
-      final address = c.billingAddress != null ? _flattenAddress(c.billingAddress!) : '';
+      final address = c.billingAddress.isNotEmpty ? _flattenAddress(c.billingAddress) : '';
 
       return Container(
         margin: const EdgeInsets.only(top: 8),
@@ -1784,7 +1791,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               child: Center(
                 child: Text(
                   initials,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
+                  style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -1873,7 +1880,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               TextSpan(
                                 text: 'GSTIN ',
                                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                                children: const [
+                                children: [
                                   TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
                                 ],
                               ),
@@ -1936,7 +1943,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               TextSpan(
                                 text: 'Billing Address ',
                                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                                children: const [
+                                children: [
                                   TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
                                 ],
                               ),
@@ -1950,12 +1957,12 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                                 color: AppColors.bgSurface,
                               ),
                               child: Text(
-                                _selectedContact!.billingAddress != null
-                                    ? _flattenAddress(_selectedContact!.billingAddress!)
+                                _selectedContact!.billingAddress.isNotEmpty
+                                    ? _flattenAddress(_selectedContact!.billingAddress)
                                     : 'Enter billing address',
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: _selectedContact!.billingAddress != null ? AppColors.textPrimary : AppColors.textMuted,
+                                  color: _selectedContact!.billingAddress.isNotEmpty ? AppColors.textPrimary : AppColors.textMuted,
                                 ),
                               ),
                             ),
@@ -1971,7 +1978,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               TextSpan(
                                 text: 'State ',
                                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                                children: const [
+                                children: [
                                   TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
                                 ],
                               ),
@@ -2001,7 +2008,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                               TextSpan(
                                 text: 'PIN Code ',
                                 style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
-                                children: const [
+                                children: [
                                   TextSpan(text: '*', style: TextStyle(color: AppColors.error)),
                                 ],
                               ),
@@ -2015,12 +2022,12 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                                 color: AppColors.bgSurface,
                               ),
                               child: Text(
-                                (_selectedContact!.billingAddress != null && _selectedContact!.billingAddress!['pincode'] != null)
-                                    ? _selectedContact!.billingAddress!['pincode'].toString()
+                                _selectedContact!.billingAddress['pincode'] != null
+                                    ? _selectedContact!.billingAddress['pincode'].toString()
                                     : 'Enter PIN Code',
                                 style: TextStyle(
                                   fontSize: 13,
-                                  color: (_selectedContact!.billingAddress != null && _selectedContact!.billingAddress!['pincode'] != null)
+                                  color: _selectedContact!.billingAddress['pincode'] != null
                                       ? AppColors.textPrimary
                                       : AppColors.textMuted,
                                 ),
@@ -2169,8 +2176,8 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           const Spacer(),
           OutlinedButton.icon(
             onPressed: _addEmptyLine,
-            icon: const Icon(Icons.add, size: 16),
-            label: const Text('Add Item', style: TextStyle(fontSize: 12)),
+            icon: Icon(Icons.add, size: 16),
+            label: Text('Add Item', style: TextStyle(fontSize: 12)),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.brandNavy,
               side: BorderSide(color: AppColors.brandNavy.withValues(alpha: 0.3)),
@@ -2578,7 +2585,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
           SizedBox(
             width: 36,
             child: IconButton(
-              icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
+              icon: Icon(Icons.delete_outline, color: AppColors.error, size: 18),
               onPressed: () => _removeLine(index),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -2703,9 +2710,63 @@ class _TransactionFormViewState extends State<TransactionFormView> {
               isDense: true,
             ),
           ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Terms & Conditions',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _showTermsTemplatePicker,
+                icon: const Icon(Icons.description_outlined, size: 16),
+                label: const Text('Template'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _termsCtrl,
+            minLines: 3,
+            maxLines: 6,
+            style: const TextStyle(fontSize: 13),
+            decoration: const InputDecoration(
+              hintText: 'Add reusable invoice terms...',
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  Future<void> _showTermsTemplatePicker() async {
+    final provider = context.read<TermsTemplateProvider>();
+    if (provider.items.isEmpty && !provider.isLoading) {
+      await provider.fetchTemplates();
+    }
+    if (!mounted) return;
+
+    final selected = await showDialog<_TermsTemplateSelection>(
+      context: context,
+      builder: (ctx) => _TermsTemplatePickerDialog(
+        templates: provider.items,
+        hasExistingTerms: _termsCtrl.text.trim().isNotEmpty,
+      ),
+    );
+
+    if (selected == null) return;
+    setState(() {
+      if (selected.mode == _TermsApplyMode.append && _termsCtrl.text.trim().isNotEmpty) {
+        _termsCtrl.text = '${_termsCtrl.text.trim()}\n\n${selected.template.content}';
+      } else {
+        _termsCtrl.text = selected.template.content;
+      }
+    });
+    _markDirty();
   }
 
   Widget _buildTaxBreakdownCard() {
@@ -2719,7 +2780,6 @@ class _TransactionFormViewState extends State<TransactionFormView> {
   }
 
   Widget _buildTotalSummaryCard() {
-    final gstRate = _posStateCode == '27' ? 9.0 : 9.0;
     return AppCard(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -2752,7 +2812,7 @@ class _TransactionFormViewState extends State<TransactionFormView> {
                   fontWeight: FontWeight.w800,
                   fontSize: 18,
                   color: AppColors.brandNavy,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
             ],
@@ -2763,13 +2823,13 @@ class _TransactionFormViewState extends State<TransactionFormView> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
+                Text(
                   'Balance Due',
                   style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: AppColors.error),
                 ),
                 Text(
                   AmountFormat.format((_total - _amountPaid).clamp(0, double.infinity)),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 13,
                     color: AppColors.error,
@@ -2866,22 +2926,179 @@ class _SummaryRow extends StatelessWidget {
   }
 }
 
+enum _TermsApplyMode { replace, append }
+
+class _TermsTemplateSelection {
+  final TermsTemplateModel template;
+  final _TermsApplyMode mode;
+
+  const _TermsTemplateSelection({
+    required this.template,
+    required this.mode,
+  });
+}
+
+class _TermsTemplatePickerDialog extends StatefulWidget {
+  final List<TermsTemplateModel> templates;
+  final bool hasExistingTerms;
+
+  const _TermsTemplatePickerDialog({
+    required this.templates,
+    required this.hasExistingTerms,
+  });
+
+  @override
+  State<_TermsTemplatePickerDialog> createState() => _TermsTemplatePickerDialogState();
+}
+
+class _TermsTemplatePickerDialogState extends State<_TermsTemplatePickerDialog> {
+  TermsTemplateModel? _selected;
+  _TermsApplyMode _mode = _TermsApplyMode.replace;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = widget.templates.isNotEmpty ? widget.templates.first : null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Apply Terms Template'),
+      content: SizedBox(
+        width: 620,
+        child: widget.templates.isEmpty
+            ? const Padding(
+                padding: EdgeInsets.all(16),
+                child: Text('No terms templates found.'),
+              )
+            : LayoutBuilder(
+                builder: (context, constraints) {
+                  final stack = constraints.maxWidth < 520;
+                  final list = _buildTemplateList();
+                  final preview = _buildPreview();
+
+                  if (stack) {
+                    return Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(height: 180, child: list),
+                        const SizedBox(height: 12),
+                        SizedBox(height: 180, child: preview),
+                        _buildModeSelector(),
+                      ],
+                    );
+                  }
+
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      SizedBox(
+                        height: 300,
+                        child: Row(
+                          children: [
+                            SizedBox(width: 220, child: list),
+                            const SizedBox(width: 12),
+                            Expanded(child: preview),
+                          ],
+                        ),
+                      ),
+                      _buildModeSelector(),
+                    ],
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: _selected == null
+              ? null
+              : () => Navigator.pop(
+                    context,
+                    _TermsTemplateSelection(template: _selected!, mode: _mode),
+                  ),
+          child: const Text('Apply'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTemplateList() {
+    return ListView.separated(
+      itemCount: widget.templates.length,
+      separatorBuilder: (_, __) => const Divider(height: 1),
+      itemBuilder: (context, index) {
+        final template = widget.templates[index];
+        final selected = template.id == _selected?.id;
+        return ListTile(
+          dense: true,
+          selected: selected,
+          title: Text(
+            template.name,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          subtitle: template.isPreset ? const Text('Preset') : null,
+          onTap: () => setState(() => _selected = template),
+        );
+      },
+    );
+  }
+
+  Widget _buildPreview() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: AppColors.bgLight,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.borderLight),
+      ),
+      child: SingleChildScrollView(
+        child: Text(
+          _selected?.content ?? '',
+          style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModeSelector() {
+    if (!widget.hasExistingTerms) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: SegmentedButton<_TermsApplyMode>(
+        segments: const [
+          ButtonSegment(value: _TermsApplyMode.replace, label: Text('Replace')),
+          ButtonSegment(value: _TermsApplyMode.append, label: Text('Append')),
+        ],
+        selected: {_mode},
+        onSelectionChanged: (value) {
+          setState(() => _mode = value.first);
+        },
+      ),
+    );
+  }
+}
+
 class _LineItemCard extends StatefulWidget {
   final int index;
   final TransactionLineItem line;
   final VoidCallback onPickProduct;
   final VoidCallback onChanged;
   final VoidCallback onRemove;
-  final bool gstEnabled;
 
   const _LineItemCard({
-    super.key,
     required this.index,
     required this.line,
     required this.onPickProduct,
     required this.onChanged,
     required this.onRemove,
-    this.gstEnabled = true,
   });
 
   @override
@@ -2983,7 +3200,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
                       color: AppColors.brandNavy,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                      fontFeatures: [FontFeature.tabularFigures()],
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -3053,7 +3270,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                     return null;
                   },
                 ),
-                if (widget.gstEnabled) ...[
+                ...[
                   const SizedBox(width: 8),
                   _SmallField(
                     label: 'GST%',
@@ -3074,7 +3291,7 @@ class _LineItemCardState extends State<_LineItemCard> {
             ),
           ),
           // Expandable detail fields
-          if (widget.gstEnabled && _showDetails)
+          if (_showDetails)
             Padding(
               padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
               child: Row(
@@ -3082,7 +3299,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                   Expanded(
                     child: TextField(
                       controller: line.hsnCtrl,
-                      style: const TextStyle(fontSize: 12),
+                      style: TextStyle(fontSize: 12),
                       onChanged: (v) => line.hsnSac = v,
                       decoration: InputDecoration(
                         hintText: 'HSN / SAC',
@@ -3105,7 +3322,7 @@ class _LineItemCardState extends State<_LineItemCard> {
                     flex: 2,
                     child: TextField(
                       controller: line.descCtrl,
-                      style: const TextStyle(fontSize: 12),
+                      style: TextStyle(fontSize: 12),
                       decoration: InputDecoration(
                         hintText: 'Description',
                         hintStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
@@ -3126,7 +3343,7 @@ class _LineItemCardState extends State<_LineItemCard> {
               ),
             ),
           // Details toggle
-          if (_hasProduct && widget.gstEnabled)
+          if (_hasProduct)
             InkWell(
               onTap: () => setState(() => _showDetails = !_showDetails),
               child: Container(
@@ -3197,7 +3414,7 @@ class _SmallField extends StatelessWidget {
           TextFormField(
             controller: ctrl,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
             onChanged: onChanged,
             validator: validator,
             decoration: InputDecoration(

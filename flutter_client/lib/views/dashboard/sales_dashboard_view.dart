@@ -1,4 +1,3 @@
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
@@ -41,12 +40,6 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
     });
   }
 
-  void _onFYChanged() {
-    if (mounted) {
-      _fetchWithPeriod(_selectedPeriod);
-    }
-  }
-
   String _fmt(double v) {
     if (v >= 10000000) return '${(v / 10000000).toStringAsFixed(1)}Cr';
     if (v >= 100000) return '${(v / 100000).toStringAsFixed(1)}L';
@@ -59,7 +52,6 @@ class _SalesDashboardViewState extends State<SalesDashboardView> {
   }
 
   void _nav(Widget view) {
-    final p = context.read<DashboardProvider>();
     Navigator.push(context, MaterialPageRoute(builder: (_) => view)).then((_) => _fetchWithPeriod(_selectedPeriod));
   }
 
@@ -719,7 +711,7 @@ class _OutstandingCollections extends StatelessWidget {
                                 fontSize: 13,
                                 fontWeight: FontWeight.w700,
                                 color: AppColors.warning,
-                                fontFeatures: const [FontFeature.tabularFigures()],
+                                fontFeatures: [FontFeature.tabularFigures()],
                               ),
                             ),
                             if (contactId != null) ...[

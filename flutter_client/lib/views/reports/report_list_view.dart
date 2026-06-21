@@ -5,7 +5,6 @@ import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
-import 'package:flutter_client/views/shared/design_system.dart' hide AppCard, AppEmptyState;
 import 'package:flutter_client/views/reports/trial_balance_view.dart';
 import 'package:flutter_client/views/reports/balance_sheet_view.dart';
 import 'package:flutter_client/views/reports/profit_loss_view.dart';

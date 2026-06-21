@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
-import 'package:flutter_client/utils/haptic_helper.dart';
 
 /// Summary statistics for the list header
 class ListSummaryData {
@@ -237,7 +235,7 @@ class _DocumentListViewState extends State<DocumentListView> {
         children: [
           Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
           const SizedBox(height: 2),
-          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: valueColor, fontFeatures: const [FontFeature.tabularFigures()])),
+          Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: valueColor, fontFeatures: [FontFeature.tabularFigures()])),
         ],
       ),
     );

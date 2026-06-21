@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field, EmailStr, model_validator
 from typing import List, Optional
 from datetime import date, datetime
 from decimal import Decimal
@@ -518,6 +518,14 @@ class RecurringInvoiceCreate(SchemaBase):
     terms_and_conditions: Optional[str] = None
     items: List[RecurringInvoiceItemCreate]
 
+    @model_validator(mode="after")
+    def validate_end_condition(self):
+        if self.end_mode == "ON_DATE" and self.end_date is None:
+            raise ValueError("end_date is required when end_mode is ON_DATE")
+        if self.end_mode == "AFTER_N" and self.max_occurrences is None:
+            raise ValueError("max_occurrences is required when end_mode is AFTER_N")
+        return self
+
 class RecurringInvoiceUpdate(SchemaBase):
     contact_id: Optional[uuid.UUID] = None
     template_name: Optional[str] = Field(None, min_length=1, max_length=150)
@@ -534,6 +542,14 @@ class RecurringInvoiceUpdate(SchemaBase):
     notes: Optional[str] = None
     terms_and_conditions: Optional[str] = None
     items: Optional[List[RecurringInvoiceItemCreate]] = None
+
+    @model_validator(mode="after")
+    def validate_end_condition(self):
+        if self.end_mode == "ON_DATE" and self.end_date is None:
+            raise ValueError("end_date is required when end_mode is ON_DATE")
+        if self.end_mode == "AFTER_N" and self.max_occurrences is None:
+            raise ValueError("max_occurrences is required when end_mode is AFTER_N")
+        return self
 
 class RecurringInvoiceResponse(SchemaBase):
     id: uuid.UUID

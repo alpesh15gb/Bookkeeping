@@ -289,8 +289,8 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   child: ElevatedButton.icon(
                     onPressed: _confirm,
-                    icon: const Icon(Icons.save_rounded, size: 16),
-                    label: const Text('Create Bill'),
+                    icon: Icon(Icons.save_rounded, size: 16),
+                    label: Text('Create Bill'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.brandNavy,
                       foregroundColor: Colors.white,
@@ -384,10 +384,10 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
+                Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.warning),
                 const SizedBox(width: 4),
                 Text('${warnings.length} warning${warnings.length > 1 ? 's' : ''}',
-                    style: const TextStyle(fontSize: 12, color: AppColors.warning)),
+                    style: TextStyle(fontSize: 12, color: AppColors.warning)),
               ],
             ),
           ),
@@ -417,7 +417,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
                     color: AppColors.successBg,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.check_circle_rounded, size: 12, color: AppColors.success),
@@ -433,7 +433,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
                     color: AppColors.warningBg,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Icon(Icons.add_circle_outline, size: 12, color: AppColors.warning),
@@ -653,7 +653,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
                     children: [
                       SizedBox(
                         width: 40,
-                        child: Text('${index + 1}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        child: Text('${index + 1}', style: TextStyle(fontWeight: FontWeight.bold)),
                       ),
                       Expanded(
                         flex: 3,
@@ -667,7 +667,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
                                   color: AppColors.warningBg,
                                   borderRadius: BorderRadius.circular(4),
                                 ),
-                                child: const Text('NEW', style: TextStyle(fontSize: 9, color: AppColors.warning, fontWeight: FontWeight.w700)),
+                                child: Text('NEW', style: TextStyle(fontSize: 9, color: AppColors.warning, fontWeight: FontWeight.w700)),
                               ),
                             Expanded(
                               child: TextField(
@@ -752,14 +752,14 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
                         child: Text(
                           '₹${amount.toStringAsFixed(2)}',
                           textAlign: TextAlign.right,
-                          style: const TextStyle(fontWeight: FontWeight.w600),
+                          style: TextStyle(fontWeight: FontWeight.w600),
                         ),
                       ),
                       const SizedBox(width: 8),
                       SizedBox(
                         width: 40,
                         child: IconButton(
-                          icon: const Icon(Icons.delete_outline, color: AppColors.error, size: 18),
+                          icon: Icon(Icons.delete_outline, color: AppColors.error, size: 18),
                           onPressed: () => _removeLine(index),
                         ),
                       ),
@@ -772,8 +772,8 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
             padding: const EdgeInsets.all(16),
             child: ElevatedButton.icon(
               onPressed: _addLine,
-              icon: const Icon(Icons.add, size: 16),
-              label: const Text('Add Row'),
+              icon: Icon(Icons.add, size: 16),
+              label: Text('Add Row'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.brandNavy,
                 foregroundColor: Colors.white,
@@ -797,7 +797,7 @@ class _ScannedBillPreviewDialogState extends State<ScannedBillPreviewDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+              Text('Total', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
               Text('₹${_total.toStringAsFixed(2)}',
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: AppColors.brandNavy)),
             ],

@@ -182,7 +182,7 @@ class _ReturnsListViewState extends State<ReturnsListView> with SingleTickerProv
             hoverActions: item.status == 'POSTED'
                 ? [
                     IconButton(
-                      icon: const Icon(Icons.cancel_outlined, size: 18, color: AppColors.error),
+                      icon: Icon(Icons.cancel_outlined, size: 18, color: AppColors.error),
                       onPressed: () {
                         final match = allItems.firstWhere((e) => e['id'].toString() == item.id, orElse: () => {});
                         _cancelItem(match, isSales);

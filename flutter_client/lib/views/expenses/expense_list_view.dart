@@ -46,17 +46,6 @@ class _ExpenseListViewState extends State<ExpenseListView> {
     });
   }
 
-  void _selectAll() {
-    final provider = context.read<ExpenseProvider>();
-    setState(() {
-      if (_selectedIds.length == provider.items.length) {
-        _selectedIds.clear();
-      } else {
-        _selectedIds = provider.items.map((e) => e['id'].toString()).toSet();
-      }
-    });
-  }
-
   void _clearSelection() {
     setState(() {
       _selectedIds.clear();
@@ -122,19 +111,6 @@ class _ExpenseListViewState extends State<ExpenseListView> {
       context,
       MaterialPageRoute(builder: (_) => ExpenseDetailView(expenseId: id)),
     ).then((_) => context.read<ExpenseProvider>().fetchExpenses());
-  }
-
-  Future<void> _deleteExpense(String id) async {
-    final confirm = await AppConfirmDialog.show(context, title: 'Delete?', message: 'Delete this expense?');
-    if (confirm == true) {
-      final provider = context.read<ExpenseProvider>();
-      final success = await provider.deleteExpense(id);
-      if (success) {
-        provider.fetchExpenses(page: provider.currentPage);
-      } else if (mounted) {
-        AppToast.error(context, provider.errorMessage ?? 'Delete failed');
-      }
-    }
   }
 
   @override

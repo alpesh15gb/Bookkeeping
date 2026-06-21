@@ -9,7 +9,6 @@ import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 import 'package:flutter_client/views/expenses/expense_form_view.dart';
 import 'package:flutter_client/views/payments/payment_form_view.dart';
 import 'package:flutter_client/views/bills/bill_form_view.dart';
-import 'package:flutter_client/views/invoices/invoice_detail_view.dart';
 
 class MobileHomeView extends StatelessWidget {
   const MobileHomeView({super.key});
@@ -174,7 +173,7 @@ class MobileHomeView extends StatelessWidget {
       children: [
         Expanded(child: _buildSnapshotCard('PAYABLE', AmountFormat.format(d.payables), AppColors.warning, Icons.arrow_upward_rounded)),
         const SizedBox(width: 10),
-        Expanded(child: _buildSnapshotCard('EXPENSES', AmountFormat.format(d.totalExpenses ?? 0), AppColors.error, Icons.receipt_long_outlined)),
+        Expanded(child: _buildSnapshotCard('EXPENSES', AmountFormat.format(d.totalExpenses), AppColors.error, Icons.receipt_long_outlined)),
         const SizedBox(width: 10),
         Expanded(child: _buildSnapshotCard('PROFIT', AmountFormat.format(d.netProfit), AppColors.success, Icons.trending_up_rounded)),
       ],
@@ -205,7 +204,7 @@ class MobileHomeView extends StatelessWidget {
           const SizedBox(height: 10),
           Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: AppColors.textMuted, letterSpacing: 0.5)),
           const SizedBox(height: 3),
-          Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontFeatures: const [FontFeature.tabularFigures()])),
+          Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontFeatures: [FontFeature.tabularFigures()])),
         ],
       ),
     );
@@ -344,7 +343,6 @@ class MobileHomeView extends StatelessWidget {
             final name = inv['contact_name']?.toString() ?? 'Party';
             final total = double.tryParse((inv['total'] ?? 0).toString()) ?? 0.0;
             final status = inv['status']?.toString() ?? 'DRAFT';
-            final id = inv['id']?.toString() ?? inv['invoice_id']?.toString();
             final isCredit = status == 'CANCELLED';
 
             Color statusDotColor;
@@ -415,7 +413,7 @@ class MobileHomeView extends StatelessWidget {
                   ),
                   Text(
                     AmountFormat.format(total),
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontFeatures: const [FontFeature.tabularFigures()]),
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontFeatures: [FontFeature.tabularFigures()]),
                   ),
                 ],
               ),

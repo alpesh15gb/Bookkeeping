@@ -187,10 +187,10 @@ class _BillDetailViewState extends State<BillDetailView> {
                 _buildHeaderStat('AMOUNT', AmountFormat.format(total)),
                 const SizedBox(width: 24),
                 _buildHeaderStat('ITEMS', '${bill.lines.length}'),
-                if (bill.billDate != null) ...[
-                  const SizedBox(width: 24),
-                  _buildHeaderStat('DATE', AppDate.format(bill.billDate)),
-                ],
+                ...[
+                const SizedBox(width: 24),
+                _buildHeaderStat('DATE', AppDate.format(bill.billDate)),
+              ],
               ],
             ),
           ],
@@ -254,7 +254,7 @@ class _BillDetailViewState extends State<BillDetailView> {
       children: [
         Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
         const SizedBox(height: 2),
-        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: valueColor, fontFeatures: const [FontFeature.tabularFigures()])),
+        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: valueColor, fontFeatures: [FontFeature.tabularFigures()])),
       ],
     );
   }
@@ -384,7 +384,7 @@ class _BillDetailViewState extends State<BillDetailView> {
             children: [
               Text('TOTAL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               const Spacer(),
-              Text(AmountFormat.format(total), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.brandNavy, fontFeatures: const [FontFeature.tabularFigures()])),
+              Text(AmountFormat.format(total), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.brandNavy, fontFeatures: [FontFeature.tabularFigures()])),
             ],
           ),
         ],

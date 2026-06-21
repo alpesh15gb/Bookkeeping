@@ -116,7 +116,7 @@ class _CreditDebitNoteDetailViewState extends State<CreditDebitNoteDetailView> {
       sections: [
         // ── Status Progression ──
         StatusProgression(
-          states: const ['DRAFT', 'POSTED', 'CANCELLED'],
+          states: ['DRAFT', 'POSTED', 'CANCELLED'],
           currentState: status,
           stateLabels: const {
             'DRAFT': 'Draft',

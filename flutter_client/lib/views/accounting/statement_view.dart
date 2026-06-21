@@ -300,7 +300,7 @@ class _StatementViewState extends State<StatementView> with SingleTickerProvider
                 Text('Net Profit', style: AppTextStyles.h2),
                 Text(
                   '₹${_fmtCurrency(_plData!['net_profit'])}',
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.info, fontFeatures: [FontFeature.tabularFigures()]),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: AppColors.info, fontFeatures: [FontFeature.tabularFigures()]),
                 ),
               ],
             ),

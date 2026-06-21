@@ -2,6 +2,7 @@ export 'app_card.dart';
 export 'app_status_badge.dart';
 export 'app_kpi_card.dart';
 export 'app_table.dart';
+export 'app_table_enhanced.dart';
 export 'app_search_field.dart';
 export 'app_filter_chip.dart';
 export 'app_section_header.dart';

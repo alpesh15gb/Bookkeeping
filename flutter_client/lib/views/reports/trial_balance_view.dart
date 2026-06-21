@@ -99,10 +99,6 @@ class _TrialBalanceViewState extends State<TrialBalanceView> {
       );
     }
 
-    final totalOpeningDeb = double.tryParse((_data!['total_opening_debits'] ?? 0).toString()) ?? 0.0;
-    final totalOpeningCred = double.tryParse((_data!['total_opening_credits'] ?? 0).toString()) ?? 0.0;
-    final totalDebits = double.tryParse((_data!['total_debits'] ?? 0).toString()) ?? 0.0;
-    final totalCredits = double.tryParse((_data!['total_credits'] ?? 0).toString()) ?? 0.0;
     final totalClosingDeb = double.tryParse((_data!['total_closing_debits'] ?? 0).toString()) ?? 0.0;
     final totalClosingCred = double.tryParse((_data!['total_closing_credits'] ?? 0).toString()) ?? 0.0;
 

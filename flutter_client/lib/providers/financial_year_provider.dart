@@ -182,7 +182,7 @@ class FinancialYearProvider extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   YearEndDashboard? _dashboard;
-  String? _pendingFySwitch; // Track pending FY switch for offline sync
+  bool _initialized = false;
 
   FinancialYear? get activeYear => _activeYear;
   List<FinancialYear> get availableYears => _availableYears;
@@ -195,7 +195,9 @@ class FinancialYearProvider extends ChangeNotifier {
   final ApiClient _client = ApiClient();
 
   Future<void> init() async {
+    if (_initialized) return;
     await _loadYears();
+    _initialized = true;
   }
 
   Future<void> _loadYears() async {
@@ -251,22 +253,6 @@ class FinancialYearProvider extends ChangeNotifier {
   /// Fallback: generate FYs locally when backend has no FY records yet.
   Future<void> _loadYearsLocal() async {
     int earliestYear = DateTime.now().year - 5;
-    try {
-      final tenantId = ApiClient.tenantId;
-      if (tenantId != null) {
-        final res = await _client.get(
-          Uri.parse('${ApiClient.baseUrl}/companies/$tenantId'),
-        );
-        if (res.statusCode == 200) {
-          final company = jsonDecode(res.body) as Map<String, dynamic>;
-          final createdAt = company['created_at']?.toString();
-          if (createdAt != null) {
-            final dt = DateTime.tryParse(createdAt);
-            if (dt != null) earliestYear = dt.year;
-          }
-        }
-      }
-    } catch (_) {}
 
     final currentYear = DateTime.now().year;
     final now = DateTime.now();
@@ -332,8 +318,7 @@ class FinancialYearProvider extends ChangeNotifier {
         notifyListeners();
       }
     } catch (_) {
-      // Offline/timeout - queue switch
-      _pendingFySwitch = year.id;
+      // Offline/timeout: keep the optimistic local switch.
     }
   }
 

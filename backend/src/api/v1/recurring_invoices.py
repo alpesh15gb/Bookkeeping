@@ -155,6 +155,27 @@ def update_recurring_invoice(
     update_data = payload.model_dump(exclude_unset=True)
     items_data = update_data.pop("items", None)
 
+    if "contact_id" in update_data:
+        contact = db.query(Contact).filter(
+            Contact.id == update_data["contact_id"],
+            Contact.tenant_id == tenant_id,
+            Contact.deleted_at == None,
+        ).first()
+        if not contact:
+            raise HTTPException(status_code=404, detail="Contact not found.")
+
+    product_by_id = {}
+    if items_data is not None:
+        for item_data in items_data:
+            product = db.query(Product).filter(
+                Product.id == item_data["product_id"],
+                Product.tenant_id == tenant_id,
+                Product.deleted_at == None,
+            ).first()
+            if not product:
+                raise HTTPException(status_code=400, detail=f"Product {item_data['product_id']} not found.")
+            product_by_id[item_data["product_id"]] = product
+
     for field, value in update_data.items():
         setattr(recurring, field, value)
 
@@ -165,15 +186,16 @@ def update_recurring_invoice(
         db.flush()
 
         for item_data in items_data:
+            product = product_by_id[item_data["product_id"]]
             db_item = RecurringInvoiceItem(
                 recurring_invoice_id=recurring.id,
-                product_id=item_data.product_id,
-                description=item_data.description,
-                quantity=item_data.quantity,
-                rate=item_data.rate,
-                discount=item_data.discount or Decimal("0.0000"),
-                hsn_sac=item_data.hsn_sac,
-                gst_rate=item_data.gst_rate,
+                product_id=item_data["product_id"],
+                description=item_data.get("description") or product.name,
+                quantity=item_data["quantity"],
+                rate=item_data["rate"],
+                discount=item_data.get("discount") or Decimal("0.0000"),
+                hsn_sac=item_data["hsn_sac"],
+                gst_rate=item_data["gst_rate"],
             )
             db.add(db_item)
 

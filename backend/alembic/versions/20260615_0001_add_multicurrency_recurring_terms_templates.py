@@ -6,6 +6,7 @@ Create Date: 2026-06-15
 """
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlalchemy import inspect
 
 revision = "20260615_0001"
@@ -53,10 +54,10 @@ def upgrade() -> None:
     if not _table_exists("recurring_invoices"):
         op.create_table(
             "recurring_invoices",
-            sa.Column("id", sa.dialects.postgresql.UUID(as_uuid=True), primary_key=True),
-            sa.Column("tenant_id", sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
-            sa.Column("contact_id", sa.dialects.postgresql.UUID(as_uuid=True), sa.ForeignKey("contacts.id"), nullable=False),
-            sa.Column("source_invoice_id", sa.dialects.postgresql.UUID(as_uuid=True), sa.ForeignKey("invoices.id"), nullable=True),
+            sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+            sa.Column("tenant_id", postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column("contact_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("contacts.id"), nullable=False),
+            sa.Column("source_invoice_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("invoices.id"), nullable=True),
             sa.Column("template_name", sa.String(150), nullable=False),
             sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
             sa.Column("frequency", sa.String(20), nullable=False, server_default="MONTHLY"),
@@ -83,9 +84,9 @@ def upgrade() -> None:
     if not _table_exists("recurring_invoice_items"):
         op.create_table(
             "recurring_invoice_items",
-            sa.Column("id", sa.dialects.postgresql.UUID(as_uuid=True), primary_key=True),
-            sa.Column("recurring_invoice_id", sa.dialects.postgresql.UUID(as_uuid=True), sa.ForeignKey("recurring_invoices.id"), nullable=False),
-            sa.Column("product_id", sa.dialects.postgresql.UUID(as_uuid=True), sa.ForeignKey("products.id"), nullable=True),
+            sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+            sa.Column("recurring_invoice_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("recurring_invoices.id"), nullable=False),
+            sa.Column("product_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("products.id"), nullable=True),
             sa.Column("description", sa.String(255), nullable=True),
             sa.Column("quantity", sa.Numeric(12, 4), nullable=False),
             sa.Column("rate", sa.Numeric(15, 4), nullable=False),
@@ -99,8 +100,8 @@ def upgrade() -> None:
     if not _table_exists("terms_templates"):
         op.create_table(
             "terms_templates",
-            sa.Column("id", sa.dialects.postgresql.UUID(as_uuid=True), primary_key=True),
-            sa.Column("tenant_id", sa.dialects.postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id"), nullable=True),
+            sa.Column("id", postgresql.UUID(as_uuid=True), primary_key=True),
+            sa.Column("tenant_id", postgresql.UUID(as_uuid=True), sa.ForeignKey("tenants.id"), nullable=True),
             sa.Column("name", sa.String(150), nullable=False),
             sa.Column("content", sa.Text(), nullable=False),
             sa.Column("is_preset", sa.Boolean(), nullable=False, server_default=sa.text("false")),

@@ -26,6 +26,16 @@ class TermsTemplateModel {
     );
   }
 
+  factory TermsTemplateModel.presetFromJson(Map<String, dynamic> json, int index) {
+    return TermsTemplateModel(
+      id: 'preset-$index',
+      name: json['name'] ?? '',
+      content: json['content'] ?? '',
+      isPreset: true,
+      isActive: true,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'name': name,

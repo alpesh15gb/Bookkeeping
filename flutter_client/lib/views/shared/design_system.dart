@@ -131,7 +131,7 @@ class AppMetric extends StatelessWidget {
         fontSize: fontSize ?? 18,
         fontWeight: FontWeight.w700,
         color: c,
-        fontFeatures: const [FontFeature.tabularFigures()],
+        fontFeatures: [FontFeature.tabularFigures()],
         letterSpacing: 0.1,
         height: 1.2,
       ),
@@ -951,7 +951,7 @@ class DocumentHero extends StatelessWidget {
                     fontSize: 32,
                     fontWeight: FontWeight.w700,
                     color: AppColors.textPrimary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+                    fontFeatures: [FontFeature.tabularFigures()],
                     letterSpacing: 0.1,
                     height: 1.1,
                   ),
@@ -1076,7 +1076,7 @@ class CustomerCard extends StatelessWidget {
             fontSize: 11,
             fontWeight: FontWeight.w600,
             color: isAlert ? AppColors.warning : AppColors.textPrimary,
-            fontFeatures: const [FontFeature.tabularFigures()],
+            fontFeatures: [FontFeature.tabularFigures()],
           ),
         ),
       ],
@@ -1147,14 +1147,14 @@ class ItemTable extends StatelessWidget {
               Expanded(
                 child: Text(
                   item.qty,
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFeatures: const [FontFeature.tabularFigures()]),
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFeatures: [FontFeature.tabularFigures()]),
                   textAlign: TextAlign.center,
                 ),
               ),
               Expanded(
                 child: Text(
                   item.rate,
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFeatures: const [FontFeature.tabularFigures()]),
+                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontFeatures: [FontFeature.tabularFigures()]),
                   textAlign: TextAlign.right,
                 ),
               ),

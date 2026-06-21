@@ -118,7 +118,7 @@ class _ContactFormViewState extends State<ContactFormView> {
     final gstin = _gstinController.text.trim().toUpperCase();
     if (gstin.length != 15) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('Enter a valid 15-character GSTIN first'), backgroundColor: AppColors.warning),
+        SnackBar(content: Text('Enter a valid 15-character GSTIN first'), backgroundColor: AppColors.warning),
       );
       return;
     }
@@ -127,7 +127,7 @@ class _ContactFormViewState extends State<ContactFormView> {
     final captchaData = await provider.fetchGstCaptcha();
     if (captchaData == null || !mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: const Text('Could not fetch captcha from GST portal'), backgroundColor: AppColors.error),
+        SnackBar(content: Text('Could not fetch captcha from GST portal'), backgroundColor: AppColors.error),
       );
       return;
     }

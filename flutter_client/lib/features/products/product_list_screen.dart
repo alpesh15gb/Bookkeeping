@@ -96,7 +96,7 @@ class _ProductListScreenState extends State<ProductListScreen> {
               : filtered.isEmpty
                   ? AppEmptyState(icon: Icons.inventory_2, title: 'No products found')
                   : AppTable(
-                      columns: const [
+                      columns: [
                         TableColumn(label: 'Product', width: 220),
                         TableColumn(label: 'SKU', width: 120),
                         TableColumn(label: 'HSN/SAC', width: 100),

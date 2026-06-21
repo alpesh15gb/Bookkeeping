@@ -7,7 +7,6 @@ import 'package:flutter_client/models/product.dart';
 import 'package:flutter_client/views/products/product_form_view.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/document_list_view.dart';
-import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/utils/haptic_helper.dart';
 
 class ProductListView extends StatefulWidget {

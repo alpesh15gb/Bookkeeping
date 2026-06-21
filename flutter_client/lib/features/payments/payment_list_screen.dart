@@ -71,57 +71,7 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
                       icon: Icons.payments,
                       title: _showReceipts ? 'No payments received' : 'No payments made',
                     )
-                  : _showReceipts
-                      ? AppTable(
-                          columns: const [
-                            TableColumn(label: 'Date', width: 110),
-                            TableColumn(label: 'Party', width: 200),
-                            TableColumn(label: 'Mode', width: 120),
-                            TableColumn(label: 'Reference', width: 140),
-                            TableColumn(label: 'Amount', width: 120),
-                            TableColumn(label: 'Status', width: 100),
-                          ],
-                          rows: receipts.map((p) {
-                            return AppTableRow(
-                              cells: [
-                                Text(_formatDate(p.paymentDate), style: AppTypography.bodySmall),
-                                Text(p.contactName ?? '', style: AppTypography.bodyMedium),
-                                Text(p.paymentMode, style: AppTypography.bodySmall),
-                                Text(p.referenceNumber ?? '-', style: AppTypography.bodySmall),
-                                AppAmountText(amount: p.amount, style: AppTypography.amountTiny),
-                                AppStatusBadge(
-                                  status: p.status == 'COMPLETED' ? InvoiceStatus.paid : InvoiceStatus.pending,
-                                  isCompact: true,
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        )
-                      : AppTable(
-                          columns: const [
-                            TableColumn(label: 'Date', width: 110),
-                            TableColumn(label: 'Vendor', width: 200),
-                            TableColumn(label: 'Mode', width: 120),
-                            TableColumn(label: 'Reference', width: 140),
-                            TableColumn(label: 'Amount', width: 120),
-                            TableColumn(label: 'Status', width: 100),
-                          ],
-                          rows: disbursements.map((p) {
-                            return AppTableRow(
-                              cells: [
-                                Text(_formatDate(p.paymentDate), style: AppTypography.bodySmall),
-                                Text(p.vendorName ?? '', style: AppTypography.bodyMedium),
-                                Text(p.paymentMode, style: AppTypography.bodySmall),
-                                Text(p.referenceNumber ?? '-', style: AppTypography.bodySmall),
-                                AppAmountText(amount: p.amount, style: AppTypography.amountTiny),
-                                AppStatusBadge(
-                                  status: p.status == 'COMPLETED' ? InvoiceStatus.paid : InvoiceStatus.pending,
-                                  isCompact: true,
-                                ),
-                              ],
-                            );
-                          }).toList(),
-                        ),
+                  : _buildEnhancedTable(_showReceipts ? receipts : disbursements, _showReceipts),
         ),
       ],
     );
@@ -138,3 +88,48 @@ class _PaymentListScreenState extends State<PaymentListScreen> {
     }
   }
 }
+  Widget _buildEnhancedTable(List<dynamic> items, bool isReceipts) {
+    final rows = items.map((p) {
+      final statusParsed = p.status == 'COMPLETED' ? InvoiceStatus.paid : InvoiceStatus.pending;
+      return <String, dynamic>{
+        'payment_date': _formatDate(p.paymentDate),
+        'contact_name': isReceipts ? p.contactName : p.vendorName,
+        'payment_mode': p.paymentMode,
+        'reference_number': p.referenceNumber ?? '-',
+        'amount': p.amount,
+        'status': p.status,
+        '_parseStatus': statusParsed,
+      };
+    }).toList();
+
+    final totalAmount = rows.fold<double>(0, (sum, row) => sum + row['amount'] as double);
+
+    return AppTable(
+      title: '${rows.length} payment${rows.length == 1 ? '' : 's'} ' + (isReceipts ? 'received' : 'made'),
+      columns: const [
+        AppTableColumn(label: 'Date', width: 110, fieldKey: 'payment_date', isSortable: true),
+        AppTableColumn(label: isReceipts ? 'Customer' : 'Vendor', width: 200, fieldKey: 'contact_name', isSortable: true),
+        AppTableColumn(label: 'Mode', width: 120, fieldKey: 'payment_mode'),
+        AppTableColumn(label: 'Reference', width: 140, fieldKey: 'reference_number'),
+        AppTableColumn(label: 'Amount', width: 120, fieldKey: 'amount', alignment: Alignment.centerRight, isSortable: true),
+        AppTableColumn(label: 'Status', width: 100, fieldKey: 'status', alignment: Alignment.center, isSortable: true),
+      ],
+      rows: rows,
+      stickyHeader: true,
+      stickyFooter: true,
+      density: AppTableDensity.comfortable,
+      enableKeyboardNav: true,
+      enableColumnChooser: true,
+      enableExport: true,
+      summaryRows: [
+        {
+          'payment_date': 'TOTALS',
+          'contact_name': '',
+          'payment_mode': '',
+          'reference_number': '',
+          'amount': totalAmount,
+          'status': '',
+        },
+      ],
+    );
+  }

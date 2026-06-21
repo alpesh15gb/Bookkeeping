@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/misc_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class AuditLogListView extends StatefulWidget {
   const AuditLogListView({super.key});
@@ -45,7 +44,7 @@ class _AuditLogListViewState extends State<AuditLogListView> {
         onRefresh: _fetch,
         child: items.isEmpty
             ? ListView(
-                children: const [
+                children: [
                   SizedBox(height: 120),
                   EmptyState(
                     icon: Icons.history_rounded,

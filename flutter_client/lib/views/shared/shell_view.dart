@@ -70,7 +70,7 @@ void _showFYSidebarPicker(BuildContext context, FinancialYearProvider provider) 
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.goldAccent),
+                  Icon(Icons.calendar_today_outlined, size: 18, color: AppColors.goldAccent),
                   const SizedBox(width: 8),
                   const Text(
                     'Financial Years',
@@ -87,7 +87,6 @@ void _showFYSidebarPicker(BuildContext context, FinancialYearProvider provider) 
                   final year = provider.availableYears[i];
                   final isActive = provider.activeYear?.id == year.id;
                   final statusColor = year.status.color;
-                  final statusBg = year.status.bgColor;
 
                   return Container(
                     decoration: BoxDecoration(
@@ -148,7 +147,7 @@ void _showFYSidebarPicker(BuildContext context, FinancialYearProvider provider) 
                         ],
                       ),
                       trailing: isActive
-                          ? const Icon(Icons.check_circle, size: 18, color: AppColors.goldAccent)
+                          ? Icon(Icons.check_circle, size: 18, color: AppColors.goldAccent)
                           : null,
                       onTap: () {
                         provider.setActiveYear(year);
@@ -1635,12 +1634,12 @@ class _HistoricalYearBanner extends StatelessWidget {
             color: AppColors.error.withValues(alpha: 0.06),
             child: Row(
               children: [
-                const Icon(Icons.lock_outline_rounded, size: 14, color: AppColors.error),
+                Icon(Icons.lock_outline_rounded, size: 14, color: AppColors.error),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     'FY ${year.name} is ${year.status.label.toLowerCase()} and locked. No transactions can be modified.',
-                    style: const TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600),
+                    style: TextStyle(fontSize: 12, color: AppColors.error, fontWeight: FontWeight.w600),
                   ),
                 ),
                 TextButton(

@@ -96,6 +96,7 @@ final appRouter = GoRouter(
         GoRoute(path: '/settings', name: 'settings', builder: (context, state) => const SettingsScreen()),
         GoRoute(path: '/recurring-invoices', name: 'recurring-invoices', builder: (context, state) => const RecurringInvoiceListScreen()),
         GoRoute(path: '/recurring-invoices/create', name: 'create-recurring-invoice', builder: (context, state) => const RecurringInvoiceFormScreen()),
+        GoRoute(path: '/recurring-invoices/:id/edit', name: 'edit-recurring-invoice', builder: (context, state) => RecurringInvoiceFormScreen(id: state.pathParameters['id']!)),
         GoRoute(path: '/recurring-invoices/:id', name: 'recurring-invoice-detail', builder: (context, state) => RecurringInvoiceDetailScreen(id: state.pathParameters['id']!)),
         GoRoute(path: '/terms-templates', name: 'terms-templates', builder: (context, state) => const TermsTemplatesScreen()),
       ],

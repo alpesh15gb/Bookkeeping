@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/sales_analytics_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class SalesAnalyticsView extends StatefulWidget {
   const SalesAnalyticsView({super.key});
@@ -66,7 +65,7 @@ class _SalesAnalyticsViewState extends State<SalesAnalyticsView> with SingleTick
   Widget _buildList(List<dynamic> items, String titleKey, String amountKey) {
     if (items.isEmpty) {
       return ListView(
-        children: const [
+        children: [
           SizedBox(height: 120),
           EmptyState(
             icon: Icons.bar_chart_rounded,

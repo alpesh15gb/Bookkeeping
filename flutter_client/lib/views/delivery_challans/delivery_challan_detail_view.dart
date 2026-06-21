@@ -79,7 +79,7 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
   Widget build(BuildContext context) {
     final c = _challan;
     final status = c?['status'] ?? 'DRAFT';
-    final issueDate = AppDate.format(c?['issued_date']?.toString()) ?? AppDate.format(c?['issue_date']?.toString()) ?? 'N/A';
+    final issueDate = AppDate.format(c?['issued_date']?.toString());
     final lines = (c?['lines'] is List ? c!['lines'] as List : []);
 
     return DocumentPreviewScreen(
@@ -101,7 +101,7 @@ class _DeliveryChallanDetailViewState extends State<DeliveryChallanDetailView> {
       sections: [
         // ── Status Progression ──
         StatusProgression(
-          states: const ['DRAFT', 'ISSUED', 'DELIVERED'],
+          states: ['DRAFT', 'ISSUED', 'DELIVERED'],
           currentState: status,
           stateLabels: const {
             'DRAFT': 'Draft',

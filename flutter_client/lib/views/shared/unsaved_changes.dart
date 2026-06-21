@@ -62,7 +62,7 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
                 color: AppColors.warningBg,
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.warning_amber_rounded,
                 size: 20,
                 color: AppColors.warning,

@@ -1,17 +1,9 @@
-import 'dart:convert';
-import 'dart:typed_data';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/invoice_provider.dart';
 import 'package:flutter_client/models/invoice.dart';
-import 'package:flutter_client/views/invoices/invoice_form_view.dart';
 import 'package:flutter_client/views/invoices/invoice_detail_view.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/document_list_view.dart';
-import 'package:flutter_client/utils/download_stub.dart' if (dart.library.html) 'package:flutter_client/utils/download_web.dart';
 
 class InvoiceListView extends StatefulWidget {
   const InvoiceListView({super.key});

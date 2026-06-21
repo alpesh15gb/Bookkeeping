@@ -330,7 +330,7 @@ class LockBanner extends StatelessWidget {
             status.isTerminal
                 ? 'This document is ${status.label.toLowerCase()} and cannot be modified.'
                 : 'This document is ${status.label.toLowerCase()} — fields are locked.',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: AppColors.immutableText,
@@ -353,17 +353,17 @@ class CancelledBanner extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
       decoration: BoxDecoration(
         color: AppColors.statusCancelledBg,
-        border: const Border(
+        border: Border(
           left: BorderSide(color: AppColors.statusCancelled, width: 3),
         ),
       ),
       child: Row(
         children: [
-          const Icon(Icons.cancel_rounded, size: 18, color: AppColors.statusCancelled),
+          Icon(Icons.cancel_rounded, size: 18, color: AppColors.statusCancelled),
           const SizedBox(width: 10),
           Text(
             'This document has been cancelled.',
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 13,
               fontWeight: FontWeight.w600,
               color: AppColors.statusCancelled,
@@ -427,12 +427,12 @@ class ConflictWarning extends StatelessWidget {
       ),
       child: Row(
         children: [
-          const Icon(Icons.sync_problem_rounded, size: 18, color: AppColors.staleText),
+          Icon(Icons.sync_problem_rounded, size: 18, color: AppColors.staleText),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
               message ?? 'This document has changed since you opened it.',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: AppColors.staleText,
@@ -517,7 +517,6 @@ class AmountText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isNegative = value < 0;
     final style = large
         ? AppTextStyles.amountLarge
         : compact
@@ -755,7 +754,7 @@ class ErrorState extends StatelessWidget {
             color: AppColors.errorBg,
             borderRadius: BorderRadius.circular(14),
           ),
-          child: const Icon(
+          child: Icon(
             Icons.error_outline_rounded,
             size: 26,
             color: AppColors.error,
@@ -1266,7 +1265,7 @@ class AppVoucherHeader extends StatelessWidget implements PreferredSizeWidget {
                 color: AppColors.warningBg,
                 borderRadius: BorderRadius.circular(AppRadius.xs),
               ),
-              child: const Text(
+              child: Text(
                 'DRAFT RECOVERED',
                 style: TextStyle(color: AppColors.warning, fontSize: 9, fontWeight: FontWeight.bold),
               ),
@@ -1353,7 +1352,7 @@ class AppBottomTotalBar extends StatelessWidget {
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                           color: Colors.white,
-                          fontFeatures: const [FontFeature.tabularFigures()],
+                          fontFeatures: [FontFeature.tabularFigures()],
                         ),
                       ),
                     ],
@@ -1549,7 +1548,7 @@ class AppAttachmentWidget extends StatelessWidget {
                 title: Text(fileNames[idx]),
                 trailing: onRemoveAttachment != null
                     ? IconButton(
-                        icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                        icon: Icon(Icons.delete_outline, color: AppColors.error),
                         onPressed: () => onRemoveAttachment!(idx),
                       )
                     : null,
@@ -1578,9 +1577,9 @@ class AppDraftIndicator extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
+          Icon(Icons.warning_amber_rounded, size: 14, color: AppColors.warning),
           const SizedBox(width: 6),
-          const Text(
+          Text(
             'Draft available',
             style: TextStyle(color: AppColors.warning, fontWeight: FontWeight.w600, fontSize: 12),
           ),
@@ -2108,7 +2107,7 @@ class _CompactDocumentCardState extends State<CompactDocumentCard> {
                         ),
                         Text(
                           AmountFormat.format(widget.amount),
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontFeatures: const [FontFeature.tabularFigures()]),
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary, fontFeatures: [FontFeature.tabularFigures()]),
                         ),
                       ],
                     ),
@@ -2139,7 +2138,7 @@ class _CompactDocumentCardState extends State<CompactDocumentCard> {
                           const SizedBox(width: 4),
                           Text(
                             AmountFormat.format(widget.balanceAmount!),
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.error, fontFeatures: const [FontFeature.tabularFigures()]),
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.error, fontFeatures: [FontFeature.tabularFigures()]),
                           ),
                         ],
                       ),
@@ -2202,7 +2201,7 @@ class SummaryStatsBar extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                      fontFeatures: [FontFeature.tabularFigures()],
                       color: s.color ?? AppColors.textPrimary,
                     ),
                   ),
@@ -2462,7 +2461,7 @@ class HeroSummaryCard extends StatelessWidget {
               fontSize: 28,
               fontWeight: FontWeight.w700,
               color: amountColor ?? AppColors.textPrimary,
-              fontFeatures: const [FontFeature.tabularFigures()],
+              fontFeatures: [FontFeature.tabularFigures()],
               letterSpacing: 0.1,
               height: 1.2,
             ),

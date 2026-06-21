@@ -186,7 +186,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Icon(Icons.error_outline_rounded, color: AppColors.error, size: 48),
+                Icon(Icons.error_outline_rounded, color: AppColors.error, size: 48),
                 const SizedBox(height: 16),
                 Text('Pre-closure Check Failed', style: AppTextStyles.h2),
                 const SizedBox(height: 8),
@@ -237,7 +237,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
           ),
           child: Center(
             child: isDone
-                ? const Icon(Icons.check, size: 16, color: Colors.white)
+                ? Icon(Icons.check, size: 16, color: Colors.white)
                 : Text('${index + 1}', style: TextStyle(
                     color: isActive ? Colors.white : AppColors.textSecondary,
                     fontWeight: FontWeight.bold, fontSize: 12)),
@@ -437,9 +437,9 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
                             style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
                         ]),
                       ),
-                      const Icon(Icons.arrow_forward_rounded, color: AppColors.goldAccent),
+                      Icon(Icons.arrow_forward_rounded, color: AppColors.goldAccent),
                       Expanded(
-                        child: Column(children: const [
+                        child: Column(children: [
                           Icon(Icons.shield_outlined, color: AppColors.success),
                           SizedBox(height: 4),
                           Text('Retained Earnings\n(EQT-RE updated)', textAlign: TextAlign.center,
@@ -495,14 +495,14 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
                     children: [
                       Row(
                         children: [
-                          const Icon(Icons.warning_amber_rounded, color: AppColors.warning),
+                          Icon(Icons.warning_amber_rounded, color: AppColors.warning),
                           const SizedBox(width: 8),
-                          const Text('Warning: Permanent Operation',
+                          Text('Warning: Permanent Operation',
                             style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.warning)),
                         ],
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Ensure all tax audits, returns, adjustments, depreciation, and reconciliations are finalized. '
                         'Once locked, modifications cannot be made to the books.',
                         style: TextStyle(fontSize: 12, color: AppColors.warning),
@@ -548,7 +548,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 64),
+                Icon(Icons.check_circle_rounded, color: AppColors.success, size: 64),
                 const SizedBox(height: 24),
                 Text('Financial Year Closed', style: AppTextStyles.display.copyWith(fontSize: 24)),
                 const SizedBox(height: 12),
@@ -587,8 +587,8 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold)),
-        Text(value, style: const TextStyle(fontFamily: 'monospace')),
+        Text(label, style: TextStyle(fontWeight: FontWeight.bold)),
+        Text(value, style: TextStyle(fontFamily: 'monospace')),
       ],
     );
   }
@@ -627,7 +627,7 @@ class _YearEndCloseViewState extends State<YearEndCloseView> {
                 ElevatedButton(
                   onPressed: canProceed ? () => setState(() => _currentStep++) : null,
                   child: Row(
-                    children: const [
+                    children: [
                       Text('Next'),
                       SizedBox(width: 8),
                       Icon(Icons.arrow_forward, size: 16),

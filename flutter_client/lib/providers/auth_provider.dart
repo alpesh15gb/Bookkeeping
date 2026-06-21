@@ -21,8 +21,10 @@ class AuthProvider extends ChangeNotifier {
 
   final ApiClient _client = ApiClient();
 
-  AuthProvider() {
-    restoreSession();
+  AuthProvider({bool restoreOnCreate = true}) {
+    if (restoreOnCreate) {
+      restoreSession();
+    }
   }
 
   Future<void> restoreSession() async {

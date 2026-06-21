@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/core/api_client.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/utils/download_stub.dart' if (dart.library.html) 'package:flutter_client/utils/download_web.dart';
 
 class BackupRestoreView extends StatefulWidget {
@@ -282,7 +281,7 @@ class _BackupRestoreViewState extends State<BackupRestoreView> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
+                        Icon(Icons.warning_amber_rounded, color: AppColors.warning, size: 20),
                         const SizedBox(width: 8),
                         Text('Ready to Import', style: AppTextStyles.h3.copyWith(color: AppColors.warning)),
                       ],
@@ -334,7 +333,7 @@ class _BackupRestoreViewState extends State<BackupRestoreView> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: AppColors.errorBg, borderRadius: BorderRadius.circular(8)),
-                child: Text(_error!, style: const TextStyle(color: AppColors.error)),
+                child: Text(_error!, style: TextStyle(color: AppColors.error)),
               ),
             ],
             if (_successMessage != null) ...[
@@ -342,7 +341,7 @@ class _BackupRestoreViewState extends State<BackupRestoreView> {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(color: AppColors.successBg, borderRadius: BorderRadius.circular(8)),
-                child: Text(_successMessage!, style: const TextStyle(color: AppColors.success)),
+                child: Text(_successMessage!, style: TextStyle(color: AppColors.success)),
               ),
             ],
           ],

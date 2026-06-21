@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_client/core/api_client.dart';
 import 'package:flutter_client/providers/auth_provider.dart';
 import 'package:flutter_client/providers/contact_provider.dart';
@@ -22,9 +21,13 @@ import 'package:flutter_client/providers/sales_analytics_provider.dart';
 import 'package:flutter_client/providers/cash_book_provider.dart';
 import 'package:flutter_client/providers/settings_provider.dart';
 import 'package:flutter_client/providers/theme_provider.dart';
+import 'package:flutter_client/providers/estimate_provider.dart';
+import 'package:flutter_client/providers/credit_note_provider.dart';
+import 'package:flutter_client/providers/purchase_order_provider.dart';
+import 'package:flutter_client/providers/recurring_invoice_provider.dart';
+import 'package:flutter_client/providers/terms_template_provider.dart';
 import 'package:flutter_client/providers/financial_year_provider.dart';
 import 'package:flutter_client/core/sync_manager.dart';
-import 'package:flutter_client/views/auth/login_view.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
@@ -61,6 +64,11 @@ class MyApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => CashBookProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
         ChangeNotifierProvider(create: (_) => FinancialYearProvider()),
+        ChangeNotifierProvider(create: (_) => EstimateProvider()),
+        ChangeNotifierProvider(create: (_) => CreditNoteProvider()),
+        ChangeNotifierProvider(create: (_) => PurchaseOrderProvider()),
+        ChangeNotifierProvider(create: (_) => RecurringInvoiceProvider()),
+        ChangeNotifierProvider(create: (_) => TermsTemplateProvider()),
         ChangeNotifierProvider(create: (_) => SyncManager()),
       ],
       child: const AppRoot(),

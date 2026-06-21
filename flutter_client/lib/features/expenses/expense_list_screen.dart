@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../../design_system/design_system.dart';
 import '../../../providers/expense_provider.dart';
@@ -42,32 +41,7 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
               ? const Center(child: CircularProgressIndicator())
               : expenses.isEmpty
                   ? AppEmptyState(icon: Icons.receipt_long, title: 'No expenses yet', subtitle: 'Track your business expenses')
-                  : AppTable(
-                      columns: const [
-                        TableColumn(label: 'Date', width: 110),
-                        TableColumn(label: 'Category', width: 150),
-                        TableColumn(label: 'Vendor', width: 180),
-                        TableColumn(label: 'Description', width: 220),
-                        TableColumn(label: 'Amount', width: 120),
-                        TableColumn(label: 'Status', width: 100),
-                      ],
-                      rows: expenses.map((exp) {
-                        final map = exp is Map<String, dynamic> ? exp : {};
-                        return AppTableRow(
-                          cells: [
-                            Text(_formatDate(map['expense_date'] ?? ''), style: AppTypography.bodySmall),
-                            Text(map['category_name'] ?? '', style: AppTypography.bodyMedium),
-                            Text(map['vendor_name'] ?? '', style: AppTypography.bodyMedium),
-                            Text(map['description'] ?? '', style: AppTypography.bodySmall, overflow: TextOverflow.ellipsis),
-                            AppAmountText(
-                              amount: double.tryParse((map['total'] ?? 0).toString()) ?? 0.0,
-                              style: AppTypography.amountTiny,
-                            ),
-                            AppStatusBadge(status: _parseStatus(map['status'] ?? 'DRAFT')),
-                          ],
-                        );
-                      }).toList(),
-                    ),
+                  : _buildEnhancedTable(expenses),
         ),
       ],
     );
@@ -92,3 +66,48 @@ class _ExpenseListScreenState extends State<ExpenseListScreen> {
     }
   }
 }
+  Widget _buildEnhancedTable(List<dynamic> expenseList) {
+    final expenses = expenseList.map((exp) {
+      final map = exp is Map<String, dynamic> ? exp : {};
+      return <String, dynamic>{
+        'expense_date': _formatDate(map['expense_date'] ?? ''),
+        'category_name': map['category_name'] ?? '',
+        'vendor_name': map['vendor_name'] ?? '',
+        'description': map['description'] ?? '',
+        'total': double.tryParse((map['total'] ?? 0).toString()) ?? 0.0,
+        'status': map['status'] ?? 'DRAFT',
+        '_parseStatus': _parseStatus(map['status'] ?? 'DRAFT'),
+      };
+    }).toList();
+
+    final totalAmount = expenses.fold<double>(0, (sum, exp) => sum + exp['total'] as double);
+
+    return AppTable(
+      title: '${expenses.length} expense${expenses.length == 1 ? '' : 's'}',
+      columns: const [
+        AppTableColumn(label: 'Date', width: 110, fieldKey: 'expense_date', isSortable: true),
+        AppTableColumn(label: 'Category', width: 150, fieldKey: 'category_name', isSortable: true),
+        AppTableColumn(label: 'Vendor', width: 180, fieldKey: 'vendor_name', isSortable: true),
+        AppTableColumn(label: 'Description', width: 220, fieldKey: 'description'),
+        AppTableColumn(label: 'Amount', width: 120, fieldKey: 'total', alignment: Alignment.centerRight, isSortable: true),
+        AppTableColumn(label: 'Status', width: 100, fieldKey: 'status', alignment: Alignment.center, isSortable: true),
+      ],
+      rows: expenses,
+      stickyHeader: true,
+      stickyFooter: true,
+      density: AppTableDensity.comfortable,
+      enableKeyboardNav: true,
+      enableColumnChooser: true,
+      enableExport: true,
+      summaryRows: [
+        {
+          'expense_date': 'TOTALS',
+          'category_name': '',
+          'vendor_name': '',
+          'description': '',
+          'total': totalAmount,
+          'status': '',
+        },
+      ],
+    );
+  }

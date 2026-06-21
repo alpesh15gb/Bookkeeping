@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/eway_bill_provider.dart';
 import 'package:flutter_client/providers/invoice_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
 import 'package:flutter_client/views/shared/adaptive_layout.dart';
 
 class EwayBillFormView extends StatefulWidget {
@@ -59,7 +58,7 @@ class _EwayBillFormViewState extends State<EwayBillFormView> {
     if (!_formKey.currentState!.validate()) return;
     if (_invoiceId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select an invoice'), backgroundColor: AppColors.error),
+        SnackBar(content: Text('Select an invoice'), backgroundColor: AppColors.error),
       );
       return;
     }
@@ -84,7 +83,7 @@ class _EwayBillFormViewState extends State<EwayBillFormView> {
       if (success) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('E-Way Bill generated'), backgroundColor: AppColors.success),
+          SnackBar(content: Text('E-Way Bill generated'), backgroundColor: AppColors.success),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

@@ -353,7 +353,7 @@ class _FinancialYearsManageViewState extends State<FinancialYearsManageView> {
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, size: 16, color: AppColors.info),
+                      Icon(Icons.info_outline, size: 16, color: AppColors.info),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -614,7 +614,7 @@ class _YearEndDashboardScreenState extends State<_YearEndDashboardScreen> {
                       children: [
                         Row(
                           children: [
-                            const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                            Icon(Icons.error_outline, color: AppColors.error, size: 20),
                             const SizedBox(width: 8),
                             Text('Blocking Issues', style: AppTextStyles.h2),
                           ],
@@ -624,7 +624,7 @@ class _YearEndDashboardScreenState extends State<_YearEndDashboardScreen> {
                           padding: const EdgeInsets.only(bottom: 8),
                           child: Row(
                             children: [
-                              const Icon(Icons.close, size: 14, color: AppColors.error),
+                              Icon(Icons.close, size: 14, color: AppColors.error),
                               const SizedBox(width: 8),
                               Expanded(child: Text(item, style: const TextStyle(fontSize: 13))),
                             ],

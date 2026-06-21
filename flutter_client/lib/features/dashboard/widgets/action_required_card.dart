@@ -54,7 +54,16 @@ class ActionRequiredCard extends StatelessWidget {
                   children: [
                     Icon(Icons.check_circle, size: 16, color: AppColors.success),
                     const SizedBox(width: AppSpacing.sm),
-                    Text('All caught up!', style: AppTypography.bodyMedium.copyWith(color: AppColors.success)),
+                    Expanded(
+                      child: Text(
+                        'All caught up!',
+                        style: AppTypography.bodyMedium.copyWith(
+                          color: AppColors.success,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -84,19 +93,70 @@ class ActionRequiredCard extends StatelessWidget {
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
-        child: Row(
-          children: [
-            Icon(icon, size: 8, color: iconColor),
-            const SizedBox(width: AppSpacing.sm),
-            Expanded(
-              child: Text(text, style: AppTypography.bodyMedium),
-            ),
-            if (amount != null)
-              Text(
-                amount,
-                style: AppTypography.amountTiny.copyWith(color: AppColors.gray600),
-              ),
-          ],
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final stackAmount = amount != null && constraints.maxWidth < 240;
+            final label = Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Icon(icon, size: 8, color: iconColor),
+                ),
+                const SizedBox(width: AppSpacing.sm),
+                Expanded(
+                  child: Text(
+                    text,
+                    style: AppTypography.bodyMedium,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            );
+
+            if (stackAmount) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  label,
+                  const SizedBox(height: AppSpacing.xs),
+                  Padding(
+                    padding: const EdgeInsets.only(left: AppSpacing.lg),
+                    child: Text(
+                      amount,
+                      style: AppTypography.amountTiny.copyWith(
+                        color: AppColors.gray600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: label),
+                if (amount != null) ...[
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    flex: 0,
+                    child: Text(
+                      amount,
+                      style: AppTypography.amountTiny.copyWith(
+                        color: AppColors.gray600,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ],
+            );
+          },
         ),
       ),
     );

@@ -144,46 +144,7 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
                       title: 'No invoices found',
                       subtitle: _searchQuery.isNotEmpty ? 'Try a different search' : 'Create your first invoice',
                     )
-                  : AppTable(
-                      columns: const [
-                        TableColumn(label: 'Invoice #', width: 130),
-                        TableColumn(label: 'Customer', width: 200),
-                        TableColumn(label: 'Date', width: 100),
-                        TableColumn(label: 'Due Date', width: 100),
-                        TableColumn(label: 'Amount', width: 110),
-                        TableColumn(label: 'Paid', width: 100),
-                        TableColumn(label: 'Balance', width: 100),
-                        TableColumn(label: 'Status', width: 120),
-                      ],
-                      showCheckbox: true,
-                      rows: filteredInvoices.map((inv) {
-                        final isOverdue = inv.status.toUpperCase() == 'OVERDUE';
-                        final balance = inv.total - inv.amountPaid;
-
-                        return AppTableRow(
-                          onTap: () => context.go('/invoices/${inv.id}'),
-                          backgroundColor: isOverdue ? AppColors.error.withOpacity(0.03) : null,
-                          cells: [
-                            Text(inv.invoiceNumber, style: AppTypography.labelLarge),
-                            Text(inv.contactName ?? '', style: AppTypography.bodyMedium),
-                            Text(_formatDate(inv.issueDate), style: AppTypography.bodySmall),
-                            Text(_formatDate(inv.dueDate), style: AppTypography.bodySmall),
-                            AppAmountText(amount: inv.total, style: AppTypography.amountTiny),
-                            AppAmountText(amount: inv.amountPaid, style: AppTypography.amountTiny),
-                            AppAmountText(
-                              amount: balance,
-                              style: AppTypography.amountTiny.copyWith(
-                                color: balance > 0 ? AppColors.error : null,
-                              ),
-                            ),
-                            AppStatusBadge(
-                              status: _parseStatus(inv.status),
-                              additionalInfo: isOverdue ? _daysOverdue(inv.dueDate) : null,
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
+                  : _buildEnhancedTable(filteredInvoices),
         ),
       ],
     );
@@ -237,5 +198,111 @@ class _InvoiceListScreenState extends State<InvoiceListScreen> {
     } catch (_) {
       return null;
     }
+  }
+  Widget _buildEnhancedTable(List<InvoiceModel> invoices) {
+    final columns = [
+      const AppTableColumn(
+        label: 'Invoice #',
+        width: 130,
+        fieldKey: 'invoice_number',
+        isSortable: true,
+      ),
+      const AppTableColumn(
+        label: 'Customer',
+        width: 200,
+        fieldKey: 'contact_name',
+        isSortable: true,
+      ),
+      const AppTableColumn(
+        label: 'Date',
+        width: 100,
+        fieldKey: 'issue_date',
+        isSortable: true,
+      ),
+      const AppTableColumn(
+        label: 'Due Date',
+        width: 100,
+        fieldKey: 'due_date',
+        isSortable: true,
+      ),
+      const AppTableColumn(
+        label: 'Amount',
+        width: 110,
+        fieldKey: 'total',
+        alignment: Alignment.centerRight,
+        isSortable: true,
+      ),
+      const AppTableColumn(
+        label: 'Paid',
+        width: 100,
+        fieldKey: 'amount_paid',
+        alignment: Alignment.centerRight,
+        isSortable: true,
+      ),
+      const AppTableColumn(
+        label: 'Balance',
+        width: 100,
+        fieldKey: 'balance',
+        alignment: Alignment.centerRight,
+        isSortable: true,
+      ),
+      const AppTableColumn(
+        label: 'Status',
+        width: 120,
+        fieldKey: 'status',
+        alignment: Alignment.center,
+        isSortable: true,
+      ),
+    ];
+
+    final rows = invoices.map((inv) {
+      final balance = inv.total - inv.amountPaid;
+      return <String, dynamic>{
+        'invoice_number': inv.invoice_number,
+        'contact_name': inv.contactName ?? '',
+        'issue_date': _formatDate(inv.issueDate),
+        'due_date': _formatDate(inv.dueDate),
+        'total': inv.total,
+        'amount_paid': inv.amountPaid,
+        'balance': balance,
+        'status': inv.status,
+        '_parseStatus': _parseStatus(inv.status),
+        '_isOverdue': inv.status.toUpperCase() == 'OVERDUE',
+        '_daysOverdue': _daysOverdue(inv.dueDate),
+        '_id': inv.id,
+      };
+    }).toList();
+
+    // Calculate totals for sticky footer
+    final totalAmount = invoices.fold<double>(0, (sum, inv) => sum + inv.total);
+    final totalPaid = invoices.fold<double>(0, (sum, inv) => sum + inv.amountPaid);
+    final totalBalance = invoices.fold<double>(0, (sum, inv) => sum + (inv.total - inv.amountPaid));
+
+    return AppTable(
+      title: '${invoices.length} invoice${invoices.length == 1 ? '' : 's'}',
+      columns: columns,
+      rows: rows,
+      stickyHeader: true,
+      stickyFooter: true,
+      density: AppTableDensity.comfortable,
+      enableKeyboardNav: true,
+      enableColumnChooser: true,
+      enableExport: true,
+      onRowTap: (row) => context.go('/invoices/${row['_id']}'),
+      onRefresh: () async => context.read<InvoiceProvider>().fetchInvoices(),
+      summaryRows: [
+        {
+          'invoice_number': 'TOTALS',
+          'contact_name': '',
+          'issue_date': '',
+          'due_date': '',
+          'total': totalAmount,
+          'amount_paid': totalPaid,
+          'balance': totalBalance,
+          'status': '',
+          'is_bold': true,
+        },
+      ],
+    );
   }
 }

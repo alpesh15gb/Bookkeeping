@@ -82,9 +82,6 @@ class _CashFlowViewState extends State<CashFlowView> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final textSecondary = theme.textTheme.bodyMedium?.color?.withOpacity(0.7) ?? Colors.grey;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text('Cash Flow Statement'),

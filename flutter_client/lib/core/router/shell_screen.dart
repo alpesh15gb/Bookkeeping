@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../design_system/tokens/colors.dart';
@@ -7,7 +6,6 @@ import '../../design_system/tokens/typography.dart';
 import '../../design_system/tokens/spacing.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/financial_year_provider.dart';
-import '../../providers/settings_provider.dart';
 import 'sidebar_data.dart';
 
 class ShellScreen extends StatefulWidget {
@@ -20,7 +18,6 @@ class ShellScreen extends StatefulWidget {
 
 class _ShellScreenState extends State<ShellScreen> {
   bool _isSidebarExpanded = true;
-  int _selectedIndex = 0;
   final ScrollController _scrollController = ScrollController();
 
   @override
@@ -137,7 +134,7 @@ class _ShellScreenState extends State<ShellScreen> {
               ],
             ),
           ),
-          const Divider(color: AppColors.sidebarHover, height: 1),
+          Divider(color: AppColors.sidebarHover, height: 1),
           // Navigation
           Expanded(
             child: ListView(
@@ -396,55 +393,99 @@ class _ShellScreenState extends State<ShellScreen> {
       height: AppSpacing.topBarHeight,
       color: AppColors.white,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
-      child: Row(
-        children: [
-          Text(
-            currentTitle,
-            style: AppTypography.headlineLarge,
-          ),
-          const Spacer(),
-          // Quick actions
-          _buildQuickActions(),
-          const SizedBox(width: AppSpacing.md),
-          // Search
-          _buildSearchButton(),
-          const SizedBox(width: AppSpacing.md),
-          // FY selector
-          _buildFySelector(),
-          const SizedBox(width: AppSpacing.md),
-          // User avatar
-          _buildUserAvatar(),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final isCompact = width < 720;
+          final isTight = width < 560;
+
+          return Row(
+            children: [
+              Expanded(
+                child: Text(
+                  currentTitle,
+                  style: AppTypography.headlineLarge,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Flexible(
+                flex: isTight ? 0 : 1,
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _buildTopBarActions(
+                    compact: isCompact,
+                    tight: isTight,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Widget _buildQuickActions() {
-    return Row(
+  Widget _buildTopBarActions({required bool compact, required bool tight}) {
+    if (tight) {
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildIconActionButton(
+            icon: Icons.add,
+            tooltip: 'New invoice',
+            color: AppColors.primary,
+            onTap: () => context.go('/invoices/create'),
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          _buildIconActionButton(
+            icon: Icons.search,
+            tooltip: 'Search commands',
+            color: AppColors.gray600,
+            onTap: _showCommandPalette,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          _buildMoreMenuButton(showFinancialYear: true),
+          const SizedBox(width: AppSpacing.sm),
+          _buildUserAvatar(),
+        ],
+      );
+    }
+
+    return Wrap(
+      alignment: WrapAlignment.end,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      spacing: AppSpacing.sm,
+      runSpacing: AppSpacing.xs,
       children: [
         _buildActionButton(
           label: '+ Invoice',
           color: AppColors.primary,
           onTap: () => context.go('/invoices/create'),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        _buildActionButton(
-          label: '+ Payment',
-          color: AppColors.success,
-          onTap: () {},
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        _buildActionButton(
-          label: '+ Expense',
-          color: AppColors.error,
-          onTap: () {},
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        _buildActionButton(
-          label: '+ Bill',
-          color: AppColors.warning,
-          onTap: () {},
-        ),
+        if (!compact) ...[
+          _buildActionButton(
+            label: '+ Payment',
+            color: AppColors.success,
+            onTap: () {},
+          ),
+          _buildActionButton(
+            label: '+ Expense',
+            color: AppColors.error,
+            onTap: () {},
+          ),
+          _buildActionButton(
+            label: '+ Bill',
+            color: AppColors.warning,
+            onTap: () {},
+          ),
+        ] else
+          _buildMoreMenuButton(showFinancialYear: false),
+        _buildSearchButton(showShortcut: !compact),
+        if (!compact) _buildFySelector(compact: false),
+        if (compact) _buildFySelector(compact: true),
+        _buildUserAvatar(),
       ],
     );
   }
@@ -455,7 +496,7 @@ class _ShellScreenState extends State<ShellScreen> {
     required VoidCallback onTap,
   }) {
     return Material(
-      color: color.withOpacity(0.1),
+      color: color.withValues(alpha: 0.1),
       borderRadius: BorderRadius.circular(AppRadius.md),
       child: InkWell(
         onTap: onTap,
@@ -474,7 +515,74 @@ class _ShellScreenState extends State<ShellScreen> {
     );
   }
 
-  Widget _buildSearchButton() {
+  Widget _buildIconActionButton({
+    required IconData icon,
+    required String tooltip,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(AppRadius.md),
+          child: SizedBox(
+            width: 36,
+            height: 36,
+            child: Icon(icon, size: 18, color: color),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMoreMenuButton({required bool showFinancialYear}) {
+    return PopupMenuButton<String>(
+      tooltip: 'More actions',
+      icon: const Icon(Icons.more_horiz, color: AppColors.gray600),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      onSelected: (value) {
+        switch (value) {
+          case 'invoice':
+            context.go('/invoices/create');
+            break;
+          case 'fy':
+            _showFYPicker(context, context.read<FinancialYearProvider>());
+            break;
+        }
+      },
+      itemBuilder: (context) => [
+        const PopupMenuItem(
+          value: 'invoice',
+          child: Text('New Invoice'),
+        ),
+        const PopupMenuItem(
+          value: 'payment',
+          child: Text('New Payment'),
+        ),
+        const PopupMenuItem(
+          value: 'expense',
+          child: Text('New Expense'),
+        ),
+        const PopupMenuItem(
+          value: 'bill',
+          child: Text('New Bill'),
+        ),
+        if (showFinancialYear)
+          const PopupMenuItem(
+            value: 'fy',
+            child: Text('Financial Year'),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSearchButton({bool showShortcut = true}) {
     return Material(
       color: AppColors.gray50,
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -489,14 +597,16 @@ class _ShellScreenState extends State<ShellScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.search, size: 18, color: AppColors.gray400),
-              const SizedBox(width: AppSpacing.sm),
-              Text(
-                'Ctrl+K',
-                style: AppTypography.labelSmall.copyWith(
-                  color: AppColors.gray400,
+              Icon(Icons.search, size: 18, color: AppColors.gray400),
+              if (showShortcut) ...[
+                const SizedBox(width: AppSpacing.sm),
+                Text(
+                  'Ctrl+K',
+                  style: AppTypography.labelSmall.copyWith(
+                    color: AppColors.gray400,
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ),
@@ -504,7 +614,7 @@ class _ShellScreenState extends State<ShellScreen> {
     );
   }
 
-  Widget _buildFySelector() {
+  Widget _buildFySelector({bool compact = false}) {
     final fyProvider = context.watch<FinancialYearProvider>();
     final activeYear = fyProvider.activeYear;
     final fyLabel = activeYear?.name ?? 'No FY';
@@ -517,20 +627,27 @@ class _ShellScreenState extends State<ShellScreen> {
           vertical: AppSpacing.sm,
         ),
         decoration: BoxDecoration(
-          color: AppColors.primary.withOpacity(0.1),
+          color: AppColors.primary.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.calendar_today_outlined, size: 14, color: AppColors.primary),
+            if (!compact) ...[
+              const SizedBox(width: AppSpacing.xs),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 120),
+                child: Text(
+                  fyLabel,
+                  style: AppTypography.labelMedium.copyWith(color: AppColors.primary),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
             const SizedBox(width: AppSpacing.xs),
-            Text(
-              fyLabel,
-              style: AppTypography.labelMedium.copyWith(color: AppColors.primary),
-            ),
-            const SizedBox(width: AppSpacing.xs),
-            const Icon(Icons.keyboard_arrow_down, size: 16, color: AppColors.primary),
+            Icon(Icons.keyboard_arrow_down, size: 16, color: AppColors.primary),
           ],
         ),
       ),
@@ -560,35 +677,50 @@ class _ShellScreenState extends State<ShellScreen> {
                 ),
               ),
               const Divider(height: 1),
-              Flexible(
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: provider.availableYears.length,
-                  itemBuilder: (context, i) {
-                    final year = provider.availableYears[i];
-                    final isActive = provider.activeYear?.id == year.id;
-                    return ListTile(
-                      leading: Container(
-                        width: 4,
-                        height: 40,
-                        decoration: BoxDecoration(
-                          color: isActive ? AppColors.primary : Colors.transparent,
-                          borderRadius: BorderRadius.circular(2),
+              if (provider.isLoading && provider.availableYears.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: CircularProgressIndicator(),
+                )
+              else if (provider.availableYears.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(32),
+                  child: Text('No financial years found'),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: provider.availableYears.length,
+                    itemBuilder: (context, i) {
+                      final year = provider.availableYears[i];
+                      final isActive = provider.activeYear?.id == year.id;
+                      final start = year.startDate;
+                      final end = year.endDate;
+                      const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+                      final dateRange = '${start.day} ${months[start.month - 1]} ${start.year} – ${end.day} ${months[end.month - 1]} ${end.year}';
+                      return ListTile(
+                        leading: Container(
+                          width: 4,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: isActive ? AppColors.primary : Colors.transparent,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
-                      ),
-                      title: Text(year.name),
-                      subtitle: Text('${year.startDate} - ${year.endDate}'),
-                      trailing: isActive
-                          ? const Icon(Icons.check_circle, color: AppColors.primary)
-                          : null,
-                      onTap: () {
-                        provider.setActiveYear(year);
-                        Navigator.pop(ctx);
-                      },
-                    );
-                  },
+                        title: Text(year.name),
+                        subtitle: Text(dateRange),
+                        trailing: isActive
+                            ? Icon(Icons.check_circle, color: AppColors.primary)
+                            : null,
+                        onTap: () {
+                          provider.setActiveYear(year);
+                          Navigator.pop(ctx);
+                        },
+                      );
+                    },
+                  ),
                 ),
-              ),
             ],
           ),
         );
@@ -671,7 +803,7 @@ class _ShellScreenState extends State<ShellScreen> {
                 backgroundColor: AppColors.primaryLight,
                 child: Text(
                   userName.isNotEmpty ? userName[0].toUpperCase() : 'U',
-                  style: const TextStyle(color: AppColors.white, fontWeight: FontWeight.w600),
+                  style: TextStyle(color: AppColors.white, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -784,7 +916,7 @@ class _ShellScreenState extends State<ShellScreen> {
     return FloatingActionButton(
       onPressed: () => _showMobileQuickActions(),
       backgroundColor: AppColors.primary,
-      child: const Icon(Icons.add, color: AppColors.white),
+      child: Icon(Icons.add, color: AppColors.white),
     );
   }
 

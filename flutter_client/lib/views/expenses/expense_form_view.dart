@@ -230,7 +230,6 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
     final bankAccounts = allAccounts.where((a) {
       final type = a['account_type'] ?? '';
       final code = (a['code'] ?? '').toString().toUpperCase();
-      final name = (a['name'] ?? '').toString().toLowerCase();
       // Include cash, bank, UPI, POS, and other liquid asset accounts
       // Exclude fixed assets (furniture, computer, deposits, prepaid)
       if (type != 'ASSET') return false;
@@ -356,7 +355,7 @@ class _ExpenseFormViewState extends State<ExpenseFormView> {
                       value: _gstRate,
                       label: 'GST Rate (%)',
                       prefixIcon: Icons.percent,
-                      items: const [
+                      items: [
                         DropdownMenuItem(value: 0.0, child: Text('0%')),
                         DropdownMenuItem(value: 5.0, child: Text('5%')),
                         DropdownMenuItem(value: 12.0, child: Text('12%')),

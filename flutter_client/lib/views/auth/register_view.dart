@@ -33,8 +33,8 @@ class _RegisterViewState extends State<RegisterView> {
           );
       if (success && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully. Please sign in.'),
+          SnackBar(
+            content: const Text('Account created successfully. Please sign in.'),
             backgroundColor: AppColors.success,
           ),
         );

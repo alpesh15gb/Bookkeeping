@@ -33,7 +33,7 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
     if (!_formKey.currentState!.validate()) return;
     if (_newCtrl.text != _confirmCtrl.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('New passwords do not match'), backgroundColor: AppColors.error),
+        SnackBar(content: Text('New passwords do not match'), backgroundColor: AppColors.error),
       );
       return;
     }
@@ -45,7 +45,7 @@ class _ChangePasswordViewState extends State<ChangePasswordView> {
       if (success) {
         Navigator.pop(context, true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Password changed successfully'), backgroundColor: AppColors.success),
+          SnackBar(content: Text('Password changed successfully'), backgroundColor: AppColors.success),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(

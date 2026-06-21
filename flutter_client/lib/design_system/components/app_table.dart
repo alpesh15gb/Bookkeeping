@@ -44,7 +44,7 @@ class AppTable extends StatelessWidget {
       child: Column(
         children: [
           _buildHeader(),
-          const Divider(height: 1, color: AppColors.gray200),
+          Divider(height: 1, color: AppColors.gray200),
           ...rows.map((row) {
             if (row is AppTableRow) {
               return _buildRow(row);

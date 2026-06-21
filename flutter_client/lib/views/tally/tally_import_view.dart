@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -320,7 +319,7 @@ class _TallyImportViewState extends State<TallyImportView> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                  Icon(Icons.error_outline, color: AppColors.error, size: 20),
                   const SizedBox(width: 10),
                   Expanded(child: Text(_error!, style: TextStyle(color: AppColors.error))),
                 ],
@@ -331,7 +330,7 @@ class _TallyImportViewState extends State<TallyImportView> {
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  const Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
+                  Icon(Icons.check_circle_outline, color: AppColors.success, size: 20),
                   const SizedBox(width: 10),
                   Expanded(child: Text(_successMessage!, style: TextStyle(color: AppColors.success))),
                 ],

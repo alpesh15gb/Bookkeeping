@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/document_provider.dart';
 import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/document_list_view.dart';
 import 'package:flutter_client/views/shared/toast.dart';
 import 'package:flutter_client/views/estimates/estimate_form_view.dart';
@@ -21,9 +20,6 @@ class _EstimateListViewState extends State<EstimateListView> {
   String _statusFilter = 'ALL';
   List<dynamic> _estimates = [];
   bool _isLoading = true;
-  String? _errorMessage;
-
-  static const _statusOptions = ['ALL', 'DRAFT', 'CONFIRMED', 'ACCEPTED', 'CANCELLED'];
 
   @override
   void initState() {
@@ -40,7 +36,6 @@ class _EstimateListViewState extends State<EstimateListView> {
   void _fetch() async {
     setState(() {
       _isLoading = true;
-      _errorMessage = null;
     });
     final list = await context.read<DocumentProvider>().fetchEstimates();
     if (mounted) {
@@ -178,7 +173,7 @@ class _EstimateListViewState extends State<EstimateListView> {
               ),
             if (item.status != 'CANCELLED')
               IconButton(
-                icon: const Icon(Icons.cancel_outlined, size: 16, color: AppColors.error),
+                icon: Icon(Icons.cancel_outlined, size: 16, color: AppColors.error),
                 onPressed: () => _cancelEstimate(item.id),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),

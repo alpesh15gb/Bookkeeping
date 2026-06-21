@@ -54,7 +54,7 @@ class _ForgotPasswordViewState extends State<ForgotPasswordView> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 if (_sent) ...[
-                  const Icon(Icons.check_circle_outline, size: 48, color: AppColors.success),
+                  Icon(Icons.check_circle_outline, size: 48, color: AppColors.success),
                   const SizedBox(height: 16),
                   const Text('Check your email', style: AppTextStyles.h2, textAlign: TextAlign.center),
                   const SizedBox(height: 8),

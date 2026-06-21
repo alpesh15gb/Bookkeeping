@@ -147,7 +147,7 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
                               _buildNotesCard(inv.notes!),
                             ],
                             const SizedBox(height: 12),
-                            _buildTimeline(inv!, status, amountPaid),
+                            _buildTimeline(inv, status, amountPaid),
                           ],
                         ),
                       ),
@@ -196,10 +196,10 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
                 _buildHeaderStat('AMOUNT', AmountFormat.format(total)),
                 const SizedBox(width: 24),
                 _buildHeaderStat('ITEMS', '${inv.lines.length}'),
-                if (inv.issueDate != null) ...[
-                  const SizedBox(width: 24),
-                  _buildHeaderStat('DATE', AppDate.format(inv.issueDate)),
-                ],
+                ...[
+                const SizedBox(width: 24),
+                _buildHeaderStat('DATE', AppDate.format(inv.issueDate)),
+              ],
               ],
             ),
           ],
@@ -268,7 +268,7 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
       children: [
         Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textMuted)),
         const SizedBox(height: 2),
-        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: valueColor, fontFeatures: const [FontFeature.tabularFigures()])),
+        Text(value, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: valueColor, fontFeatures: [FontFeature.tabularFigures()])),
       ],
     );
   }
@@ -405,7 +405,7 @@ class _InvoiceDetailViewState extends State<InvoiceDetailView> {
             children: [
               Text('TOTAL', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
               const Spacer(),
-              Text(AmountFormat.format(total, currency: inv.currency), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.brandNavy, fontFeatures: const [FontFeature.tabularFigures()])),
+              Text(AmountFormat.format(total, currency: inv.currency), style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: AppColors.brandNavy, fontFeatures: [FontFeature.tabularFigures()])),
             ],
           ),
           if (isMultiCurrency)

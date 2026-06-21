@@ -2,8 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_client/core/constants.dart';
 import 'package:flutter_client/providers/banking_profile_provider.dart';
-import 'package:flutter_client/views/shared/app_components.dart';
-import 'package:flutter_client/views/shared/design_system.dart';
 import 'package:flutter_client/views/shared/document_list_view.dart';
 import 'package:flutter_client/views/banking/banking_profile_form_view.dart';
 
@@ -73,7 +71,7 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
         searchController: _searchCtrl,
         searchHint: 'Search bank accounts...',
         onSearchChanged: (_) => setState(() {}),
-        filterTabs: const [],
+        filterTabs: [],
         activeFilter: '',
         onFilterChanged: (_) {},
         items: items,
@@ -243,7 +241,7 @@ class _BankingProfileListViewState extends State<BankingProfileListView> {
                             color: AppColors.error.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text(
+                          child: Text(
                             'Inactive',
                             style: TextStyle(fontSize: 10, color: AppColors.error, fontWeight: FontWeight.w600),
                           ),

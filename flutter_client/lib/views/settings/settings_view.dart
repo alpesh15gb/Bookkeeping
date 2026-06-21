@@ -352,15 +352,15 @@ class _SettingsViewState extends State<SettingsView> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Enable GST'),
+        title: Text('Enable GST'),
         content: Text(
           newMode == 'GST_REGULAR'
               ? 'GST fields (HSN, GST Rate, CGST/SGST/IGST) will appear on all invoices, bills, and expenses.'
               : 'Composition scheme GST fields will be enabled. Turnover limit applies.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Enable GST')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, true), child: Text('Enable GST')),
         ],
       ),
     );
@@ -368,7 +368,7 @@ class _SettingsViewState extends State<SettingsView> {
       final ok = await context.read<SettingsProvider>().toggleGstMode(newMode);
       if (ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('GST enabled successfully'), backgroundColor: AppColors.success),
+          SnackBar(content: Text('GST enabled successfully'), backgroundColor: AppColors.success),
         );
       }
     }
@@ -399,11 +399,11 @@ class _SettingsViewState extends State<SettingsView> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('Cancel')),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.orange),
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Disable GST'),
+            child: Text('Disable GST'),
           ),
         ],
       ),
@@ -412,7 +412,7 @@ class _SettingsViewState extends State<SettingsView> {
       final ok = await context.read<SettingsProvider>().toggleGstMode('NON_GST');
       if (ok && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('GST disabled. GST data preserved.'), backgroundColor: AppColors.success),
+          SnackBar(content: Text('GST disabled. GST data preserved.'), backgroundColor: AppColors.success),
         );
       }
     }
@@ -434,7 +434,7 @@ class _SettingsViewState extends State<SettingsView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -446,7 +446,7 @@ class _SettingsViewState extends State<SettingsView> {
               );
               if (mounted && success) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('UPI ID saved successfully'), backgroundColor: AppColors.success),
+                  SnackBar(content: Text('UPI ID saved successfully'), backgroundColor: AppColors.success),
                 );
               }
             },
@@ -584,7 +584,7 @@ class _SettingsViewState extends State<SettingsView> {
     if (mounted) {
       if (success) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text('Settings saved successfully'),
             backgroundColor: AppColors.success,
           ),
@@ -645,7 +645,7 @@ class _SettingsViewState extends State<SettingsView> {
 
       if (response.statusCode == 200) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Logo uploaded successfully'), backgroundColor: AppColors.success),
+          SnackBar(content: Text('Logo uploaded successfully'), backgroundColor: AppColors.success),
         );
         await context.read<SettingsProvider>().fetchAllSettings();
       } else {
@@ -767,7 +767,7 @@ class _SettingsViewState extends State<SettingsView> {
                 if (mounted) {
                   if (success) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
+                      SnackBar(
                         content: Text('E-Invoicing settings saved successfully'),
                         backgroundColor: AppColors.success,
                       ),
@@ -870,7 +870,7 @@ class _SettingsViewState extends State<SettingsView> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
+              child: Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -883,14 +883,14 @@ class _SettingsViewState extends State<SettingsView> {
 
                 if (prefix.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Prefix is required'), backgroundColor: AppColors.error),
+                    SnackBar(content: Text('Prefix is required'), backgroundColor: AppColors.error),
                   );
                   return;
                 }
 
                 if (nextVal == null || nextVal < 1) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    SnackBar(
                       content: Text('Next Number must be 1 or greater'),
                       backgroundColor: AppColors.error,
                     ),
@@ -900,7 +900,7 @@ class _SettingsViewState extends State<SettingsView> {
 
                 if (padVal == null || padVal < 1 || padVal > 10) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    SnackBar(
                       content: Text('Padding Digits must be between 1 and 10'),
                       backgroundColor: AppColors.error,
                     ),
@@ -920,7 +920,7 @@ class _SettingsViewState extends State<SettingsView> {
                 if (mounted) {
                   if (success) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
+                      SnackBar(
                         content: Text('Numbering series created successfully'),
                         backgroundColor: AppColors.success,
                       ),
@@ -1035,7 +1035,7 @@ class _SettingsViewState extends State<SettingsView> {
 
                 if (mounted && success) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Layout formatting saved successfully'), backgroundColor: AppColors.success),
+                    SnackBar(content: Text('Layout formatting saved successfully'), backgroundColor: AppColors.success),
                   );
                 }
               },
@@ -1141,7 +1141,7 @@ class _SettingsViewState extends State<SettingsView> {
 
                 if (mounted && success) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Transaction preferences saved successfully'), backgroundColor: AppColors.success),
+                    SnackBar(content: Text('Transaction preferences saved successfully'), backgroundColor: AppColors.success),
                   );
                 }
               },
@@ -1178,7 +1178,6 @@ class _SettingsViewState extends State<SettingsView> {
     final gstin = company['gstin'] ?? 'Not configured';
     final pan = company['pan'] ?? 'Not configured';
     final currency = settings['currency'] ?? 'INR';
-    final gstEnabled = settingsProvider.gstEnabled;
     final taxMode = settingsProvider.taxMode;
     final stateCode = settings['origin_state_code'] ?? 'Not configured';
     final extraSettings =
@@ -1272,10 +1271,10 @@ class _SettingsViewState extends State<SettingsView> {
                               child: Image.network(
                                 settings['logo_url'],
                                 fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) => const Icon(Icons.business, size: 30),
+                                errorBuilder: (_, __, ___) => Icon(Icons.business, size: 30),
                               ),
                             )
-                          : const Icon(Icons.business, size: 30, color: AppColors.textMuted),
+                          : Icon(Icons.business, size: 30, color: AppColors.textMuted),
                     ),
                     const SizedBox(width: 16),
                     Expanded(
@@ -1580,7 +1579,7 @@ class _SettingsViewState extends State<SettingsView> {
                                 ? 'Reopening the financial period allows users to create, edit, or delete transactions in this year context. Do you want to proceed?'
                                 : 'Locking the period creates a closing journal entry, transfers inventory balances, and locks all transactions in this year from any further modification. Do you want to proceed?'),
                             actions: [
-                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                              TextButton(onPressed: () => Navigator.pop(ctx, false), child: Text('Cancel')),
                               ElevatedButton(onPressed: () => Navigator.pop(ctx, true), child: Text(isLocked ? 'Unlock' : 'Lock & Close')),
                             ],
                           ),
@@ -1590,14 +1589,14 @@ class _SettingsViewState extends State<SettingsView> {
                             final ok = await fyProvider.reopenFinancialYear(activeFy.id);
                             if (mounted && ok) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Financial year reopened successfully'), backgroundColor: AppColors.success),
+                                SnackBar(content: Text('Financial year reopened successfully'), backgroundColor: AppColors.success),
                               );
                             }
                           } else {
                             final res = await fyProvider.closeFinancialYear(activeFy.id);
                             if (mounted && res != null) {
                               ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Financial year locked successfully'), backgroundColor: AppColors.success),
+                                SnackBar(content: Text('Financial year locked successfully'), backgroundColor: AppColors.success),
                               );
                             }
                           }
@@ -1619,15 +1618,15 @@ class _SettingsViewState extends State<SettingsView> {
               action: Consumer<SyncManager>(
                 builder: (context, sync, _) {
                   if (!sync.isOnline) {
-                    return const Icon(Icons.cloud_off, color: AppColors.warning, size: 18);
+                    return Icon(Icons.cloud_off, color: AppColors.warning, size: 18);
                   }
                   if (sync.pendingCount > 0) {
                     return Badge(
                       label: Text('${sync.pendingCount}'),
-                      child: const Icon(Icons.sync, color: AppColors.info, size: 18),
+                      child: Icon(Icons.sync, color: AppColors.info, size: 18),
                     );
                   }
-                  return const Icon(Icons.cloud_done, color: AppColors.success, size: 18);
+                  return Icon(Icons.cloud_done, color: AppColors.success, size: 18);
                 },
               ),
               child: Consumer<SyncManager>(
@@ -1850,7 +1849,7 @@ class _SettingsViewState extends State<SettingsView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+            child: Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -1863,7 +1862,7 @@ class _SettingsViewState extends State<SettingsView> {
 
               if (nextVal == null || nextVal < 1) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text('Next Number must be 1 or greater'),
                     backgroundColor: AppColors.error,
                   ),
@@ -1873,7 +1872,7 @@ class _SettingsViewState extends State<SettingsView> {
 
               if (padVal == null || padVal < 1 || padVal > 10) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
+                  SnackBar(
                     content: Text('Padding Digits must be between 1 and 10'),
                     backgroundColor: AppColors.error,
                   ),
@@ -1893,7 +1892,7 @@ class _SettingsViewState extends State<SettingsView> {
                 if (success) {
                   Navigator.pop(context);
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
+                    SnackBar(
                       content: Text('Numbering series updated successfully'),
                       backgroundColor: AppColors.success,
                     ),
@@ -1911,7 +1910,7 @@ class _SettingsViewState extends State<SettingsView> {
                 }
               }
             },
-            child: const Text('Save'),
+            child: Text('Save'),
           ),
         ],
       ),
@@ -1922,14 +1921,14 @@ class _SettingsViewState extends State<SettingsView> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Row(
+        title: Row(
           children: [
             Icon(Icons.warning_amber_rounded, color: AppColors.error),
             SizedBox(width: 8),
             Text('Purge Company Data'),
           ],
         ),
-        content: const Text(
+        content: Text(
           'WARNING: This will permanently delete all invoices, bills, estimates, '
           'payments, contacts, products, and expenses for this company context.\n\n'
           'This action CANNOT be undone. Are you sure you want to proceed and receive a verification OTP on your email?',
@@ -1937,7 +1936,7 @@ class _SettingsViewState extends State<SettingsView> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: Text('Cancel'),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.error),
@@ -2048,7 +2047,7 @@ class _SettingsViewState extends State<SettingsView> {
                         if (res.statusCode == 200) {
                           Navigator.pop(ctx);
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
+                            SnackBar(
                               content: Text(
                                 'Company data purged successfully.',
                               ),
@@ -2081,7 +2080,7 @@ class _SettingsViewState extends State<SettingsView> {
                         setDialogState(() => verifying = false);
                       }
                     },
-              child: const Text('Purge Data'),
+              child: Text('Purge Data'),
             ),
           ],
         ),
