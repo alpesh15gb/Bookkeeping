@@ -596,7 +596,7 @@ class TenantSetting(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
-    name = Column(String(100), nullable=False)  # Setting name/key
+    name = Column(String(100), nullable=True)  # Setting name/key (optional for backward compat)
     value = Column(String(255))  # Setting value
     logo_url = Column(String(255))
     currency = Column(String(10), nullable=False, default="INR")
