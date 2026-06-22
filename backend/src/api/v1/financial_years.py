@@ -182,6 +182,7 @@ def create_financial_year(
     _log_audit(db, tenant_id, fy.id, "CREATED", tenant_id, f"FY {fy.name} created")
     db.commit()
     db.refresh(fy)
+    today = date.today()
     computed = _compute_status(fy, today)
 
     return FinancialYearResponse(
