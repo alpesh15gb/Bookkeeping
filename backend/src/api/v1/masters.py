@@ -309,7 +309,7 @@ def delete_product(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
 
-    from src.infrastructure.database.models import InvoiceLine, BillLine
+    from src.infrastructure.database.models import InvoiceLine, BillLine, SalesOrderLine, DeliveryChallanLine
     active_inv_lines = db.query(InvoiceLine).join(InvoiceLine.invoice).filter(
         InvoiceLine.product_id == id,
         Invoice.deleted_at == None,
@@ -320,11 +320,25 @@ def delete_product(
         Bill.deleted_at == None,
         Bill.status != "CANCELLED"
     ).count()
-    if active_inv_lines > 0 or active_bill_lines > 0:
-        raise HTTPException(status_code=400, detail="Cannot delete product with active invoice or bill lines.")
+    active_so_lines = db.query(SalesOrderLine).join(SalesOrderLine.sales_order).filter(
+        SalesOrderLine.product_id == id,
+        SalesOrder.deleted_at == None,
+        SalesOrder.status != "CANCELLED"
+    ).count()
+    active_dc_lines = db.query(DeliveryChallanLine).join(DeliveryChallanLine.delivery_challan).filter(
+        DeliveryChallanLine.product_id == id,
+        DeliveryChallan.deleted_at == None,
+        DeliveryChallan.status != "CANCELLED"
+    ).count()
+    if active_inv_lines > 0 or active_bill_lines > 0 or active_so_lines > 0 or active_dc_lines > 0:
+        raise HTTPException(status_code=400, detail="Cannot delete product with active invoice, bill, sales order, or delivery challan lines.")
 
-    product.deleted_at = datetime.now(timezone.utc)
-    db.commit()
+    try:
+        product.deleted_at = datetime.now(timezone.utc)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete product: {str(e)}")
     return None
 
 

@@ -77,13 +77,26 @@ def _enforce_single_current(db: Session, tenant_id: uuid.UUID, exclude_id: uuid.
         )
 
 
-def _normalize_current_flags(fys: list[FinancialYear], today: date) -> Optional[FinancialYear]:
-    """Ensure only the FY containing today is marked current."""
-    correct_current = None
-    for fy in fys:
-        if fy.start_date <= today <= fy.end_date and fy.status not in ("LOCKED", "ARCHIVED"):
-            correct_current = fy
-            break
+def _normalize_current_flags(fys: list[FinancialYear], today: date, force_fy_id: uuid.UUID = None) -> Optional[FinancialYear]:
+    """Ensure only the FY containing today is marked current.
+    
+    If force_fy_id is provided, that FY is marked as current instead of the
+    date-based calculation. This supports explicit user switches.
+    """
+    # If there's an explicit override, use it
+    if force_fy_id is not None:
+        for fy in fys:
+            if fy.id == force_fy_id and fy.status not in ("LOCKED", "ARCHIVED"):
+                correct_current = fy
+                break
+        else:
+            correct_current = None
+    else:
+        correct_current = None
+        for fy in fys:
+            if fy.start_date <= today <= fy.end_date and fy.status not in ("LOCKED", "ARCHIVED"):
+                correct_current = fy
+                break
 
     for fy in fys:
         fy.is_current = (correct_current is not None and fy.id == correct_current.id)
@@ -100,7 +113,6 @@ def list_financial_years(
     fys = (
         db.query(FinancialYear)
         .filter(FinancialYear.tenant_id == tenant_id)
-        .with_for_update(nowait=True)  # Lock rows to prevent race with concurrent close/switch
         .order_by(FinancialYear.start_date.desc())
         .all()
     )
@@ -162,9 +174,11 @@ def create_financial_year(
     )
     db.add(fy)
     db.flush()
+    fy.is_current = True
     all_fys = db.query(FinancialYear).filter(FinancialYear.tenant_id == tenant_id).all()
-    today = date.today()
-    _normalize_current_flags(all_fys, today)
+    for other_fy in all_fys:
+        if other_fy.id != fy.id:
+            other_fy.is_current = False
     _log_audit(db, tenant_id, fy.id, "CREATED", tenant_id, f"FY {fy.name} created")
     db.commit()
     db.refresh(fy)
@@ -196,7 +210,11 @@ def switch_financial_year(
 
     today = date.today()
     all_fys = db.query(FinancialYear).filter(FinancialYear.tenant_id == tenant_id).all()
-    _normalize_current_flags(all_fys, today)
+    _normalize_current_flags(all_fys, today, force_fy_id=target.id)
+    target.is_current = True
+    for fy in all_fys:
+        if fy.id != target.id:
+            fy.is_current = False
     target.switched_by = tenant_id
     target.last_accessed_at = datetime.now(timezone.utc)
     db.flush()
@@ -237,6 +255,11 @@ def get_current_financial_year(
         ).first()
         if not fy:
             raise HTTPException(status_code=404, detail="No current financial year found. Create one first.")
+    
+    fy.is_current = True
+    for other_fy in fys:
+        if other_fy.id != fy.id:
+            other_fy.is_current = False
 
     computed = _compute_status(fy, today)
     db.commit()
@@ -462,8 +485,7 @@ def close_financial_year(
     # Update FY status → LOCKED (immediately, no CLOSED intermediate)
     fy.status = "LOCKED"
     fy.closed_at = datetime.now(timezone.utc)
-    # CRITICAL FIX: closed_by should be tenant_id (acting user), not user_id
-    fy.closed_by = tenant_id
+    fy.closed_by = None
     fy.journal_entry_id = entry_id if journal_entry else None
 
     # Sync AccountingPeriod: close the period covering this FY
@@ -493,10 +515,10 @@ def close_financial_year(
     ).update({"is_current": False})
 
     next_fy_start = fy.end_date + timedelta(days=1)
-    # HIGH FIX: Compute next FY end based on FY start month (not hardcoded March 31)
-    # Indian FY: if start is Apr 1, end is Mar 31 next year
-    # Generic: end = start_date + 1 year - 1 day
-    next_fy_end = date(next_fy_start.year + 1, next_fy_start.month, 1) - timedelta(days=1)
+    try:
+        next_fy_end = date(next_fy_start.year + 1, next_fy_start.month, 1) - timedelta(days=1)
+    except ValueError:
+        next_fy_end = date(next_fy_start.year + 1, next_fy_start.month, 28) - timedelta(days=1)
 
     # CRITICAL: Check for overlap before creating next FY
     overlap = db.query(FinancialYear).filter(

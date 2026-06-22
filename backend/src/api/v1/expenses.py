@@ -6,6 +6,10 @@ from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from pydantic import BaseModel, validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func
+import logging
+
+logger = logging.getLogger(__name__)
+
 from src.api.deps import get_db_session, enforce_permission, get_current_user
 from src.infrastructure.database.models import Expense, ExpenseCategory, User
 from src.core.rate_limiter import limiter
@@ -404,7 +408,13 @@ def post_expense(
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
     expense.status = "POSTED"
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger = logging.getLogger(__name__)
+        logger.error(f"Failed to commit posted expense {expense.id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to post expense: {str(e)}")
 
     db.refresh(expense)
     return _expense_to_response(expense)
@@ -482,8 +492,14 @@ def cancel_expense(
     expense.status = "CANCELLED"
     from datetime import datetime, timezone
     expense.cancelled_at = datetime.now(timezone.utc)
-    expense.cancelled_by = current_user.id
-    db.commit()
+    if current_user:
+        expense.cancelled_by = current_user.id
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Failed to cancel expense {expense.id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to cancel expense: {str(e)}")
 
     db.refresh(expense)
     return _expense_to_response(expense)

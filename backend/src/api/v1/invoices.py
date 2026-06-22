@@ -246,7 +246,12 @@ def create_invoice(
             pass  # QR generation is non-critical
 
     # Auto-post: create journal entry immediately
-    auto_post_invoice(db, tenant_id, invoice)
+    try:
+        auto_post_invoice(db, tenant_id, invoice)
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Auto-post failed for invoice {invoice.id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to post invoice to ledger: {str(e)}")
 
     # Trigger background e-invoice generation if tenant has e-invoicing enabled
     if tenant_settings and getattr(tenant_settings, "e_invoice_enabled", None):

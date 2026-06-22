@@ -125,7 +125,11 @@ def create_delivery_challan(
     )
 
     db.add(dc)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create delivery challan: {str(e)}")
     db.refresh(dc)
     return dc
 

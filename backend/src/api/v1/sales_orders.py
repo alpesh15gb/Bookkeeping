@@ -13,7 +13,7 @@ from src.schemas.bill_schemas import (
 )
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
-from src.domains.company.services import resolve_origin_state_code
+from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
 from src.api.deps import get_tenant_context, enforce_permission
 
 router = APIRouter(prefix="/sales-orders", tags=["Sales Orders"])
@@ -126,7 +126,11 @@ def create_sales_order(
     )
 
     db.add(so)
-    db.commit()
+    try:
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to create sales order: {str(e)}")
     db.refresh(so)
     return so
 
