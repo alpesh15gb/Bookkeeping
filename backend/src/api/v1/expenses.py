@@ -161,46 +161,50 @@ def create_expense(
     import logging
     logger = logging.getLogger(__name__)
     from src.domains.accounting.period_lock import validate_period_open
+
     try:
         validate_period_open(db, tenant_id, payload.expense_date)
 
-    category = db.query(ExpenseCategory).filter(
-        ExpenseCategory.id == payload.expense_category_id,
-        ExpenseCategory.tenant_id == tenant_id,
-        ExpenseCategory.is_active == True,
-    ).first()
-    if not category:
-        raise HTTPException(status_code=404, detail="Expense category not found.")
+        category = db.query(ExpenseCategory).filter(
+            ExpenseCategory.id == payload.expense_category_id,
+            ExpenseCategory.tenant_id == tenant_id,
+            ExpenseCategory.is_active == True,
+        ).first()
+        if not category:
+            raise HTTPException(status_code=404, detail="Expense category not found.")
 
-    expense_number = _gen_expense_number(db, tenant_id)
-    place_of_supply = payload.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
-    totals = _compute_expense_totals(db, tenant_id, payload.amount, payload.gst_rate, place_of_supply)
+        expense_number = _gen_expense_number(db, tenant_id)
+        place_of_supply = payload.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
+        totals = _compute_expense_totals(db, tenant_id, payload.amount, payload.gst_rate, place_of_supply)
 
-    expense = Expense(
-        tenant_id=tenant_id,
-        expense_number=expense_number,
-        expense_category_id=payload.expense_category_id,
-        bank_account_id=payload.bank_account_id,
-        expense_date=payload.expense_date,
-        vendor_name=payload.vendor_name,
-        description=payload.description,
-        amount=payload.amount,
-        gst_rate=payload.gst_rate,
-        cgst_amount=totals["cgst_amount"],
-        sgst_amount=totals["sgst_amount"],
-        igst_amount=totals["igst_amount"],
-        utgst_amount=totals["utgst_amount"],
-        cess_amount=totals["cess_amount"],
-        round_off=totals["round_off"],
-        total=totals["total"],
-        status="DRAFT",
-        notes=payload.notes,
-        reference_number=payload.reference_number,
-    )
-    db.add(expense)
-    db.commit()
-    db.refresh(expense)
-    return _expense_to_response(expense)
+        expense = Expense(
+            tenant_id=tenant_id,
+            expense_number=expense_number,
+            expense_category_id=payload.expense_category_id,
+            bank_account_id=payload.bank_account_id,
+            expense_date=payload.expense_date,
+            vendor_name=payload.vendor_name,
+            description=payload.description,
+            amount=payload.amount,
+            gst_rate=payload.gst_rate,
+            cgst_amount=totals["cgst_amount"],
+            sgst_amount=totals["sgst_amount"],
+            igst_amount=totals["igst_amount"],
+            utgst_amount=totals["utgst_amount"],
+            cess_amount=totals["cess_amount"],
+            round_off=totals["round_off"],
+            total=totals["total"],
+            status="DRAFT",
+            notes=payload.notes,
+            reference_number=payload.reference_number,
+        )
+        db.add(expense)
+        db.commit()
+        db.refresh(expense)
+        return _expense_to_response(expense)
+    except Exception as e:
+        logger.error(f"Error creating expense: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create expense: {str(e)}")
     except Exception as e:
         logger.error(f"Error creating expense: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create expense: {str(e)}")
