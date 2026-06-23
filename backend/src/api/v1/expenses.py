@@ -158,8 +158,11 @@ def create_expense(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:create")),
 ):
+    import logging
+    logger = logging.getLogger(__name__)
     from src.domains.accounting.period_lock import validate_period_open
-    validate_period_open(db, tenant_id, payload.expense_date)
+    try:
+        validate_period_open(db, tenant_id, payload.expense_date)
 
     category = db.query(ExpenseCategory).filter(
         ExpenseCategory.id == payload.expense_category_id,
@@ -198,6 +201,9 @@ def create_expense(
     db.commit()
     db.refresh(expense)
     return _expense_to_response(expense)
+    except Exception as e:
+        logger.error(f"Error creating expense: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create expense: {str(e)}")
 
 
 @router.get("", response_model=List[ExpenseListResponse])
