@@ -43,7 +43,7 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/master'
     steps:
-      - name: SSH and Deploy
+      - name: SSH and Deploy Backend Only
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -53,6 +53,14 @@ jobs:
           script: |
             cd /opt/bookkeeping
             git pull origin master
-            docker compose up -d --build backend worker frontend
+            
+            # Build and restart only backend and worker (skip frontend)
+            docker compose up -d --build backend worker
+            
             sleep 10
+            
+            # Run database migrations
             docker compose exec -T backend alembic upgrade head
+            
+            # Verify backend is running
+            docker compose ps backend
