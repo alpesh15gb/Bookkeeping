@@ -92,12 +92,17 @@ def _normalize_current_flags(fys: list[FinancialYear], today: date, force_fy_id:
         else:
             correct_current = None
     else:
-        correct_current = None
-        for fy in fys:
-            if fy.start_date <= today <= fy.end_date and fy.status not in ("LOCKED", "ARCHIVED"):
-                correct_current = fy
-                break
-
+        # Check if there is exactly one FY marked as current in the list
+        current_fys = [fy for fy in fys if fy.is_current and fy.status not in ("LOCKED", "ARCHIVED")]
+        if len(current_fys) == 1:
+            correct_current = current_fys[0]
+        else:
+            # If multiple or none are marked as current, fallback to date-based calculation
+            correct_current = None
+            for fy in fys:
+                if fy.start_date <= today <= fy.end_date and fy.status not in ("LOCKED", "ARCHIVED"):
+                    correct_current = fy
+                    break
     for fy in fys:
         fy.is_current = (correct_current is not None and fy.id == correct_current.id)
 

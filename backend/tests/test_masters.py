@@ -272,5 +272,28 @@ class TestMasterData(unittest.TestCase):
         self.assertEqual(res_terms.status_code, 200)
         self.assertGreaterEqual(len(res_terms.json()), 4) # Due on Receipt, Net 15, Net 30, Net 60
 
+    def test_delete_product(self):
+        # Create product
+        payload = {
+            "name": "Product to Delete",
+            "sku": "SKU-DEL",
+            "hsn_sac": "998311",
+            "product_type": "SERVICE",
+            "uom": "HRS",
+            "sales_price": 100.00,
+            "purchase_price": 0.00,
+            "gst_rate": 18.0
+        }
+        res_post = self.client.post("/api/v1/masters/products", json=payload, headers=self.headers_a)
+        self.assertEqual(res_post.status_code, 201)
+        product_id = res_post.json()["id"]
+
+        # Delete product
+        res_del = self.client.delete(f"/api/v1/masters/products/{product_id}", headers=self.headers_a)
+        self.assertEqual(res_del.status_code, 204)
+
+        # Try to retrieve it
+        res_get = self.client.get(f"/api/v1/masters/products/{product_id}", headers=self.headers_a)
+        self.assertEqual(res_get.status_code, 404)
 if __name__ == "__main__":
     unittest.main()

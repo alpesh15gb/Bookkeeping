@@ -309,7 +309,10 @@ def delete_product(
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
 
-    from src.infrastructure.database.models import InvoiceLine, BillLine, SalesOrderLine, DeliveryChallanLine
+    from src.infrastructure.database.models import (
+        InvoiceLine, BillLine, SalesOrderLine, DeliveryChallanLine,
+        Invoice, Bill, SalesOrder, DeliveryChallan
+    )
     active_inv_lines = db.query(InvoiceLine).join(InvoiceLine.invoice).filter(
         InvoiceLine.product_id == id,
         Invoice.deleted_at == None,

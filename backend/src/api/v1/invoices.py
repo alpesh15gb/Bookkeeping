@@ -478,6 +478,15 @@ def preview_invoice(
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
+    tds_rate = payload.tds_rate or Decimal("0.00")
+    tcs_rate = payload.tcs_rate or Decimal("0.00")
+    tds_amount = Decimal("0.0000")
+    tcs_amount = Decimal("0.0000")
+    if tds_rate > 0:
+        tds_amount = (rounded_total * tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
+    if tcs_rate > 0:
+        tcs_amount = (rounded_total * tcs_rate / Decimal("100")).quantize(Decimal("0.0001"))
+
     preview_invoice = Invoice(
         id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
         tenant_id=tenant_id,
@@ -499,6 +508,14 @@ def preview_invoice(
         pos_state_code=payload.pos_state_code,
         e_invoice_status="PENDING",
         is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive else False,
+        is_rcm=payload.is_rcm or False,
+        supply_type=payload.supply_type or "DOMESTIC",
+        currency=payload.currency or "INR",
+        exchange_rate=payload.exchange_rate or Decimal("1.000000"),
+        tds_rate=tds_rate,
+        tds_amount=tds_amount,
+        tcs_rate=tcs_rate,
+        tcs_amount=tcs_amount,
         lines=db_lines,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),

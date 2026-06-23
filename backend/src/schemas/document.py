@@ -117,6 +117,12 @@ class InvoicePreviewRequest(SchemaBase):
     discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
     is_gst_inclusive: Optional[bool] = False
+    currency: Optional[str] = Field(default="INR", max_length=10)
+    exchange_rate: Optional[Decimal] = Field(default=Decimal("1.000000"), ge=0)
+    is_rcm: Optional[bool] = False
+    supply_type: Optional[str] = Field(default="DOMESTIC", pattern="^(DOMESTIC|EXPORT_WITH_TAX|EXPORT_WITHOUT_TAX|SEZ_WITH_TAX|SEZ_WITHOUT_TAX)$")
+    tds_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    tcs_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
 
 class InvoiceUpdate(SchemaBase):
     contact_id: Optional[uuid.UUID] = None

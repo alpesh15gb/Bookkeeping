@@ -415,6 +415,12 @@ def update_settings(
         setting.e_way_bill_username = payload.e_way_bill_username
     if payload.e_way_bill_password is not None:
         setting.e_way_bill_password_hash = encrypt_credential(payload.e_way_bill_password)
+    if payload.upi_id is not None:
+        setting.upi_id = payload.upi_id
+    if payload.display_settings is not None:
+        setting.display_settings = payload.display_settings
+        from sqlalchemy.orm.attributes import flag_modified
+        flag_modified(setting, "display_settings")
     if payload.origin_state_code is not None:
         setting.origin_state_code = payload.origin_state_code
     if payload.extra_settings is not None:

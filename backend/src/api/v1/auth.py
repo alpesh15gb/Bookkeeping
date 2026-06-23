@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 import uuid
 import re
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union
 from datetime import datetime, timedelta, timezone
 import redis
 
@@ -317,10 +317,18 @@ def refresh_token(
 @router.post("/logout")
 def logout_user(
     request: Request,
-    refresh_token_str: Optional[str] = Body(None),
-    current_user: User = Depends(get_current_user)
+    payload: Optional[Union[RefreshTokenRequest, str]] = Body(None),
 ):
-    """Revokes a refresh token so it can no longer be used."""
+    """Revokes a refresh token so it can no longer be used.
+
+    Logout must work even when the access token has expired; the refresh token
+    is the credential being revoked here.
+    """
+    refresh_token_str = (
+        payload.refresh_token
+        if isinstance(payload, RefreshTokenRequest)
+        else payload
+    )
     try:
         payload = decode_token(refresh_token_str, expected_type="refresh")
         user_id = payload.get("sub")

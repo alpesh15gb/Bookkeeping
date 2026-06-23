@@ -71,6 +71,7 @@ def get_tenant_context(
             detail="X-Tenant-ID or tenant_id must be a valid UUID."
         )
 
+    tenant_context.set(tenant_uuid)
     membership = db.query(TenantMembership).filter(
         TenantMembership.tenant_id == tenant_uuid,
         TenantMembership.user_id == current_user.id,
@@ -82,8 +83,6 @@ def get_tenant_context(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User does not have access to this tenant context."
         )
-
-    tenant_context.set(tenant_uuid)
     set_audit_context(
         tenant_id=tenant_uuid,
         actor_id=current_user.id,
@@ -118,6 +117,7 @@ def enforce_permission(required_permission: str):
                 detail="X-Tenant-ID or tenant_id must be a valid UUID."
             )
 
+        tenant_context.set(tenant_uuid)
         membership = db.query(TenantMembership).filter(
             TenantMembership.tenant_id == tenant_uuid,
             TenantMembership.user_id == current_user.id,
@@ -136,8 +136,6 @@ def enforce_permission(required_permission: str):
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"Operation requires permission scope: {required_permission}"
             )
-
-        tenant_context.set(tenant_uuid)
         set_audit_context(
             tenant_id=tenant_uuid,
             actor_id=current_user.id,

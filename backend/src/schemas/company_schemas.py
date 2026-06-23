@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from typing import Optional, Dict, Any
 import uuid
 from decimal import Decimal
@@ -81,9 +81,16 @@ class TenantSettingResponse(SchemaBase):
     e_invoice_username: Optional[str]
     e_way_bill_username: Optional[str]
     upi_id: Optional[str]
-    display_settings: Dict[str, Any]
+    display_settings: Optional[Dict[str, Any]] = None
     origin_state_code: Optional[str]
-    extra_settings: Dict[str, Any]
+    extra_settings: Optional[Dict[str, Any]] = None
+
+    @field_validator("display_settings", "extra_settings", mode="before")
+    @classmethod
+    def convert_none_to_dict(cls, v):
+        if v is None:
+            return {}
+        return v
     created_at: datetime
     updated_at: datetime
 
