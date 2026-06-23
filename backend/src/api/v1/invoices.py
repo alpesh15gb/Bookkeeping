@@ -392,10 +392,7 @@ def preview_invoice(
     Useful for frontend live preview before submission.
     Contact resolution is skipped since preview doesn't require it.
     """
-    import logging
-    logger = logging.getLogger(__name__)
-    try:
-        origin_state_code = resolve_origin_state_code(db, tenant_id)
+    origin_state_code = resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
     inv_subtotal = Decimal("0.0000")
@@ -508,6 +505,7 @@ def preview_invoice(
         round_off=round_off,
         shipping_charges=header_shipping,
         total=rounded_total,
+        vyapar_custom_fields={},
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
         e_invoice_status="PENDING",
@@ -520,16 +518,12 @@ def preview_invoice(
         tds_amount=tds_amount,
         tcs_rate=tcs_rate,
         tcs_amount=tcs_amount,
-        vyapar_custom_fields={},
         lines=db_lines,
         created_at=datetime.now(timezone.utc),
         updated_at=datetime.now(timezone.utc),
     )
 
     return preview_invoice
-    except Exception as e:
-        logger.error(f"Error generating invoice preview: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate preview: {str(e)}")
 
 
 # ==========================================
