@@ -717,7 +717,14 @@ def trial_balance_excel(
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill
     from src.api.v1.accounting import get_trial_balance
+    from src.infrastructure.database.models import Tenant
+    
     data = get_trial_balance(db=db, tenant_id=tenant_id)
+    if not data or not hasattr(data, 'lines'):
+        raise HTTPException(status_code=404, detail="Trial balance data not available")
+    
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     company_name = tenant.legal_name if tenant else "ApexBooks"
 

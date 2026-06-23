@@ -73,14 +73,14 @@ def get_gstr1_report(
 
     for inv in invoices:
         contact = inv.contact
-        is_registered = contact and contact.gstin
+        is_registered = bool(contact and contact.gstin)
 
         if is_registered:
             # Section 4: B2B registered sales
             b2b_lines.append(
                 GSTR1B2BLine(
-                    customer_name=contact.name,
-                    customer_gstin=contact.gstin,
+                    customer_name=contact.name if contact else "Unknown",
+                    customer_gstin=contact.gstin if contact else None,
                     invoice_number=inv.invoice_number,
                     invoice_date=inv.issue_date,
                     pos_state_code=inv.pos_state_code,
@@ -218,7 +218,7 @@ def get_gstr1_report(
     for cn in credit_notes:
         invoice = cn.invoice
         contact = invoice.contact if invoice else None
-        is_registered = contact and contact.gstin
+        is_registered = bool(contact and contact.gstin)
 
         note_line = GSTR1NoteLine(
             note_number=cn.credit_note_number,
@@ -244,7 +244,7 @@ def get_gstr1_report(
     for dn in debit_notes:
         invoice = dn.invoice
         contact = invoice.contact if invoice else None
-        is_registered = contact and contact.gstin
+        is_registered = bool(contact and contact.gstin)
 
         note_line = GSTR1NoteLine(
             note_number=dn.debit_note_number,
@@ -494,7 +494,7 @@ def export_gstr1(
     
     for inv in invoices:
         contact = inv.contact
-        is_registered = contact and contact.gstin
+        is_registered = bool(contact and contact.gstin)
         if is_registered:
             # Group lines by rate
             rate_groups = {}

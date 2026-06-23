@@ -376,11 +376,14 @@ def get_settings(
     """Gets tenant-specific settings and visual parameters."""
     setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
     if not setting:
+        # Create with all required fields to avoid NULL serialization issues
         setting = TenantSetting(
             tenant_id=tenant_id,
             currency="INR",
             gst_enabled=True,
-            e_invoicing_enabled=False
+            e_invoicing_enabled=False,
+            display_settings={},
+            extra_settings={}
         )
         db.add(setting)
         db.commit()
