@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import List, Optional
 from datetime import date, datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
-from pydantic import BaseModel, validator
+from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 import logging
@@ -36,7 +36,8 @@ def _parse_date(s: Optional[str], param_name: str) -> Optional[date]:
 class BulkDeleteRequest(BaseModel):
     ids: List[uuid.UUID]
 
-    @validator('ids')
+    @field_validator('ids')
+    @classmethod
     def check_max_ids(cls, v):
         if len(v) > 100:
             raise ValueError("Cannot bulk delete more than 100 items at once.")
@@ -202,9 +203,6 @@ def create_expense(
         db.commit()
         db.refresh(expense)
         return _expense_to_response(expense)
-    except Exception as e:
-        logger.error(f"Error creating expense: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to create expense: {str(e)}")
     except Exception as e:
         logger.error(f"Error creating expense: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create expense: {str(e)}")

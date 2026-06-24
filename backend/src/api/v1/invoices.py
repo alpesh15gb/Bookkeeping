@@ -248,6 +248,9 @@ def create_invoice(
     # Auto-post: create journal entry immediately
     try:
         auto_post_invoice(db, tenant_id, invoice)
+    except ValueError as ve:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(ve))
     except Exception as e:
         db.rollback()
         logger.error(f"Auto-post failed for invoice {invoice.id}: {e}")

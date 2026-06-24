@@ -64,8 +64,8 @@ def create_contact(
         gstin=normalized_gstin,
         pan=payload.pan,
         registration_type=payload.registration_type,
-        billing_address=payload.billing_address.dict(),
-        shipping_address=payload.shipping_address.dict() if payload.shipping_address else None,
+        billing_address=payload.billing_address.model_dump(),
+        shipping_address=payload.shipping_address.model_dump() if payload.shipping_address else None,
         state_code=payload.state_code,
         is_active=True
     )

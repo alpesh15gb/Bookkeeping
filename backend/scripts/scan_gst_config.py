@@ -1,0 +1,185 @@
+#!/usr/bin/env python3
+"""
+Production GST Configuration Scanner
+Scans all tenants for GST configuration issues and generates a repair script.
+Run: docker compose exec -T backend python /tmp/scan_gst_config.py
+"""
+import sys, os
+sys.path.insert(0, "/app")
+os.chdir("/app")
+
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import Session
+
+engine = create_engine(os.environ.get("DATABASE_URL", "postgresql://postgres:production_secure_db_pass@db:5432/bookkeeping"))
+SEP = "=" * 70
+
+GSTIN_PATTERN = r'^\d{2}[A-Z]{5}\d{4}[A-Z]\d[Z][A-Z\d]$'
+GST_STATE_CODES = {
+    "01","02","03","04","05","06","07","08","09","10","11","12","13","14","15",
+    "16","17","18","19","20","21","22","23","24","25","26","27","28","29","30",
+    "31","32","33","34","35","36","37","38","97","99"
+}
+
+def is_valid_gstin(gstin):
+    if not gstin or len(gstin) != 15:
+        return False
+    import re
+    if not re.match(GSTIN_PATTERN, gstin):
+        return False
+    return gstin[:2] in GST_STATE_CODES
+
+with Session(engine) as db:
+    print(SEP)
+    print("PRODUCTION GST CONFIGURATION SCAN")
+    print(SEP)
+
+    # Fetch all tenants
+    tenants = db.execute(text("""
+        SELECT t.id, t.legal_name, t.gstin, t.pan, t.tax_mode,
+               ts.origin_state_code, ts.gst_enabled as settings_gst_enabled
+        FROM tenants t
+        LEFT JOIN tenant_settings ts ON ts.tenant_id = t.id
+        WHERE t.deleted_at IS NULL
+        ORDER BY t.created_at ASC
+    """)).mappings().all()
+
+    print(f"\nTotal tenants: {len(tenants)}")
+
+    # Category A: GSTIN present but tax_mode = NON_GST
+    cat_a = []
+    # Category B: GST enabled but origin_state_code = NULL
+    cat_b = []
+    # Category C: GST_REGULAR with invalid GSTIN
+    cat_c = []
+    # All good
+    cat_ok = []
+
+    for t in tenants:
+        tid = str(t['id'])
+        name = t['legal_name']
+        gstin = t['gstin']
+        tax_mode = t['tax_mode']
+        origin = t['origin_state_code']
+        settings_gst = t['settings_gst_enabled']
+
+        issues = []
+
+        # Category A: GSTIN present but tax_mode = NON_GST
+        if gstin and tax_mode == "NON_GST":
+            cat_a.append({
+                'id': tid, 'name': name, 'gstin': gstin,
+                'tax_mode': tax_mode, 'origin': origin
+            })
+            issues.append("A")
+
+        # Category B: GST enabled but origin_state_code = NULL
+        if tax_mode in ("GST_REGULAR", "GST_COMPOSITION") and not origin:
+            # Check if we can derive from GSTIN
+            if gstin and is_valid_gstin(gstin):
+                cat_b.append({
+                    'id': tid, 'name': name, 'gstin': gstin,
+                    'tax_mode': tax_mode, 'origin': origin,
+                    'derived_origin': gstin[:2]
+                })
+            else:
+                cat_b.append({
+                    'id': tid, 'name': name, 'gstin': gstin,
+                    'tax_mode': tax_mode, 'origin': origin,
+                    'derived_origin': None
+                })
+            issues.append("B")
+
+        # Category C: GST_REGULAR with invalid GSTIN
+        if tax_mode in ("GST_REGULAR", "GST_COMPOSITION") and gstin and not is_valid_gstin(gstin):
+            cat_c.append({
+                'id': tid, 'name': name, 'gstin': gstin,
+                'tax_mode': tax_mode
+            })
+            issues.append("C")
+
+        if not issues:
+            cat_ok.append({
+                'id': tid, 'name': name, 'tax_mode': tax_mode
+            })
+
+    # Report
+    print(f"\n{SEP}")
+    print(f"A. GSTIN present but tax_mode = NON_GST: {len(cat_a)}")
+    print(SEP)
+    if cat_a:
+        for r in cat_a:
+            print(f"  {r['name']} ({r['id'][:8]}...)")
+            print(f"    gstin={r['gstin']}  tax_mode={r['tax_mode']}")
+    else:
+        print("  NONE — all good")
+
+    print(f"\n{SEP}")
+    print(f"B. GST enabled but origin_state_code = NULL: {len(cat_b)}")
+    print(SEP)
+    if cat_b:
+        for r in cat_b:
+            print(f"  {r['name']} ({r['id'][:8]}...)")
+            print(f"    gstin={r['gstin']}  tax_mode={r['tax_mode']}  origin={r['origin']}")
+            if r['derived_origin']:
+                print(f"    → Can derive origin_state_code = {r['derived_origin']}")
+            else:
+                print(f"    → Cannot derive (no valid GSTIN)")
+    else:
+        print("  NONE — all good")
+
+    print(f"\n{SEP}")
+    print(f"C. GST_REGULAR with invalid GSTIN: {len(cat_c)}")
+    print(SEP)
+    if cat_c:
+        for r in cat_c:
+            print(f"  {r['name']} ({r['id'][:8]}...)")
+            print(f"    gstin={r['gstin']}  tax_mode={r['tax_mode']}")
+    else:
+        print("  NONE — all good")
+
+    print(f"\n{SEP}")
+    print(f"OK: {len(cat_ok)}")
+    print(SEP)
+
+    # Generate repair SQL if needed
+    has_issues = cat_a or cat_b or cat_c
+    if has_issues:
+        print(f"\n{SEP}")
+        print("REPAIR SQL")
+        print(SEP)
+        print("-- Generated by scan_gst_config.py")
+        print("-- Review each statement before executing")
+        print("-- Run in a transaction: BEGIN; ... COMMIT;")
+        print()
+
+        if cat_a:
+            print("-- Category A: Set tax_mode = GST_REGULAR for tenants with GSTIN")
+            for r in cat_a:
+                print(f"UPDATE tenants SET tax_mode = 'GST_REGULAR' WHERE id = '{r['id']}';")
+            print()
+
+        if cat_b:
+            print("-- Category B: Set origin_state_code from GSTIN prefix")
+            for r in cat_b:
+                if r['derived_origin']:
+                    print(f"UPDATE tenant_settings SET origin_state_code = '{r['derived_origin']}' WHERE tenant_id = '{r['id']}';")
+                else:
+                    print(f"-- WARNING: {r['name']} ({r['id'][:8]}...) has no valid GSTIN, cannot derive origin_state_code")
+                    print(f"-- Manual intervention required: set origin_state_code in tenant_settings")
+            print()
+
+        if cat_c:
+            print("-- Category C: Invalid GSTIN — requires manual fix")
+            for r in cat_c:
+                print(f"-- {r['name']} ({r['id'][:8]}...): gstin='{r['gstin']}' is invalid")
+                print(f"-- Either fix the GSTIN or set tax_mode = 'NON_GST'")
+            print()
+    else:
+        print(f"\n{SEP}")
+        print("NO ISSUES FOUND — all tenant configurations are correct")
+        print(SEP)
+
+    print(f"\n{SEP}")
+    print("SCAN COMPLETE")
+    print(SEP)

@@ -1,5 +1,7 @@
 import uuid
+import re
 import base64
+from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
@@ -145,6 +147,48 @@ GST_STATE_CODES: set = {
     "97", "99",
 }
 
+_GSTIN_PATTERN = re.compile(r'^\d{2}[A-Z]{5}\d{4}[A-Z]\d[Z][A-Z\d]$')
+
+
+# ---------------------------------------------------------------------------
+# Shared GST helpers — single source of truth for GSTIN validation,
+# tax_mode detection, and origin_state_code derivation.
+# ---------------------------------------------------------------------------
+
+def is_valid_gstin(gstin: Optional[str]) -> bool:
+    """Returns True if gstin is a valid 15-character GSTIN with correct format."""
+    if not gstin or len(gstin) != 15:
+        return False
+    if not _GSTIN_PATTERN.match(gstin):
+        return False
+    return gstin[:2] in GST_STATE_CODES
+
+
+def detect_tax_mode(gstin: Optional[str], explicit_mode: Optional[str] = None) -> str:
+    """
+    Determines the tax_mode for a tenant.
+
+    Priority:
+      1. explicit_mode if provided and valid (GST_REGULAR, GST_COMPOSITION, NON_GST)
+      2. GST_REGULAR if gstin is a valid 15-char GSTIN
+      3. NON_GST otherwise
+    """
+    if explicit_mode in ("GST_REGULAR", "GST_COMPOSITION", "NON_GST"):
+        return explicit_mode
+    return "GST_REGULAR" if is_valid_gstin(gstin) else "NON_GST"
+
+
+def derive_origin_state_code(gstin: Optional[str]) -> Optional[str]:
+    """
+    Derives the 2-character origin state code from a GSTIN prefix.
+    Returns None if GSTIN is invalid or state code is not recognized.
+    """
+    if not is_valid_gstin(gstin):
+        return None
+    prefix = gstin[:2]
+    return prefix if prefix in GST_STATE_CODES else None
+
+
 # ---------------------------------------------------------------------------
 # Origin state resolution — from tenant GSTIN or TenantSetting fallback
 # ---------------------------------------------------------------------------
@@ -155,7 +199,7 @@ def resolve_origin_state_code(db: Session, tenant_id: uuid.UUID) -> str:
     Resolution order:
       1. TenantSetting.origin_state_code — explicit override (set in Settings page)
       2. Tenant.gstin[:2] — auto-detected from GSTIN prefix
-      3. Raises ValueError if neither is available
+      3. Fallback to "36" (Telangana) to prevent HTTP 500 crashes
     """
     setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
     if setting and setting.origin_state_code:
@@ -163,12 +207,11 @@ def resolve_origin_state_code(db: Session, tenant_id: uuid.UUID) -> str:
             return setting.origin_state_code
 
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
-    if tenant and tenant.gstin and len(tenant.gstin) == 15:
-        state_code = tenant.gstin[:2]
-        if state_code in GST_STATE_CODES:
-            return state_code
+    if tenant:
+        derived = derive_origin_state_code(tenant.gstin)
+        if derived:
+            return derived
 
-    # Fallback to "36" (Telangana) instead of raising ValueError to prevent HTTP 500 crashes
     return "36"
 
 

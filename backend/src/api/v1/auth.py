@@ -122,11 +122,14 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
     db.flush() # Flushes to allocate user ID
 
     # 3. Create Tenant company record
+    from src.domains.company.services import is_valid_gstin, detect_tax_mode, derive_origin_state_code
+    has_valid_gstin = is_valid_gstin(payload.company_gstin)
     tenant = Tenant(
         legal_name=payload.company_legal_name,
         trade_name=payload.company_legal_name,
         gstin=payload.company_gstin,
-        pan=payload.company_pan
+        pan=payload.company_pan,
+        tax_mode=detect_tax_mode(payload.company_gstin),
     )
     db.add(tenant)
     db.flush() # Flushes to allocate tenant ID
@@ -170,6 +173,17 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
             linked_account_id=linked_account_id,
             is_active=True,
         ))
+
+    # Create TenantSetting with origin_state_code derived from GSTIN prefix
+    from src.infrastructure.database.models import TenantSetting
+    setting = TenantSetting(
+        tenant_id=tenant.id,
+        currency="INR",
+        gst_enabled=has_valid_gstin,
+        e_invoicing_enabled=False,
+        origin_state_code=derive_origin_state_code(payload.company_gstin),
+    )
+    db.add(setting)
 
     _log_audit(db, "user.register", user_id=str(user.id), tenant_id=str(tenant.id), request=request)
     db.commit()

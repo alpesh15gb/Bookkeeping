@@ -40,12 +40,13 @@ def create_company(
     current_user: User = Depends(get_current_user)
 ):
     """Registers an additional company/tenant context under the current active user."""
+    from src.domains.company.services import detect_tax_mode
     tenant = Tenant(
         legal_name=payload.legal_name,
         trade_name=payload.legal_name,
         gstin=payload.gstin,
         pan=payload.pan,
-        tax_mode=payload.tax_mode or ("GST_REGULAR" if payload.gstin else "NON_GST"),
+        tax_mode=detect_tax_mode(payload.gstin, payload.tax_mode),
     )
     db.add(tenant)
     db.flush()
@@ -95,11 +96,13 @@ def create_company(
             )
             db.add(cat)
 
+    from src.domains.company.services import is_valid_gstin, derive_origin_state_code
     setting = TenantSetting(
         tenant_id=tenant.id,
         currency="INR",
-        gst_enabled=True if payload.gstin else False,
-        e_invoicing_enabled=False
+        gst_enabled=is_valid_gstin(payload.gstin),
+        e_invoicing_enabled=False,
+        origin_state_code=derive_origin_state_code(payload.gstin),
     )
     db.add(setting)
 
@@ -208,6 +211,13 @@ def toggle_gst(
     if setting:
         setting.gst_enabled = new_mode in ("GST_REGULAR", "GST_COMPOSITION")
 
+        # Auto-detect origin_state_code from GSTIN prefix when enabling GST
+        if new_mode in ("GST_REGULAR", "GST_COMPOSITION") and not setting.origin_state_code:
+            from src.domains.company.services import derive_origin_state_code
+            derived = derive_origin_state_code(tenant.gstin)
+            if derived:
+                setting.origin_state_code = derived
+
     _log_audit(db, tenant_id, "TAX_MODE_CHANGED",
                f"Tax mode changed from {old_mode} to {new_mode}")
 
@@ -254,7 +264,7 @@ def create_branch(
         tenant_id=tenant_id,
         name=payload.name,
         gstin=payload.gstin,
-        address=payload.address.dict(),
+        address=payload.address.model_dump(),
         is_active=True
     )
     db.add(branch)
