@@ -12,6 +12,7 @@ from src.core.database import get_db_session
 from src.api.deps import enforce_permission
 from src.infrastructure.database.models import Tenant
 from io import BytesIO
+from fastapi.responses import StreamingResponse
 from src.domains.accounting.report_services import (
     BalanceSheetService,
     TrialBalanceService,

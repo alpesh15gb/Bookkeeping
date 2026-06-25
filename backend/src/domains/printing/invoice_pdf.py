@@ -1388,18 +1388,26 @@ def generate_balance_sheet_pdf(data, company_name: str, cutoff: str) -> bytes:
     ]))
     elements.append(Spacer(1, 4*mm))
 
+    assets_data = data.get("assets", {})
+    liabilities_data = data.get("liabilities", {})
+    equity_data = data.get("equity", {})
     sections = [
-        ("ASSETS", data.get("assets", {}).get("items", []) or data.get("assets", []), float(data.get("total_assets", 0))),
-        ("LIABILITIES", data.get("liabilities", {}).get("items", []) or data.get("liabilities", []), float(data.get("total_liabilities", 0))),
-        ("EQUITY", data.get("equity", {}).get("items", []) or data.get("equity", []), float(data.get("total_equity", 0)))
+        ("ASSETS", assets_data.get("items", []) if isinstance(assets_data, dict) else [], float(assets_data.get("total", 0) if isinstance(assets_data, dict) else 0)),
+        ("LIABILITIES", liabilities_data.get("items", []) if isinstance(liabilities_data, dict) else [], float(liabilities_data.get("total", 0) if isinstance(liabilities_data, dict) else 0)),
+        ("EQUITY", equity_data.get("items", []) if isinstance(equity_data, dict) else [], float(equity_data.get("total", 0) if isinstance(equity_data, dict) else 0))
     ]
 
     for title, items, total in sections:
         table_data = [[Paragraph(f"<b>{title}</b>", bold_style), ""]]
         for item in items:
-            name = item.get("account_name") or item.account_name
-            code = item.get("account_code") or item.account_code
-            bal = float(item.get("balance") or item.balance)
+            if isinstance(item, dict):
+                name = item.get("account_name", "")
+                code = item.get("account_code", "")
+                bal = float(item.get("balance", 0))
+            else:
+                name = item.account_name
+                code = item.account_code
+                bal = float(item.balance)
             table_data.append([
                 Paragraph(f"{name} ({code})" if code and code != "--" else name, normal_style),
                 Paragraph(f"₹{bal:,.2f}", right_style)
