@@ -123,3 +123,33 @@ class NumberingSeriesResponse(SchemaBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+
+from pydantic import EmailStr
+
+class TenantInviteRequest(BaseModel):
+    email: EmailStr
+    role: str = Field("accountant", pattern="^(owner|accountant|salesperson|auditor)$")
+
+class TenantInviteResponse(SchemaBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    email: str
+    role: str
+    token: str
+    status: str
+    expires_at: datetime
+    created_at: datetime
+
+class TenantMemberResponse(BaseModel):
+    user_id: uuid.UUID
+    email: str
+    full_name: str
+    role: str
+    is_active: bool
+
+class TenantMemberUpdate(BaseModel):
+    role: str = Field(..., pattern="^(owner|accountant|salesperson|auditor)$")
+    is_active: Optional[bool] = None
+
+class InvitationAcceptRejectRequest(BaseModel):
+    token: str

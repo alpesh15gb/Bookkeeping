@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional, Any, Dict
 from decimal import Decimal
 from datetime import date
+import uuid
 
 
 # ---------------------------------------------------------------------------
@@ -368,3 +369,95 @@ class CashBookResponse(BaseModel):
     outflows: List[CashBookRow]
     summary: CashBookSummary
     tax_summary: CashBookTaxSummary
+
+
+class DayBookLine(BaseModel):
+    account_id: str
+    account_name: str
+    account_code: str
+    amount: Decimal
+    direction: str
+    narration: Optional[str] = None
+
+class DayBookEntry(BaseModel):
+    id: str
+    entry_date: date
+    reference_number: str
+    description: str
+    source_type: str
+    source_id: Optional[str] = None
+    lines: List[DayBookLine]
+
+class DayBookResponse(BaseModel):
+    start_date: date
+    end_date: date
+    total_debit: Decimal
+    total_credit: Decimal
+    entries: List[DayBookEntry]
+    total_count: int
+
+
+class StockRegisterLine(BaseModel):
+    product_id: uuid.UUID
+    product_name: str
+    sku: Optional[str] = None
+    uom: str
+    opening_stock: Decimal
+    inward_qty: Decimal
+    outward_qty: Decimal
+    adjustment_qty: Decimal
+    closing_stock: Decimal
+
+class StockRegisterResponse(BaseModel):
+    start_date: date
+    end_date: date
+    items: List[StockRegisterLine]
+    total_count: int
+
+
+class TDSDetailLine(BaseModel):
+    id: uuid.UUID
+    type: str
+    number: str
+    date: date
+    contact_name: str
+    taxable_amount: Decimal
+    tds_rate: Decimal
+    tds_amount: Decimal
+
+class TDSSummaryLine(BaseModel):
+    contact_id: uuid.UUID
+    contact_name: str
+    total_taxable_amount: Decimal
+    total_tds_amount: Decimal
+
+class TDSReportResponse(BaseModel):
+    start_date: date
+    end_date: date
+    report_type: str
+    total_tds_amount: Decimal
+    detailed_items: Optional[List[TDSDetailLine]] = None
+    summary_items: Optional[List[TDSSummaryLine]] = None
+
+class TCSDetailLine(BaseModel):
+    id: uuid.UUID
+    number: str
+    date: date
+    contact_name: str
+    taxable_amount: Decimal
+    tcs_rate: Decimal
+    tcs_amount: Decimal
+
+class TCSSummaryLine(BaseModel):
+    contact_id: uuid.UUID
+    contact_name: str
+    total_taxable_amount: Decimal
+    total_tcs_amount: Decimal
+
+class TCSReportResponse(BaseModel):
+    start_date: date
+    end_date: date
+    report_type: str
+    total_tcs_amount: Decimal
+    detailed_items: Optional[List[TCSDetailLine]] = None
+    summary_items: Optional[List[TCSSummaryLine]] = None

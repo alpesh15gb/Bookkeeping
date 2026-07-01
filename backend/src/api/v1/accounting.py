@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    Account, JournalEntry, JournalLine, NumberingSeries
+    Account, JournalEntry, JournalLine, NumberingSeries, AccountingPeriod, PeriodLockAudit, FinancialYear
 )
 from src.schemas.accounting_schemas import (
     JournalEntryCreate, JournalEntryResponse, JournalLineResponse,
@@ -17,7 +17,8 @@ from src.schemas.accounting_schemas import (
     TrialBalanceResponse, TrialBalanceLine,
     ProfitLossResponse, ProfitLossItem,
     BalanceSheetResponse, BalanceSheetSection,
-    UnpostedDocument, YearEndPrepareResponse, YearEndCloseRequest
+    UnpostedDocument, YearEndPrepareResponse, YearEndCloseRequest,
+    PeriodLockUnlockRequest, AccountingPeriodResponse, ContraEntryCreate, BulkOpeningBalancesRequest
 )
 from src.domains.company.services import NumberingSeriesService
 from src.domains.accounting.services import update_account_balances
@@ -132,6 +133,150 @@ def create_manual_journal_entry(
     db.flush()
     affected = {line.account_id for line in db_lines}
     update_account_balances(db, tenant_id, affected)
+    db.commit()
+
+    # Re-fetch lines with account details to build response
+    lines_with_acc = db.query(
+        JournalLine.id,
+        JournalLine.account_id,
+        Account.name.label("account_name"),
+        Account.code.label("account_code"),
+        JournalLine.amount,
+        JournalLine.direction,
+        JournalLine.narration
+    ).join(Account, JournalLine.account_id == Account.id)\
+     .filter(JournalLine.entry_id == journal_entry.id, Account.deleted_at == None).all()
+
+    return JournalEntryResponse(
+        id=journal_entry.id,
+        tenant_id=journal_entry.tenant_id,
+        entry_date=journal_entry.entry_date,
+        reference_number=journal_entry.reference_number,
+        description=journal_entry.description,
+        source_type=journal_entry.source_type,
+        source_id=journal_entry.source_id,
+        created_at=journal_entry.created_at,
+        updated_at=journal_entry.updated_at,
+        lines=[
+            JournalLineResponse(
+                id=row.id,
+                account_id=row.account_id,
+                account_name=row.account_name,
+                account_code=row.account_code,
+                amount=row.amount,
+                direction=row.direction,
+                narration=row.narration
+            )
+            for row in lines_with_acc
+        ]
+    )
+
+@router.post("/contra", response_model=JournalEntryResponse, status_code=status.HTTP_201_CREATED)
+def create_contra_entry(
+    payload: ContraEntryCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("ledger:manual_post"))
+):
+    """Creates a Contra entry (Cash/Bank transfer) and updates balances."""
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.entry_date)
+
+    if payload.debit_account_id == payload.credit_account_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Debit and credit accounts must be different."
+        )
+
+    # Fetch debit account with row lock
+    debit_account = db.query(Account).filter(
+        Account.id == payload.debit_account_id,
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None
+    ).with_for_update().first()
+
+    if not debit_account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Debit account with ID {payload.debit_account_id} not found."
+        )
+    if not debit_account.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Debit account '{debit_account.name}' is inactive."
+        )
+
+    # Fetch credit account with row lock
+    credit_account = db.query(Account).filter(
+        Account.id == payload.credit_account_id,
+        Account.tenant_id == tenant_id,
+        Account.deleted_at == None
+    ).with_for_update().first()
+
+    if not credit_account:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Credit account with ID {payload.credit_account_id} not found."
+        )
+    if not credit_account.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Credit account '{credit_account.name}' is inactive."
+        )
+
+    # Enforce Both belong to Cash & Bank group
+    if debit_account.account_group != "Cash & Bank" or credit_account.account_group != "Cash & Bank":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Both debit and credit accounts must belong to the 'Cash & Bank' group."
+        )
+
+    # Generate reference number
+    ref_num = payload.reference_number
+    if not ref_num:
+        ref_num = NumberingSeriesService.generate_next_number(db, tenant_id, "JOURNAL")
+
+    # Check duplicate reference number under same tenant (with row lock)
+    dup = db.query(JournalEntry).filter(
+        JournalEntry.tenant_id == tenant_id,
+        JournalEntry.reference_number == ref_num
+    ).with_for_update().first()
+    if dup:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Contra Entry reference number '{ref_num}' already exists."
+        )
+
+    entry_id = uuid.uuid4()
+    db_lines = [
+        JournalLine(
+            account_id=payload.debit_account_id,
+            amount=payload.amount,
+            direction="DEBIT",
+            narration=payload.description or "Contra Debit"
+        ),
+        JournalLine(
+            account_id=payload.credit_account_id,
+            amount=payload.amount,
+            direction="CREDIT",
+            narration=payload.description or "Contra Credit"
+        )
+    ]
+
+    journal_entry = JournalEntry(
+        id=entry_id,
+        tenant_id=tenant_id,
+        entry_date=payload.entry_date,
+        reference_number=ref_num,
+        description=payload.description or "Contra Entry",
+        source_type="MANUAL",
+        source_id=entry_id,
+        lines=db_lines
+    )
+
+    db.add(journal_entry)
+    db.flush()
+
+    update_account_balances(db, tenant_id, {payload.debit_account_id, payload.credit_account_id})
     db.commit()
 
     # Re-fetch lines with account details to build response
@@ -805,4 +950,198 @@ def close_year_end(
         db.flush()
 
     return close_financial_year(fy_id=fy.id, db=db, tenant_id=tenant_id)
+
+
+
+# ── Period Lock Management Endpoints ───────────────────────────────────────
+
+@router.post("/periods/lock", response_model=AccountingPeriodResponse)
+def lock_accounting_period(
+    payload: PeriodLockUnlockRequest,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
+):
+    import calendar
+    period_date = payload.period_date
+    today = date.today()
+
+    start_date = date(period_date.year, period_date.month, 1)
+    if start_date > today:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot lock a future period."
+        )
+
+    last_day = calendar.monthrange(period_date.year, period_date.month)[1]
+    end_date = date(period_date.year, period_date.month, last_day)
+    period_name = f"{period_date.year:04d}-{period_date.month:02d}"
+
+    period = db.query(AccountingPeriod).filter(
+        AccountingPeriod.tenant_id == tenant_id,
+        AccountingPeriod.period_name == period_name
+    ).first()
+
+    if not period:
+        period = AccountingPeriod(
+            tenant_id=tenant_id,
+            period_name=period_name,
+            start_date=start_date,
+            end_date=end_date,
+            is_closed=True
+        )
+        db.add(period)
+    else:
+        period.is_closed = True
+
+    audit = PeriodLockAudit(
+        tenant_id=tenant_id,
+        period_date=start_date,
+        action="LOCK",
+        locked_by=tenant_id,
+        note=payload.note
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(period)
+    return period
+
+
+@router.post("/periods/unlock", response_model=AccountingPeriodResponse)
+def unlock_accounting_period(
+    payload: PeriodLockUnlockRequest,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
+):
+    period_date = payload.period_date
+    period_name = f"{period_date.year:04d}-{period_date.month:02d}"
+
+    containing_fy = db.query(FinancialYear).filter(
+        FinancialYear.tenant_id == tenant_id,
+        FinancialYear.start_date <= period_date,
+        FinancialYear.end_date >= period_date
+    ).first()
+
+    if containing_fy and containing_fy.status in ("LOCKED", "ARCHIVED"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot unlock period: the containing financial year '{containing_fy.name}' is closed ({containing_fy.status.lower()}). Reopen the financial year first."
+        )
+
+    period = db.query(AccountingPeriod).filter(
+        AccountingPeriod.tenant_id == tenant_id,
+        AccountingPeriod.period_name == period_name
+    ).first()
+
+    if not period:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Accounting period not found."
+        )
+
+    period.is_closed = False
+
+    audit = PeriodLockAudit(
+        tenant_id=tenant_id,
+        period_date=period.start_date,
+        action="UNLOCK",
+        locked_by=tenant_id,
+        note=payload.note
+    )
+    db.add(audit)
+    db.commit()
+    db.refresh(period)
+    return period
+
+
+@router.get("/periods", response_model=List[AccountingPeriodResponse])
+def get_accounting_periods(
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:view"))
+):
+    periods = db.query(AccountingPeriod).filter(
+        AccountingPeriod.tenant_id == tenant_id
+    ).order_by(AccountingPeriod.start_date.desc()).all()
+    return periods
+
+
+
+@router.post("/opening-balances")
+def update_opening_balances(
+    payload: BulkOpeningBalancesRequest,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage"))
+):
+    """Bulk update of account opening balances. Supports validation, rollback, and audit log."""
+    from src.domains.accounting.period_lock import validate_period_open
+    from src.infrastructure.database.models import AuditLog
+
+    validate_period_open(db, tenant_id, date.today())
+
+    updated_accounts = []
+    audit_details = []
+
+    try:
+        for item in payload.balances:
+            account = db.query(Account).filter(
+                Account.id == item.account_id,
+                Account.tenant_id == tenant_id,
+                Account.deleted_at == None
+            ).with_for_update().first()
+
+            if not account:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Account with ID {item.account_id} not found."
+                )
+
+            if not account.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Account '{account.name}' is inactive."
+                )
+
+            old_bal = account.opening_balance
+            new_bal = item.opening_balance
+            diff = new_bal - old_bal
+
+            account.opening_balance = new_bal
+            account.current_balance = account.current_balance + diff
+
+            updated_accounts.append({
+                "account_id": str(account.id),
+                "name": account.name,
+                "code": account.code,
+                "old_opening_balance": str(old_bal),
+                "new_opening_balance": str(new_bal),
+                "current_balance": str(account.current_balance)
+            })
+
+            audit_details.append({
+                "account_id": str(account.id),
+                "name": account.name,
+                "old_opening_balance": float(old_bal),
+                "new_opening_balance": float(new_bal)
+            })
+
+        audit = AuditLog(
+            tenant_id=tenant_id,
+            action="accounts.opening_balance.bulk_update",
+            entity_type="account",
+            entity_id=tenant_id,
+            after_state={"updates": audit_details}
+        )
+        db.add(audit)
+        db.commit()
+
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Failed to update opening balances: {str(e)}"
+        )
+
+    return {"detail": "Opening balances updated successfully.", "updated": updated_accounts}
+
 

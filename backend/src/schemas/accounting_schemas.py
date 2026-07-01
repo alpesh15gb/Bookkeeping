@@ -164,3 +164,34 @@ class YearEndDashboardResponse(SchemaBase):
     closing_allowed: bool
     blocking_items: List[str]
 
+
+from datetime import date
+
+class PeriodLockUnlockRequest(SchemaBase):
+    period_date: date
+    note: Optional[str] = None
+
+class AccountingPeriodResponse(SchemaBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    period_name: str
+    start_date: date
+    end_date: date
+    is_closed: bool
+    created_at: datetime
+    updated_at: datetime
+
+class ContraEntryCreate(SchemaBase):
+    entry_date: date
+    debit_account_id: uuid.UUID
+    credit_account_id: uuid.UUID
+    amount: Decimal = Field(..., gt=Decimal("0.00"))
+    description: Optional[str] = None
+    reference_number: Optional[str] = None
+
+class OpeningBalanceItem(BaseModel):
+    account_id: uuid.UUID
+    opening_balance: Decimal
+
+class BulkOpeningBalancesRequest(SchemaBase):
+    balances: List[OpeningBalanceItem]

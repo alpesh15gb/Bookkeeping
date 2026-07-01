@@ -53,3 +53,12 @@ class TenantResponse(SchemaBase):
     trade_name: Optional[str]
     gstin: Optional[str]
     pan: Optional[str]
+
+class Login2FAResponse(BaseModel):
+    requires_2fa: bool = True
+    challenge_token: str
+    challenge_expiry: datetime
+
+class TwoFactorChallengeRequest(BaseModel):
+    challenge_token: str
+    totp_code: str

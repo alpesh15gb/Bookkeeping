@@ -3,18 +3,19 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from typing import List
 import json, os, uuid
-from datetime import datetime, date, timezone
+from datetime import datetime, date, timezone, timedelta
 
 from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.rate_limiter import limiter
-from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries, ExpenseCategory
+from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries, ExpenseCategory, TenantInvitation
 from src.schemas.company_schemas import (
     CompanyCreate, CompanyResponse,
     BranchCreate, BranchUpdate, BranchResponse,
     TenantSettingUpdate, TenantSettingResponse,
     NumberingSeriesCreate, NumberingSeriesUpdate, NumberingSeriesResponse,
     GstToggleRequest,
+    TenantInviteRequest, TenantInviteResponse, TenantMemberResponse, TenantMemberUpdate, InvitationAcceptRejectRequest
 )
 from src.domains.company.services import NumberingSeriesService, encrypt_credential
 from src.api.deps import get_current_user, enforce_permission
@@ -1012,3 +1013,299 @@ def import_tenant_data(
             "counts": counts,
         }
     )
+
+
+# ── Team Management Endpoints ──────────────────────────────────────────────
+
+@router.post("/companies/{id}/invite", response_model=TenantInviteResponse)
+def invite_to_company(
+    id: uuid.UUID,
+    payload: TenantInviteRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
+):
+    if id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot manage invites for another company context."
+        )
+
+    invite_email = payload.email.strip().lower()
+    user_to_invite = db.query(User).filter(User.email == invite_email, User.deleted_at == None).first()
+    if user_to_invite:
+        existing_membership = db.query(TenantMembership).filter(
+            TenantMembership.tenant_id == id,
+            TenantMembership.user_id == user_to_invite.id
+        ).first()
+        if existing_membership and existing_membership.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="User is already an active member of this company."
+            )
+
+    existing_invite = db.query(TenantInvitation).filter(
+        TenantInvitation.tenant_id == id,
+        TenantInvitation.email == invite_email,
+        TenantInvitation.status == "PENDING"
+    ).first()
+
+    import secrets
+    token = secrets.token_urlsafe(32)[:50]
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+
+    if existing_invite:
+        existing_invite.token = token
+        existing_invite.expires_at = expires_at
+        existing_invite.role = payload.role
+        existing_invite.invited_by = current_user.id
+        db.commit()
+        db.refresh(existing_invite)
+        _log_audit(db, id, "invite.resend", f"Resent invitation to {invite_email} with role {payload.role}")
+        return existing_invite
+
+    invite = TenantInvitation(
+        tenant_id=id,
+        email=invite_email,
+        role=payload.role,
+        invited_by=current_user.id,
+        token=token,
+        status="PENDING",
+        expires_at=expires_at
+    )
+    db.add(invite)
+    db.commit()
+    db.refresh(invite)
+    _log_audit(db, id, "invite.created", f"Created invitation to {invite_email} with role {payload.role}")
+    return invite
+
+
+@router.get("/companies/{id}/members", response_model=List[TenantMemberResponse])
+def get_company_members(
+    id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:view"))
+):
+    if id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot view members for another company context."
+        )
+
+    memberships = db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == id
+    ).all()
+
+    results = []
+    for m in memberships:
+        user = db.query(User).filter(User.id == m.user_id).first()
+        if user:
+            results.append(TenantMemberResponse(
+                user_id=user.id,
+                email=user.email,
+                full_name=user.full_name,
+                role=m.role,
+                is_active=m.is_active
+            ))
+    return results
+
+
+@router.put("/companies/{id}/members/{user_id}", response_model=TenantMemberResponse)
+def update_company_member(
+    id: uuid.UUID,
+    user_id: uuid.UUID,
+    payload: TenantMemberUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
+):
+    if id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot manage members for another company context."
+        )
+
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot modify your own membership role or status."
+        )
+
+    membership = db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == id,
+        TenantMembership.user_id == user_id
+    ).first()
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member membership not found."
+        )
+
+    membership.role = payload.role
+    if payload.is_active is not None:
+        membership.is_active = payload.is_active
+
+    db.commit()
+    db.refresh(membership)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    _log_audit(db, id, "member.updated", f"Updated member {user.email if user else user_id} (role: {payload.role}, active: {payload.is_active})")
+
+    return TenantMemberResponse(
+        user_id=user.id,
+        email=user.email if user else "",
+        full_name=user.full_name if user else "",
+        role=membership.role,
+        is_active=membership.is_active
+    )
+
+
+@router.delete("/companies/{id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_company_member(
+    id: uuid.UUID,
+    user_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
+):
+    if id != tenant_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot manage members for another company context."
+        )
+
+    if user_id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own membership."
+        )
+
+    membership = db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == id,
+        TenantMembership.user_id == user_id
+    ).first()
+
+    if not membership:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Member membership not found."
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    db.delete(membership)
+    db.commit()
+
+    _log_audit(db, id, "member.removed", f"Removed member {user.email if user else user_id} from company.")
+    return None
+
+
+@router.post("/companies/invitations/accept")
+def accept_invitation(
+    payload: InvitationAcceptRejectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    invitation = db.query(TenantInvitation).filter(
+        TenantInvitation.token == payload.token
+    ).first()
+
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found."
+        )
+
+    if invitation.status != "PENDING":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invitation has already been {invitation.status.lower()}."
+        )
+
+    expires_naive = invitation.expires_at.replace(tzinfo=None) if invitation.expires_at.tzinfo else invitation.expires_at
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+    if expires_naive < now_naive:
+        invitation.status = "EXPIRED"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation has expired."
+        )
+
+    if invitation.email.strip().lower() != current_user.email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This invitation was sent to a different email address."
+        )
+
+    membership = db.query(TenantMembership).filter(
+        TenantMembership.tenant_id == invitation.tenant_id,
+        TenantMembership.user_id == current_user.id
+    ).first()
+
+    if membership:
+        membership.role = invitation.role
+        membership.is_active = True
+    else:
+        membership = TenantMembership(
+            tenant_id=invitation.tenant_id,
+            user_id=current_user.id,
+            role=invitation.role,
+            is_active=True
+        )
+        db.add(membership)
+
+    invitation.status = "ACCEPTED"
+    db.commit()
+
+    _log_audit(db, invitation.tenant_id, "invite.accepted", f"User {current_user.email} accepted invitation as {invitation.role}")
+
+    return {"detail": "Invitation accepted successfully.", "tenant_id": str(invitation.tenant_id)}
+
+
+@router.post("/companies/invitations/reject")
+def reject_invitation(
+    payload: InvitationAcceptRejectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db_session)
+):
+    invitation = db.query(TenantInvitation).filter(
+        TenantInvitation.token == payload.token
+    ).first()
+
+    if not invitation:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invitation not found."
+        )
+
+    if invitation.status != "PENDING":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invitation has already been {invitation.status.lower()}."
+        )
+
+    expires_naive = invitation.expires_at.replace(tzinfo=None) if invitation.expires_at.tzinfo else invitation.expires_at
+    now_naive = datetime.now(timezone.utc).replace(tzinfo=None)
+    if expires_naive < now_naive:
+        invitation.status = "EXPIRED"
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invitation has expired."
+        )
+
+    if invitation.email.strip().lower() != current_user.email.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This invitation was sent to a different email address."
+        )
+
+    invitation.status = "EXPIRED"
+    db.commit()
+
+    _log_audit(db, invitation.tenant_id, "invite.rejected", f"User {current_user.email} rejected invitation.")
+
+    return {"detail": "Invitation rejected."}
+

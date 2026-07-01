@@ -343,14 +343,13 @@ class PaymentAllocationSchema(SchemaBase):
 
 class PaymentCreate(SchemaBase):
     contact_id: uuid.UUID
-    payment_number: str = Field(..., max_length=50)
+    payment_number: Optional[str] = Field(None, max_length=50)
     payment_date: date
     payment_mode: str = Field(..., pattern="^(CASH|BANK|UPI|POS|OTHER)$")
     amount: Decimal = Field(..., gt=0)
     reference_number: Optional[str] = None
     description: Optional[str] = None
-    allocations: List[PaymentAllocationSchema]
-
+    allocations: List[PaymentAllocationSchema] = []
 
 # ── SALES RETURN SCHEMAS ──
 class SalesReturnLineCreate(SchemaBase):

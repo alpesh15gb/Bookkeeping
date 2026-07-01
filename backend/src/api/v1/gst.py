@@ -3,7 +3,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 from io import BytesIO
 import openpyxl
@@ -11,10 +11,11 @@ from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 import re
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import Invoice, Bill, CreditNote, DebitNote, Contact, Tenant, TenantSetting, PurchaseReturn
+from src.infrastructure.database.models import Invoice, Bill, CreditNote, DebitNote, Contact, Tenant, TenantSetting, PurchaseReturn, GSTReturn
 from src.schemas.gst_schemas import (
     GSTR1Response, GSTR1B2BLine, GSTR1B2CLine, GSTR1B2CSLine, GSTR1NoteLine, GSTR1HSNLine,
-    GSTR2Response, GSTR2B2BLine, GSTR2B2BURLine, GSTR2NoteLine, GSTR2HSNLine
+    GSTR2Response, GSTR2B2BLine, GSTR2B2BURLine, GSTR2NoteLine, GSTR2HSNLine,
+    GSTReturnCreate, GSTReturnUpdate, GSTReturnResponse
 )
 from src.domains.company.services import resolve_origin_state_code
 from src.domains.accounting.report_services import GSTR3BService
@@ -1211,5 +1212,115 @@ def export_gstr3b_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=GSTR3B_Export_{start_date}_to_{end_date}.pdf"}
     )
+
+
+# ── GST Return Status Tracking Endpoints ────────────────────────────────────
+
+_STATUS_MAP_TO_DB = {
+    "DRAFT": "COMPUTED",
+    "READY": "READY_TO_FILE",
+    "FILED": "FILED",
+    "REVISED": "ACKNOWLEDGED"
+}
+
+_STATUS_MAP_FROM_DB = {
+    "COMPUTED": "DRAFT",
+    "READY_TO_FILE": "READY",
+    "FILED": "FILED",
+    "ACKNOWLEDGED": "REVISED"
+}
+
+@router.get("/returns", response_model=List[GSTReturnResponse])
+def list_gst_returns(
+    return_type: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("gst:report_view"))
+):
+    q = db.query(GSTReturn).filter(GSTReturn.tenant_id == tenant_id)
+    if return_type:
+        q = q.filter(GSTReturn.return_type == return_type.upper())
+    if status:
+        db_status = _STATUS_MAP_TO_DB.get(status.upper(), status.upper())
+        q = q.filter(GSTReturn.status == db_status)
+    results = q.order_by(GSTReturn.period_start.desc()).all()
+    for r in results:
+        r.status = _STATUS_MAP_FROM_DB.get(r.status, r.status)
+    return results
+
+
+@router.post("/returns", response_model=GSTReturnResponse, status_code=status.HTTP_201_CREATED)
+def create_gst_return_status(
+    payload: GSTReturnCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("gst:filing_manage"))
+):
+    rt = payload.return_type.upper()
+    st_upper = payload.status.upper()
+    db_status = _STATUS_MAP_TO_DB.get(st_upper, st_upper)
+
+    existing = db.query(GSTReturn).filter(
+        GSTReturn.tenant_id == tenant_id,
+        GSTReturn.return_type == rt,
+        GSTReturn.period_start == payload.period_start
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="GST Return status tracking for this return type and period already exists."
+        )
+
+    ret = GSTReturn(
+        tenant_id=tenant_id,
+        return_type=rt,
+        period_start=payload.period_start,
+        period_end=payload.period_end,
+        status=db_status,
+        arn=payload.arn
+    )
+    if db_status == "FILED":
+        ret.filed_at = datetime.now(timezone.utc)
+
+    db.add(ret)
+    db.commit()
+    db.refresh(ret)
+    ret.status = _STATUS_MAP_FROM_DB.get(ret.status, ret.status)
+    return ret
+
+
+@router.put("/returns/{id}", response_model=GSTReturnResponse)
+def update_gst_return_status(
+    id: uuid.UUID,
+    payload: GSTReturnUpdate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("gst:filing_manage"))
+):
+    ret = db.query(GSTReturn).filter(
+        GSTReturn.id == id,
+        GSTReturn.tenant_id == tenant_id
+    ).first()
+
+    if not ret:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="GST Return tracking record not found."
+        )
+
+    new_st = payload.status.upper()
+    db_status = _STATUS_MAP_TO_DB.get(new_st, new_st)
+    ret.status = db_status
+    if payload.arn is not None:
+        ret.arn = payload.arn
+
+    if db_status == "FILED":
+        ret.filed_at = payload.filed_at or datetime.now(timezone.utc)
+    else:
+        ret.filed_at = None
+
+    db.commit()
+    db.refresh(ret)
+    ret.status = _STATUS_MAP_FROM_DB.get(ret.status, ret.status)
+    return ret
 
 

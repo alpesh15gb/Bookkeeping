@@ -94,14 +94,14 @@ def _auth(user, tenant):
     }
 
 
-def _seed_contact(db, tenant, name="Acme Corp", gstin="29AAACB1234F1Z5", state_code="29"):
+def _seed_contact(db, tenant, name="Acme Corp", gstin="29AAACB1234F1Z5", state_code="29", contact_type="CUSTOMER"):
     contact = Contact(
         id=uuid.uuid4(),
         tenant_id=tenant.id,
         name=name,
         email=f"{name.lower().replace(' ', '')}@test.com",
         phone="+919876543210",
-        contact_type="CUSTOMER",
+        contact_type=contact_type,
         gstin=gstin,
         registration_type="REGULAR",
         billing_address={"street": "1 St", "city": "Bengaluru", "state": "Karnataka", "state_code": state_code, "pincode": "560001", "country": "India"},
@@ -615,7 +615,7 @@ class TestP3_AccountingEngine:
 
     def test_bill_auto_posts(self, db_session, client):
         tenant, user, _, _ = self._setup(db_session)
-        vendor = _seed_contact(db_session, tenant, name="Vendor Co", gstin="27AAACV9999F1Z5", state_code="27")
+        vendor = _seed_contact(db_session, tenant, name="Vendor Co", gstin="27AAACV9999F1Z5", state_code="27", contact_type="VENDOR")
         product = _seed_product(db_session, tenant, name="Purchase Item")
         _seed_numbering_series(db_session, tenant)
         headers = _auth(user, tenant)

@@ -147,3 +147,32 @@ class GSTR2Response(SchemaBase):
     cdnur_purchases: List[GSTR2NoteLine]
     hsn_summary: List[GSTR2HSNLine]
 
+
+from datetime import date, datetime
+from typing import Optional
+import uuid
+from pydantic import Field
+
+class GSTReturnCreate(SchemaBase):
+    return_type: str = Field(..., pattern="^(GSTR1|GSTR2|GSTR3B)$")
+    period_start: date
+    period_end: date
+    status: str = Field("DRAFT", pattern="^(DRAFT|READY|FILED|REVISED)$")
+    arn: Optional[str] = Field(None, max_length=50)
+
+class GSTReturnUpdate(SchemaBase):
+    status: str = Field(..., pattern="^(DRAFT|READY|FILED|REVISED)$")
+    arn: Optional[str] = Field(None, max_length=50)
+    filed_at: Optional[datetime] = None
+
+class GSTReturnResponse(SchemaBase):
+    id: uuid.UUID
+    tenant_id: uuid.UUID
+    return_type: str
+    period_start: date
+    period_end: date
+    status: str
+    filed_at: Optional[datetime] = None
+    arn: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime

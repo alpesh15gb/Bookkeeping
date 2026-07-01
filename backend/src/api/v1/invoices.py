@@ -1688,10 +1688,14 @@ def record_invoice_payment(
     if invoice.status in ("DRAFT", "CANCELLED", "PAID"):
         raise HTTPException(status_code=400, detail="Cannot record payments on draft, cancelled, or fully paid invoices.")
 
+    p_num = payload.payment_number
+    if not p_num:
+        p_num = NumberingSeriesService.generate_next_number(db, tenant_id, "PAYMENT")
+
     payment = Payment(
         tenant_id=tenant_id,
         contact_id=payload.contact_id,
-        payment_number=payload.payment_number,
+        payment_number=p_num,
         payment_date=payload.payment_date,
         payment_mode=payload.payment_mode,
         amount=payload.amount,
@@ -1702,8 +1706,15 @@ def record_invoice_payment(
     db.add(payment)
     db.flush()
 
+    allocations = payload.allocations
+    if not allocations:
+        from src.schemas.document import PaymentAllocationSchema
+        allocations = [
+            PaymentAllocationSchema(invoice_id=invoice.id, amount=payload.amount)
+        ]
+
     allocated_amount = Decimal("0.0000")
-    for alloc in payload.allocations:
+    for alloc in allocations:
         if alloc.invoice_id != id:
             raise HTTPException(status_code=400, detail="Allocation invoice ID mismatch.")
 

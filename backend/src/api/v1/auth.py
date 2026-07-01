@@ -9,13 +9,14 @@ import redis
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import User, Tenant, TenantMembership, PasswordResetToken, AuditLog
-from src.schemas.auth_schemas import UserRegister, UserLogin, TokenResponse, UserResponse, SchemaBase
+from src.schemas.auth_schemas import UserRegister, UserLogin, TokenResponse, UserResponse, SchemaBase, Login2FAResponse, TwoFactorChallengeRequest
 from src.core.security import (
     get_password_hash,
     verify_password,
     create_access_token,
     create_refresh_token,
     decode_token,
+    create_2fa_challenge_token,
     ROLE_PERMISSIONS
 )
 from pydantic import BaseModel
@@ -24,6 +25,8 @@ from src.core.config import settings
 from src.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
+
+_USED_2FA_CHALLENGE_TOKENS = set()
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -196,7 +199,7 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
 
     return user
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login", response_model=Union[TokenResponse, Login2FAResponse])
 @limiter.limit(settings.RATE_LIMIT_LOGIN)
 def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_db_session)):
     # 1. Query user
@@ -242,6 +245,18 @@ def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_d
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User account is deactivated."
+        )
+
+    # 5. Check if 2FA (TOTP) is enabled
+    if user.totp_enabled:
+        challenge_token = create_2fa_challenge_token(str(user.id))
+        challenge_expiry = datetime.now(timezone.utc) + timedelta(minutes=5)
+        _log_audit(db, "login.2fa_required", user_id=str(user.id), request=request)
+        db.commit()
+        return Login2FAResponse(
+            requires_2fa=True,
+            challenge_token=challenge_token,
+            challenge_expiry=challenge_expiry
         )
 
     # 2. Query memberships to define scopes
@@ -603,3 +618,90 @@ def disable_2fa(
     current_user.totp_secret = None
     db.commit()
     return {"detail": "2FA disabled successfully."}
+
+
+@router.post("/2fa/challenge", response_model=TokenResponse)
+@limiter.limit("5/minute")
+def verify_2fa_challenge(
+    request: Request,
+    payload: TwoFactorChallengeRequest,
+    db: Session = Depends(get_db_session)
+):
+    import hashlib
+    challenge_token = payload.challenge_token
+    totp_code = payload.totp_code
+
+    # 1. Prevent replay attacks by checking if already used
+    token_hash = hashlib.sha256(challenge_token.encode()).hexdigest()
+    redis_key = f"2fa_used:{token_hash}"
+
+    r = _get_redis_client()
+    if r:
+        try:
+            if r.get(redis_key):
+                raise HTTPException(status_code=401, detail="Challenge token has already been used.")
+        except Exception:
+            pass
+
+    if token_hash in _USED_2FA_CHALLENGE_TOKENS:
+        raise HTTPException(status_code=401, detail="Challenge token has already been used.")
+
+    # 2. Decode the challenge token
+    try:
+        token_payload = decode_token(challenge_token, expected_type="2fa_challenge")
+        user_id_str = token_payload.get("sub")
+        if not user_id_str:
+            raise HTTPException(status_code=401, detail="Invalid challenge token.")
+        user_id = uuid.UUID(user_id_str)
+    except jwt.ExpiredSignatureError:
+        _log_audit(db, "login.2fa.failed", details={"reason": "expired"}, request=request)
+        db.commit()
+        raise HTTPException(status_code=401, detail="Challenge token has expired.")
+    except Exception as e:
+        _log_audit(db, "login.2fa.failed", details={"reason": "invalid_token", "error": str(e)}, request=request)
+        db.commit()
+        raise HTTPException(status_code=401, detail="Invalid challenge token.")
+
+    # 3. Load user
+    user = db.query(User).filter(User.id == user_id, User.deleted_at == None).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid challenge token or inactive user.")
+
+    # 4. Verify TOTP code
+    from src.domains.auth.totp_service import verify_totp
+    if not user.totp_secret or not verify_totp(user.totp_secret, totp_code):
+        _log_audit(db, "login.2fa.failed", user_id=str(user.id), details={"reason": "invalid_code"}, request=request)
+        db.commit()
+        raise HTTPException(status_code=401, detail="Invalid 2FA code.")
+
+    # 5. Mark token as used to prevent replay
+    if r:
+        try:
+            r.setex(redis_key, 300, "1")
+        except Exception:
+            pass
+    _USED_2FA_CHALLENGE_TOKENS.add(token_hash)
+
+    # 6. Retrieve scopes/memberships
+    memberships = db.query(TenantMembership).filter(
+        TenantMembership.user_id == user.id,
+        TenantMembership.is_active == True
+    ).all()
+    scopes = []
+    for m in memberships:
+        role_scopes = ROLE_PERMISSIONS.get(m.role.lower(), [])
+        scopes.extend(role_scopes)
+    scopes = list(set(scopes))
+
+    # 7. Create access and refresh tokens
+    access_token = create_access_token(user_id=str(user.id), scopes=scopes)
+    refresh_token = create_refresh_token(user_id=str(user.id))
+
+    _log_audit(db, "login.success", user_id=str(user.id), details={"method": "2fa"}, request=request)
+    db.commit()
+
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token
+    )
+

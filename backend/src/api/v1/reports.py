@@ -37,6 +37,10 @@ from src.schemas.report_schemas import (
     OutstandingARResponse,
     OutstandingAPResponse,
     PartyStatementResponse,
+    DayBookResponse,
+    StockRegisterResponse,
+    TDSReportResponse,
+    TCSReportResponse
 )
 from src.schemas.gst_schemas import GSTR2Response
 
@@ -1190,4 +1194,890 @@ def get_cash_book_pdf(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=CashBook_{start_date}_{end_date}.pdf"}
+    )
+
+
+# ── Day Book Exports & Endpoints ───────────────────────────────────────────
+
+def generate_day_book_excel(data: dict, company_name: str) -> bytes:
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    import io
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Day Book"
+    ws.views.sheetView[0].showGridLines = True
+
+    # Title
+    ws["A1"] = "Day Book"
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="0F1B3D")
+    ws["A2"] = f"Company: {company_name} | Period: {data['start_date']} to {data['end_date']}"
+    ws["A2"].font = Font(name="Calibri", size=11, bold=True)
+
+    # Headers
+    headers = ["Date", "Voucher Type", "Voucher No.", "Particulars/Account", "Debit (₹)", "Credit (₹)", "Narration"]
+    for col_num, h in enumerate(headers, 1):
+        cell = ws.cell(row=4, column=col_num, value=h)
+        cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+        cell.fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+        cell.alignment = Alignment(horizontal="center")
+
+    thin_side = Side(border_style="thin", color="D1D5DB")
+    thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+    row_num = 5
+    for entry in data["entries"]:
+        first = True
+        for line in entry["lines"]:
+            if first:
+                ws.cell(row=row_num, column=1, value=entry["entry_date"]).alignment = Alignment(horizontal="center")
+                ws.cell(row=row_num, column=2, value=entry["source_type"]).alignment = Alignment(horizontal="center")
+                ws.cell(row=row_num, column=3, value=entry["reference_number"]).alignment = Alignment(horizontal="center")
+                first = False
+
+            ws.cell(row=row_num, column=4, value=f"{line['account_name']} ({line['account_code']})")
+
+            if line["direction"] == "DEBIT":
+                ws.cell(row=row_num, column=5, value=float(line["amount"]))
+            else:
+                ws.cell(row=row_num, column=6, value=float(line["amount"]))
+
+            ws.cell(row=row_num, column=7, value=line["narration"] or entry["description"])
+
+            for col in range(1, 8):
+                ws.cell(row=row_num, column=col).font = Font(name="Calibri", size=10)
+                ws.cell(row=row_num, column=col).border = thin_border
+
+            row_num += 1
+
+    # Totals Row
+    ws.cell(row=row_num, column=4, value="Total").font = Font(name="Calibri", size=11, bold=True)
+    ws.cell(row=row_num, column=5, value=float(data["total_debit"])).font = Font(name="Calibri", size=11, bold=True)
+    ws.cell(row=row_num, column=6, value=float(data["total_credit"])).font = Font(name="Calibri", size=11, bold=True)
+
+    for col in range(1, 8):
+        ws.cell(row=row_num, column=col).border = thin_border
+
+    for col in range(1, 8):
+        ws.column_dimensions[openpyxl.utils.get_column_letter(col)].width = 16
+
+    stream = io.BytesIO()
+    wb.save(stream)
+    return stream.getvalue()
+
+
+def generate_day_book_pdf(data: dict, company_name: str) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    import io
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=15,
+        leftMargin=15,
+        topMargin=15,
+        bottomMargin=15
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'DocTitle',
+        parent=styles['Heading1'],
+        fontName='Helvetica-Bold',
+        fontSize=18,
+        leading=22,
+        textColor=colors.HexColor('#0F1B3D')
+    )
+    subtitle_style = ParagraphStyle(
+        'DocSubtitle',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=10,
+        leading=14,
+        textColor=colors.HexColor('#4B5563')
+    )
+    table_header_style = ParagraphStyle(
+        'TableHeader',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=9,
+        leading=11,
+        textColor=colors.white
+    )
+    table_cell_style = ParagraphStyle(
+        'TableCell',
+        parent=styles['Normal'],
+        fontName='Helvetica',
+        fontSize=8,
+        leading=10
+    )
+    table_cell_bold = ParagraphStyle(
+        'TableCellBold',
+        parent=styles['Normal'],
+        fontName='Helvetica-Bold',
+        fontSize=8,
+        leading=10
+    )
+
+    story = []
+
+    story.append(Paragraph("Day Book", title_style))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph(f"Company: {company_name} | Period: {data['start_date']} to {data['end_date']}", subtitle_style))
+    story.append(Spacer(1, 15))
+
+    headers = [
+        Paragraph("Date", table_header_style),
+        Paragraph("Type", table_header_style),
+        Paragraph("Ref No.", table_header_style),
+        Paragraph("Particulars/Account", table_header_style),
+        Paragraph("Debit (₹)", table_header_style),
+        Paragraph("Credit (₹)", table_header_style)
+    ]
+
+    table_data = [headers]
+
+    for entry in data["entries"]:
+        first = True
+        for line in entry["lines"]:
+            row = []
+            if first:
+                row.append(Paragraph(str(entry["entry_date"]), table_cell_style))
+                row.append(Paragraph(str(entry["source_type"]), table_cell_style))
+                row.append(Paragraph(str(entry["reference_number"] or ""), table_cell_style))
+                first = False
+            else:
+                row.extend([Paragraph("", table_cell_style), Paragraph("", table_cell_style), Paragraph("", table_cell_style)])
+
+            row.append(Paragraph(f"{line['account_name']} ({line['account_code']})", table_cell_style))
+
+            if line["direction"] == "DEBIT":
+                row.append(Paragraph(f"{line['amount']:.2f}", table_cell_style))
+                row.append(Paragraph("", table_cell_style))
+            else:
+                row.append(Paragraph("", table_cell_style))
+                row.append(Paragraph(f"{line['amount']:.2f}", table_cell_style))
+
+            table_data.append(row)
+
+    table_data.append([
+        Paragraph("", table_cell_style),
+        Paragraph("", table_cell_style),
+        Paragraph("", table_cell_style),
+        Paragraph("Total", table_cell_bold),
+        Paragraph(f"{data['total_debit']:.2f}", table_cell_bold),
+        Paragraph(f"{data['total_credit']:.2f}", table_cell_bold)
+    ])
+
+    col_widths = [60, 60, 65, 200, 90, 90]
+
+    t = Table(table_data, colWidths=col_widths, repeatRows=1)
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0F1B3D')),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('TOPPADDING', (0,0), (-1,0), 6),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#D1D5DB')),
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#F3F4F6')),
+    ]))
+
+    story.append(t)
+    doc.build(story)
+    return buffer.getvalue()
+
+
+@router.get("/day-book", response_model=DayBookResponse)
+def get_day_book(
+    start_date: date = Query(..., description="Start date of report"),
+    end_date: date = Query(..., description="End date of report"),
+    branch_id: Optional[uuid.UUID] = Query(None, description="Optional branch ID to filter by"),
+    account_id: Optional[uuid.UUID] = Query(None, description="Optional ledger/account ID to filter by"),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from src.infrastructure.database.models import Branch, JournalEntry, JournalLine
+
+    if branch_id:
+        branch = db.query(Branch).filter(Branch.id == branch_id, Branch.tenant_id == tenant_id).first()
+        if not branch:
+            raise HTTPException(status_code=404, detail="Branch not found.")
+
+    q = db.query(JournalEntry).filter(
+        JournalEntry.tenant_id == tenant_id,
+        JournalEntry.entry_date >= start_date,
+        JournalEntry.entry_date <= end_date
+    )
+
+    if account_id:
+        q = q.filter(JournalEntry.lines.any(JournalLine.account_id == account_id))
+
+    total_count = q.count()
+
+    offset = (page - 1) * limit
+    journals = q.order_by(JournalEntry.entry_date.asc(), JournalEntry.created_at.asc()).offset(offset).limit(limit).all()
+
+    all_journals = q.all()
+    total_debit = Decimal("0.00")
+    total_credit = Decimal("0.00")
+    for j in all_journals:
+        for l in j.lines:
+            if l.direction == "DEBIT":
+                total_debit += l.amount
+            elif l.direction == "CREDIT":
+                total_credit += l.amount
+
+    entries = []
+    for j in journals:
+        lines = []
+        for l in j.lines:
+            lines.append({
+                "account_id": str(l.account_id),
+                "account_name": l.account.name if l.account else "Unknown",
+                "account_code": l.account.code if l.account else "Unknown",
+                "amount": l.amount,
+                "direction": l.direction,
+                "narration": l.narration
+            })
+
+        entries.append({
+            "id": str(j.id),
+            "entry_date": j.entry_date,
+            "reference_number": j.reference_number or "",
+            "description": j.description or "",
+            "source_type": j.source_type,
+            "source_id": str(j.source_id) if j.source_id else None,
+            "lines": lines
+        })
+
+    return DayBookResponse(
+        start_date=start_date,
+        end_date=end_date,
+        total_debit=total_debit,
+        total_credit=total_credit,
+        entries=entries,
+        total_count=total_count
+    )
+
+
+@router.get("/day-book/excel")
+def get_day_book_excel(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    branch_id: Optional[uuid.UUID] = Query(None),
+    account_id: Optional[uuid.UUID] = Query(None),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from fastapi.responses import Response
+    from src.infrastructure.database.models import Tenant
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    day_book_raw = get_day_book(
+        start_date=start_date,
+        end_date=end_date,
+        branch_id=branch_id,
+        account_id=account_id,
+        page=1,
+        limit=10000,
+        db=db,
+        tenant_id=tenant_id
+    )
+
+    excel_bytes = generate_day_book_excel(day_book_raw.model_dump(), company_name)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=DayBook_{start_date}_{end_date}.xlsx"}
+    )
+
+
+@router.get("/day-book/pdf")
+def get_day_book_pdf(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    branch_id: Optional[uuid.UUID] = Query(None),
+    account_id: Optional[uuid.UUID] = Query(None),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from fastapi.responses import Response
+    from src.infrastructure.database.models import Tenant
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    day_book_raw = get_day_book(
+        start_date=start_date,
+        end_date=end_date,
+        branch_id=branch_id,
+        account_id=account_id,
+        page=1,
+        limit=10000,
+        db=db,
+        tenant_id=tenant_id
+    )
+
+    pdf_bytes = generate_day_book_pdf(day_book_raw.model_dump(), company_name)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=DayBook_{start_date}_{end_date}.pdf"}
+    )
+
+
+@router.get("/stock-register", response_model=StockRegisterResponse)
+def get_stock_register(
+    start_date: Optional[date] = Query(None, description="Start date of report"),
+    end_date: Optional[date] = Query(None, description="End date of report"),
+    product_id: Optional[uuid.UUID] = Query(None, description="Optional product ID to filter by"),
+    page: int = Query(default=1, ge=1),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from src.infrastructure.database.models import Product, StockLedger
+
+    if not start_date:
+        start_date = date(2026, 4, 1)
+    if not end_date:
+        end_date = date.today()
+
+    pq = db.query(Product).filter(Product.tenant_id == tenant_id, Product.deleted_at == None)
+    if product_id:
+        pq = pq.filter(Product.id == product_id)
+
+    total_count = pq.count()
+
+    offset = (page - 1) * limit
+    products = pq.order_by(Product.name.asc()).offset(offset).limit(limit).all()
+
+    items = []
+    for p in products:
+        last_entry_before = db.query(StockLedger).filter(
+            StockLedger.tenant_id == tenant_id,
+            StockLedger.product_id == p.id,
+            StockLedger.transaction_date < start_date
+        ).order_by(StockLedger.transaction_date.desc(), StockLedger.created_at.desc()).first()
+
+        opening_stock = last_entry_before.running_balance if last_entry_before else Decimal("0.00")
+
+        entries = db.query(StockLedger).filter(
+            StockLedger.tenant_id == tenant_id,
+            StockLedger.product_id == p.id,
+            StockLedger.transaction_date >= start_date,
+            StockLedger.transaction_date <= end_date
+        ).order_by(StockLedger.transaction_date.asc(), StockLedger.created_at.asc()).all()
+
+        inward_qty = Decimal("0.00")
+        outward_qty = Decimal("0.00")
+        adjustment_qty = Decimal("0.00")
+
+        for e in entries:
+            if e.transaction_type == "ADJUSTMENT":
+                adjustment_qty += e.quantity_change
+            else:
+                if e.quantity_change > 0:
+                    inward_qty += e.quantity_change
+                else:
+                    outward_qty += abs(e.quantity_change)
+
+        closing_stock = opening_stock + inward_qty - outward_qty + adjustment_qty
+
+        items.append({
+            "product_id": p.id,
+            "product_name": p.name,
+            "sku": p.sku,
+            "uom": p.uom,
+            "opening_stock": opening_stock,
+            "inward_qty": inward_qty,
+            "outward_qty": outward_qty,
+            "adjustment_qty": adjustment_qty,
+            "closing_stock": closing_stock
+        })
+
+    return StockRegisterResponse(
+        start_date=start_date,
+        end_date=end_date,
+        items=items,
+        total_count=total_count
+    )
+
+
+# ── TDS/TCS Reports Endpoints ───────────────────────────────────────────────
+
+def generate_tcs_excel(data: dict, company_name: str) -> bytes:
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    import io
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "TCS Report"
+    ws.views.sheetView[0].showGridLines = True
+
+    ws["A1"] = "TCS Report"
+    ws["A1"].font = Font(name="Calibri", size=16, bold=True, color="0F1B3D")
+    ws["A2"] = f"Company: {company_name} | Period: {data['start_date']} to {data['end_date']} | Type: {data['report_type'].upper()}"
+    ws["A2"].font = Font(name="Calibri", size=11, bold=True)
+
+    thin_side = Side(border_style="thin", color="D1D5DB")
+    thin_border = Border(left=thin_side, right=thin_side, top=thin_side, bottom=thin_side)
+
+    if data["report_type"] == "detailed":
+        headers = ["Date", "Reference No.", "Party Name", "Taxable Amount (₹)", "TCS Rate (%)", "TCS Amount (₹)"]
+        for col_num, h in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col_num, value=h)
+            cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+
+        row_num = 5
+        for item in data["detailed_items"]:
+            ws.cell(row=row_num, column=1, value=str(item["date"])).alignment = Alignment(horizontal="center")
+            ws.cell(row=row_num, column=2, value=item["number"]).alignment = Alignment(horizontal="center")
+            ws.cell(row=row_num, column=3, value=item["contact_name"])
+            ws.cell(row=row_num, column=4, value=float(item["taxable_amount"]))
+            ws.cell(row=row_num, column=5, value=float(item["tcs_rate"]))
+            ws.cell(row=row_num, column=6, value=float(item["tcs_amount"]))
+
+            for col in range(1, 7):
+                ws.cell(row=row_num, column=col).border = thin_border
+                ws.cell(row=row_num, column=col).font = Font(name="Calibri", size=10)
+            row_num += 1
+
+        ws.cell(row=row_num, column=3, value="Total").font = Font(name="Calibri", size=11, bold=True)
+        ws.cell(row=row_num, column=6, value=float(data["total_tcs_amount"])).font = Font(name="Calibri", size=11, bold=True)
+        ws.cell(row=row_num, column=3).border = thin_border
+        ws.cell(row=row_num, column=6).border = thin_border
+
+    else:
+        headers = ["Party Name", "Total Taxable Amount (₹)", "Total TCS Amount (₹)"]
+        for col_num, h in enumerate(headers, 1):
+            cell = ws.cell(row=4, column=col_num, value=h)
+            cell.font = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
+            cell.fill = PatternFill(start_color="0F1B3D", end_color="0F1B3D", fill_type="solid")
+            cell.alignment = Alignment(horizontal="center")
+
+        row_num = 5
+        for item in data["summary_items"]:
+            ws.cell(row=row_num, column=1, value=item["contact_name"])
+            ws.cell(row=row_num, column=2, value=float(item["total_taxable_amount"]))
+            ws.cell(row=row_num, column=3, value=float(item["total_tcs_amount"]))
+
+            for col in range(1, 4):
+                ws.cell(row=row_num, column=col).border = thin_border
+                ws.cell(row=row_num, column=col).font = Font(name="Calibri", size=10)
+            row_num += 1
+
+        ws.cell(row=row_num, column=1, value="Total").font = Font(name="Calibri", size=11, bold=True)
+        ws.cell(row=row_num, column=3, value=float(data["total_tcs_amount"])).font = Font(name="Calibri", size=11, bold=True)
+        ws.cell(row=row_num, column=1).border = thin_border
+        ws.cell(row=row_num, column=3).border = thin_border
+
+    stream = io.BytesIO()
+    wb.save(stream)
+    return stream.getvalue()
+
+
+def generate_tds_pdf(data: dict, company_name: str) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    import io
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15, leftMargin=15, topMargin=15, bottomMargin=15)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('DocTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, textColor=colors.HexColor('#0F1B3D'))
+    subtitle_style = ParagraphStyle('DocSubtitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#4B5563'))
+    th_style = ParagraphStyle('TH', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.white)
+    tc_style = ParagraphStyle('TC', parent=styles['Normal'], fontName='Helvetica', fontSize=8)
+    tc_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8)
+
+    story = [
+        Paragraph("TDS Report", title_style),
+        Spacer(1, 4),
+        Paragraph(f"Company: {company_name} | Period: {data['start_date']} to {data['end_date']} | Type: {data['report_type'].upper()}", subtitle_style),
+        Spacer(1, 15)
+    ]
+
+    if data["report_type"] == "detailed":
+        headers = [Paragraph("Date", th_style), Paragraph("Type", th_style), Paragraph("Ref No.", th_style), Paragraph("Party Name", th_style), Paragraph("Taxable (₹)", th_style), Paragraph("TDS Amount (₹)", th_style)]
+        table_data = [headers]
+        for item in data["detailed_items"]:
+            table_data.append([
+                Paragraph(str(item["date"]), tc_style),
+                Paragraph(item["type"], tc_style),
+                Paragraph(item["number"], tc_style),
+                Paragraph(item["contact_name"], tc_style),
+                Paragraph(f"{item['taxable_amount']:.2f}", tc_style),
+                Paragraph(f"{item['tds_amount']:.2f}", tc_style)
+            ])
+        table_data.append([Paragraph("", tc_style), Paragraph("", tc_style), Paragraph("", tc_style), Paragraph("Total", tc_bold), Paragraph("", tc_bold), Paragraph(f"{data['total_tds_amount']:.2f}", tc_bold)])
+        col_widths = [65, 55, 65, 180, 100, 100]
+    else:
+        headers = [Paragraph("Party Name", th_style), Paragraph("Total Taxable Amount (₹)", th_style), Paragraph("Total TDS Amount (₹)", th_style)]
+        table_data = [headers]
+        for item in data["summary_items"]:
+            table_data.append([
+                Paragraph(item["contact_name"], tc_style),
+                Paragraph(f"{item['total_taxable_amount']:.2f}", tc_style),
+                Paragraph(f"{item['total_tds_amount']:.2f}", tc_style)
+            ])
+        table_data.append([Paragraph("Total", tc_bold), Paragraph("", tc_bold), Paragraph(f"{data['total_tds_amount']:.2f}", tc_bold)])
+        col_widths = [265, 150, 150]
+
+    t = Table(table_data, colWidths=col_widths, repeatRows=1)
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0F1B3D')),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('TOPPADDING', (0,0), (-1,0), 6),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#D1D5DB')),
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#F3F4F6')),
+    ]))
+    story.append(t)
+    doc.build(story)
+    return buffer.getvalue()
+
+
+def generate_tcs_pdf(data: dict, company_name: str) -> bytes:
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    import io
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4, rightMargin=15, leftMargin=15, topMargin=15, bottomMargin=15)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('DocTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=18, textColor=colors.HexColor('#0F1B3D'))
+    subtitle_style = ParagraphStyle('DocSubtitle', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=10, textColor=colors.HexColor('#4B5563'))
+    th_style = ParagraphStyle('TH', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=9, textColor=colors.white)
+    tc_style = ParagraphStyle('TC', parent=styles['Normal'], fontName='Helvetica', fontSize=8)
+    tc_bold = ParagraphStyle('TCB', parent=styles['Normal'], fontName='Helvetica-Bold', fontSize=8)
+
+    story = [
+        Paragraph("TCS Report", title_style),
+        Spacer(1, 4),
+        Paragraph(f"Company: {company_name} | Period: {data['start_date']} to {data['end_date']} | Type: {data['report_type'].upper()}", subtitle_style),
+        Spacer(1, 15)
+    ]
+
+    if data["report_type"] == "detailed":
+        headers = [Paragraph("Date", th_style), Paragraph("Ref No.", th_style), Paragraph("Party Name", th_style), Paragraph("Taxable (₹)", th_style), Paragraph("TCS Amount (₹)", th_style)]
+        table_data = [headers]
+        for item in data["detailed_items"]:
+            table_data.append([
+                Paragraph(str(item["date"]), tc_style),
+                Paragraph(item["number"], tc_style),
+                Paragraph(item["contact_name"], tc_style),
+                Paragraph(f"{item['taxable_amount']:.2f}", tc_style),
+                Paragraph(f"{item['tcs_amount']:.2f}", tc_style)
+            ])
+        table_data.append([Paragraph("", tc_style), Paragraph("", tc_style), Paragraph("Total", tc_bold), Paragraph("", tc_bold), Paragraph(f"{data['total_tcs_amount']:.2f}", tc_bold)])
+        col_widths = [80, 80, 205, 100, 100]
+    else:
+        headers = [Paragraph("Party Name", th_style), Paragraph("Total Taxable Amount (₹)", th_style), Paragraph("Total TCS Amount (₹)", th_style)]
+        table_data = [headers]
+        for item in data["summary_items"]:
+            table_data.append([
+                Paragraph(item["contact_name"], tc_style),
+                Paragraph(f"{item['total_taxable_amount']:.2f}", tc_style),
+                Paragraph(f"{item['total_tcs_amount']:.2f}", tc_style)
+            ])
+        table_data.append([Paragraph("Total", tc_bold), Paragraph("", tc_bold), Paragraph(f"{data['total_tcs_amount']:.2f}", tc_bold)])
+        col_widths = [265, 150, 150]
+
+    t = Table(table_data, colWidths=col_widths, repeatRows=1)
+    t.setStyle(TableStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#0F1B3D')),
+        ('ALIGN', (0,0), (-1,-1), 'LEFT'),
+        ('VALIGN', (0,0), (-1,-1), 'TOP'),
+        ('BOTTOMPADDING', (0,0), (-1,0), 6),
+        ('TOPPADDING', (0,0), (-1,0), 6),
+        ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor('#D1D5DB')),
+        ('BACKGROUND', (0,-1), (-1,-1), colors.HexColor('#F3F4F6')),
+    ]))
+    story.append(t)
+    doc.build(story)
+    return buffer.getvalue()
+
+
+@router.get("/tds", response_model=TDSReportResponse)
+def get_tds_report(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    contact_id: Optional[uuid.UUID] = Query(None),
+    report_type: str = Query("summary", pattern="^(summary|detailed)$"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from src.infrastructure.database.models import Invoice, Bill
+
+    if not start_date:
+        start_date = date(2026, 4, 1)
+    if not end_date:
+        end_date = date.today()
+
+    bq = db.query(Bill).filter(Bill.tenant_id == tenant_id, Bill.deleted_at == None, Bill.tds_amount > 0)
+    if contact_id:
+        bq = bq.filter(Bill.contact_id == contact_id)
+    bq = bq.filter(Bill.issue_date >= start_date, Bill.issue_date <= end_date)
+    bills = bq.all()
+
+    iq = db.query(Invoice).filter(Invoice.tenant_id == tenant_id, Invoice.deleted_at == None, Invoice.tds_amount > 0)
+    if contact_id:
+        iq = iq.filter(Invoice.contact_id == contact_id)
+    iq = iq.filter(Invoice.issue_date >= start_date, Invoice.issue_date <= end_date)
+    invoices = iq.all()
+
+    detailed_items = []
+    for b in bills:
+        detailed_items.append({
+            "id": b.id,
+            "type": "BILL",
+            "number": b.bill_number,
+            "date": b.issue_date,
+            "contact_name": b.contact.name if b.contact else "Unknown Vendor",
+            "taxable_amount": b.subtotal,
+            "tds_rate": b.tds_rate,
+            "tds_amount": b.tds_amount
+        })
+
+    for inv in invoices:
+        detailed_items.append({
+            "id": inv.id,
+            "type": "INVOICE",
+            "number": inv.invoice_number,
+            "date": inv.issue_date,
+            "contact_name": inv.contact.name if inv.contact else "Unknown Customer",
+            "taxable_amount": inv.subtotal,
+            "tds_rate": inv.tds_rate,
+            "tds_amount": inv.tds_amount
+        })
+
+    detailed_items.sort(key=lambda x: (x["date"], x["number"]))
+    total_tds = sum(x["tds_amount"] for x in detailed_items)
+
+    if report_type == "detailed":
+        return TDSReportResponse(
+            start_date=start_date,
+            end_date=end_date,
+            report_type=report_type,
+            total_tds_amount=total_tds,
+            detailed_items=detailed_items
+        )
+
+    summary_map = {}
+    for x in detailed_items:
+        c_name = x["contact_name"]
+        c_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
+        matched_doc = db.query(Bill).filter(Bill.id == x["id"]).first() or db.query(Invoice).filter(Invoice.id == x["id"]).first()
+        if matched_doc and matched_doc.contact_id:
+            c_id = matched_doc.contact_id
+
+        if c_name not in summary_map:
+            summary_map[c_name] = {
+                "contact_id": c_id,
+                "contact_name": c_name,
+                "total_taxable_amount": Decimal("0.00"),
+                "total_tds_amount": Decimal("0.00")
+            }
+        summary_map[c_name]["total_taxable_amount"] += x["taxable_amount"]
+        summary_map[c_name]["total_tds_amount"] += x["tds_amount"]
+
+    summary_items = list(summary_map.values())
+    summary_items.sort(key=lambda x: x["contact_name"])
+
+    return TDSReportResponse(
+        start_date=start_date,
+        end_date=end_date,
+        report_type=report_type,
+        total_tds_amount=total_tds,
+        summary_items=summary_items
+    )
+
+
+@router.get("/tcs", response_model=TCSReportResponse)
+def get_tcs_report(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    contact_id: Optional[uuid.UUID] = Query(None),
+    report_type: str = Query("summary", pattern="^(summary|detailed)$"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from src.infrastructure.database.models import Invoice
+
+    if not start_date:
+        start_date = date(2026, 4, 1)
+    if not end_date:
+        end_date = date.today()
+
+    iq = db.query(Invoice).filter(Invoice.tenant_id == tenant_id, Invoice.deleted_at == None, Invoice.tcs_amount > 0)
+    if contact_id:
+        iq = iq.filter(Invoice.contact_id == contact_id)
+    iq = iq.filter(Invoice.issue_date >= start_date, Invoice.issue_date <= end_date)
+    invoices = iq.all()
+
+    detailed_items = []
+    for inv in invoices:
+        detailed_items.append({
+            "id": inv.id,
+            "number": inv.invoice_number,
+            "date": inv.issue_date,
+            "contact_name": inv.contact.name if inv.contact else "Unknown Customer",
+            "taxable_amount": inv.subtotal,
+            "tcs_rate": inv.tcs_rate,
+            "tcs_amount": inv.tcs_amount
+        })
+
+    detailed_items.sort(key=lambda x: (x["date"], x["number"]))
+    total_tcs = sum(x["tcs_amount"] for x in detailed_items)
+
+    if report_type == "detailed":
+        return TCSReportResponse(
+            start_date=start_date,
+            end_date=end_date,
+            report_type=report_type,
+            total_tcs_amount=total_tcs,
+            detailed_items=detailed_items
+        )
+
+    summary_map = {}
+    for x in detailed_items:
+        c_name = x["contact_name"]
+        c_id = uuid.UUID("00000000-0000-0000-0000-000000000000")
+        matched_doc = db.query(Invoice).filter(Invoice.id == x["id"]).first()
+        if matched_doc and matched_doc.contact_id:
+            c_id = matched_doc.contact_id
+
+        if c_name not in summary_map:
+            summary_map[c_name] = {
+                "contact_id": c_id,
+                "contact_name": c_name,
+                "total_taxable_amount": Decimal("0.00"),
+                "total_tcs_amount": Decimal("0.00")
+            }
+        summary_map[c_name]["total_taxable_amount"] += x["taxable_amount"]
+        summary_map[c_name]["total_tcs_amount"] += x["tcs_amount"]
+
+    summary_items = list(summary_map.values())
+    summary_items.sort(key=lambda x: x["contact_name"])
+
+    return TCSReportResponse(
+        start_date=start_date,
+        end_date=end_date,
+        report_type=report_type,
+        total_tcs_amount=total_tcs,
+        summary_items=summary_items
+    )
+
+
+@router.get("/tds/excel")
+def get_tds_report_excel(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    contact_id: Optional[uuid.UUID] = Query(None),
+    report_type: str = Query("summary"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from fastapi.responses import Response
+    from src.infrastructure.database.models import Tenant
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    data = get_tds_report(start_date=start_date, end_date=end_date, contact_id=contact_id, report_type=report_type, db=db, tenant_id=tenant_id)
+    excel_bytes = generate_tds_excel(data.model_dump(), company_name)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=TDS_Report_{start_date}_{end_date}.xlsx"}
+    )
+
+
+@router.get("/tcs/excel")
+def get_tcs_report_excel(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    contact_id: Optional[uuid.UUID] = Query(None),
+    report_type: str = Query("summary"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from fastapi.responses import Response
+    from src.infrastructure.database.models import Tenant
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    data = get_tcs_report(start_date=start_date, end_date=end_date, contact_id=contact_id, report_type=report_type, db=db, tenant_id=tenant_id)
+    excel_bytes = generate_tcs_excel(data.model_dump(), company_name)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=TCS_Report_{start_date}_{end_date}.xlsx"}
+    )
+
+
+@router.get("/tds/pdf")
+def get_tds_report_pdf(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    contact_id: Optional[uuid.UUID] = Query(None),
+    report_type: str = Query("summary"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from fastapi.responses import Response
+    from src.infrastructure.database.models import Tenant
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    data = get_tds_report(start_date=start_date, end_date=end_date, contact_id=contact_id, report_type=report_type, db=db, tenant_id=tenant_id)
+    pdf_bytes = generate_tds_pdf(data.model_dump(), company_name)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=TDS_Report_{start_date}_{end_date}.pdf"}
+    )
+
+
+@router.get("/tcs/pdf")
+def get_tcs_report_pdf(
+    start_date: Optional[date] = Query(None),
+    end_date: Optional[date] = Query(None),
+    contact_id: Optional[uuid.UUID] = Query(None),
+    report_type: str = Query("summary"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view"))
+):
+    from fastapi.responses import Response
+    from src.infrastructure.database.models import Tenant
+
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    company_name = tenant.legal_name if tenant else "ApexBooks"
+
+    data = get_tcs_report(start_date=start_date, end_date=end_date, contact_id=contact_id, report_type=report_type, db=db, tenant_id=tenant_id)
+    pdf_bytes = generate_tcs_pdf(data.model_dump(), company_name)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=TCS_Report_{start_date}_{end_date}.pdf"}
     )

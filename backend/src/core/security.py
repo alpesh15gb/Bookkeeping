@@ -81,6 +81,7 @@ class Permissions:
     BILL_VIEW = "bill:view"
     BILL_UPDATE = "bill:update"
     BILL_DELETE = "bill:delete"
+    DATA_IMPORT = "data:import"
 
 ROLE_PERMISSIONS = {
 
@@ -100,6 +101,7 @@ ROLE_PERMISSIONS = {
     Permissions.EXPENSE_CREATE, Permissions.EXPENSE_VIEW,
     Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
     Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
+    Permissions.DATA_IMPORT,
 ],
 "accountant": [
     Permissions.TENANT_VIEW,
@@ -114,6 +116,7 @@ ROLE_PERMISSIONS = {
     Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
     Permissions.EXPENSE_VIEW, Permissions.EXPENSE_CREATE, Permissions.EXPENSE_FINALIZE,
     Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
+    Permissions.DATA_IMPORT,
 ],
 "salesperson": [
     Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
@@ -176,6 +179,16 @@ def create_refresh_token(user_id: str) -> str:
         "exp": expire,
         "iat": datetime.now(timezone.utc),
         "type": "refresh",
+    }
+    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+
+def create_2fa_challenge_token(user_id: str) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(minutes=5)
+    payload = {
+        "sub": user_id,
+        "exp": expire,
+        "iat": datetime.now(timezone.utc),
+        "type": "2fa_challenge",
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
