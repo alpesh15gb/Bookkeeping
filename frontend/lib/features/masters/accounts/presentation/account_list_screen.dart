@@ -276,7 +276,7 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
               children: [
                 if (hasChildren)
                   InkWell(
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(ApexRadius.xl),
                     onTap: () => setState(() {
                       if (isExpanded) {
                         _expanded.remove(a.id);

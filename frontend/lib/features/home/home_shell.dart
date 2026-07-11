@@ -381,7 +381,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           // Close drawer when in drawer mode
           Navigator.of(context).maybePop();
         },
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(ApexRadius.sm),
         child: Container(
           padding: EdgeInsets.only(
             left: compact ? 10 : 9,
@@ -393,7 +393,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             color: active
                 ? colors.primaryContainer.withValues(alpha: 0.30)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(6),
+            borderRadius: BorderRadius.circular(ApexRadius.sm),
             border: Border(
               left: BorderSide(
                 color: active ? colors.primary : Colors.transparent,

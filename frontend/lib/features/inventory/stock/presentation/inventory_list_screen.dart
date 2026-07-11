@@ -171,11 +171,11 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
                     vertical: isMobile ? 14 : 10,
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(ApexRadius.md),
                     borderSide: BorderSide(color: c.border),
                   ),
                   enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(ApexRadius.md),
                     borderSide: BorderSide(color: c.border),
                   ),
                 ),
@@ -249,7 +249,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
           elevation: 0,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(ApexRadius.lg),
             side: BorderSide(color: c.border),
           ),
           child: Padding(

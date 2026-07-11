@@ -25,7 +25,7 @@ class FilterChipView {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
         color: active ? colors.primaryContainer : colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: BorderRadius.circular(ApexRadius.pill),
         border: Border.all(color: colors.border),
       ),
       child: Row(
@@ -114,7 +114,7 @@ class _ApexDateRangeFilterState extends State<ApexDateRangeFilter> {
     final value = hasRange ? '${formatDate(from)} → ${formatDate(to)}' : null;
     return InkWell(
       onTap: _pick,
-      borderRadius: BorderRadius.circular(999),
+      borderRadius: BorderRadius.circular(ApexRadius.pill),
       child: FilterChipView.buildRaw(
         context,
         colors,

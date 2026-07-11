@@ -116,7 +116,7 @@ class _EntitySelectorSheetState<T> extends State<_EntitySelectorSheet<T>> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: colors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(ApexRadius.sm),
                 ),
               ),
             ),
@@ -138,7 +138,7 @@ class _EntitySelectorSheetState<T> extends State<_EntitySelectorSheet<T>> {
                   prefixIcon: const Icon(Icons.search_rounded, size: 20),
                   isDense: true,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(ApexRadius.md),
                   ),
                   contentPadding: const EdgeInsets.symmetric(vertical: 10),
                 ),

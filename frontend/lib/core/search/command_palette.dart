@@ -93,7 +93,7 @@ class _CommandPaletteState extends State<CommandPalette> {
           child: Card(
             margin: const EdgeInsets.all(24),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: BorderRadius.circular(ApexRadius.lg),
             ),
             clipBehavior: Clip.antiAlias,
             child: Column(
@@ -108,7 +108,7 @@ class _CommandPaletteState extends State<CommandPalette> {
                       hintText: 'Search commands and modules\u2026',
                       prefixIcon: const Icon(Icons.search_rounded),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(ApexRadius.md),
                       ),
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),

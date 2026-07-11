@@ -132,7 +132,7 @@ class EntityDetailPage extends ConsumerWidget {
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
     decoration: BoxDecoration(
       color: c.color.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(ApexRadius.lg),
     ),
     child: Text(
       c.label,

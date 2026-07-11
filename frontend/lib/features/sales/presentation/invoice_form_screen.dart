@@ -775,7 +775,7 @@ class _LineRowState extends State<_LineRow> {
                 width: 24, height: 24,
                 decoration: BoxDecoration(
                   color: c.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(6),
+                  borderRadius: BorderRadius.circular(ApexRadius.sm),
                 ),
                 alignment: Alignment.center,
                 child: Text('$lineNum', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: c.primary)),

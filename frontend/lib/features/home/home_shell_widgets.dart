@@ -14,7 +14,7 @@ Widget selectorWidget(
       padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(ApexRadius.md),
         border: Border.all(color: colors.border),
       ),
       child: Row(
@@ -232,7 +232,7 @@ Widget buildToolbar(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 460),
               child: InkWell(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(ApexRadius.md),
                 onTap: onSearch,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -241,7 +241,7 @@ Widget buildToolbar(
                   ),
                   decoration: BoxDecoration(
                     color: colors.surfaceMuted,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(ApexRadius.md),
                     border: Border.all(color: colors.border),
                   ),
                   child: Row(
@@ -316,7 +316,7 @@ Widget _keycap(String label, ApexColors colors) => Container(
   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
   decoration: BoxDecoration(
     color: colors.surface,
-    borderRadius: BorderRadius.circular(4),
+    borderRadius: BorderRadius.circular(ApexRadius.sm),
     border: Border.all(color: colors.border),
   ),
   child: Text(

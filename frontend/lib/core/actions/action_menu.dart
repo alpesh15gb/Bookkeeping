@@ -101,7 +101,7 @@ class ActionMenu extends StatelessWidget {
                 height: 4,
                 decoration: BoxDecoration(
                   color: colors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: BorderRadius.circular(ApexRadius.sm),
                 ),
               ),
               const SizedBox(height: 8),

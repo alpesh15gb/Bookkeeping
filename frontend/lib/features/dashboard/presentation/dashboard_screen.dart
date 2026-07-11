@@ -544,7 +544,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             height: 34,
             decoration: BoxDecoration(
               color: tone,
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
             ),
           ),
           const SizedBox(width: 12),
