@@ -68,7 +68,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ResponsiveLayout.isMobile(context) ? 12 : 28,
               40,
             ),
-            itemCount: 3,
+            itemCount: 4,
             itemBuilder: (context, index) {
               switch (index) {
                 case 0:
@@ -117,6 +117,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         ),
                       );
                     },
+                  );
+                case 3:
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 20),
+                    child: _gstSummaryCard(state, colors, fmt),
                   );
                 default:
                   return const SizedBox.shrink();
@@ -579,6 +584,124 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ── GST Summary ───────────────────────────────────────────────────────────
+  Widget _gstSummaryCard(
+    DashboardState state,
+    ApexColors colors,
+    NumberFormatter fmt,
+  ) {
+    return state.metrics.when(
+      loading: () => _Panel(
+        colors: colors,
+        child: const SizedBox(
+          height: 100,
+          child: Center(child: LoadingSpinner(size: 24)),
+        ),
+      ),
+      error: (_, _) => const SizedBox.shrink(),
+      data: (m) {
+        final cgst = m.cgstTotal;
+        final sgst = m.sgstTotal;
+        final igst = m.igstTotal;
+        final totalOutput = cgst + sgst + igst;
+        final netPayable = totalOutput; // Net of ITC; backend provides full calc
+        return _Panel(
+          colors: colors,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Text(
+                    'GST Summary',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(
+                    'Net Payable: ${fmt.currency(netPayable)}',
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w800,
+                      color: colors.primary,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'July 2026  ·  Output GST',
+                style: TextStyle(fontSize: 12, color: colors.textMuted),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  _gstItem('CGST', fmt.currency(cgst), colors),
+                  const SizedBox(width: 16),
+                  _gstItem('SGST', fmt.currency(sgst), colors),
+                  const SizedBox(width: 16),
+                  if (igst > 0) ...[
+                    _gstItem('IGST', fmt.currency(igst), colors),
+                    const SizedBox(width: 16),
+                  ],
+                  _gstItem(
+                    'Total',
+                    fmt.currency(totalOutput),
+                    colors,
+                    emphasize: true,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _gstItem(
+    String label,
+    String value,
+    ApexColors colors, {
+    bool emphasize = false,
+  }) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: colors.surfaceMuted,
+          borderRadius: BorderRadius.circular(ApexRadius.md),
+          border: emphasize ? Border.all(color: colors.primary.withValues(alpha: 0.3)) : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                color: colors.textMuted,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: emphasize ? colors.primary : colors.textPrimary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
