@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/entity_detail_page.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
 import 'package:apexbooks/core/cache/cache_service.dart';
@@ -24,7 +25,7 @@ class ExpenseCategoryDetailScreen extends ConsumerWidget {
       chips: [
         DetailChip(
           label: category.isActive ? 'Active' : 'Inactive',
-          color: category.isActive ? Colors.green : Colors.red,
+          color: category.isActive ? apexColors(context).success : apexColors(context).danger,
         ),
       ],
       sections: [

@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/entity_detail_page.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
 import 'package:apexbooks/core/cache/cache_service.dart';
@@ -38,11 +39,11 @@ class BankingProfileDetailScreen extends ConsumerWidget {
       chips: [
         DetailChip(
           label: profile.isPrimary ? 'Primary' : 'Not Primary',
-          color: profile.isPrimary ? Colors.amber : Colors.grey,
+          color: profile.isPrimary ? apexColors(context).accent : apexColors(context).textMuted,
         ),
         DetailChip(
           label: profile.isActive ? 'Active' : 'Inactive',
-          color: profile.isActive ? Colors.green : Colors.red,
+          color: profile.isActive ? apexColors(context).success : apexColors(context).danger,
         ),
       ],
       sections: [
