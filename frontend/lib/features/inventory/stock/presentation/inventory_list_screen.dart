@@ -253,7 +253,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
             side: BorderSide(color: c.border),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(ApexSpacing.lg),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [

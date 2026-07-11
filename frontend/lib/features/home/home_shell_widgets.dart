@@ -11,7 +11,7 @@ Widget selectorWidget(
   return Padding(
     padding: const EdgeInsets.symmetric(horizontal: 12),
     child: Container(
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(ApexSpacing.sm),
       decoration: BoxDecoration(
         color: colors.surface,
         borderRadius: BorderRadius.circular(ApexRadius.md),
@@ -168,7 +168,7 @@ Widget buildProfileBox(
   String? role,
 }) {
   return Padding(
-    padding: const EdgeInsets.all(12),
+    padding: const EdgeInsets.all(ApexSpacing.md),
     child: Row(
       children: [
         CircleAvatar(
