@@ -62,7 +62,7 @@ class ActionMenu extends StatelessWidget {
                     Icon(
                       a.icon,
                       size: 18,
-                      color: a.destructive ? Colors.red : null,
+                      color: a.destructive ? apexColors(context).danger : null,
                     ),
                     const SizedBox(width: 12),
                     Text(a.label),
@@ -109,7 +109,7 @@ class ActionMenu extends StatelessWidget {
                 (a) => ListTile(
                   leading: Icon(
                     a.icon,
-                    color: a.destructive ? Colors.red : null,
+                    color: a.destructive ? apexColors(context).danger : null,
                   ),
                   title: Text(a.label),
                   enabled: a.enabled,

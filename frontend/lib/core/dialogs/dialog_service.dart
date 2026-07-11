@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/theme/app_colors.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/states.dart';
@@ -96,7 +97,9 @@ class DialogService {
               child: Text(saveLabel),
             ),
           TextButton(
-            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).extension<ApexColors>()?.danger ?? Colors.red,
+            ),
             onPressed: () => Navigator.pop(ctx, DialogResult.discard),
             child: const Text('Discard'),
           ),

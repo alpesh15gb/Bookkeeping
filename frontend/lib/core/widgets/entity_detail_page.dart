@@ -155,7 +155,7 @@ class EntityDetailPage extends ConsumerWidget {
           width: isMobile ? 80 : 100,
           child: Text(
             r.label,
-            style: TextStyle(color: Colors.grey[600], fontSize: 13),
+            style: TextStyle(color: colors.textSecondary, fontSize: 13),
           ),
         ),
         Expanded(
