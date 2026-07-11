@@ -1,4 +1,9 @@
 /// ApexBooks light + dark [ThemeData] builders built on the [ApexColors] tokens.
+///
+/// Font stack per DESIGN.md:
+///   Display/Headings → Instrument Sans (weights 500-700)
+///   Body/UI          → Inter (weights 400-700)
+///   Data/Tables      → JetBrains Mono (with tabular-nums)
 library;
 
 import 'package:flutter/material.dart';
@@ -27,21 +32,58 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
     onError: colors.onPrimary,
   );
 
-  final baseText = GoogleFonts.interTextTheme();
-  final textTheme = baseText.copyWith(
-    bodyLarge: baseText.bodyLarge?.copyWith(color: colors.textPrimary),
-    bodyMedium: baseText.bodyMedium?.copyWith(color: colors.textPrimary),
-    bodySmall: baseText.bodySmall?.copyWith(color: colors.textSecondary),
-    titleLarge: baseText.titleLarge?.copyWith(
+  // -- Font loaders (Google Fonts caches after first use) -------------------
+  final displayFont = GoogleFonts.instrumentSans;
+  final bodyFont = GoogleFonts.inter;
+  final monoFont = GoogleFonts.jetBrainsMono;
+
+  // Cache text themes so Google Fonts loads them once at startup
+  final bodyText = GoogleFonts.interTextTheme();
+  final displayText = GoogleFonts.instrumentSansTextTheme();
+  final monoText = GoogleFonts.jetBrainsMonoTextTheme();
+
+  final textTheme = bodyText.copyWith(
+    // Display/headings → Instrument Sans
+    displayLarge: displayText.displayLarge?.copyWith(color: colors.textPrimary),
+    displayMedium: displayText.displayMedium?.copyWith(color: colors.textPrimary),
+    displaySmall: displayText.displaySmall?.copyWith(color: colors.textPrimary),
+    headlineLarge: displayText.headlineLarge?.copyWith(
+      color: colors.textPrimary,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.5,
+    ),
+    headlineMedium: displayText.headlineMedium?.copyWith(
+      color: colors.textPrimary,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
+    ),
+    headlineSmall: displayText.headlineSmall?.copyWith(
+      color: colors.textPrimary,
+      fontWeight: FontWeight.w700,
+      letterSpacing: -0.3,
+    ),
+    // Body/UI → Inter
+    bodyLarge: bodyText.bodyLarge?.copyWith(color: colors.textPrimary),
+    bodyMedium: bodyText.bodyMedium?.copyWith(color: colors.textPrimary),
+    bodySmall: bodyText.bodySmall?.copyWith(color: colors.textSecondary),
+    titleLarge: bodyText.titleLarge?.copyWith(
       color: colors.textPrimary,
       fontWeight: FontWeight.w700,
     ),
-    titleMedium: baseText.titleMedium?.copyWith(
+    titleMedium: bodyText.titleMedium?.copyWith(
       color: colors.textPrimary,
       fontWeight: FontWeight.w600,
     ),
-    labelLarge: baseText.labelLarge?.copyWith(
+    titleSmall: bodyText.titleSmall?.copyWith(
       color: colors.textPrimary,
+      fontWeight: FontWeight.w600,
+    ),
+    labelLarge: bodyText.labelLarge?.copyWith(
+      color: colors.textPrimary,
+      fontWeight: FontWeight.w600,
+    ),
+    labelSmall: bodyText.labelSmall?.copyWith(
+      color: colors.textSecondary,
       fontWeight: FontWeight.w600,
     ),
   );
@@ -60,7 +102,7 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
       elevation: 0,
       scrolledUnderElevation: 0.5,
       centerTitle: false,
-      titleTextStyle: GoogleFonts.inter(
+      titleTextStyle: GoogleFonts.instrumentSans(
         fontSize: 18,
         fontWeight: FontWeight.w700,
         color: colors.textPrimary,
@@ -84,7 +126,7 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(ApexRadius.md),
         ),
-        textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+        textStyle: GoogleFonts.instrumentSans(fontSize: 15, fontWeight: FontWeight.w600),
         minimumSize: const Size(0, 48),
       ),
     ),
@@ -96,7 +138,7 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
           borderRadius: BorderRadius.circular(ApexRadius.md),
         ),
         side: BorderSide(color: colors.border),
-        textStyle: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w600),
+        textStyle: GoogleFonts.instrumentSans(fontSize: 15, fontWeight: FontWeight.w600),
         minimumSize: const Size(0, 48),
       ),
     ),
@@ -130,7 +172,7 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(ApexRadius.xl),
       ),
-      titleTextStyle: GoogleFonts.inter(
+      titleTextStyle: GoogleFonts.instrumentSans(
         fontSize: 18,
         fontWeight: FontWeight.w700,
         color: colors.textPrimary,
