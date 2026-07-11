@@ -71,7 +71,12 @@ def list_reminders(
     return reminders
 
 
-@router.post("", status_code=status.HTTP_201_CREATED)
-def create_reminder(
-):
-    return {"message": "Reminder created (stub)"}
+@router.post("", status_code=status.HTTP_200_OK)
+def acknowledge_reminder():
+    """Reminders are auto-generated from live invoice/payment/bill data.
+
+    This endpoint is a no-op: all reminders are computed dynamically from
+    overdue invoices, daily summaries, and other real-time data in the GET
+    handler. No persistence is required.
+    """
+    return {"message": "Reminders acknowledged — all are auto-generated from live data."}
