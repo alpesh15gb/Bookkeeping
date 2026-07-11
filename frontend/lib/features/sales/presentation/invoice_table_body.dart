@@ -3,6 +3,7 @@ import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/tables/table_column.dart';
+import 'package:apexbooks/core/widgets/status_badge.dart';
 import '../models/invoice.dart';
 import '../models/invoice_status.dart';
 
@@ -184,48 +185,16 @@ class InvoiceTableBody extends StatelessWidget {
   }
 
   Widget _statusBadge(InvoiceStatus status) {
-    final (Color bg, Color fg, String label) = switch (status) {
-      InvoiceStatus.draft => (
-        colors.warning.withValues(alpha: 0.15),
-        colors.warning,
-        'DRAFT',
-      ),
-      InvoiceStatus.posted => (
-        colors.info.withValues(alpha: 0.15),
-        colors.info,
-        'POSTED',
-      ),
-      InvoiceStatus.sent => (
-        colors.primary.withValues(alpha: 0.15),
-        colors.primary,
-        'SENT',
-      ),
-      InvoiceStatus.partiallyPaid => (
-        colors.warning.withValues(alpha: 0.15),
-        colors.warning,
-        'PARTIAL',
-      ),
-      InvoiceStatus.paid => (
-        colors.success.withValues(alpha: 0.15),
-        colors.success,
-        'PAID',
-      ),
-      InvoiceStatus.cancelled => (
-        colors.danger.withValues(alpha: 0.12),
-        colors.danger,
-        'CANCELLED',
-      ),
+    final tone = switch (status) {
+      InvoiceStatus.draft => StatusTone.neutral,
+      InvoiceStatus.posted || InvoiceStatus.sent => StatusTone.primary,
+      InvoiceStatus.partiallyPaid => StatusTone.warning,
+      InvoiceStatus.paid => StatusTone.success,
+      InvoiceStatus.cancelled => StatusTone.danger,
     };
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(color: fg, fontWeight: FontWeight.w700, fontSize: 11),
-      ),
+    return StatusBadge(
+      label: status.value.replaceAll('_', ' '),
+      tone: tone,
     );
   }
 }
