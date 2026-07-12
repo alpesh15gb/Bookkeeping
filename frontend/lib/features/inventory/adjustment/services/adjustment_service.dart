@@ -7,6 +7,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 
 /// An adjustment line — changes stock for one product.
 @immutable
@@ -55,9 +56,9 @@ class AdjustmentLine {
     id: (json['id'] ?? '').toString(),
     productId: (json['product_id'] ?? '').toString(),
     productName: json['product_name'] as String? ?? '',
-    quantityChange: (json['quantity_change'] as num?)?.toDouble() ?? 0,
-    unitCost: (json['unit_cost'] as num?)?.toDouble(),
-    totalCost: (json['total_cost'] as num?)?.toDouble() ?? 0,
+    quantityChange: parseDoubleSafe(json['quantity_change']),
+    unitCost: parseDoubleSafe(json['unit_cost']),
+    totalCost: parseDoubleSafe(json['total_cost']),
   );
 }
 

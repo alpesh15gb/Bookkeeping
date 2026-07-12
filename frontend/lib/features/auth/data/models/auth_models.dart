@@ -4,6 +4,8 @@
 /// `AUTHENTICATION_GUIDE.md` and `REQUEST_RESPONSE_REFERENCE.md`.
 library;
 
+import 'package:apexbooks/core/utils/formatters.dart';
+
 import 'package:flutter/foundation.dart';
 
 /// Response from `POST /auth/register` and `GET /auth/me`.
@@ -69,7 +71,7 @@ class TokenPair {
       accessToken: json['access_token'] as String,
       refreshToken: json['refresh_token'] as String,
       tokenType: (json['token_type'] as String?) ?? 'bearer',
-      expiresIn: (json['expires_in'] as num?)?.toInt() ?? 900,
+      expiresIn: parseIntSafe(json['expires_in'], defaultValue: 900),
     );
   }
 

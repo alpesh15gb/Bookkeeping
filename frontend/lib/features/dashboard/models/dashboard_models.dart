@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 
 /// KPIs from GET /dashboard/kpis
 @immutable
@@ -23,12 +24,12 @@ class DashboardKpis {
   final double netProfit;
 
   factory DashboardKpis.fromJson(Map<String, dynamic> json) => DashboardKpis(
-    totalInvoiced: (json['total_invoiced'] as num?)?.toDouble() ?? 0,
-    totalCollected: (json['total_collected'] as num?)?.toDouble() ?? 0,
-    totalExpenses: (json['total_expenses'] as num?)?.toDouble() ?? 0,
-    outstanding: (json['outstanding'] as num?)?.toDouble() ?? 0,
-    overdue: (json['overdue'] as num?)?.toDouble() ?? 0,
-    netProfit: (json['net_profit'] as num?)?.toDouble() ?? 0,
+    totalInvoiced: parseDoubleSafe(json['total_invoiced']),
+    totalCollected: parseDoubleSafe(json['total_collected']),
+    totalExpenses: parseDoubleSafe(json['total_expenses']),
+    outstanding: parseDoubleSafe(json['outstanding']),
+    overdue: parseDoubleSafe(json['overdue']),
+    netProfit: parseDoubleSafe(json['net_profit']),
   );
 }
 
@@ -51,10 +52,10 @@ class DashboardMetrics {
 
   factory DashboardMetrics.fromJson(Map<String, dynamic> json) =>
       DashboardMetrics(
-        cgstTotal: (json['cgst_total'] as num?)?.toDouble() ?? 0,
-        sgstTotal: (json['sgst_total'] as num?)?.toDouble() ?? 0,
-        igstTotal: (json['igst_total'] as num?)?.toDouble() ?? 0,
-        cessTotal: (json['cess_total'] as num?)?.toDouble() ?? 0,
+        cgstTotal: parseDoubleSafe(json['cgst_total']),
+        sgstTotal: parseDoubleSafe(json['sgst_total']),
+        igstTotal: parseDoubleSafe(json['igst_total']),
+        cessTotal: parseDoubleSafe(json['cess_total']),
       );
 }
 
@@ -67,9 +68,9 @@ class TrendPoint {
   final double total;
 
   factory TrendPoint.fromJson(Map<String, dynamic> json) => TrendPoint(
-    month: json['month'] as int? ?? 1,
-    year: json['year'] as int? ?? DateTime.now().year,
-    total: (json['total'] as num?)?.toDouble() ?? 0,
+    month: parseIntSafe(json['month'], defaultValue: 1),
+    year: parseIntSafe(json['year'], defaultValue: DateTime.now().year),
+    total: parseDoubleSafe(json['total']),
   );
 
   /// Label like "Jan 2025"
@@ -118,9 +119,9 @@ class OverdueAlert {
     id: (json['id'] ?? '').toString(),
     invoiceNumber: json['invoice_number'] as String? ?? '',
     contactName: json['contact_name'] as String? ?? '',
-    balance: (json['balance'] as num?)?.toDouble() ?? 0,
+    balance: parseDoubleSafe(json['balance']),
     dueDate: json['due_date'] as String? ?? '',
-    daysOverdue: json['days_overdue'] as int? ?? 0,
+    daysOverdue: parseIntSafe(json['days_overdue']),
     severity: json['severity'] as String? ?? 'medium',
   );
 }
@@ -146,7 +147,7 @@ class OverdueAlertsResponse {
                 .toList() ??
             [],
         totalOverdueAmount:
-            (json['total_overdue_amount'] as num?)?.toDouble() ?? 0,
-        count: json['count'] as int? ?? 0,
+            parseDoubleSafe(json['total_overdue_amount']),
+        count: parseIntSafe(json['count']),
       );
 }

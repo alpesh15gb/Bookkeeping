@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 import '../models/invoice.dart';
 
 class InvoiceService {
@@ -81,7 +82,7 @@ class InvoiceService {
       final items = (data['items'] as List)
           .map((e) => InvoiceListItem.fromJson(e as Map<String, dynamic>))
           .toList();
-      return (items: items, total: (data['total'] as num?)?.toInt() ?? items.length);
+      return (items: items, total: parseIntSafe(data['total'], defaultValue: items.length));
     });
   }
 

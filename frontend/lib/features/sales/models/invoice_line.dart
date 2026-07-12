@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 
 @immutable
 class InvoiceLine {
@@ -115,22 +116,22 @@ class InvoiceLine {
     productId: (json['product_id'] ?? '').toString(),
     productName: json['product_name'] as String?,
     description: json['description'] as String?,
-    quantity: (json['quantity'] as num?)?.toDouble() ?? 1,
-    rate: (json['rate'] as num?)?.toDouble() ?? 0,
-    discount: (json['discount'] as num?)?.toDouble() ?? 0,
+    quantity: parseDoubleSafe(json['quantity'], defaultValue: 1),
+    rate: parseDoubleSafe(json['rate']),
+    discount: parseDoubleSafe(json['discount']),
     hsnSac: json['hsn_sac'] as String? ?? '',
-    gstRate: (json['gst_rate'] as num?)?.toDouble() ?? 0,
-    subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
-    cgstRate: (json['cgst_rate'] as num?)?.toDouble() ?? 0,
-    cgstAmount: (json['cgst_amount'] as num?)?.toDouble() ?? 0,
-    sgstRate: (json['sgst_rate'] as num?)?.toDouble() ?? 0,
-    sgstAmount: (json['sgst_amount'] as num?)?.toDouble() ?? 0,
-    igstRate: (json['igst_rate'] as num?)?.toDouble() ?? 0,
-    igstAmount: (json['igst_amount'] as num?)?.toDouble() ?? 0,
-    utgstRate: (json['utgst_rate'] as num?)?.toDouble() ?? 0,
-    utgstAmount: (json['utgst_amount'] as num?)?.toDouble() ?? 0,
-    cessRate: (json['cess_rate'] as num?)?.toDouble() ?? 0,
-    cessAmount: (json['cess_amount'] as num?)?.toDouble() ?? 0,
-    total: (json['total'] as num?)?.toDouble() ?? 0,
+    gstRate: parseDoubleSafe(json['gst_rate']),
+    subtotal: parseDoubleSafe(json['subtotal']),
+    cgstRate: parseDoubleSafe(json['cgst_rate']),
+    cgstAmount: parseDoubleSafe(json['cgst_amount']),
+    sgstRate: parseDoubleSafe(json['sgst_rate']),
+    sgstAmount: parseDoubleSafe(json['sgst_amount']),
+    igstRate: parseDoubleSafe(json['igst_rate']),
+    igstAmount: parseDoubleSafe(json['igst_amount']),
+    utgstRate: parseDoubleSafe(json['utgst_rate']),
+    utgstAmount: parseDoubleSafe(json['utgst_amount']),
+    cessRate: parseDoubleSafe(json['cess_rate']),
+    cessAmount: parseDoubleSafe(json['cess_amount']),
+    total: parseDoubleSafe(json['total']),
   );
 }

@@ -6,6 +6,7 @@
 library;
 
 import 'package:dio/dio.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
@@ -145,7 +146,7 @@ class LedgerPostingService {
         final currentDirection = line['direction'] as String;
         return {
           'account_id': line['account_id'] as String,
-          'amount': (line['amount'] as num).toDouble(),
+          'amount': parseDoubleSafe(line['amount']),
           'direction': currentDirection == 'DEBIT' ? 'CREDIT' : 'DEBIT',
           'narration': 'Reversal: ${line['narration'] ?? ''}',
         };
@@ -174,10 +175,10 @@ class LedgerPostingService {
             return PostingLine(
               accountId: m['account_id'] as String,
               debit: (m['direction'] as String) == 'DEBIT'
-                  ? (m['amount'] as num).toDouble()
+                  ? parseDoubleSafe(m['amount'])
                   : 0,
               credit: (m['direction'] as String) == 'CREDIT'
-                  ? (m['amount'] as num).toDouble()
+                  ? parseDoubleSafe(m['amount'])
                   : 0,
               description: m['narration'] as String?,
             );

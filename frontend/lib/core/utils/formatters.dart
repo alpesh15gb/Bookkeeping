@@ -30,10 +30,27 @@ String formatDateTime(DateTime dt) =>
     DateFormat('dd MMM yyyy, hh:mm a').format(dt);
 
 /// Parses a decimal string from the backend into a [double], tolerating null.
+/// Handles int, double, String ("19900.0000"), and null values safely.
 double parseDecimal(Object? value) {
   if (value == null) return 0;
   if (value is num) return value.toDouble();
   return double.tryParse(value.toString()) ?? 0;
+}
+
+/// Parses an integer from the backend, tolerating null, String, num.
+int parseIntSafe(Object? value, {int defaultValue = 0}) {
+  if (value == null) return defaultValue;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  return int.tryParse(value.toString()) ?? defaultValue;
+}
+
+/// Parses a double from the backend, tolerating null, String, num.
+double parseDoubleSafe(Object? value, {double defaultValue = 0}) {
+  if (value == null) return defaultValue;
+  if (value is double) return value;
+  if (value is num) return value.toDouble();
+  return double.tryParse(value.toString()) ?? defaultValue;
 }
 
 /// Validates an email address.

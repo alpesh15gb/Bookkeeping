@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 
 @immutable
 class OutstandingInvoice {
@@ -44,8 +45,8 @@ class OutstandingInvoice {
       OutstandingInvoice(
         id: (json['id'] ?? '').toString(),
         invoiceNumber: json['invoice_number'] as String? ?? '',
-        total: (json['total'] as num?)?.toDouble() ?? 0,
-        amountPaid: (json['amount_paid'] as num?)?.toDouble() ?? 0,
+        total: parseDoubleSafe(json['total']),
+        amountPaid: parseDoubleSafe(json['amount_paid']),
         dueDate: json['due_date'] as String? ?? '',
         contactName: json['contact_name'] as String? ?? '',
         status: json['status'] as String? ?? '',

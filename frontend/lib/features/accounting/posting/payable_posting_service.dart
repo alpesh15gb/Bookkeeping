@@ -6,6 +6,7 @@ library;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
@@ -24,9 +25,8 @@ class VendorBalance {
 
   factory VendorBalance.fromJson(Map<String, dynamic> json) => VendorBalance(
     contactId: json['contact_id'] as String? ?? json['id'] as String? ?? '',
-    totalOutstanding:
-        (json['total_outstanding'] as num?)?.toDouble() ?? 0,
-    overdueAmount: (json['overdue_amount'] as num?)?.toDouble() ?? 0,
+    totalOutstanding: parseDoubleSafe(json['total_outstanding']),
+    overdueAmount: parseDoubleSafe(json['overdue_amount']),
   );
 }
 

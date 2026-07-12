@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 import 'payment_enums.dart';
 
 // ---------------------------------------------------------------------------
@@ -38,7 +39,7 @@ class PaymentAllocation {
       PaymentAllocation(
         id: (json['id'] ?? '').toString(),
         invoiceId: (json['invoice_id'] ?? '').toString(),
-        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        amount: parseDoubleSafe(json['amount']),
       );
 
   Map<String, dynamic> toCreatePayload() => {
@@ -98,7 +99,7 @@ class Payment {
     paymentMode: PaymentMode.fromString(
       json['payment_mode'] as String? ?? 'OTHER',
     ),
-    amount: (json['amount'] as num?)?.toDouble() ?? 0,
+    amount: parseDoubleSafe(json['amount']),
     referenceNumber: json['reference_number'] as String?,
     description: json['description'] as String?,
     status: PaymentStatus.fromString(json['status'] as String? ?? 'ACTIVE'),
@@ -149,7 +150,7 @@ class PaymentListItem {
         paymentMode: PaymentMode.fromString(
           json['payment_mode'] as String? ?? 'OTHER',
         ),
-        amount: (json['amount'] as num?)?.toDouble() ?? 0,
+        amount: parseDoubleSafe(json['amount']),
         contactName: json['contact_name'] as String? ?? '',
         status: PaymentStatus.fromString(json['status'] as String? ?? 'ACTIVE'),
         createdAt: json['created_at'] as String?,

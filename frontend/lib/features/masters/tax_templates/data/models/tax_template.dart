@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 
 @immutable
@@ -31,7 +32,7 @@ class TaxTemplate extends BaseModel {
   TaxTemplate fromJson(Map<String, dynamic> json) => TaxTemplate(
     id: (json['id'] ?? '').toString(),
     name: json['name'] as String? ?? '',
-    rate: (json['rate'] as num?)?.toDouble() ?? 0,
+    rate: parseDoubleSafe(json['rate']),
     isActive: json['is_active'] as bool? ?? true,
     createdAt: json['created_at'] as String?,
     updatedAt: json['updated_at'] as String?,

@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/foundation.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 import 'invoice_status.dart';
 import 'invoice_line.dart';
 
@@ -105,17 +106,17 @@ class Invoice {
     issueDate: json['issue_date'] as String? ?? '',
     dueDate: json['due_date'] as String? ?? '',
     status: InvoiceStatus.fromString(json['status'] as String? ?? 'DRAFT'),
-    subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
-    discountTotal: (json['discount_total'] as num?)?.toDouble() ?? 0,
-    shippingCharges: (json['shipping_charges'] as num?)?.toDouble() ?? 0,
-    cgstAmount: (json['cgst_amount'] as num?)?.toDouble() ?? 0,
-    sgstAmount: (json['sgst_amount'] as num?)?.toDouble() ?? 0,
-    igstAmount: (json['igst_amount'] as num?)?.toDouble() ?? 0,
-    utgstAmount: (json['utgst_amount'] as num?)?.toDouble() ?? 0,
-    cessAmount: (json['cess_amount'] as num?)?.toDouble() ?? 0,
-    roundOff: (json['round_off'] as num?)?.toDouble() ?? 0,
-    total: (json['total'] as num?)?.toDouble() ?? 0,
-    amountPaid: (json['amount_paid'] as num?)?.toDouble() ?? 0,
+    subtotal: parseDoubleSafe(json['subtotal']),
+    discountTotal: parseDoubleSafe(json['discount_total']),
+    shippingCharges: parseDoubleSafe(json['shipping_charges']),
+    cgstAmount: parseDoubleSafe(json['cgst_amount']),
+    sgstAmount: parseDoubleSafe(json['sgst_amount']),
+    igstAmount: parseDoubleSafe(json['igst_amount']),
+    utgstAmount: parseDoubleSafe(json['utgst_amount']),
+    cessAmount: parseDoubleSafe(json['cess_amount']),
+    roundOff: parseDoubleSafe(json['round_off']),
+    total: parseDoubleSafe(json['total']),
+    amountPaid: parseDoubleSafe(json['amount_paid']),
     posStateCode: json['pos_state_code'] as String? ?? '',
     irn: json['irn'] as String?,
     qrCode: json['qr_code'] as String?,
@@ -131,11 +132,11 @@ class Invoice {
     isRcm: json['is_rcm'] as bool? ?? false,
     supplyType: json['supply_type'] as String? ?? 'DOMESTIC',
     currency: json['currency'] as String? ?? 'INR',
-    exchangeRate: (json['exchange_rate'] as num?)?.toDouble() ?? 1,
-    tdsRate: (json['tds_rate'] as num?)?.toDouble() ?? 0,
-    tdsAmount: (json['tds_amount'] as num?)?.toDouble() ?? 0,
-    tcsRate: (json['tcs_rate'] as num?)?.toDouble() ?? 0,
-    tcsAmount: (json['tcs_amount'] as num?)?.toDouble() ?? 0,
+    exchangeRate: parseDoubleSafe(json['exchange_rate'], defaultValue: 1),
+    tdsRate: parseDoubleSafe(json['tds_rate']),
+    tdsAmount: parseDoubleSafe(json['tds_amount']),
+    tcsRate: parseDoubleSafe(json['tcs_rate']),
+    tcsAmount: parseDoubleSafe(json['tcs_amount']),
     contactName: json['contact_name'] as String?,
     lines:
         (json['lines'] as List?)
@@ -186,8 +187,8 @@ class InvoiceListItem {
         issueDate: json['issue_date'] as String? ?? '',
         dueDate: json['due_date'] as String? ?? '',
         status: InvoiceStatus.fromString(json['status'] as String? ?? 'DRAFT'),
-        total: (json['total'] as num?)?.toDouble() ?? 0,
-        amountPaid: (json['amount_paid'] as num?)?.toDouble() ?? 0,
+        total: parseDoubleSafe(json['total']),
+        amountPaid: parseDoubleSafe(json['amount_paid']),
         contactName: json['contact_name'] as String? ?? '',
         referenceNumber: json['reference_number'] as String?,
         createdAt: json['created_at'] as String?,

@@ -11,6 +11,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 
 /// Transfer line item.
 @immutable
@@ -25,8 +26,8 @@ class TransferLine {
   factory TransferLine.fromJson(Map<String, dynamic> json) => TransferLine(
     productId: (json['product_id'] ?? '').toString(),
     productName: json['product_name'] as String? ?? '',
-    quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
-    rate: (json['rate'] as num?)?.toDouble() ?? 0,
+    quantity: parseDoubleSafe(json['quantity']),
+    rate: parseDoubleSafe(json['rate']),
   );
 
   TransferLine copyWith({

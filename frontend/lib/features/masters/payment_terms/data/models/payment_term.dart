@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 
 @immutable
@@ -31,7 +32,7 @@ class PaymentTerm extends BaseModel {
   PaymentTerm fromJson(Map<String, dynamic> json) => PaymentTerm(
     id: (json['id'] ?? '').toString(),
     name: json['name'] as String? ?? '',
-    dueDays: json['due_days'] as int? ?? 0,
+    dueDays: parseIntSafe(json['due_days']),
     isActive: json['is_active'] as bool? ?? true,
     createdAt: json['created_at'] as String?,
     updatedAt: json['updated_at'] as String?,

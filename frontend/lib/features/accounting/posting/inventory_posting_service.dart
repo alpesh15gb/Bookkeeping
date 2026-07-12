@@ -6,6 +6,7 @@ library;
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/utils/formatters.dart';
 import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
@@ -38,8 +39,10 @@ class StockMovement {
   factory StockMovement.fromJson(Map<String, dynamic> json) =>
       StockMovement(
         productId: json['product_id'] as String? ?? json['item_id'] as String? ?? '',
-        quantity: (json['quantity'] as num?)?.toDouble() ?? 0,
-        unitValue: (json['unit_value'] as num?)?.toDouble() ?? (json['unit_price'] as num?)?.toDouble() ?? 0,
+        quantity: parseDoubleSafe(json['quantity']),
+        unitValue: parseDoubleSafe(json['unit_value']) != 0
+            ? parseDoubleSafe(json['unit_value'])
+            : parseDoubleSafe(json['unit_price']),
         type: _parseType(json['type'] as String?),
         warehouseId: json['warehouse_id'] as String?,
         referenceId: json['reference_id'] as String?,

@@ -3,6 +3,7 @@
 library;
 
 import 'package:dio/dio.dart';
+import '../utils/formatters.dart';
 import 'package:flutter/foundation.dart';
 
 import '../result/result.dart';
@@ -73,9 +74,9 @@ Paged<T> parsePaged<T>(
         }
       }
     }
-    total = (data['total'] as num?)?.toInt() ?? items.length;
-    resolvedPage = (data['page'] as num?)?.toInt() ?? page;
-    resolvedLimit = (data['limit'] as num?)?.toInt() ?? limit;
+    total = parseIntSafe(data['total'], defaultValue: items.length);
+    resolvedPage = parseIntSafe(data['page'], defaultValue: page);
+    resolvedLimit = parseIntSafe(data['limit'], defaultValue: limit);
   } else if (data is List) {
     for (final item in data) {
       if (item is Map<String, dynamic>) {
