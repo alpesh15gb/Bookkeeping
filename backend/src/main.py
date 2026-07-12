@@ -73,6 +73,7 @@ from src.api.v1.sales_orders import router as sales_orders_router
 from src.api.v1.delivery_challans import router as delivery_challans_router
 from src.api.v1.proforma_invoices import router as proforma_invoices_router
 from src.api.v1.inventory_adjustments import router as inventory_adjustments_router
+from src.api.v1.transfers import router as transfers_router
 from src.api.v1.bank_reconciliation import router as bank_reconciliation_router
 from src.api.v1.companies import router as companies_router
 from src.api.v1.masters import router as masters_router
@@ -96,6 +97,8 @@ from src.api.v1.returns import router as returns_router
 from src.api.v1.financial_years import router as financial_years_router
 from src.api.v1.recurring_invoices import router as recurring_invoices_router
 from src.api.v1.terms_templates import router as terms_templates_router
+from src.api.v1.warehouses import router as warehouses_router
+from src.api.v1.stock_ledger import router as stock_ledger_router
 from src.schemas.document import ContactResponse, ProductResponse
 from src.infrastructure.database.models import Contact, Product
 from src.infrastructure.database.idempotency import IdempotencyRecord  # noqa: F401
@@ -380,6 +383,7 @@ app.include_router(sales_orders_router, prefix="/api/v1")
 app.include_router(delivery_challans_router, prefix="/api/v1")
 app.include_router(proforma_invoices_router, prefix="/api/v1")
 app.include_router(inventory_adjustments_router, prefix="/api/v1")
+app.include_router(transfers_router, prefix="/api/v1")
 app.include_router(bank_reconciliation_router, prefix="/api/v1")
 app.include_router(companies_router,  prefix="/api/v1")
 app.include_router(masters_router,    prefix="/api/v1")
@@ -402,6 +406,8 @@ app.include_router(returns_router,       prefix="/api/v1")
 app.include_router(financial_years_router, prefix="/api/v1")
 app.include_router(recurring_invoices_router, prefix="/api/v1")
 app.include_router(terms_templates_router, prefix="/api/v1")
+app.include_router(warehouses_router, prefix="/api/v1")
+app.include_router(stock_ledger_router, prefix="/api/v1")
 
 
 # ---------------------------------------------------------------------------

@@ -557,3 +557,62 @@ class BankReconciliationListResponse(SchemaBase):
     amount: Decimal
     notes: Optional[str] = None
     created_at: datetime
+
+
+# INTER-WAREHOUSE TRANSFER SCHEMAS
+
+class TransferLineSchema(SchemaBase):
+    product_id: uuid.UUID
+    product_name: str = ""
+    quantity: Decimal
+    rate: Decimal = Decimal("0")
+
+class TransferCreate(SchemaBase):
+    transfer_number: Optional[str] = Field(None, max_length=50)
+    transfer_date: str
+    from_warehouse_id: uuid.UUID
+    from_warehouse_name: str = ""
+    to_warehouse_id: uuid.UUID
+    to_warehouse_name: str = ""
+    lines: List[TransferLineSchema] = []
+    notes: Optional[str] = None
+
+class TransferUpdate(SchemaBase):
+    transfer_number: Optional[str] = Field(None, max_length=50)
+    transfer_date: Optional[str] = None
+    from_warehouse_id: Optional[uuid.UUID] = None
+    from_warehouse_name: Optional[str] = None
+    to_warehouse_id: Optional[uuid.UUID] = None
+    to_warehouse_name: Optional[str] = None
+    lines: Optional[List[TransferLineSchema]] = None
+    notes: Optional[str] = None
+
+class TransferResponse(SchemaBase):
+    id: uuid.UUID
+    transfer_number: str = ""
+    transfer_date: str = ""
+    from_warehouse_id: uuid.UUID
+    from_warehouse_name: str = ""
+    to_warehouse_id: uuid.UUID
+    to_warehouse_name: str = ""
+    status: str = "DRAFT"
+    lines: List[TransferLineSchema] = []
+    notes: Optional[str] = None
+    completed_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class TransferListResponse(SchemaBase):
+    id: uuid.UUID
+    transfer_number: str = ""
+    transfer_date: str = ""
+    from_warehouse_name: str = ""
+    to_warehouse_name: str = ""
+    status: str = "DRAFT"
+    created_at: Optional[datetime] = None
+
+class PaginatedTransferResponse(SchemaBase):
+    items: List[TransferListResponse]
+    total: int
+    page: int
+    limit: int

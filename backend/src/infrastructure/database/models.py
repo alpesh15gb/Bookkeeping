@@ -1899,6 +1899,40 @@ class RecurringInvoiceItem(Base):
 
 
 # ---------------------------------------------------------------------------
+# INTER-WAREHOUSE TRANSFERS
+# ---------------------------------------------------------------------------
+
+class Transfer(Base):
+    __tablename__ = "transfers"
+    __table_args__ = (
+        Index("ix_transfers_tenant_date", "tenant_id", "transfer_date"),
+        Index("ix_transfers_tenant_status", "tenant_id", "status"),
+        Index("ix_transfers_tenant_deleted", "tenant_id", "deleted_at"),
+        CheckConstraint(
+            "status IN ('DRAFT', 'IN_TRANSIT', 'COMPLETED', 'CANCELLED')",
+            name="ck_transfers_status",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    transfer_number = Column(String(50))
+    transfer_date = Column(String(10))  # ISO date string (YYYY-MM-DD)
+    from_warehouse_id = Column(UUID(as_uuid=True))
+    from_warehouse_name = Column(String(200))
+    to_warehouse_id = Column(UUID(as_uuid=True))
+    to_warehouse_name = Column(String(200))
+    status = Column(String(20), nullable=False, default="DRAFT")
+    lines = Column(JSON, nullable=False, default=list)
+    notes = Column(Text)
+    completed_at = Column(DateTime(timezone=True))
+    completed_by = Column(UUID(as_uuid=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+    deleted_at = Column(DateTime(timezone=True))
+
+
+# ---------------------------------------------------------------------------
 # TERMS & CONDITIONS TEMPLATES
 # ---------------------------------------------------------------------------
 
