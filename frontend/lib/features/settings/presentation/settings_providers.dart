@@ -7,6 +7,10 @@ import '../../../core/network/api_client.dart';
 import '../../../core/result/result.dart';
 import '../../auth/data/models/membership_models.dart';
 import '../data/models/financial_year.dart';
+import '../data/models/export_record.dart';
+import '../data/models/gst_config.dart';
+import '../data/models/preferences.dart';
+import '../data/models/series.dart';
 import '../data/models/team_member.dart';
 import '../data/settings_repository.dart';
 
@@ -51,3 +55,63 @@ final teamMemberListProvider =
     _ => throw const ApiError(message: 'Unexpected response.'),
   };
 });
+
+// ---------------------------------------------------------------------------
+// Invoice Series
+// ---------------------------------------------------------------------------
+
+/// Fetches all numbering series from `/settings/series`.
+final invoiceSeriesListProvider = FutureProvider<List<InvoiceSeries>>((ref) {
+  final repo = ref.watch(settingsRepositoryProvider);
+  return _unwrapResult(repo.getSeries());
+});
+
+// ---------------------------------------------------------------------------
+// Export History
+// ---------------------------------------------------------------------------
+
+/// Fetches export history for a company.
+final exportHistoryProvider =
+    FutureProvider.family<List<ExportRecord>, String>((ref, companyId) async {
+  final repo = ref.watch(settingsRepositoryProvider);
+  final result = await repo.getExportHistory(companyId);
+  return switch (result) {
+    Success<List<ExportRecord>>(:final value) => value,
+    Failure<List<ExportRecord>>(:final error) => throw error,
+    _ => throw const ApiError(message: 'Unexpected response.'),
+  };
+});
+
+// ---------------------------------------------------------------------------
+// GST Configuration
+// ---------------------------------------------------------------------------
+
+/// Fetches GST config from `/settings`.
+final gstConfigProvider = FutureProvider<GstConfig>((ref) {
+  final repo = ref.watch(settingsRepositoryProvider);
+  return _unwrapResult(repo.getGstConfig());
+});
+
+// ---------------------------------------------------------------------------
+// User Preferences
+// ---------------------------------------------------------------------------
+
+/// Fetches user preferences from `/settings`.
+final userPreferencesProvider = FutureProvider<UserPreferences>((ref) {
+  final repo = ref.watch(settingsRepositoryProvider);
+  return _unwrapResult(repo.getPreferences());
+});
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/// Unwraps a [Result] future, throwing on failure.
+Future<T> _unwrapResult<T>(Future<Result<T>> future) async {
+  final result = await future;
+  return switch (result) {
+    Success<T>(:final value) => value,
+    Failure<T>(:final error) => throw error,
+    _ => throw const ApiError(message: 'Unexpected response.'),
+  };
+}

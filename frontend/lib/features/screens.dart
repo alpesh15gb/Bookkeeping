@@ -47,3 +47,7 @@ export 'gst/presentation/gst_dashboard_screen.dart';
 export 'gst/presentation/gstr1_screen.dart';
 export 'gst/presentation/gstr3b_screen.dart';
 export 'gst/presentation/gst_returns_screen.dart';
+export 'settings/presentation/settings_backup_screen.dart';
+export 'settings/presentation/settings_gst_config_screen.dart';
+export 'settings/presentation/settings_invoice_series_screen.dart';
+export 'settings/presentation/settings_preferences_screen.dart';

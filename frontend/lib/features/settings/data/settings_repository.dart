@@ -8,6 +8,10 @@ import '../../../core/network/dio_extensions.dart';
 import '../../../core/result/result.dart';
 import '../../auth/data/models/membership_models.dart';
 import 'models/financial_year.dart';
+import 'models/export_record.dart';
+import 'models/gst_config.dart';
+import 'models/preferences.dart';
+import 'models/series.dart';
 import 'models/team_member.dart';
 
 class SettingsRepository {
@@ -127,6 +131,139 @@ class SettingsRepository {
   Future<Result<void>> removeMember(String companyId, String memberId) {
     return guardDio(() async {
       await _dio.delete('/companies/$companyId/members/$memberId');
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Invoice Series
+  // ---------------------------------------------------------------------------
+
+  /// `GET /settings/series` — list all numbering series.
+  Future<Result<List<InvoiceSeries>>> getSeries() {
+    return guardDio(() async {
+      final res = await _dio.get('/settings/series');
+      return _parseList(res.data, InvoiceSeries.fromJson);
+    });
+  }
+
+  /// `POST /settings/series` — create a new numbering series.
+  Future<Result<InvoiceSeries>> createSeries(Map<String, dynamic> data) {
+    return guardDio(() async {
+      final res = await _dio.post('/settings/series', data: data);
+      return InvoiceSeries.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  /// `PUT /settings/series/{id}` — update an existing series.
+  Future<Result<InvoiceSeries>> updateSeries(
+    String id,
+    Map<String, dynamic> data,
+  ) {
+    return guardDio(() async {
+      final res = await _dio.put('/settings/series/$id', data: data);
+      return InvoiceSeries.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Export / Import / Purge
+  // ---------------------------------------------------------------------------
+
+  /// `GET /companies/{id}/exports` — fetch export history.
+  Future<Result<List<ExportRecord>>> getExportHistory(String companyId) {
+    return guardDio(() async {
+      final res = await _dio.get('/companies/$companyId/exports');
+      return _parseList(res.data, ExportRecord.fromJson);
+    });
+  }
+
+  /// `POST /companies/{id}/export` — trigger a new data export.
+  Future<Result<ExportRecord>> triggerExport(String companyId) {
+    return guardDio(() async {
+      final res = await _dio.post('/companies/$companyId/export');
+      return ExportRecord.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  /// `POST /companies/{id}/import` — import company data.
+  Future<Result<void>> importData(
+    String companyId, {
+    required List<int> fileBytes,
+    required String fileName,
+  }) {
+    return guardDio(() async {
+      await _dio.post(
+        '/companies/$companyId/import',
+        data: FormData.fromMap({
+          'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
+        }),
+      );
+    });
+  }
+
+  /// `POST /purge/request` — request a data purge (OTP sent).
+  Future<Result<void>> requestPurge() {
+    return guardDio(() async {
+      await _dio.post('/purge/request');
+    });
+  }
+
+  /// `POST /purge/verify` — verify purge with OTP.
+  Future<Result<void>> verifyPurge(String otp) {
+    return guardDio(() async {
+      await _dio.post('/purge/verify', data: {'otp': otp});
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // GST Configuration
+  // ---------------------------------------------------------------------------
+
+  /// `POST /companies/{id}/gst-toggle` — change GST tax mode.
+  Future<Result<void>> toggleGstMode(String companyId, String taxMode) {
+    return guardDio(() async {
+      await _dio.post(
+        '/companies/$companyId/gst-toggle',
+        data: {'tax_mode': taxMode},
+      );
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Settings (preferences + GST config fields live under /settings)
+  // ---------------------------------------------------------------------------
+
+  /// `GET /settings` — fetch user preferences.
+  Future<Result<UserPreferences>> getPreferences() {
+    return guardDio(() async {
+      final res = await _dio.get('/settings');
+      return UserPreferences.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  /// `PUT /settings` — update user preferences.
+  Future<Result<UserPreferences>> updatePreferences(
+    Map<String, dynamic> data,
+  ) {
+    return guardDio(() async {
+      final res = await _dio.put('/settings', data: data);
+      return UserPreferences.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  /// `GET /settings` — fetch GST config (may share the same endpoint).
+  Future<Result<GstConfig>> getGstConfig() {
+    return guardDio(() async {
+      final res = await _dio.get('/settings');
+      return GstConfig.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  /// `PUT /settings` — update GST-related settings fields.
+  Future<Result<GstConfig>> updateGstConfig(Map<String, dynamic> data) {
+    return guardDio(() async {
+      final res = await _dio.put('/settings', data: data);
+      return GstConfig.fromJson(res.data as Map<String, dynamic>);
     });
   }
 
