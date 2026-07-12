@@ -1,0 +1,73 @@
+/// Movement service — combined view of stock movements across all sources.
+///
+/// Provides history and audit trail functionality. The movement is the source
+/// of truth; current stock is derived from movement history.
+library;
+
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
+import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/features/inventory/stock/models/stock_models.dart';
+
+class MovementService {
+  MovementService(this._dio);
+  final Dio _dio;
+
+  Future<Result<List<StockMovement>>> getProductHistory({
+    required String productId,
+    int page = 1,
+    int limit = 50,
+    String? referenceType,
+  }) {
+    return guardDio(() async {
+      final q = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+        if (referenceType != null) 'reference_type': referenceType,
+      };
+      final res = await _dio.get(
+        '/products/$productId/stock-ledger',
+        queryParameters: q,
+      );
+      return (res.data as List)
+          .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
+  Future<Result<List<StockMovement>>> getAllMovements({
+    int page = 1,
+    int limit = 50,
+    String? productId,
+    String? referenceType,
+  }) {
+    return guardDio(() async {
+      final q = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+        if (productId != null) 'product_id': productId,
+        if (referenceType != null) 'reference_type': referenceType,
+      };
+      final res = await _dio.get('/stock-ledger', queryParameters: q);
+      return (res.data as List)
+          .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
+          .toList();
+    });
+  }
+
+  /// Reconcile current stock by replaying movements.
+  /// Returns the calculated balance from movement history.
+  double calculateBalanceFromMovements(List<StockMovement> movements) {
+    double balance = 0;
+    for (final m in movements) {
+      balance += m.quantity;
+    }
+    return balance;
+  }
+}
+
+final movementServiceProvider = Provider<MovementService>((ref) {
+  return MovementService(ref.watch(apiClientProvider));
+});
