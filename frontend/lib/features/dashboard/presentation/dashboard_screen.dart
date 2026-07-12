@@ -6,6 +6,7 @@ import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/widgets/states.dart';
+import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import '../../sales/presentation/invoice_form_screen.dart';
 import 'dashboard_controller.dart';
@@ -318,17 +319,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         runSpacing: gap,
         children: List.generate(
           cols,
-          (_) => SizedBox(
-            width: w,
-            height: 116,
-            child: Container(
-              decoration: BoxDecoration(
-                color: colors.surfaceRaised,
-                borderRadius: BorderRadius.circular(ApexRadius.lg),
-                border: Border.all(color: colors.border),
-              ),
-            ),
-          ),
+          (_) => SizedBox(width: w, child: const KpiCardSkeleton()),
         ),
       );
     },
@@ -343,8 +334,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return _Panel(
       colors: colors,
       child: state.revenueTrend.when(
-        loading: () =>
-            const SizedBox(height: 240, child: Center(child: LoadingSpinner())),
+        loading: () => ShimmerSkeleton(
+          child: Container(
+            height: 240,
+            decoration: BoxDecoration(
+              color: colors.skeletonBase,
+              borderRadius: BorderRadius.circular(ApexRadius.lg),
+            ),
+          ),
+        ),
         error: (_, _) =>
             const SizedBox(height: 240, child: Center(child: Text('—'))),
         data: (revenue) {
@@ -449,8 +447,15 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return _Panel(
       colors: colors,
       child: state.overdueAlerts.when(
-        loading: () =>
-            const SizedBox(height: 240, child: Center(child: LoadingSpinner())),
+        loading: () => ShimmerSkeleton(
+          child: Container(
+            height: 240,
+            decoration: BoxDecoration(
+              color: colors.skeletonBase,
+              borderRadius: BorderRadius.circular(ApexRadius.lg),
+            ),
+          ),
+        ),
         error: (_, _) =>
             const SizedBox(height: 240, child: Center(child: Text('—'))),
         data: (res) {
@@ -596,9 +601,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return state.metrics.when(
       loading: () => _Panel(
         colors: colors,
-        child: const SizedBox(
-          height: 100,
-          child: Center(child: LoadingSpinner(size: 24)),
+        child: ShimmerSkeleton(
+          child: Container(
+            height: 100,
+            decoration: BoxDecoration(
+              color: colors.skeletonBase,
+              borderRadius: BorderRadius.circular(ApexRadius.lg),
+            ),
+          ),
         ),
       ),
       error: (e, _) => _Panel(

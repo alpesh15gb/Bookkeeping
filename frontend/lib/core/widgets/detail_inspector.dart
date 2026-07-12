@@ -80,10 +80,7 @@ class DetailInspector extends StatelessWidget {
                   Expanded(
                     child: Text(
                       title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: colors.textPrimary,
-                      ),
+                      style: Theme.of(context).textTheme.titleMedium,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -104,9 +101,8 @@ class DetailInspector extends StatelessWidget {
                   if (subtitle != null) ...[
                     Text(
                       subtitle!,
-                      style: TextStyle(
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: colors.textSecondary,
-                        fontSize: 13,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -145,16 +141,15 @@ class _InspectorRow extends StatelessWidget {
         children: [
           Text(
             row.label,
-            style: TextStyle(fontSize: 12, color: colors.textSecondary),
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(width: 12),
           Flexible(
             child: Text(
               row.value ?? '—',
               textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.bold,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                fontWeight: FontWeight.w600,
                 color: colors.textPrimary,
               ),
             ),

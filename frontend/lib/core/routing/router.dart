@@ -22,6 +22,28 @@ import '../../features/auth/presentation/reset_password_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../app/app_splash.dart';
 
+/// Slide-up page transition for detail/form screens
+class SlideUpTransitionPage extends CustomTransitionPage<void> {
+  SlideUpTransitionPage({required super.child})
+      : super(
+          transitionDuration: const Duration(milliseconds: 200),
+          reverseTransitionDuration: const Duration(milliseconds: 150),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            final tween = Tween(begin: const Offset(0, 0.04), end: Offset.zero)
+                .chain(CurveTween(curve: Curves.easeOutCubic));
+            final fadeTween = Tween(begin: 0.0, end: 1.0)
+                .chain(CurveTween(curve: Curves.easeOut));
+            return FadeTransition(
+              opacity: animation.drive(fadeTween),
+              child: SlideTransition(
+                position: animation.drive(tween),
+                child: child,
+              ),
+            );
+          },
+        );
+}
+
 /// Provider that exposes the configured [GoRouter]. It listens to the auth
 /// controller so redirects re-evaluate on every auth state change.
 final routerProvider = Provider<GoRouter>((ref) {
@@ -68,7 +90,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/splash',
         name: 'splash',
-        builder: (context, state) => const AppSplash(),
+        pageBuilder: (context, state) => SlideUpTransitionPage(
+          child: const AppSplash(),
+        ),
       ),
       GoRoute(
         path: auth_routes.login,

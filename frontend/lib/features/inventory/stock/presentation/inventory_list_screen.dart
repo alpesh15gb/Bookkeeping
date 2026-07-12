@@ -191,11 +191,11 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
                 selected: _lowOnly,
                 onSelected: (v) => setState(() => _lowOnly = v),
                 avatar: Icon(Icons.warning_amber_rounded,
-                    size: 14, color: _lowOnly ? Colors.white : c.warning),
+                    size: 14, color: _lowOnly ? c.onPrimary : c.warning),
                 selectedColor: c.warning,
                 labelStyle: TextStyle(
                     fontSize: 12,
-                    color: _lowOnly ? Colors.white : c.textSecondary),
+                    color: _lowOnly ? c.onPrimary : c.textSecondary),
               ),
             ],
             const SizedBox(width: 8),

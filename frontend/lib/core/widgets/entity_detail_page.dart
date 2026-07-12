@@ -79,11 +79,12 @@ class EntityDetailPage extends ConsumerWidget {
           if (appBarActions != null) ...appBarActions!,
         ],
       ),
-      body: ListView(
+      body: ListView.builder(
         padding: EdgeInsets.all(ResponsiveLayout.isMobile(context) ? 12 : 16),
-        children: [
-          if (header != null || chips != null)
-            Card(
+        itemCount: _computeItemCount(),
+        itemBuilder: (context, index) {
+          if (index == 0 && (header != null || chips != null)) {
+            return Card(
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -100,33 +101,50 @@ class EntityDetailPage extends ConsumerWidget {
                   ],
                 ),
               ),
-            ),
-          for (final section in sections) ...[
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      section.title,
-                      style: Theme.of(context).textTheme.titleSmall,
-                    ),
-                    const Divider(),
-                    for (final row in section.rows) _buildRow(row, context),
-                  ],
+            );
+          }
+
+          final hasHeader = header != null || chips != null;
+          final sectionIndex = hasHeader ? index - 1 : index;
+
+          if (sectionIndex < sections.length) {
+            final section = sections[sectionIndex];
+            return Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        section.title,
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                      const Divider(),
+                      for (final row in section.rows) _buildRow(row, context),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
-          if (timeline.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Card(child: AuditTimeline(entries: timeline)),
-          ],
-        ],
+            );
+          }
+
+          // Timeline entry (last item)
+          return Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Card(child: AuditTimeline(entries: timeline)),
+          );
+        },
       ),
     );
+  }
+
+  int _computeItemCount() {
+    int count = sections.length;
+    if (header != null || chips != null) count++;
+    if (timeline.isNotEmpty) count++;
+    return count;
   }
 
   Widget _buildChip(DetailChip c) => Container(
