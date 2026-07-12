@@ -28,13 +28,13 @@ typedef SignOutCallback = Future<void> Function();
 /// Interceptor that refreshes the access token on 401 and retries the request.
 class RefreshInterceptor extends Interceptor {
   RefreshInterceptor({
-    required this._read,
+    required this.tokenReader,
     required this.refreshDio,
     required this.sessionStorage,
     required this.onSessionExpired,
   });
 
-  final TokenReader _read;
+  final TokenReader tokenReader;
   final Dio refreshDio;
   final SessionStorage sessionStorage;
   final SignOutCallback onSessionExpired;
@@ -79,7 +79,7 @@ class RefreshInterceptor extends Interceptor {
     _isRefreshing = true;
     _refreshCompleter = Completer<bool>();
     try {
-      final refreshToken = _read().refreshToken;
+      final refreshToken = tokenReader().refreshToken;
       if (refreshToken.isEmpty) return false;
 
       final base = EnvConfig.instance.apiBaseUrl;
@@ -140,7 +140,7 @@ class RefreshInterceptor extends Interceptor {
       ),
     );
     // Re-attach the auth + tenant headers from the latest token state.
-    final state = _read();
+    final state = tokenReader();
     options.headers['Authorization'] = 'Bearer ${state.accessToken}';
     if (state.activeTenantId.isNotEmpty) {
       options.headers['X-Tenant-ID'] = state.activeTenantId;
@@ -164,7 +164,7 @@ RefreshInterceptor buildRefreshInterceptor(
     ),
   );
   return RefreshInterceptor(
-    read: tokenReaderFrom(ref),
+    tokenReader: tokenReaderFrom(ref),
     refreshDio: refreshDio,
     sessionStorage: ref.watch(sessionStorageProvider),
     onSessionExpired: onSessionExpired,

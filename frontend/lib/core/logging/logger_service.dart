@@ -51,8 +51,8 @@ abstract class LogSink {
 /// of `print()`. Supports debug/info/warning/error levels and an optional
 /// broadcast stream that the analytics service can subscribe to.
 class LoggerService implements LogSink {
-  LoggerService({bool this._enableDebug = kDebugMode});
-  final bool _enableDebug;
+  LoggerService({this.enableDebug = kDebugMode});
+  final bool enableDebug;
   final _controller = StreamController<LogRecord>.broadcast(sync: true);
 
   /// Broadcast stream of every emitted record — analytics subscribes here.
@@ -97,7 +97,7 @@ class LoggerService implements LogSink {
     StackTrace? stackTrace,
     Map<String, dynamic>? context,
   }) {
-    if (level == LogLevel.debug && !_enableDebug) return;
+    if (level == LogLevel.debug && !enableDebug) return;
     final record = LogRecord(
       level: level,
       message: message,
