@@ -14,15 +14,12 @@ import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/network/api_client.dart';
-import 'package:apexbooks/core/result/result.dart';
-import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/crud/base_crud.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
-import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/features/sales/models/invoice_line.dart';
 
 // ---------------------------------------------------------------------------
@@ -272,7 +269,7 @@ class ProformaFormScreen extends ConsumerStatefulWidget {
 
 class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
   final _customerFocus = FocusNode();
-  bool _loaded = false;
+  bool _loaded = true;
 
   @override
   void initState() {

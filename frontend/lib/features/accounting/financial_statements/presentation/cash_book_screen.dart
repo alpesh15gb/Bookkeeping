@@ -512,12 +512,11 @@ class _MergedRow {
     required this.description,
     this.debit = 0,
     this.credit = 0,
-    this.balance = 0,
   });
 
   final String date;
   final String description;
   final double debit;
   final double credit;
-  double balance;
+  double balance = 0;
 }

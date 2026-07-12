@@ -17,7 +17,6 @@ import '../../../core/result/result.dart';
 import '../../auth/data/models/membership_models.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/team_member.dart';
-import '../data/settings_repository.dart';
 import 'settings_providers.dart';
 
 class SettingsTeamScreen extends ConsumerStatefulWidget {
@@ -33,9 +32,6 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
 
   String? get _companyId =>
       ref.read(authControllerProvider).activeMembership?.tenantId;
-
-  String get _currentUserId =>
-      ref.read(authControllerProvider).user?.id ?? '';
 
   Future<void> _inviteMember() async {
     final emailCtrl = TextEditingController();

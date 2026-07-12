@@ -15,7 +15,6 @@ import '../../../core/dialogs/dialog_service.dart';
 import '../../../core/result/result.dart';
 import '../../auth/data/models/membership_models.dart';
 import '../../auth/presentation/auth_controller.dart';
-import '../data/settings_repository.dart';
 import 'settings_providers.dart';
 
 class SettingsCompanyScreen extends ConsumerStatefulWidget {

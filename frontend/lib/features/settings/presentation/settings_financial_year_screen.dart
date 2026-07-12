@@ -15,7 +15,6 @@ import '../../../core/utils/formatters.dart';
 import '../../../core/result/result.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/financial_year.dart';
-import '../data/settings_repository.dart';
 import 'settings_providers.dart';
 
 class SettingsFinancialYearScreen extends ConsumerStatefulWidget {

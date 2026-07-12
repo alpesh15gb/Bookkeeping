@@ -80,7 +80,6 @@ class ReconciliationListScreen extends ConsumerWidget {
 
   Future<void> _showUploadDialog(BuildContext context, WidgetRef ref) async {
     // Simple upload dialog
-    final colors = apexColors(context);
     final result = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -93,9 +92,6 @@ class ReconciliationListScreen extends ConsumerWidget {
       ),
     );
     if (result == true && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Statement upload initiated.')),
-      );
     }
   }
 }
@@ -117,7 +113,7 @@ class _ReconciliationCard extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: ApexSpacing.sm),
       child: ApexCard(
         child: ListTile(
-          title: Text(item.statementDate ?? 'Bank Statement'),
+          title: Text(item.statementDate.isEmpty ? 'Bank Statement' : item.statementDate),
           subtitle: Text('Balance: ${fmt.currency(item.closingBalance)}'),
           trailing: const Icon(Icons.chevron_right_rounded),
         ),
