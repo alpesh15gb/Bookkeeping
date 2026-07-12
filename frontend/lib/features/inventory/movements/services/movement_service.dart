@@ -42,6 +42,7 @@ class MovementService {
     int limit = 50,
     String? productId,
     String? referenceType,
+    String? warehouseId,
   }) {
     return guardDio(() async {
       final q = <String, dynamic>{
@@ -49,6 +50,7 @@ class MovementService {
         'limit': limit,
         if (productId != null) 'product_id': productId,
         if (referenceType != null) 'reference_type': referenceType,
+        if (warehouseId != null) 'warehouse_id': warehouseId,
       };
       final res = await _dio.get('/stock-ledger', queryParameters: q);
       return (res.data as List)

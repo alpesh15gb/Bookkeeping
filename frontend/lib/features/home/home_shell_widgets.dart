@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/widgets/states.dart';
+import 'package:apexbooks/features/inventory/warehouse/presentation/warehouse_providers.dart';
 import '../screens.dart';
 
 Widget selectorWidget(
@@ -114,14 +117,21 @@ List<(String, IconData, String, Widget)> getScreensList() {
       'Inventory',
       Icons.inventory_2_outlined,
       'TRANSACTIONS',
-      const HubTabWidget(
+      HubTabWidget(
         tabs: ['Stock', 'Ledger', 'Transfers', 'Adjustments', 'Warehouses'],
         views: [
           InventoryListScreen(),
           StockMovementListScreen(),
           TransferListScreen(),
           AdjustmentListScreen(),
-          WarehouseListScreen(),
+          HubTabWidget(
+            tabs: ['Dashboard', 'Warehouses', 'Stock'],
+            views: [
+              WarehouseDashboardScreen(),
+              WarehouseListScreen(),
+              const _WarehouseStockTabView(),
+            ],
+          ),
         ],
       ),
     ),
@@ -352,3 +362,129 @@ Widget _keycap(String label, ApexColors colors) => Container(
     style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: colors.textMuted),
   ),
 );
+
+/// Stock tab for the warehouse sub-navigation.
+/// Shows a warehouse picker at the top and the stock view below.
+class _WarehouseStockTabView extends ConsumerStatefulWidget {
+  const _WarehouseStockTabView();
+
+  @override
+  ConsumerState<_WarehouseStockTabView> createState() =>
+      _WarehouseStockTabViewState();
+}
+
+class _WarehouseStockTabViewState
+    extends ConsumerState<_WarehouseStockTabView> {
+  String? _selectedWarehouseId;
+
+  @override
+  Widget build(BuildContext context) {
+    final whAsync = ref.watch(warehouseListProvider);
+    final colors = apexColors(context);
+
+    return Scaffold(
+      body: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 12),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              border: Border(bottom: BorderSide(color: colors.border)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.inventory_2_outlined,
+                  size: 18,
+                  color: colors.textSecondary,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Select Warehouse',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: whAsync.when(
+                    loading: () => const SizedBox(
+                      height: 36,
+                      child: LoadingSpinner(size: 18),
+                    ),
+                    error: (_, __) => Text(
+                      'Could not load warehouses',
+                      style: TextStyle(color: colors.danger, fontSize: 13),
+                    ),
+                    data: (warehouses) => Container(
+                      decoration: BoxDecoration(
+                        color: colors.surfaceRaised,
+                        borderRadius: BorderRadius.circular(ApexRadius.sm),
+                        border: Border.all(color: colors.border),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: DropdownButtonHideUnderline(
+                        child: DropdownButton<String>(
+                          value: _selectedWarehouseId,
+                          hint: Text(
+                            'Choose a warehouse…',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: colors.textMuted,
+                            ),
+                          ),
+                          isDense: true,
+                          borderRadius: BorderRadius.circular(ApexRadius.md),
+                          items: warehouses
+                              .map(
+                                (w) => DropdownMenuItem(
+                                  value: w.id,
+                                  child: Text(
+                                    '${w.name} (${w.code})',
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (v) =>
+                              setState(() => _selectedWarehouseId = v),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _selectedWarehouseId == null
+                ? Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.warehouse_outlined,
+                          size: 48,
+                          color: colors.textMuted,
+                        ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Select a warehouse to view stock',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : WarehouseStockScreen(
+                    warehouseId: _selectedWarehouseId!),
+          ),
+        ],
+      ),
+    );
+  }
+}

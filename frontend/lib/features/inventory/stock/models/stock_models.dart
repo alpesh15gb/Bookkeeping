@@ -42,6 +42,7 @@ class StockMovement {
     this.rate = 0,
     this.warehouseId,
     this.createdAt,
+    this.sku = '',
   });
 
   final String id;
@@ -54,6 +55,7 @@ class StockMovement {
   final double rate;
   final String? warehouseId;
   final String? createdAt;
+  final String sku;
 
   MovementDirection get direction =>
       quantity >= 0 ? MovementDirection.in_ : MovementDirection.out;
@@ -73,6 +75,7 @@ class StockMovement {
     rate: _toDouble(json['rate']),
     warehouseId: json['warehouse_id']?.toString(),
     createdAt: json['created_at'] as String?,
+    sku: json['sku'] as String? ?? '',
   );
 
   static double _toDouble(dynamic value) {
