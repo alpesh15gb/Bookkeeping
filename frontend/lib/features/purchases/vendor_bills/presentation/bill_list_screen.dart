@@ -11,6 +11,7 @@ import 'package:apexbooks/core/result/result.dart';
 import '../models/vendor_bill.dart';
 import '../services/vendor_bill_service.dart';
 import 'bill_detail_screen.dart';
+import 'bill_form_screen.dart';
 import 'bill_table_body.dart';
 
 final billsListProvider = FutureProvider.autoDispose<List<VendorBillListItem>>((
@@ -93,10 +94,24 @@ class _BillListScreenState extends ConsumerState<BillListScreen> {
     final list = Scaffold(
       body: Column(
         children: [
-          const PageHeader(
+          PageHeader(
             title: 'Purchase Bills',
             subtitle:
                 'Track vendor bills, purchase receipts, and accounts payable.',
+            actions: [
+              FilledButton.icon(
+                onPressed: () async {
+                  await Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const BillFormScreen(),
+                    ),
+                  );
+                  ref.invalidate(billsListProvider);
+                },
+                icon: const Icon(Icons.add_rounded, size: 18),
+                label: const Text('New Bill'),
+              ),
+            ],
           ),
           Expanded(
             child: asyncVals.when(

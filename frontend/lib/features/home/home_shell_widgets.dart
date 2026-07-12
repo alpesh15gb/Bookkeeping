@@ -83,6 +83,19 @@ List<(String, IconData, String, Widget)> getScreensList() {
       const InvoiceListScreen(),
     ),
     (
+      'Sales Orders',
+      Icons.shopping_bag_outlined,
+      'TRANSACTIONS',
+      const HubTabWidget(
+        tabs: ['Quotations', 'Orders', 'Challans'],
+        views: [
+          ProformaListScreen(),
+          SalesOrderListScreen(),
+          DeliveryChallanListScreen(),
+        ],
+      ),
+    ),
+    (
       'Purchases',
       Icons.shopping_cart_outlined,
       'TRANSACTIONS',
