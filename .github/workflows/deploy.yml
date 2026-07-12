@@ -43,7 +43,16 @@ jobs:
     needs: test
     if: github.ref == 'refs/heads/master'
     steps:
-      - name: SSH and Deploy Backend Only
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Build Flutter Web
+        run: |
+          cd frontend
+          flutter pub get
+          flutter build web --release --tree-shake-icons
+
+      - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SSH_HOST }}
@@ -53,14 +62,18 @@ jobs:
           script: |
             cd /opt/bookkeeping
             git pull origin master
-            
-            # Build and restart only backend and worker (skip frontend)
-            docker compose up -d --build backend worker
-            
+
+            # Build and restart all services including frontend
+            docker compose up -d --build
+
             sleep 10
-            
+
             # Run database migrations
             docker compose exec -T backend alembic upgrade head
-            
-            # Verify backend is running
-            docker compose ps backend
+
+            # Restart nginx to pick up config changes
+            sudo cp /opt/bookkeeping/nginx.conf /etc/nginx/sites-available/apexbooks.in
+            sudo nginx -t && sudo systemctl reload nginx
+
+            # Verify all services are running
+            docker compose ps
