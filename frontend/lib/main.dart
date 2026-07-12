@@ -23,9 +23,14 @@ import 'features/auth/presentation/auth_controller.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. Load environment config from the bundled .env asset.
-  final envContent = await rootBundle.loadString('.env');
-  EnvConfig.initialize(envContent);
+  // 1. Load environment config — falls back to defaults if .env is missing.
+  try {
+    final envContent = await rootBundle.loadString('.env');
+    EnvConfig.initialize(envContent);
+  } catch (_) {
+    // .env not bundled — use production defaults from EnvConfig.
+    EnvConfig.initialize('');
+  }
 
   // 2. Initialize shared preferences used by session + theme storage.
   final prefs = await SharedPreferences.getInstance();
