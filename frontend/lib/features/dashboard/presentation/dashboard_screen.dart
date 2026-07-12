@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'dart:math' as math;
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
@@ -384,17 +384,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                   ),
                 )
               else
-                RepaintBoundary(
-                  child: SizedBox(
-                    height: 220,
-                    child: CustomPaint(
-                      size: Size.infinite,
-                      painter: _TrendChartPainter(
-                        _buildTrend(revenue, expense),
-                        colors,
-                      ),
-                    ),
-                  ),
+                SizedBox(
+                  height: 220,
+                  child: _buildFlChart(revenue, expense, colors, fmt),
                 ),
             ],
           );
@@ -403,7 +395,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     );
   }
 
-  _TrendData _buildTrend(List<TrendPoint> revenue, List<TrendPoint> expense) {
+  Widget _buildFlChart(
+    List<TrendPoint> revenue,
+    List<TrendPoint> expense,
+    ApexColors colors,
+    NumberFormatter fmt,
+  ) {
     final allMonths = <String>{
       ...revenue.map((p) => p.label),
       ...expense.map((p) => p.label),
@@ -411,11 +408,132 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     final sorted = allMonths.toList()..sort((a, b) => a.compareTo(b));
     final revMap = {for (final p in revenue) p.label: p.total};
     final expMap = {for (final p in expense) p.label: p.total};
-    final maxVal = [
-      if (revenue.isNotEmpty) revenue.map((p) => p.total).reduce(math.max),
-      if (expense.isNotEmpty) expense.map((p) => p.total).reduce(math.max),
+
+    final maxY = [
+      ...revenue.map((p) => p.total),
+      ...expense.map((p) => p.total),
     ].fold(0.0, (a, b) => a > b ? a : b);
-    return _TrendData(sorted, revMap, expMap, maxVal > 0 ? maxVal : 1.0);
+
+    // If no data at all, show empty state
+    if (sorted.isEmpty) {
+      return Center(
+        child: Text(
+          'No trend data yet',
+          style: TextStyle(color: colors.textMuted),
+        ),
+      );
+    }
+
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: (maxY == 0 ? 1 : maxY) * 1.15,
+        minY: 0,
+        barTouchData: BarTouchData(
+          touchTooltipData: BarTouchTooltipData(
+            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+              final label = sorted[groupIndex];
+              final value = rod.toY;
+              final seriesLabel = rodIndex == 0 ? 'Revenue' : 'Expense';
+              return BarTooltipItem(
+                '$seriesLabel\n${fmt.currency(value)}',
+                TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              );
+            },
+          ),
+        ),
+        titlesData: FlTitlesData(
+          show: true,
+          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 52,
+              getTitlesWidget: (value, meta) {
+                if (value == 0) return const SizedBox.shrink();
+                return Text(
+                  fmt.quantity(value),
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: colors.textMuted,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.right,
+                );
+              },
+            ),
+          ),
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              reservedSize: 28,
+              getTitlesWidget: (value, meta) {
+                final index = value.toInt();
+                if (index < 0 || index >= sorted.length) {
+                  return const SizedBox.shrink();
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 6),
+                  child: Text(
+                    sorted[index].split(' ')[0],
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: colors.textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+        ),
+        gridData: FlGridData(
+          show: true,
+          drawVerticalLine: false,
+          horizontalInterval: (maxY == 0 ? 1 : maxY) / 4,
+          getDrawingHorizontalLine: (value) {
+            return FlLine(
+              color: colors.border,
+              strokeWidth: 1,
+            );
+          },
+        ),
+        borderData: FlBorderData(show: false),
+        barGroups: List.generate(sorted.length, (i) {
+          final label = sorted[i];
+          final revValue = revMap[label] ?? 0;
+          final expValue = expMap[label] ?? 0;
+          return BarChartGroupData(
+            x: i,
+            barRods: [
+              BarChartRodData(
+                toY: revValue,
+                color: colors.success,
+                width: 14,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(4),
+                ),
+              ),
+              BarChartRodData(
+                toY: expValue,
+                color: colors.danger,
+                width: 14,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(4),
+                ),
+              ),
+            ],
+          );
+        }),
+      ),
+      swapAnimationDuration: const Duration(milliseconds: 600),
+      swapAnimationCurve: Curves.easeOutCubic,
+    );
   }
 
   Widget _legendDot(Color color, String label) => Row(
@@ -863,77 +981,3 @@ class _KpiCardState extends State<_KpiCard> {
   }
 }
 
-// ── Chart data + painter ────────────────────────────────────────────────────
-class _TrendData {
-  _TrendData(this.labels, this.revenue, this.expense, this.scale);
-  final List<String> labels;
-  final Map<String, double> revenue;
-  final Map<String, double> expense;
-  final double scale;
-}
-
-class _TrendChartPainter extends CustomPainter {
-  _TrendChartPainter(this.data, this.colors);
-  final _TrendData data;
-  final ApexColors colors;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final labels = data.labels;
-    if (labels.isEmpty) return;
-    const bottomPad = 22.0;
-    final chartH = size.height - bottomPad;
-
-    // Horizontal gridlines
-    final grid = Paint()
-      ..color = colors.border
-      ..strokeWidth = 1;
-    for (var g = 0; g <= 4; g++) {
-      final y = chartH - chartH * g / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
-    }
-
-    final slot = size.width / labels.length;
-    final barW = math.min(18.0, slot / 3);
-    final paint = Paint()..style = PaintingStyle.fill;
-
-    for (var i = 0; i < labels.length; i++) {
-      final label = labels[i];
-      final center = slot * i + slot / 2;
-      final rev = (data.revenue[label] ?? 0) / data.scale * chartH;
-      final exp = (data.expense[label] ?? 0) / data.scale * chartH;
-      paint.color = colors.success;
-      if (rev > 0)
-        canvas.drawRRect(
-          RRect.fromRectAndCorners(
-            Rect.fromLTWH(center - barW - 2, chartH - rev, barW, rev),
-            topLeft: const Radius.circular(4),
-            topRight: const Radius.circular(4),
-          ),
-          paint,
-        );
-      paint.color = colors.danger;
-      if (exp > 0)
-        canvas.drawRRect(
-          RRect.fromRectAndCorners(
-            Rect.fromLTWH(center + 2, chartH - exp, barW, exp),
-            topLeft: const Radius.circular(4),
-            topRight: const Radius.circular(4),
-          ),
-          paint,
-        );
-
-      final tp = TextPainter(
-        textDirection: TextDirection.ltr,
-        text: TextSpan(
-          text: label.split(' ')[0],
-          style: TextStyle(fontSize: 10, color: colors.textMuted),
-        ),
-      )..layout();
-      tp.paint(canvas, Offset(center - tp.width / 2, size.height - 14));
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _TrendChartPainter old) => old.data != data;
-}

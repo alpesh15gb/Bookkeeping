@@ -9,6 +9,7 @@ import 'package:apexbooks/core/permissions/permissions_constants.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
 import 'package:apexbooks/core/cache/cache_service.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../data/models/expense_category.dart';
 import 'expense_category_controller.dart';
@@ -35,6 +36,9 @@ class _ExpenseCategoryFormScreenState
 
   bool get _isEditing => widget.category != null;
 
+  bool get _hasUnsavedChanges =>
+      (_field('name')?.isNotEmpty ?? false) || _descCtrl.text.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -53,7 +57,20 @@ class _ExpenseCategoryFormScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (_hasUnsavedChanges) {
+          final result = await const DialogService().unsavedChanges(context);
+          if (result == DialogResult.discard && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        } else if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Category' : 'New Expense Category'),
       ),
@@ -119,6 +136,7 @@ class _ExpenseCategoryFormScreenState
             ],
           ),
         ),
+      ),
       ),
     );
   }

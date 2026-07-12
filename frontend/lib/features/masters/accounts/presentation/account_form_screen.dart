@@ -10,6 +10,7 @@ import 'package:apexbooks/core/permissions/permissions_constants.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
 import 'package:apexbooks/core/cache/cache_service.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../data/models/account.dart';
 import 'account_controller.dart';
@@ -41,6 +42,11 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
   }
 
   bool get _isEditing => widget.account != null;
+
+  bool get _hasUnsavedChanges =>
+      _nameCtrl.text.isNotEmpty ||
+      _codeCtrl.text.isNotEmpty ||
+      _groupCtrl.text.isNotEmpty;
 
   @override
   void initState() {
@@ -90,7 +96,20 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (_hasUnsavedChanges) {
+          final result = await const DialogService().unsavedChanges(context);
+          if (result == DialogResult.discard && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        } else if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text(_isEditing ? 'Edit Account' : 'New Account')),
       body: ApexForm(
         controller: _ctrl,
@@ -199,6 +218,7 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

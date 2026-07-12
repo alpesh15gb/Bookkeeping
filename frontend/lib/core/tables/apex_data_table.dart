@@ -9,6 +9,7 @@ import 'package:flutter/services.dart';
 
 import '../api/base_model.dart';
 import '../network/dio_extensions.dart';
+import '../widgets/skeleton_loader.dart';
 import '../widgets/states.dart';
 import 'table_body.dart';
 import 'table_column.dart';
@@ -129,7 +130,19 @@ class _ApexDataTableState<T extends BaseModel> extends State<ApexDataTable<T>> {
 
   Widget _body() {
     if (widget.isLoading && widget.rows == null) {
-      return const LoadingState(label: 'Loading...');
+      return Column(
+        children: [
+          const PageHeaderSkeleton(),
+          const SizedBox(height: 16),
+          Expanded(
+            child: ListView.builder(
+              itemCount: 6,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              itemBuilder: (context, i) => const TableRowSkeleton(columns: 4),
+            ),
+          ),
+        ],
+      );
     }
     if (widget.error != null && widget.rows == null) {
       return ErrorView(message: widget.error!, onRetry: widget.onRetry);

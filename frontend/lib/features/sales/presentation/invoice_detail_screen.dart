@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -51,7 +52,13 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     return Scaffold(
       backgroundColor: colors.surfaceMuted,
       body: asyncVal.when(
-        loading: () => const Center(child: LoadingSpinner(size: 36)),
+        loading: () => const Column(
+          children: [
+            DetailSectionSkeleton(),
+            DetailSectionSkeleton(),
+            DetailSectionSkeleton(),
+          ],
+        ),
         error: (err, _) => ErrorView(
           message: err.toString(),
           onRetry: () =>

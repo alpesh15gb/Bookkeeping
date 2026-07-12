@@ -12,6 +12,7 @@ import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
 import 'package:apexbooks/core/cache/cache_service.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/utils/formatters.dart';
 import '../data/models/contact.dart';
 import 'contact_controller.dart';
@@ -40,6 +41,16 @@ class _ContactFormScreenState extends ConsumerState<ContactFormScreen> {
   bool _saving = false;
 
   bool get _isEditing => widget.contact != null;
+
+  bool get _hasUnsavedChanges =>
+      _nameCtrl.text.isNotEmpty ||
+      _emailCtrl.text.isNotEmpty ||
+      _phoneCtrl.text.isNotEmpty ||
+      _streetCtrl.text.isNotEmpty ||
+      _cityCtrl.text.isNotEmpty ||
+      _stateCtrl.text.isNotEmpty ||
+      _pincodeCtrl.text.isNotEmpty ||
+      _countryCtrl.text.isNotEmpty;
 
   static Map<String, dynamic> _serialize(
     Map<String, ApexFormField<dynamic>> fields,
@@ -89,7 +100,20 @@ class _ContactFormScreenState extends ConsumerState<ContactFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (_hasUnsavedChanges) {
+          final result = await const DialogService().unsavedChanges(context);
+          if (result == DialogResult.discard && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        } else if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text(_isEditing ? 'Edit Contact' : 'New Contact')),
       body: ApexForm(
         controller: _ctrl,
@@ -281,6 +305,7 @@ class _ContactFormScreenState extends ConsumerState<ContactFormScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

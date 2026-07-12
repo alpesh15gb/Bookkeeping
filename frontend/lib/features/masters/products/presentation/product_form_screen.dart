@@ -12,6 +12,7 @@ import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/cache/cache_service.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../data/models/product.dart';
 import 'product_controller.dart';
@@ -39,6 +40,11 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
   bool get _isEditing => widget.product != null;
   bool get _isGoods => _type == ProductType.goods;
+
+  bool get _hasUnsavedChanges =>
+      _nameCtrl.text.isNotEmpty ||
+      _skuCtrl.text.isNotEmpty ||
+      _hsnCtrl.text.isNotEmpty;
 
   static Map<String, dynamic> _serialize(
     Map<String, ApexFormField<dynamic>> fields,
@@ -76,7 +82,20 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (_hasUnsavedChanges) {
+          final result = await const DialogService().unsavedChanges(context);
+          if (result == DialogResult.discard && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        } else if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(title: Text(_isEditing ? 'Edit Product' : 'New Product')),
       body: ApexForm(
         controller: _ctrl,
@@ -213,6 +232,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             ],
           ),
         ),
+      ),
       ),
     );
   }

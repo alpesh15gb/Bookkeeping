@@ -14,6 +14,7 @@ import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/permissions/permissions_constants.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/search_bar.dart';
 import '../data/models/account.dart';
@@ -119,7 +120,13 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
         ],
       ),
       body: switch (state) {
-        ListLoading() => const Center(child: LoadingSpinner(size: 36)),
+        ListLoading() => ShimmerSkeleton(
+          child: Column(
+            children: [
+              for (int i = 0; i < 6; i++) const TableRowSkeleton(columns: 4),
+            ],
+          ),
+        ),
         ListEmpty() => EmptyState(
           icon: Icons.account_tree_outlined,
           title: 'No accounts yet',

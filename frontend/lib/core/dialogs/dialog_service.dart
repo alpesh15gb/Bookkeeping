@@ -7,6 +7,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/states.dart';
@@ -36,21 +37,48 @@ class DialogService {
               ? Icons.warning_amber_rounded
               : Icons.help_outline_rounded,
           color: destructive ? colors.danger : colors.primary,
-          size: 32,
+          size: 36,
         ),
-        title: Text(title),
-        content: Text(message),
+        title: Text(
+          title,
+          style: GoogleFonts.instrumentSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: colors.textPrimary,
+          ),
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: colors.textSecondary,
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.end,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text(cancelLabel),
+            child: Text(
+              cancelLabel,
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w500,
+                color: colors.textSecondary,
+              ),
+            ),
           ),
           FilledButton(
-            style: destructive
-                ? FilledButton.styleFrom(backgroundColor: colors.danger)
-                : null,
+            style: FilledButton.styleFrom(
+              backgroundColor: destructive ? colors.danger : colors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
             onPressed: () => Navigator.pop(ctx, true),
-            child: Text(confirmLabel),
+            child: Text(
+              confirmLabel,
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+                color: colors.onPrimary,
+              ),
+            ),
           ),
         ],
       ),
@@ -79,16 +107,37 @@ class DialogService {
     String saveLabel = 'Save',
     bool offerSave = false,
   }) async {
+    final colors = Theme.of(context).extension<ApexColors>()!;
     final result = await showDialog<DialogResult>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: const Icon(Icons.edit_note_rounded, size: 32),
-        title: Text(title),
-        content: Text(message),
+        icon: Icon(Icons.edit_note_rounded, size: 36, color: colors.warning),
+        title: Text(
+          title,
+          style: GoogleFonts.instrumentSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: colors.textPrimary,
+          ),
+        ),
+        content: Text(
+          message,
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: colors.textSecondary,
+          ),
+        ),
+        actionsAlignment: MainAxisAlignment.end,
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, DialogResult.cancel),
-            child: const Text('Keep editing'),
+            child: Text(
+              'Keep editing',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w500,
+                color: colors.textSecondary,
+              ),
+            ),
           ),
           if (offerSave)
             FilledButton(
@@ -97,10 +146,16 @@ class DialogService {
             ),
           TextButton(
             style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).extension<ApexColors>()?.danger ?? const Color(0xFFDC2626),
+              foregroundColor: colors.danger,
             ),
             onPressed: () => Navigator.pop(ctx, DialogResult.discard),
-            child: const Text('Discard'),
+            child: Text(
+              'Discard',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w600,
+                color: colors.danger,
+              ),
+            ),
           ),
         ],
       ),
@@ -119,9 +174,25 @@ class DialogService {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.check_circle_rounded, color: colors.success, size: 32),
-        title: Text(title),
-        content: message == null ? null : Text(message),
+        icon: Icon(Icons.check_circle_rounded, color: colors.success, size: 36),
+        title: Text(
+          title,
+          style: GoogleFonts.instrumentSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: colors.textPrimary,
+          ),
+        ),
+        content: message == null
+            ? null
+            : Text(
+                message,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: colors.textSecondary,
+                ),
+              ),
+        actionsAlignment: MainAxisAlignment.end,
         actions: [
           FilledButton(
             onPressed: () => Navigator.pop(ctx),
@@ -145,9 +216,25 @@ class DialogService {
     await showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        icon: Icon(Icons.error_outline_rounded, color: colors.danger, size: 32),
-        title: Text(title),
-        content: message == null ? null : Text(message),
+        icon: Icon(Icons.error_outline_rounded, color: colors.danger, size: 36),
+        title: Text(
+          title,
+          style: GoogleFonts.instrumentSans(
+            fontSize: 18,
+            fontWeight: FontWeight.w700,
+            color: colors.textPrimary,
+          ),
+        ),
+        content: message == null
+            ? null
+            : Text(
+                message,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: colors.textSecondary,
+                ),
+              ),
+        actionsAlignment: MainAxisAlignment.end,
         actions: [
           if (retryLabel != null && onRetry != null)
             TextButton(
@@ -193,11 +280,20 @@ class DialogService {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(fontWeight: FontWeight.w600),
+                        style: GoogleFonts.inter(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
                       ),
                       if (message != null) ...[
                         const SizedBox(height: 4),
-                        Text(message, style: Theme.of(ctx).textTheme.bodySmall),
+                        Text(
+                          message,
+                          style: GoogleFonts.inter(
+                            fontSize: 13,
+                            color: Theme.of(ctx).extension<ApexColors>()?.textSecondary,
+                          ),
+                        ),
                       ],
                     ],
                   ),

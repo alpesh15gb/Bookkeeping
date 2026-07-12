@@ -9,6 +9,7 @@ import 'package:apexbooks/core/permissions/permissions_constants.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
 import 'package:apexbooks/core/cache/cache_service.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../data/models/banking_profile.dart';
 import 'banking_profile_controller.dart';
@@ -35,6 +36,14 @@ class _BankingProfileFormScreenState
 
   bool get _isEditing => widget.profile != null;
 
+  bool get _hasUnsavedChanges =>
+      (_field('bank_name')?.isNotEmpty ?? false) ||
+      (_field('account_number')?.isNotEmpty ?? false) ||
+      (_field('ifsc_code')?.isNotEmpty ?? false) ||
+      (_field('branch_name')?.isNotEmpty ?? false) ||
+      (_field('account_holder')?.isNotEmpty ?? false) ||
+      (_field('upi_id')?.isNotEmpty ?? false);
+
   @override
   void initState() {
     super.initState();
@@ -47,7 +56,20 @@ class _BankingProfileFormScreenState
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (_hasUnsavedChanges) {
+          final result = await const DialogService().unsavedChanges(context);
+          if (result == DialogResult.discard && context.mounted) {
+            Navigator.of(context).pop();
+          }
+        } else if (context.mounted) {
+          Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
       appBar: AppBar(
         title: Text(_isEditing ? 'Edit Bank Account' : 'New Bank Account'),
       ),
@@ -157,6 +179,7 @@ class _BankingProfileFormScreenState
             ],
           ),
         ),
+      ),
       ),
     );
   }

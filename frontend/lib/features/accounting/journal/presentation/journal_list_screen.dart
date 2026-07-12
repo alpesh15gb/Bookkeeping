@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/search_bar.dart';
+import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -48,7 +49,13 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
           ),
           Expanded(
             child: asyncVals.when(
-              loading: () => const Center(child: LoadingSpinner(size: 36)),
+              loading: () => ShimmerSkeleton(
+                child: Column(
+                  children: [
+                    for (int i = 0; i < 6; i++) const TableRowSkeleton(columns: 4),
+                  ],
+                ),
+              ),
               error: (err, _) => ErrorView(
                 message: err.toString(),
                 onRetry: () => ref.invalidate(journalsListProvider),
