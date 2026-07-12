@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
+import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -450,26 +451,12 @@ class _Panel extends StatelessWidget {
   const _Panel({
     required this.colors,
     required this.child,
-    this.padding = const EdgeInsets.all(18),
+    this.padding,
   });
   final ApexColors colors;
   final Widget child;
-  final EdgeInsets padding;
+  final EdgeInsets? padding;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: BoxDecoration(
-      color: colors.surfaceRaised,
-      borderRadius: BorderRadius.circular(ApexRadius.lg),
-      border: Border.all(color: colors.border),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.03),
-          blurRadius: 10,
-          offset: const Offset(0, 3),
-        ),
-      ],
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) =>
+      ApexCard(padding: padding ?? const EdgeInsets.all(18), child: child);
 }

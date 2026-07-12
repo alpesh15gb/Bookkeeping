@@ -6,6 +6,7 @@ import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/widgets/states.dart';
+import 'package:apexbooks/core/widgets/page_header.dart';
 import '../../sales/presentation/invoice_form_screen.dart';
 import 'dashboard_controller.dart';
 import '../models/dashboard_models.dart';
@@ -731,22 +732,7 @@ class _Panel extends StatelessWidget {
   final ApexColors colors;
   final Widget child;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: colors.surfaceRaised,
-      borderRadius: BorderRadius.circular(ApexRadius.lg),
-      border: Border.all(color: colors.border),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.03),
-          blurRadius: 12,
-          offset: const Offset(0, 4),
-        ),
-      ],
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) => ApexCard(child: child);
 }
 
 // ── Premium KPI card ────────────────────────────────────────────────────────
