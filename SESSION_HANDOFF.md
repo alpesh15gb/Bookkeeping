@@ -1,6 +1,6 @@
 # ApexBooks — Session Handoff
 
-## Session: 2026-07-12 — Service Layer & Design Consistency
+## Session: 2026-07-12 — Service Layer, Dead Code Cleanup & Design Consolidation
 
 ### What Was Done
 
@@ -18,53 +18,74 @@ All 23 non-masters services refactored from `ApiError.network()` collapses to `g
 - Accounting: `ledger_service.dart`, `journal_service.dart`, `financial_statement_service.dart`, `trial_balance_service.dart`, `reconciliation_service.dart`
 - Posting: `ledger_posting_service.dart`, `payable_posting_service.dart`, `receivable_posting_service.dart`, `inventory_posting_service.dart`
 
-#### 2. Design Consistency
+#### 2. Dead Code Removal
+8 files removed with zero consumers:
+- `accounting/financial_year/` (models + service, no presentation)
+- `accounting/gst/models/gst_report.dart` (no consumers)
+- `inventory/reservation/services/reservation_service.dart` (no consumers)
+- `inventory/valuation/services/valuation_service.dart` (no consumers)
+- `purchases/matching/` (models + service, no consumers)
+- + 5 orphaned test files
 
-- **InvoiceSearchBar** (HIGH severity): Fully styled with ApexColors, ApexRadius, themed InputDecoration — was fully unstyled before
-- **InvoiceFormScreen** (HIGH severity): Replaced `ListView` with `ListView.builder` per CLAUDE.md performance rules
-- **Dashboard GST card** (MEDIUM severity): Fixed `SizedBox.shrink()` on error → proper error state with retry
-- **PurchaseOrderListScreen sidebar** (MEDIUM severity): Replaced hardcoded `TextStyle(fontWeight: FontWeight.bold)` with `textTheme.titleMedium`
-- **ApexSearchBar** (shared widget): Created `core/widgets/search_bar.dart` — reusable themed search bar for all feature screens
+#### 3. Design Consolidation — Private Widgets → Shared ApexCard
+All 12 private `_Panel`/`_Card` widgets across the app now delegate to the shared `ApexCard` widget from `core/widgets/page_header.dart`. Each was a copy of the same ~15-line `Container` + `BoxDecoration` + `BoxShadow` pattern.
 
-#### 3. Audit Complete
-Multi-agent audit across all 256 Dart files identified:
-- 23 services needing error handling fix ✅ (all done)
-- 4 high-severity design issues ✅ (all fixed)
-- 12 medium-severity design issues ✅ (4 fixed, 8 remaining are minor)
-- ~50 minor issues (hardcoded spacing, inline TextStyle) — consistent across app, low impact
+| Screen | Before | After |
+|--------|--------|-------|
+| Dashboard | `_Panel` (inline) | → `ApexCard` |
+| Invoice detail | `_Panel` (inline) | → `ApexCard` |
+| Invoice form | `_Card` (inline) | → `ApexCard` |
+| Bill detail | `_Panel` (inline) | → `ApexCard` |
+| PO detail | `_Panel` (inline) | → `ApexCard` |
+| PO form | `_Card` (inline) | → `ApexCard` |
+| PR detail | `_Panel` (inline) | → `ApexCard` |
+| PR form | `_Card` (inline) | → `ApexCard` |
+| GR detail | `_Panel` (inline) | → `ApexCard` |
+| GR form | `_Card` (inline) | → `ApexCard` |
+| Payment form | `_Card` (inline) | → `ApexCard` |
+| Adjustment form | `_Card` (inline) | → `ApexCard` |
 
-### Remaining Work (Lower Priority)
+**Result:** All card surfaces across the app render identically. ~209 lines removed.
 
-#### Minor Design Issues
-- Hardcoded padding/spacing (e.g., `EdgeInsets.all(16)`) instead of `ApexSpacing.lg` — every screen does this, it's consistent but not pixel-perfect to the token
-- Private `_Panel`/`_Card`/`_dec` widget duplicates in purchase screens instead of using `core/widgets/page_header.dart` `ApexCard` or theme `cardTheme`
-- Inline `TextStyle(...)` instead of `textTheme` — consistent across the app but bypasses Google Fonts configuration
-- Some purchase lists do client-side sort (backend API doesn't support server-side sort — the service contract would need to change)
+#### 4. Other Design Fixes
+- **InvoiceSearchBar** (was HIGH severity): Fully styled with ApexColors/ApexRadius — was fully unstyled
+- **InvoiceFormScreen** (was HIGH severity): `ListView` → `ListView.builder`
+- **Dashboard GST card** (was MEDIUM): `SizedBox.shrink()` on error → proper error+retry
+- **ApexSearchBar** (shared): Created `core/widgets/search_bar.dart`
 
-#### Dead/Duplicate Infrastructure (from audit)
-- `core/forms/apex_text_field.dart` vs `core/widgets/form_fields.dart` — both export `ApexTextField`, used by different subsystems (ApexForm system vs standalone forms)
-- `financial_year`, `purchases/matching` — models+services exist but zero presentation consumers
-- `filter_engine.dart` — competing unused filter system
+### Design Compliance Status
 
-#### Future UX Improvements
-- Add server-side pagination to purchase lists (requires API changes)
-- Replace remaining private `_Card` widgets with `ApexCard` from `page_header.dart`
-- Add keyboard navigation to form screens (tab order is mostly good but undocumented)
-- Screen-specific search bars could use the shared `ApexSearchBar`
+| Aspect | Status |
+|--------|--------|
+| ApexColors usage | ✅ All screens |
+| ApexSpacing/ApexRadius | ✅ Major widgets; ~50 hardcoded paddings remain (minor, consistent pattern) |
+| ApexCard (shared) | ✅ All 12 card surfaces unified |
+| StatusBadge | ✅ Every status rendering |
+| PageHeader | ✅ Every list/detail screen |
+| LoadingState/EmptyState/ErrorView | ✅ Every async screen |
+| ListView.builder | ✅ Every dynamic list (was 1 violation, fixed) |
+| TextStyle via textTheme | ⚠️ ~40 inline TextStyles remain (minor, consistent pattern) |
+| Server-side pagination | ⚠️ Invoice list: yes; purchase lists: client-side (API contract limitation) |
+| filter_engine.dart | 🗑️ Dead code, zero consumers (identified, not removed — no conflicts) |
+
+### Remaining Work (Low Priority)
+
+- ~50 instances of hardcoded `EdgeInsets.all(N)` instead of `ApexSpacing.lg`/`ApexSpacing.md` — consistent across app, low visual impact
+- ~40 inline `TextStyle(...)` that bypass `textTheme` — consistent pattern, Google Fonts still load but aren't used in these spots
+- `core/forms/apex_text_field.dart` vs `core/widgets/form_fields.dart` — both export `ApexTextField` with different APIs (ApexForm vs standalone). No naming collision at import sites since features choose one.
+- Purchase lists use client-side sort — backend API returns flat arrays without sort/pagination envelope
+- Home shell navigation polish (sidebar icons, responsive transitions)
 
 ### Build Status
-- `flutter analyze`: 0 errors, 0 warnings, ~118 info-level lints (prefer_const, curly_braces, use_super_parameters — all pre-existing)
-- `flutter build`: Not verified in this session
-
-### Key Files Changed
-```
-23 service files refactored to guardDio()
-1 new file: frontend/lib/core/widgets/search_bar.dart
-3 files design-fixed: invoice_form_screen, invoice_search_bar, purchase_order_list_screen, dashboard_screen
-```
+- `flutter analyze`: **0 errors, 0 warnings**, ~114 info-level lints (all pre-existing)
+- `flutter build`: Not verified this session
 
 ### Git Log
 ```
 1ea6cd4 fix(services): replace ApiError.network() collapses with guardDio()
 99a3487 fix(design): apply ApexBooks design tokens across purchases, accounting, dashboard
+5501fb1 docs: add SESSION_HANDOFF.md
+b1c1446 chore(cleanup): remove dead service modules and orphaned test files
+af670d8 refactor(design): replace 5 private _Panel widgets with shared ApexCard
+2c2a3b9 refactor(design): replace all 12 private _Card/_Panel widgets with shared ApexCard
 ```
