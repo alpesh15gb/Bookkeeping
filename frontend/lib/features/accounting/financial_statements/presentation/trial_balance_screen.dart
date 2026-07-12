@@ -65,7 +65,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
                   children: [
                     _banner(report, colors),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+                      padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.sm),
                       child: TextField(
                         decoration: InputDecoration(
                           hintText: 'Search account name or code…',
@@ -77,7 +77,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
                             size: 20,
                           ),
                           contentPadding: const EdgeInsets.symmetric(
-                            vertical: 12,
+                            vertical: ApexSpacing.md,
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(ApexRadius.sm),
@@ -105,8 +105,8 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
   Widget _banner(TrialBalanceReport report, ApexColors colors) {
     final ok = report.isBalanced;
     return Container(
-      margin: const EdgeInsets.fromLTRB(24, 4, 24, 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.fromLTRB(ApexSpacing.xl, ApexSpacing.xs, ApexSpacing.xl, ApexSpacing.sm),
+      padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.md),
       decoration: BoxDecoration(
         color: (ok ? colors.success : colors.danger).withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(ApexRadius.md),
@@ -141,7 +141,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
     NumberFormatter fmt,
   ) {
     return Container(
-      margin: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+      margin: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.lg),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
         borderRadius: BorderRadius.circular(ApexRadius.lg),
@@ -153,7 +153,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
           // Sticky header
           Container(
             color: colors.surfaceMuted,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+            padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.md),
             child: Row(
               children: [
                 Expanded(flex: 56, child: Text('ACCOUNT', style: _th(colors))),
@@ -195,8 +195,8 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
                           ),
                         ),
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 10,
+                          horizontal: ApexSpacing.lg,
+                          vertical: ApexSpacing.sm,
                         ),
                         child: Row(
                           children: [
@@ -274,7 +274,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
               color: colors.surfaceMuted,
               border: Border(top: BorderSide(color: colors.border, width: 1.5)),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.md),
             child: Row(
               children: [
                 Expanded(

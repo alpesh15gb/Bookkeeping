@@ -84,11 +84,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         ),
         title: Text(
           company?.displayName ?? 'ApexBooks',
-          style: TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
-            color: colors.textPrimary,
-          ),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
         ),
         actions: [
           IconButton(
@@ -146,7 +142,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 8),
+                const SizedBox(height: ApexSpacing.sm),
                 IconButton(
                   icon: Icon(
                     _coll ? Icons.menu_open_rounded : Icons.menu_rounded,
@@ -155,7 +151,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   tooltip: 'Toggle menu',
                   onPressed: () => Scaffold.of(context).openDrawer(),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: ApexSpacing.sm),
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
@@ -163,19 +159,14 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                       for (final entry in groupedNavs.entries) ...[
                         if (!_coll)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+                            padding: EdgeInsets.fromLTRB(ApexSpacing.sm, ApexSpacing.md, ApexSpacing.sm, ApexSpacing.xs),
                             child: Text(
                               entry.key,
-                              style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: colors.textMuted,
-                                letterSpacing: 1.0,
-                              ),
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 9, color: colors.textMuted, letterSpacing: 1.0),
                             ),
                           )
                         else
-                          const SizedBox(height: 4),
+                          const SizedBox(height: ApexSpacing.xs),
                         for (final item in entry.value)
                           _buildNavItem(
                             item.$1, item.$2, item.$3, colors,
@@ -205,7 +196,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   ),
                   onPressed: () => setState(() => _coll = !_coll),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: ApexSpacing.sm),
               ],
             ),
           ),
@@ -244,12 +235,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 16),
+                const SizedBox(height: ApexSpacing.lg),
                 selectorWidget(
                   context, _coll, colors,
                   company?.displayName ?? 'ApexBooks ERP',
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: ApexSpacing.lg),
                 Expanded(
                   child: ListView(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -257,19 +248,14 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                       for (final entry in groupedNavs.entries) ...[
                         if (!_coll)
                           Padding(
-                            padding: const EdgeInsets.fromLTRB(12, 16, 12, 6),
+                            padding: EdgeInsets.fromLTRB(ApexSpacing.md, ApexSpacing.lg, ApexSpacing.md, 6),
                             child: Text(
                               entry.key,
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: colors.textMuted,
-                                letterSpacing: 1.1,
-                              ),
+                              style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, color: colors.textMuted, letterSpacing: 1.1),
                             ),
                           )
                         else
-                          const SizedBox(height: 8),
+                          const SizedBox(height: ApexSpacing.sm),
                         for (final item in entry.value)
                           _buildNavItem(
                             item.$1, item.$2, item.$3, colors,
@@ -298,7 +284,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   ),
                   onPressed: () => setState(() => _coll = !_coll),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: ApexSpacing.md),
               ],
             ),
           ),
@@ -330,24 +316,19 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const SizedBox(height: 16),
+        const SizedBox(height: ApexSpacing.lg),
         selectorWidget(context, false, colors, companyName),
-        const SizedBox(height: 16),
+        const SizedBox(height: ApexSpacing.lg),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.symmetric(horizontal: 8),
             children: [
               for (final entry in groupedNavs.entries) ...[
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 16, 12, 6),
+                  padding: EdgeInsets.fromLTRB(ApexSpacing.md, ApexSpacing.lg, ApexSpacing.md, 6),
                   child: Text(
                     entry.key,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      color: colors.textMuted,
-                      letterSpacing: 1.1,
-                    ),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, color: colors.textMuted, letterSpacing: 1.1),
                   ),
                 ),
                 for (final item in entry.value)
@@ -374,7 +355,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
   }) {
     final active = _selIdx == idx;
     final tile = Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+      padding: EdgeInsets.symmetric(vertical: ApexSpacing.xs, horizontal: ApexSpacing.xs),
       child: InkWell(
         onTap: () {
           setState(() => _selIdx = idx);
@@ -409,7 +390,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 color: active ? colors.primary : colors.textSecondary,
               ),
               if (!compact) ...[
-                const SizedBox(width: 12),
+                const SizedBox(width: ApexSpacing.md),
                 Expanded(
                   child: Text(
                     name,

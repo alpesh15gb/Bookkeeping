@@ -9,7 +9,7 @@ Widget selectorWidget(
   String name,
 ) {
   return Padding(
-    padding: const EdgeInsets.symmetric(horizontal: 12),
+    padding: EdgeInsets.symmetric(horizontal: ApexSpacing.md),
     child: Container(
       padding: const EdgeInsets.all(ApexSpacing.sm),
       decoration: BoxDecoration(
@@ -21,15 +21,11 @@ Widget selectorWidget(
         children: [
           Icon(Icons.blur_on_rounded, size: 20, color: colors.primary),
           if (!coll) ...[
-            const SizedBox(width: 8),
+            const SizedBox(width: ApexSpacing.sm),
             Expanded(
               child: Text(
                 name,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: colors.textPrimary,
-                ),
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 13),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -184,18 +180,14 @@ Widget buildProfileBox(
               children: [
                 Text(
                   email.split('@')[0],
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold,
-                    color: colors.textPrimary,
-                  ),
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 13),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (role != null)
                   Text(
                     role,
-                    style: TextStyle(fontSize: 11, color: colors.textMuted),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, color: colors.textMuted),
                   ),
               ],
             ),
@@ -255,16 +247,13 @@ Widget buildToolbar(
                       Expanded(
                         child: Text(
                           'Search invoices, customers, products…',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: colors.textMuted,
-                          ),
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12.5, color: colors.textMuted),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       _keycap('Ctrl', colors),
-                      const SizedBox(width: 4),
+                      const SizedBox(width: ApexSpacing.xs),
                       _keycap('K', colors),
                     ],
                   ),
@@ -273,7 +262,7 @@ Widget buildToolbar(
             ),
           ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: ApexSpacing.lg),
         IconButton(
           icon: Icon(
             Icons.notifications_none_rounded,
@@ -298,11 +287,7 @@ Widget buildToolbar(
               const SizedBox(width: 6),
               Text(
                 display,
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12.5,
-                  color: colors.textPrimary,
-                ),
+                style: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: 12.5),
               ),
             ],
           ),
@@ -321,10 +306,6 @@ Widget _keycap(String label, ApexColors colors) => Container(
   ),
   child: Text(
     label,
-    style: TextStyle(
-      fontSize: 10.5,
-      fontWeight: FontWeight.w700,
-      color: colors.textMuted,
-    ),
+    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: colors.textMuted),
   ),
 );

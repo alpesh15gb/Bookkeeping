@@ -78,7 +78,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                 return Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 0, 24, 10),
+                      padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.sm),
                       child: TextField(
                         decoration: InputDecoration(
                           hintText:
@@ -91,7 +91,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                             size: 20,
                           ),
                           contentPadding: const EdgeInsets.symmetric(
-                            vertical: 12,
+                            vertical: ApexSpacing.md,
                           ),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(ApexRadius.sm),
@@ -113,7 +113,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                               subtitle: 'Try a different search term.',
                             )
                           : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                              padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.lg),
                               itemCount: filtered.length,
                               itemBuilder: (context, idx) =>
                                   _entryCard(filtered[idx], colors, fmt),
@@ -131,18 +131,11 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
 
   Widget _entryCard(JournalEntry e, ApexColors colors, NumberFormatter fmt) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: ApexSpacing.md),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
         borderRadius: BorderRadius.circular(ApexRadius.lg),
         border: Border.all(color: colors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
       ),
       child: Column(
         children: [
@@ -154,7 +147,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                 top: Radius.circular(ApexRadius.lg),
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.sm),
             child: Row(
               children: [
                 Text(
@@ -194,7 +187,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
           ),
           // Debit | Credit columns
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.sm),
             child: Column(
               children: [
                 Row(
@@ -224,7 +217,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                 const SizedBox(height: 4),
                 ...e.lines.map(
                   (l) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 3),
+                    padding: const EdgeInsets.symmetric(vertical: ApexSpacing.xs),
                     child: Row(
                       children: [
                         Expanded(
@@ -288,7 +281,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: ApexSpacing.xs),
                   child: Divider(height: 1, color: colors.border),
                 ),
                 Row(
