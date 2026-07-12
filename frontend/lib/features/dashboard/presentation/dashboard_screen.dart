@@ -8,6 +8,7 @@ import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/monetary_text.dart';
 import '../../sales/presentation/invoice_form_screen.dart';
 import 'dashboard_controller.dart';
 import '../models/dashboard_models.dart';
@@ -432,7 +433,6 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
-              final label = sorted[groupIndex];
               final value = rod.toY;
               final seriesLabel = rodIndex == 0 ? 'Revenue' : 'Expense';
               return BarTooltipItem(
@@ -822,13 +822,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w700,
-                color: emphasize ? colors.primary : colors.textPrimary,
-              ),
+            MonetaryText(
+              value: value,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: emphasize ? colors.primary : colors.textPrimary,
             ),
           ],
         ),
@@ -953,14 +951,11 @@ class _KpiCardState extends State<_KpiCard> {
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
-            child: Text(
-              widget.fmt.currency(widget.value),
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w700,
-                color: widget.colors.textPrimary,
-                letterSpacing: -0.5,
-              ),
+            child: MonetaryText(
+              value: widget.fmt.currency(widget.value),
+              fontSize: 22,
+              fontWeight: FontWeight.w700,
+              color: widget.colors.textPrimary,
             ),
           ),
           if (widget.footer != null) ...[

@@ -17,6 +17,8 @@ import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/search_bar.dart';
+import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import '../data/models/account.dart';
 import 'account_controller.dart';
 import 'account_form_screen.dart';
@@ -34,6 +36,7 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
   String _search = '';
   AccountType? _typeFilter;
   final Set<String> _expanded = {};
+  String? _hoveredId;
 
   @override
   void initState() {
@@ -101,50 +104,59 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
     final state = ref.watch(accountControllerProvider);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Chart of Accounts'),
-        actions: [
-          PermissionGate(
-            permission: Permissions.accountsManage,
-            child: IconButton(
-              tooltip: 'Seed standard accounts',
-              icon: const Icon(Icons.auto_fix_high_outlined),
-              onPressed: () => _confirmSeed(context),
-            ),
-          ),
-          IconButton(
-            tooltip: 'Refresh',
-            icon: const Icon(Icons.refresh_rounded),
-            onPressed: _reload,
-          ),
-        ],
-      ),
-      body: switch (state) {
-        ListLoading() => ShimmerSkeleton(
-          child: Column(
-            children: [
-              for (int i = 0; i < 6; i++) const TableRowSkeleton(columns: 4),
+      body: Column(
+        children: [
+          PageHeader(
+            title: 'Chart of Accounts',
+            subtitle: 'Manage your chart of accounts and account groups.',
+            actions: [
+              PermissionGate(
+                permission: Permissions.accountsManage,
+                child: IconButton(
+                  tooltip: 'Seed standard accounts',
+                  icon: const Icon(Icons.auto_fix_high_outlined),
+                  onPressed: () => _confirmSeed(context),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Refresh',
+                icon: const Icon(Icons.refresh_rounded),
+                onPressed: _reload,
+              ),
+              FilledButton.icon(
+                icon: const Icon(Icons.add_rounded, size: 20),
+                label: const Text('New Account'),
+                onPressed: () => _openForm(),
+              ),
             ],
           ),
-        ),
-        ListEmpty() => EmptyState(
-          icon: Icons.account_tree_outlined,
-          title: 'No accounts yet',
-          subtitle: 'Seed the standard chart or create your first account.',
-          actionLabel: 'Seed Standard Accounts',
-          onAction: () => _confirmSeed(context),
-        ),
-        ListError(:final message) => ErrorView(
-          message: message,
-          onRetry: _reload,
-        ),
-        ListData<Account>(:final paged) => _chartBody(paged.items),
-        _ => const SizedBox.shrink(),
-      },
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openForm(),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('New Account'),
+          Expanded(
+            child: switch (state) {
+              ListLoading() => ShimmerSkeleton(
+                child: Column(
+                  children: [
+                    for (int i = 0; i < 6; i++)
+                      const TableRowSkeleton(columns: 4),
+                  ],
+                ),
+              ),
+              ListEmpty() => EmptyState(
+                icon: Icons.account_tree_outlined,
+                title: 'No accounts yet',
+                subtitle:
+                    'Seed the standard chart or create your first account.',
+                actionLabel: 'Seed Standard Accounts',
+                onAction: () => _confirmSeed(context),
+              ),
+              ListError(:final message) => ErrorView(
+                message: message,
+                onRetry: _reload,
+              ),
+              ListData<Account>(:final paged) => _chartBody(paged.items),
+              _ => const SizedBox.shrink(),
+            },
+          ),
+        ],
       ),
     );
   }
@@ -247,16 +259,23 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
 
     return Column(
       children: [
-        InkWell(
-          onTap: () => _openDetail(a),
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: 16.0 + depth * 24,
-              right: 16,
-              top: 8,
-              bottom: 8,
+        MouseRegion(
+          onEnter: (_) => setState(() => _hoveredId = node.account.id),
+          onExit: (_) => setState(() => _hoveredId = null),
+          child: Container(
+            decoration: BoxDecoration(
+              color: _hoveredId == node.account.id ? colors.surfaceMuted : Colors.transparent,
             ),
-            child: Row(
+            child: InkWell(
+              onTap: () => _openDetail(a),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 16.0 + depth * 24,
+                  right: 16,
+                  top: 8,
+                  bottom: 8,
+                ),
+                child: Row(
               children: [
                 if (hasChildren)
                   InkWell(
@@ -316,6 +335,8 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
             ),
           ),
         ),
+        ),
+        ),
         if (hasChildren && isExpanded)
           ...node.children.map((c) => _treeTile(c, depth + 1, fmt, colors)),
       ],
@@ -355,28 +376,15 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
   }
 
   Future<void> _confirmSeed(BuildContext context) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Seed Standard Accounts'),
-        content: const Text(
-          'This creates the standard ApexBooks chart of accounts '
+    final ok = await const DialogService().confirm(
+      context,
+      title: 'Seed Standard Accounts',
+      message: 'This creates the standard ApexBooks chart of accounts '
           '(Cash, Bank, Receivables, Inventory, GST, Sales, Purchases, etc.). '
           'Existing accounts with the same code are skipped. Continue?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Seed'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Seed',
     );
-    if (ok == true && mounted) {
+    if (ok && mounted) {
       await ref.read(accountControllerProvider.notifier).seedDefaults(context);
     }
   }
