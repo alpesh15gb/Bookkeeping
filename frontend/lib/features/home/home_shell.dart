@@ -11,6 +11,21 @@ import 'package:apexbooks/features/auth/presentation/auth_routes.dart'
 import 'package:apexbooks/core/search/command_palette.dart';
 import 'home_shell_widgets.dart';
 
+// Types for flattened nav
+sealed class _NavEntry {
+  const _NavEntry();
+}
+class _NavHeader extends _NavEntry {
+  const _NavHeader(this.label);
+  final String label;
+}
+class _NavItem extends _NavEntry {
+  const _NavItem(this.idx, this.name, this.icon);
+  final int idx;
+  final String name;
+  final IconData icon;
+}
+
 class HomeShell extends ConsumerStatefulWidget {
   const HomeShell({super.key});
   @override
@@ -123,6 +138,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     Membership? company,
     BuildContext context,
   ) {
+    final navEntries = <_NavEntry>[
+      for (final entry in groupedNavs.entries) ...[
+        _NavHeader(entry.key),
+        for (final item in entry.value)
+          _NavItem(item.$1, item.$2, item.$3),
+      ],
+    ];
     return Scaffold(
       drawer: Drawer(
         child: SafeArea(
@@ -153,27 +175,25 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 ),
                 const SizedBox(height: ApexSpacing.sm),
                 Expanded(
-                  child: ListView(
+                  child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
-                    children: [
-                      for (final entry in groupedNavs.entries) ...[
-                        if (!_coll)
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(ApexSpacing.sm, ApexSpacing.md, ApexSpacing.sm, ApexSpacing.xs),
-                            child: Text(
-                              entry.key,
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 9, color: colors.textMuted, letterSpacing: 1.0),
-                            ),
-                          )
-                        else
-                          const SizedBox(height: ApexSpacing.xs),
-                        for (final item in entry.value)
-                          _buildNavItem(
-                            item.$1, item.$2, item.$3, colors,
-                            compact: _coll,
-                          ),
-                      ],
-                    ],
+                    itemCount: navEntries.length,
+                    itemBuilder: (context, i) {
+                      final entry = navEntries[i];
+                      return switch (entry) {
+                        _NavHeader(:final label) => !_coll
+                            ? Padding(
+                                padding: EdgeInsets.fromLTRB(ApexSpacing.sm, ApexSpacing.md, ApexSpacing.sm, ApexSpacing.xs),
+                                child: Text(
+                                  label,
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 9, color: colors.textMuted, letterSpacing: 1.0),
+                                ),
+                              )
+                            : const SizedBox(height: ApexSpacing.xs),
+                        _NavItem(:final idx, :final name, :final icon) =>
+                            _buildNavItem(idx, name, icon, colors, compact: _coll),
+                      };
+                    },
                   ),
                 ),
                 const Divider(height: 1),
@@ -225,6 +245,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     Membership? company,
     BuildContext context,
   ) {
+    final navEntries = <_NavEntry>[
+      for (final entry in groupedNavs.entries) ...[
+        _NavHeader(entry.key),
+        for (final item in entry.value)
+          _NavItem(item.$1, item.$2, item.$3),
+      ],
+    ];
     return Scaffold(
       body: Row(
         children: [
@@ -242,27 +269,25 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 ),
                 const SizedBox(height: ApexSpacing.lg),
                 Expanded(
-                  child: ListView(
+                  child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 8),
-                    children: [
-                      for (final entry in groupedNavs.entries) ...[
-                        if (!_coll)
-                          Padding(
-                            padding: EdgeInsets.fromLTRB(ApexSpacing.md, ApexSpacing.lg, ApexSpacing.md, 6),
-                            child: Text(
-                              entry.key,
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, color: colors.textMuted, letterSpacing: 1.1),
-                            ),
-                          )
-                        else
-                          const SizedBox(height: ApexSpacing.sm),
-                        for (final item in entry.value)
-                          _buildNavItem(
-                            item.$1, item.$2, item.$3, colors,
-                            compact: _coll,
-                          ),
-                      ],
-                    ],
+                    itemCount: navEntries.length,
+                    itemBuilder: (context, i) {
+                      final entry = navEntries[i];
+                      return switch (entry) {
+                        _NavHeader(:final label) => !_coll
+                            ? Padding(
+                                padding: EdgeInsets.fromLTRB(ApexSpacing.md, ApexSpacing.lg, ApexSpacing.md, 6),
+                                child: Text(
+                                  label,
+                                  style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, color: colors.textMuted, letterSpacing: 1.1),
+                                ),
+                              )
+                            : const SizedBox(height: ApexSpacing.sm),
+                        _NavItem(:final idx, :final name, :final icon) =>
+                            _buildNavItem(idx, name, icon, colors, compact: _coll),
+                      };
+                    },
                   ),
                 ),
                 const Divider(height: 1),
@@ -313,6 +338,13 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     String companyName,
     String? role,
   ) {
+    final navEntries = <_NavEntry>[
+      for (final entry in groupedNavs.entries) ...[
+        _NavHeader(entry.key),
+        for (final item in entry.value)
+          _NavItem(item.$1, item.$2, item.$3),
+      ],
+    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -320,21 +352,23 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         selectorWidget(context, false, colors, companyName),
         const SizedBox(height: ApexSpacing.lg),
         Expanded(
-          child: ListView(
+          child: ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            children: [
-              for (final entry in groupedNavs.entries) ...[
-                Padding(
-                  padding: EdgeInsets.fromLTRB(ApexSpacing.md, ApexSpacing.lg, ApexSpacing.md, 6),
-                  child: Text(
-                    entry.key,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, color: colors.textMuted, letterSpacing: 1.1),
+            itemCount: navEntries.length,
+            itemBuilder: (context, i) {
+              final entry = navEntries[i];
+              return switch (entry) {
+                _NavHeader(:final label) => Padding(
+                    padding: EdgeInsets.fromLTRB(ApexSpacing.md, ApexSpacing.lg, ApexSpacing.md, 6),
+                    child: Text(
+                      label,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 10, color: colors.textMuted, letterSpacing: 1.1),
+                    ),
                   ),
-                ),
-                for (final item in entry.value)
-                  _buildNavItem(item.$1, item.$2, item.$3, colors),
-              ],
-            ],
+                _NavItem(:final idx, :final name, :final icon) =>
+                    _buildNavItem(idx, name, icon, colors),
+              };
+            },
           ),
         ),
         const Divider(height: 1),

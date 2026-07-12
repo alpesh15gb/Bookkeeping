@@ -281,7 +281,7 @@ class _StatusFilterBar extends StatelessWidget {
                     boxShadow: selected
                         ? [
                             BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.06),
+                              color: Colors.black.withValues(alpha: 0.03),
                               blurRadius: 4,
                               offset: const Offset(0, 1),
                             ),

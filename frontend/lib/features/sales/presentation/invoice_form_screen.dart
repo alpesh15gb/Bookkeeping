@@ -370,7 +370,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
         border: Border(top: BorderSide(color: colors.border)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: 0.015),
             blurRadius: 12,
             offset: const Offset(0, -3),
           ),
