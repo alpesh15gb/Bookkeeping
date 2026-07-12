@@ -4,11 +4,14 @@ FROM ghcr.io/cirruslabs/flutter:stable AS builder
 WORKDIR /app
 COPY . .
 
+# Create .env placeholder (gitignored, needed for flutter assets)
+RUN echo "API_BASE_URL=https://api.apexbooks.in" > .env
+
 # Get dependencies
 RUN flutter pub get
 
 # Build for web with release optimizations
-RUN flutter build web --release --tree-shake-icons
+RUN flutter build web --release --tree-shake-icons --no-wasm-dry-run
 
 # ── Stage 2: Serve with nginx ─────────────────────────────────────────
 FROM nginx:alpine
