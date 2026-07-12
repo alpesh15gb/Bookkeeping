@@ -122,7 +122,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 case 3:
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 20),
-                    child: _gstSummaryCard(state, colors, fmt),
+                    child: _gstSummaryCard(state, colors, fmt, now),
                   );
                 default:
                   return const SizedBox.shrink();
@@ -156,8 +156,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             children: [
               Text(
                 greeting,
-                style: TextStyle(
-                  fontSize: 14,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                   color: colors.textSecondary,
                   fontWeight: FontWeight.w500,
                 ),
@@ -167,10 +166,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                 children: [
                   Text(
                     'Overview',
-                    style: TextStyle(
-                      fontSize: 26,
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w700,
-                      color: colors.textPrimary,
                       letterSpacing: -0.5,
                     ),
                   ),
@@ -185,7 +182,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               const SizedBox(height: 2),
               Text(
                 '${_months[now.month - 1]} ${now.day}, ${now.year}  ·  Live financials',
-                style: TextStyle(fontSize: 13, color: colors.textMuted),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.textMuted),
               ),
             ],
           ),
@@ -594,6 +591,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     DashboardState state,
     ApexColors colors,
     NumberFormatter fmt,
+    DateTime now,
   ) {
     return state.metrics.when(
       loading: () => _Panel(
@@ -641,8 +639,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                'July 2026  ·  Output GST',
-                style: TextStyle(fontSize: 12, color: colors.textMuted),
+                '${_months[now.month - 1]} ${now.year}  ·  Output GST',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.textMuted),
               ),
               const SizedBox(height: 16),
               Row(

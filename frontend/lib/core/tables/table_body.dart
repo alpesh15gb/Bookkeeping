@@ -84,6 +84,9 @@ class ApexTableBody<T extends BaseModel> extends StatelessWidget {
               if (states.contains(WidgetState.selected)) {
                 return colors.primaryContainer;
               }
+              if (states.contains(WidgetState.hovered)) {
+                return colors.surfaceMuted;
+              }
               if (focused) return colors.surfaceMuted;
               return null;
             }),
