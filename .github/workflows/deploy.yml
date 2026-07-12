@@ -60,6 +60,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pub-
 
+      - name: Create .env for build
+        run: |
+          cd frontend
+          echo "API_BASE_URL=https://api.apexbooks.in" > .env
+
       - name: Build Flutter Web
         run: |
           cd frontend
