@@ -1197,6 +1197,23 @@ def get_cash_book_pdf(
     )
 
 
+# ── Bank Book ──────────────────────────────────────────────────────────────
+
+@router.get(
+    "/bank-book",
+    summary="Bank Book",
+    description="Returns the Bank Book tracking bank account inflows and outflows.",
+)
+def get_bank_book(
+    start_date: date = Query(..., description="Start date of the report"),
+    end_date: date = Query(..., description="End date of the report"),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("reports:view")),
+):
+    from src.domains.accounting.report_services import BankBookService
+    return BankBookService.get(db, tenant_id, start_date, end_date)
+
+
 # ── Day Book Exports & Endpoints ───────────────────────────────────────────
 
 def generate_day_book_excel(data: dict, company_name: str) -> bytes:

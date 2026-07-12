@@ -11,6 +11,8 @@ import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../models/profit_loss.dart';
 import '../models/balance_sheet.dart';
+import '../models/cash_book.dart';
+import '../models/day_book.dart';
 
 class FinancialStatementService {
   FinancialStatementService(this._dio);
@@ -38,6 +40,50 @@ class FinancialStatementService {
         queryParameters: q,
       );
       return BalanceSheetReport.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  Future<Result<CashBookReport>> getCashBook({
+    String? startDate,
+    String? endDate,
+  }) {
+    return guardDio(() async {
+      final q = <String, dynamic>{};
+      if (startDate != null) q['start_date'] = startDate;
+      if (endDate != null) q['end_date'] = endDate;
+      final res = await _dio.get('/reports/cash-book', queryParameters: q);
+      return CashBookReport.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  Future<Result<CashBookReport>> getBankBook({
+    String? startDate,
+    String? endDate,
+  }) {
+    return guardDio(() async {
+      final q = <String, dynamic>{};
+      if (startDate != null) q['start_date'] = startDate;
+      if (endDate != null) q['end_date'] = endDate;
+      final res = await _dio.get('/reports/bank-book', queryParameters: q);
+      return CashBookReport.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  Future<Result<DayBookReport>> getDayBook({
+    String? startDate,
+    String? endDate,
+    int page = 1,
+    int limit = 50,
+  }) {
+    return guardDio(() async {
+      final q = <String, dynamic>{
+        'page': page,
+        'limit': limit,
+      };
+      if (startDate != null) q['start_date'] = startDate;
+      if (endDate != null) q['end_date'] = endDate;
+      final res = await _dio.get('/reports/day-book', queryParameters: q);
+      return DayBookReport.fromJson(res.data as Map<String, dynamic>);
     });
   }
 

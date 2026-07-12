@@ -1351,16 +1351,22 @@ class PartyStatementService:
 class CashBookService:
     @staticmethod
     def get(db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date) -> CashBookResponse:
-        cash_accounts = db.query(Account).filter(
+        return CashBookService._get_register(db, tenant_id, start_date, end_date, "CASH%")
+
+    @staticmethod
+    def _get_register(
+        db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date, code_pattern: str
+    ) -> CashBookResponse:
+        accounts = db.query(Account).filter(
             Account.tenant_id == tenant_id,
             Account.deleted_at == None,
-            Account.code.like("CASH%")
+            Account.code.like(code_pattern)
         ).all()
-        cash_account_ids = [a.id for a in cash_accounts]
-        
-        op_bal_base = sum(a.opening_balance for a in cash_accounts)
-        
-        if not cash_account_ids:
+        account_ids = [a.id for a in accounts]
+
+        op_bal_base = sum(a.opening_balance for a in accounts)
+
+        if not account_ids:
             return CashBookResponse(
                 period_start=start_date,
                 period_end=end_date,
@@ -1375,21 +1381,21 @@ class CashBookService:
             func.sum(case((JournalLine.direction == "DEBIT", JournalLine.amount), else_=0)).label("debits"),
             func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)).label("credits")
         ).join(JournalEntry, JournalLine.entry_id == JournalEntry.id).filter(
-            JournalLine.account_id.in_(cash_account_ids),
+            JournalLine.account_id.in_(account_ids),
             JournalEntry.entry_date < start_date
         ).first()
-        
+
         op_debits = _q(past_journals.debits if past_journals and past_journals.debits else 0)
         op_credits = _q(past_journals.credits if past_journals and past_journals.credits else 0)
         opening_balance = _q(op_bal_base) + op_debits - op_credits
-        
+
         lines = db.query(JournalLine, JournalEntry).join(
             JournalEntry, JournalLine.entry_id == JournalEntry.id
         ).filter(
-            JournalLine.account_id.in_(cash_account_ids),
+            JournalLine.account_id.in_(account_ids),
             JournalEntry.entry_date.between(start_date, end_date)
         ).order_by(JournalEntry.entry_date.asc(), JournalEntry.created_at.asc()).all()
-        
+
         inflows = []
         outflows = []
         total_inflow = ZERO
@@ -1401,7 +1407,7 @@ class CashBookService:
             amt = _q(jl.amount)
             tax_amt = ZERO
             inv_amt = amt
-            
+
             if je.source_type == "INVOICE" and je.source_id:
                 inv = db.query(Invoice).filter_by(id=je.source_id).first()
                 if inv:
@@ -1434,9 +1440,9 @@ class CashBookService:
                 outflows.append(row)
                 total_outflow += amt
                 tax_paid += tax_amt
-                
+
         closing_balance = opening_balance + total_inflow - total_outflow
-        
+
         return CashBookResponse(
             period_start=start_date,
             period_end=end_date,
@@ -1456,3 +1462,10 @@ class CashBookService:
                 tax_payable=max(ZERO, tax_received - tax_paid)
             )
         )
+
+
+class BankBookService:
+    """Bank Book: tracks bank account inflows and outflows."""
+    @staticmethod
+    def get(db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date) -> CashBookResponse:
+        return CashBookService._get_register(db, tenant_id, start_date, end_date, "BANK%")

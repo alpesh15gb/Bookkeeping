@@ -9,7 +9,7 @@ Widget selectorWidget(
   String name,
 ) {
   return Padding(
-    padding: EdgeInsets.symmetric(horizontal: ApexSpacing.md),
+    padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.md),
     child: Container(
       padding: const EdgeInsets.all(ApexSpacing.sm),
       decoration: BoxDecoration(
@@ -130,15 +130,35 @@ List<(String, IconData, String, Widget)> getScreensList() {
       Icons.account_tree_outlined,
       'FINANCIALS',
       const HubTabWidget(
-        tabs: ['COA', 'Journals', 'Trial Balance', 'P&L', 'Balance Sheet'],
+        tabs: [
+          'COA',
+          'Journals',
+          'Trial Balance',
+          'General Ledger',
+          'P&L',
+          'Balance Sheet',
+          'Cash Book',
+          'Bank Book',
+          'Day Book',
+        ],
         views: [
           AccountListScreen(),
           JournalListScreen(),
           TrialBalanceScreen(),
+          GeneralLedgerScreen(),
           ProfitLossScreen(),
           BalanceSheetScreen(),
+          CashBookScreen(),
+          BankBookScreen(),
+          DayBookScreen(),
         ],
       ),
+    ),
+    (
+      'Reports',
+      Icons.assessment_rounded,
+      'REPORTS',
+      const ReportsShell(),
     ),
     (
       'Contacts',
