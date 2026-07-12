@@ -7,6 +7,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/download/download_service.dart';
 import '../models/purchase_order.dart';
 import '../models/purchase_order_line.dart';
 import '../models/purchase_order_status.dart';
@@ -91,13 +92,30 @@ class _PurchaseOrderDetailScreenState
   }
 
   Future<void> _printPo(PurchaseOrder po) async {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Downloading ${po.poNumber}.pdf...'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    final downloadSvc = ref.read(downloadServiceProvider);
+    final result = await downloadSvc.download(
+      relativeUrl: '/purchase-orders/${po.id}/print',
+      filename: po.poNumber,
+      kind: ExportKind.pdf,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case Success():
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Downloaded ${po.poNumber}.pdf'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      case Failure(:final error):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${error.message}'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      default:
+        break;
     }
   }
 

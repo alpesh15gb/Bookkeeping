@@ -7,6 +7,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/download/download_service.dart';
 import '../models/vendor_bill.dart';
 import '../models/bill_line.dart';
 import '../services/vendor_bill_service.dart';
@@ -87,13 +88,30 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
   }
 
   Future<void> _printBill(VendorBill bill) async {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Downloading ${bill.billNumber}.pdf...'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    final downloadSvc = ref.read(downloadServiceProvider);
+    final result = await downloadSvc.download(
+      relativeUrl: '/bills/${bill.id}/print',
+      filename: bill.billNumber,
+      kind: ExportKind.pdf,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case Success():
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Downloaded ${bill.billNumber}.pdf'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      case Failure(:final error):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${error.message}'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      default:
+        break;
     }
   }
 

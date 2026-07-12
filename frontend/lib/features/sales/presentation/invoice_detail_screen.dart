@@ -8,6 +8,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/download/download_service.dart';
 import 'package:apexbooks/core/widgets/transaction_detail_layout.dart';
 import '../models/invoice.dart';
 import '../models/invoice_line.dart';
@@ -78,13 +79,30 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
   }
 
   Future<void> _printInvoice(Invoice inv) async {
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Downloading ${inv.invoiceNumber}.pdf...'),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+    final downloadSvc = ref.read(downloadServiceProvider);
+    final result = await downloadSvc.download(
+      relativeUrl: '/invoices/${inv.id}/print',
+      filename: inv.invoiceNumber,
+      kind: ExportKind.pdf,
+    );
+    if (!mounted) return;
+    switch (result) {
+      case Success():
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Downloaded ${inv.invoiceNumber}.pdf'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      case Failure(:final error):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${error.message}'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      default:
+        break;
     }
   }
 
