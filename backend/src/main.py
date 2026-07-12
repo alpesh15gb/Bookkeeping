@@ -244,11 +244,39 @@ app.add_exception_handler(RateLimitExceeded, rate_limiter_exceeded_handler)
 
 
 # ---------------------------------------------------------------------------
-# Security Headers Middleware
+# CORS — MUST be outermost middleware so preflight OPTIONS requests are
+# handled before any other middleware can reject them.
+# ---------------------------------------------------------------------------
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.allowed_origins_list,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Tenant-ID", "Accept", "Idempotency-Key"],
+    expose_headers=["X-Request-ID", "X-RateLimit-Remaining"],
+)
+
+# ---------------------------------------------------------------------------
+# GZip Compression — reduces response payload by 50-80%
+# ---------------------------------------------------------------------------
+
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
+app.add_middleware(IdempotencyMiddleware)
+app.add_middleware(SlowAPIMiddleware)
+
+# ---------------------------------------------------------------------------
+# Security Headers Middleware — added AFTER CORS so it doesn't interfere
+# with preflight handling. Only adds response headers, never blocks requests.
 # ---------------------------------------------------------------------------
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    # Pass OPTIONS preflight through to CORS immediately
+    if request.method == "OPTIONS":
+        return await call_next(request)
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
@@ -259,7 +287,6 @@ async def add_security_headers(request: Request, call_next):
         response.headers["Access-Control-Allow-Private-Network"] = "true"
     if settings.is_production:
         response.headers["Strict-Transport-Security"] = "max-age=63072000; includeSubDomains; preload"
-        response.headers["Content-Security-Policy"] = "default-src 'self'"
     return response
 
 
@@ -278,29 +305,6 @@ async def add_request_id(request: Request, call_next):
         request_id_var.reset(token)
     response.headers["X-Request-ID"] = request_id
     return response
-
-
-# ---------------------------------------------------------------------------
-# CORS
-# ---------------------------------------------------------------------------
-
-# ---------------------------------------------------------------------------
-# GZip Compression — reduces response payload by 50-80%
-# ---------------------------------------------------------------------------
-
-from starlette.middleware.gzip import GZipMiddleware
-app.add_middleware(GZipMiddleware, minimum_size=500)
-
-app.add_middleware(IdempotencyMiddleware)
-app.add_middleware(SlowAPIMiddleware)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.allowed_origins_list,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type", "X-Tenant-ID", "Accept", "Idempotency-Key"],
-)
 
 
 # ---------------------------------------------------------------------------
