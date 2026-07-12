@@ -1,6 +1,8 @@
 /// Product form screen — uses ApexForm + reusable field widgets.
 library;
 
+import 'package:flutter/services.dart';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/forms/apex_form.dart';
@@ -95,7 +97,14 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
           Navigator.of(context).pop();
         }
       },
-      child: Scaffold(
+      child: CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
+        const SingleActivator(LogicalKeyboardKey.keyS, meta: true): _save,
+      },
+      child: Focus(
+        autofocus: true,
+        child: Scaffold(
       appBar: AppBar(title: Text(_isEditing ? 'Edit Product' : 'New Product')),
       body: ApexForm(
         controller: _ctrl,
@@ -232,6 +241,8 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
             ],
           ),
         ),
+      ),
+      ),
       ),
       ),
     );

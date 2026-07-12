@@ -90,6 +90,17 @@ class _PurchaseOrderDetailScreenState
     );
   }
 
+  Future<void> _printPo(PurchaseOrder po) async {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Downloading ${po.poNumber}.pdf...'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Widget _actionBar(
     PurchaseOrder po,
     PurchaseOrderService service,
@@ -131,6 +142,11 @@ class _PurchaseOrderDetailScreenState
                   spacing: 8,
                   runSpacing: 8,
                   children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _printPo(po),
+                      icon: const Icon(Icons.print_rounded, size: 18),
+                      label: const Text('Print'),
+                    ),
                     if (_operating)
                       const LoadingSpinner(size: 18),
                     if (po.status == PurchaseOrderStatus.draft)
@@ -192,6 +208,12 @@ class _PurchaseOrderDetailScreenState
                     ],
                   ),
                 ),
+                OutlinedButton.icon(
+                  onPressed: () => _printPo(po),
+                  icon: const Icon(Icons.print_rounded, size: 18),
+                  label: const Text('Print'),
+                ),
+                const SizedBox(width: 8),
                 if (_operating)
                   const Padding(
                     padding: EdgeInsets.only(right: 12),

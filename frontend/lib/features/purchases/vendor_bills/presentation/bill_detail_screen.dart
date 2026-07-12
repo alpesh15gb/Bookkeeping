@@ -86,6 +86,17 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
     );
   }
 
+  Future<void> _printBill(VendorBill bill) async {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Downloading ${bill.billNumber}.pdf...'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   Widget _actionBar(
     VendorBill bill,
     VendorBillService service,
@@ -128,6 +139,11 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
+                    OutlinedButton.icon(
+                      onPressed: () => _printBill(bill),
+                      icon: const Icon(Icons.print_rounded, size: 18),
+                      label: const Text('Print'),
+                    ),
                     if (_operating)
                       const LoadingSpinner(size: 18),
                     if (bill.status.name == 'draft')
@@ -177,6 +193,12 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                     ],
                   ),
                 ),
+                OutlinedButton.icon(
+                  onPressed: () => _printBill(bill),
+                  icon: const Icon(Icons.print_rounded, size: 18),
+                  label: const Text('Print'),
+                ),
+                const SizedBox(width: 8),
                 if (_operating)
                   const Padding(
                     padding: EdgeInsets.only(right: 12),

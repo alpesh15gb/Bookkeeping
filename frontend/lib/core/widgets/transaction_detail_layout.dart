@@ -215,15 +215,19 @@ class _TransactionAppBar extends StatelessWidget
         // Back button + title row
         Row(
           children: [
-            IconButton(
-              onPressed: () => Navigator.of(context).maybePop(),
-              icon: Icon(
-                Icons.arrow_back_rounded,
-                color: colors.textPrimary,
-                size: 20,
+            Tooltip(
+              message: 'Go back',
+              child: IconButton(
+                onPressed: () => Navigator.of(context).maybePop(),
+                icon: Icon(
+                  Icons.arrow_back_rounded,
+                  color: colors.textPrimary,
+                  size: 20,
+                ),
+                padding: EdgeInsets.zero,
+                constraints:
+                    const BoxConstraints.tightFor(width: 32, height: 32),
               ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
             ),
             const SizedBox(width: 8),
             Expanded(
@@ -258,15 +262,18 @@ class _TransactionAppBar extends StatelessWidget
   ) {
     return Row(
       children: [
-        IconButton(
-          onPressed: () => Navigator.of(context).maybePop(),
-          icon: Icon(
-            Icons.arrow_back_rounded,
-            color: colors.textPrimary,
-            size: 20,
+        Tooltip(
+          message: 'Go back',
+          child: IconButton(
+            onPressed: () => Navigator.of(context).maybePop(),
+            icon: Icon(
+              Icons.arrow_back_rounded,
+              color: colors.textPrimary,
+              size: 20,
+            ),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
           ),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
         ),
         const SizedBox(width: 8),
         Expanded(

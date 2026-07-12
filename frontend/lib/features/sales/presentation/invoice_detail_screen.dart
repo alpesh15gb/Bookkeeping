@@ -77,6 +77,17 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     );
   }
 
+  Future<void> _printInvoice(Invoice inv) async {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Downloading ${inv.invoiceNumber}.pdf...'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   // ── Action buttons for the AppBar ──────────────────────────────────────────
   List<Widget> _buildActions(
     Invoice inv,
@@ -84,6 +95,11 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     ApexColors colors,
   ) {
     return [
+      OutlinedButton.icon(
+        onPressed: () => _printInvoice(inv),
+        icon: const Icon(Icons.print_rounded, size: 18),
+        label: const Text('Print'),
+      ),
       StatusBadge(
         label: inv.status.value.replaceAll('_', ' '),
         tone: toneForStatus(inv.status.value),

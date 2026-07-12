@@ -60,6 +60,9 @@ class VendorBillService {
       return VendorBill.fromJson(res.data as Map<String, dynamic>);
     });
   }
+
+  /// Returns the /print path for downloading PDF from the backend.
+  String getPdfUrl(String id) => '/bills/$id/print';
 }
 
 final vendorBillServiceProvider = Provider<VendorBillService>((ref) {

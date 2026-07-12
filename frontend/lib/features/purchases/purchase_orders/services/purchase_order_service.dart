@@ -63,6 +63,9 @@ class PurchaseOrderService {
       return PurchaseOrder.fromJson(res.data as Map<String, dynamic>);
     });
   }
+
+  /// Returns the /print path for downloading PDF from the backend.
+  String getPdfUrl(String id) => '/purchase-orders/$id/print';
 }
 
 final purchaseOrderServiceProvider = Provider<PurchaseOrderService>((ref) {

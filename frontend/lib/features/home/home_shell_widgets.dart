@@ -192,9 +192,13 @@ Widget buildProfileBox(
               ],
             ),
           ),
-          IconButton(
-            icon: Icon(Icons.logout_rounded, size: 16, color: colors.textMuted),
-            onPressed: onLogout,
+          Tooltip(
+            message: 'Log out',
+            child: IconButton(
+              icon:
+                  Icon(Icons.logout_rounded, size: 16, color: colors.textMuted),
+              onPressed: onLogout,
+            ),
           ),
         ],
       ],
