@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
+import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
@@ -635,28 +636,14 @@ class _Card extends StatelessWidget {
   const _Card({
     required this.colors,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding,
   });
   final ApexColors colors;
   final Widget child;
-  final EdgeInsets padding;
+  final EdgeInsets? padding;
   @override
-  Widget build(BuildContext context) => Container(
-    padding: padding,
-    decoration: BoxDecoration(
-      color: colors.surfaceRaised,
-      borderRadius: BorderRadius.circular(ApexRadius.lg),
-      border: Border.all(color: colors.border),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(alpha: 0.03),
-          blurRadius: 10,
-          offset: const Offset(0, 3),
-        ),
-      ],
-    ),
-    child: child,
-  );
+  Widget build(BuildContext context) =>
+      ApexCard(padding: padding ?? const EdgeInsets.all(20), child: child);
 }
 
 class _VendorField extends StatelessWidget {
