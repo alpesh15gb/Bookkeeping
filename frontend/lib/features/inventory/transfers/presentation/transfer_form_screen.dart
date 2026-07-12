@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -38,6 +39,14 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
   static String _fmtDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
+  bool get _hasUnsavedChanges {
+    final s = ref.read(transferFormProvider);
+    return s.transferNumber.isNotEmpty ||
+        s.fromWarehouseId.isNotEmpty ||
+        s.toWarehouseId.isNotEmpty ||
+        s.lines.any((l) => l.productId.isNotEmpty || l.quantity > 0);
+  }
+
   Future<void> _save() async {
     final notifier = ref.read(transferFormProvider.notifier);
     if (ref.read(transferFormProvider).saving) return;
@@ -62,7 +71,21 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            if (_hasUnsavedChanges) {
+              final result =
+                  await const DialogService().unsavedChanges(context);
+              if (result == DialogResult.discard && context.mounted) {
+                Navigator.of(context).pop();
+              }
+            } else {
+              Navigator.of(context).pop();
+            }
+          },
+          child: Scaffold(
           backgroundColor: colors.surfaceMuted,
           appBar: AppBar(
             backgroundColor: colors.surfaceRaised,
@@ -98,6 +121,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
             ],
           ),
           body: _buildBody(state, notifier, products, colors, fmt),
+          ),
         ),
       ),
     );

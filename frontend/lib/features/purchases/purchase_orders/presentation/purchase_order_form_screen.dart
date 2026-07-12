@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -55,6 +56,13 @@ class _PurchaseOrderFormScreenState
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   DateTime? _parseDate(String s) => DateTime.tryParse(s);
 
+  bool get _hasUnsavedChanges {
+    final s = ref.read(purchaseOrderFormProvider);
+    return s.contactId != null ||
+        s.poNumber.isNotEmpty ||
+        s.lines.any((l) => l.productId.isNotEmpty);
+  }
+
   Future<void> _save() async {
     final notifier = ref.read(purchaseOrderFormProvider.notifier);
     if (ref.read(purchaseOrderFormProvider).saving) return;
@@ -86,7 +94,21 @@ class _PurchaseOrderFormScreenState
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            if (_hasUnsavedChanges) {
+              final result =
+                  await const DialogService().unsavedChanges(context);
+              if (result == DialogResult.discard && context.mounted) {
+                Navigator.of(context).pop();
+              }
+            } else {
+              Navigator.of(context).pop();
+            }
+          },
+          child: Scaffold(
           backgroundColor: colors.surfaceMuted,
           appBar: AppBar(
             backgroundColor: colors.surfaceRaised,
@@ -176,6 +198,7 @@ class _PurchaseOrderFormScreenState
               ),
               _totalsBar(state, colors, fmt),
             ],
+          ),
           ),
         ),
       ),

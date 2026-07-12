@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/search_bar.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -18,6 +19,7 @@ class StockMovementListScreen extends ConsumerStatefulWidget {
 
 class _StockMovementListScreenState
     extends ConsumerState<StockMovementListScreen> {
+  final _searchCtrl = TextEditingController();
   String _search = '';
   MovementReferenceType? _typeFilter;
 
@@ -55,25 +57,9 @@ class _StockMovementListScreenState
             child: Row(
               children: [
                 Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: 'Search product…',
-                      isDense: true,
-                      filled: true,
-                      fillColor: colors.surfaceRaised,
-                      prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                      contentPadding: EdgeInsets.symmetric(
-                        vertical: isMobile ? 14 : 12,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(ApexRadius.sm),
-                        borderSide: BorderSide(color: colors.border),
-                      ),
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(ApexRadius.sm),
-                        borderSide: BorderSide(color: colors.border),
-                      ),
-                    ),
+                  child: ApexSearchBar(
+                    controller: _searchCtrl,
+                    hintText: 'Search product…',
                     onChanged: (v) => setState(() => _search = v),
                   ),
                 ),

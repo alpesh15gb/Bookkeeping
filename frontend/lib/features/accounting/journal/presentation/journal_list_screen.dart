@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/search_bar.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -27,6 +28,7 @@ class JournalListScreen extends ConsumerStatefulWidget {
 }
 
 class _JournalListScreenState extends ConsumerState<JournalListScreen> {
+  final _searchCtrl = TextEditingController();
   String _search = '';
 
   @override
@@ -79,29 +81,9 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                   children: [
                     Padding(
                       padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.sm),
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText:
-                              'Search by account, description, reference…',
-                          isDense: true,
-                          filled: true,
-                          fillColor: colors.surfaceRaised,
-                          prefixIcon: const Icon(
-                            Icons.search_rounded,
-                            size: 20,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            vertical: ApexSpacing.md,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(ApexRadius.sm),
-                            borderSide: BorderSide(color: colors.border),
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(ApexRadius.sm),
-                            borderSide: BorderSide(color: colors.border),
-                          ),
-                        ),
+                      child: ApexSearchBar(
+                        controller: _searchCtrl,
+                        hintText: 'Search by account, description, reference…',
                         onChanged: (v) => setState(() => _search = v),
                       ),
                     ),

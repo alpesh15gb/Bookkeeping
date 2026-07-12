@@ -15,6 +15,7 @@ import 'package:apexbooks/core/permissions/permissions_constants.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/states.dart';
+import 'package:apexbooks/core/widgets/search_bar.dart';
 import '../data/models/account.dart';
 import 'account_controller.dart';
 import 'account_form_screen.dart';
@@ -126,7 +127,7 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
           actionLabel: 'Seed Standard Accounts',
           onAction: () => _confirmSeed(context),
         ),
-        ListError(:final message) => _ErrorView(
+        ListError(:final message) => ErrorView(
           message: message,
           onRetry: _reload,
         ),
@@ -152,34 +153,10 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
           child: Column(
             children: [
-              TextField(
+              ApexSearchBar(
                 controller: _searchCtrl,
-                decoration: InputDecoration(
-                  hintText: 'Search by code, name or group…',
-                  isDense: true,
-                  filled: true,
-                  fillColor: colors.surfaceMuted,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
-                    borderSide: BorderSide(color: colors.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
-                    borderSide: BorderSide(color: colors.border),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 12),
-                  prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                  suffixIcon: _search.isNotEmpty
-                      ? IconButton(
-                          icon: const Icon(Icons.clear_rounded, size: 18),
-                          onPressed: () {
-                            _searchCtrl.clear();
-                            setState(() => _search = '');
-                          },
-                        )
-                      : null,
-                ),
-                onChanged: (v) => setState(() => _search = v.trim()),
+                hintText: 'Search by code, name or group…',
+                onChanged: (v) => setState(() => _search = v),
               ),
               const SizedBox(height: 8),
               SizedBox(
@@ -395,38 +372,5 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
     if (ok == true && mounted) {
       await ref.read(accountControllerProvider.notifier).seedDefaults(context);
     }
-  }
-}
-
-class _ErrorView extends StatelessWidget {
-  const _ErrorView({required this.message, required this.onRetry});
-  final String message;
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.cloud_off_rounded,
-              size: 48,
-              color: Theme.of(context).colorScheme.error,
-            ),
-            const SizedBox(height: 12),
-            Text(message, textAlign: TextAlign.center),
-            const SizedBox(height: 16),
-            FilledButton.icon(
-              onPressed: onRetry,
-              icon: const Icon(Icons.refresh_rounded),
-              label: const Text('Retry'),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

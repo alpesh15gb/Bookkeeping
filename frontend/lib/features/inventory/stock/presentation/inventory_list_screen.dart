@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/search_bar.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -29,6 +30,7 @@ class InventoryListScreen extends ConsumerStatefulWidget {
 }
 
 class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
+  final _searchCtrl = TextEditingController();
   String _search = '';
   bool _lowOnly = false;
 
@@ -161,24 +163,9 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
         child: Row(
           children: [
             Expanded(
-              child: TextField(
-                decoration: InputDecoration(
-                  hintText: 'Search products…',
-                  prefixIcon: Icon(Icons.search, color: c.textMuted, size: 18),
-                  isDense: true,
-                  contentPadding: EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: isMobile ? 14 : 10,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(ApexRadius.md),
-                    borderSide: BorderSide(color: c.border),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(ApexRadius.md),
-                    borderSide: BorderSide(color: c.border),
-                  ),
-                ),
+              child: ApexSearchBar(
+                controller: _searchCtrl,
+                hintText: 'Search products…',
                 onChanged: (v) => setState(() => _search = v),
               ),
             ),

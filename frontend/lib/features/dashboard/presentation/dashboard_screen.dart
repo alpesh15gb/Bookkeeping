@@ -744,7 +744,7 @@ class _Panel extends StatelessWidget {
 }
 
 // ── Premium KPI card ────────────────────────────────────────────────────────
-class _KpiCard extends StatelessWidget {
+class _KpiCard extends StatefulWidget {
   const _KpiCard({
     required this.label,
     required this.value,
@@ -767,23 +767,44 @@ class _KpiCard extends StatelessWidget {
   final bool emphasize;
 
   @override
+  State<_KpiCard> createState() => _KpiCardState();
+}
+
+class _KpiCardState extends State<_KpiCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
-        border: Border.all(
-          color: emphasize ? tone.withValues(alpha: 0.4) : colors.border,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      cursor: SystemMouseCursors.click,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.all(18),
+        transform: _hovered
+            ? (Matrix4.identity()..translate(0.0, -2.0))
+            : Matrix4.identity(),
+        transformAlignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: widget.colors.surfaceRaised,
+          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          border: Border.all(
+            color: _hovered
+                ? widget.tone.withValues(alpha: 0.5)
+                : widget.emphasize
+                    ? widget.tone.withValues(alpha: 0.4)
+                    : widget.colors.border,
           ),
-        ],
-      ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: _hovered ? 0.06 : 0.03),
+              blurRadius: _hovered ? 14 : 10,
+              offset: Offset(0, _hovered ? 6 : 3),
+            ),
+          ],
+        ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -792,20 +813,20 @@ class _KpiCard extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: tone.withValues(alpha: 0.12),
+                  color: widget.tone.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(ApexRadius.sm),
                 ),
-                child: Icon(icon, size: 18, color: tone),
+                child: Icon(widget.icon, size: 18, color: widget.tone),
               ),
               const Spacer(),
             ],
           ),
           const SizedBox(height: 14),
           Text(
-            label.toUpperCase(),
+            widget.label.toUpperCase(),
             style: TextStyle(
               fontSize: 11,
-              color: colors.textMuted,
+              color: widget.colors.textMuted,
               fontWeight: FontWeight.w600,
               letterSpacing: 0.5,
             ),
@@ -815,27 +836,28 @@ class _KpiCard extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
-              fmt.currency(value),
+              widget.fmt.currency(widget.value),
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
+                color: widget.colors.textPrimary,
                 letterSpacing: -0.5,
               ),
             ),
           ),
-          if (footer != null) ...[
+          if (widget.footer != null) ...[
             const SizedBox(height: 6),
             Text(
-              footer!,
+              widget.footer!,
               style: TextStyle(
                 fontSize: 11,
-                color: footerTone ?? colors.textSecondary,
+                color: widget.footerTone ?? widget.colors.textSecondary,
                 fontWeight: FontWeight.w500,
               ),
             ),
           ],
         ],
+      ),
       ),
     );
   }

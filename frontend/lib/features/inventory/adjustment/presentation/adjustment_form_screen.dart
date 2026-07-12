@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -39,6 +40,13 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   DateTime? _parseDate(String s) => DateTime.tryParse(s);
 
+  bool get _hasUnsavedChanges {
+    final s = ref.read(adjustmentFormProvider);
+    return s.adjustmentNumber.isNotEmpty ||
+        (s.reason?.isNotEmpty ?? false) ||
+        s.lines.any((l) => l.productId.isNotEmpty || l.quantityChange != 0);
+  }
+
   Future<void> _save() async {
     final notifier = ref.read(adjustmentFormProvider.notifier);
     if (ref.read(adjustmentFormProvider).saving) return;
@@ -65,7 +73,21 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            if (_hasUnsavedChanges) {
+              final result =
+                  await const DialogService().unsavedChanges(context);
+              if (result == DialogResult.discard && context.mounted) {
+                Navigator.of(context).pop();
+              }
+            } else {
+              Navigator.of(context).pop();
+            }
+          },
+          child: Scaffold(
           backgroundColor: colors.surfaceMuted,
           appBar: AppBar(
             backgroundColor: colors.surfaceRaised,
@@ -155,6 +177,7 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
               ),
               _summaryBar(state, colors),
             ],
+          ),
           ),
         ),
       ),

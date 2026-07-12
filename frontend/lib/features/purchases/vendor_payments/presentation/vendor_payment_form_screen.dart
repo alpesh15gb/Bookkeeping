@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -50,6 +51,13 @@ class _VendorPaymentFormScreenState
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
   DateTime? _parseDate(String s) => DateTime.tryParse(s);
 
+  bool get _hasUnsavedChanges {
+    final s = ref.read(vendorPaymentFormProvider);
+    return s.contactId != null ||
+        s.amount > 0 ||
+        s.paymentNumber.isNotEmpty;
+  }
+
   Future<void> _save() async {
     final notifier = ref.read(vendorPaymentFormProvider.notifier);
     if (ref.read(vendorPaymentFormProvider).saving) return;
@@ -74,7 +82,21 @@ class _VendorPaymentFormScreenState
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            if (_hasUnsavedChanges) {
+              final result =
+                  await const DialogService().unsavedChanges(context);
+              if (result == DialogResult.discard && context.mounted) {
+                Navigator.of(context).pop();
+              }
+            } else {
+              Navigator.of(context).pop();
+            }
+          },
+          child: Scaffold(
           backgroundColor: colors.surfaceMuted,
           appBar: AppBar(
             backgroundColor: colors.surfaceRaised,
@@ -193,6 +215,7 @@ class _VendorPaymentFormScreenState
               ),
               _summaryBar(state, colors, fmt),
             ],
+          ),
           ),
         ),
       ),

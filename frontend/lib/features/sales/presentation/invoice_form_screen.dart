@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -55,6 +56,12 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
   DateTime? _parseDate(String s) => DateTime.tryParse(s);
 
+  bool get _hasUnsavedChanges {
+    final s = ref.read(invoiceFormProvider);
+    return s.contactId != null ||
+        s.lines.any((l) => l.productId.isNotEmpty);
+  }
+
   Future<void> _save() async {
     final notifier = ref.read(invoiceFormProvider.notifier);
     if (ref.read(invoiceFormProvider).saving) return;
@@ -86,7 +93,21 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
+        child: PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            if (_hasUnsavedChanges) {
+              final result =
+                  await const DialogService().unsavedChanges(context);
+              if (result == DialogResult.discard && context.mounted) {
+                Navigator.of(context).pop();
+              }
+            } else {
+              Navigator.of(context).pop();
+            }
+          },
+          child: Scaffold(
           backgroundColor: colors.surfaceMuted,
           appBar: AppBar(
             backgroundColor: colors.surfaceRaised,
@@ -174,6 +195,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               ),
               _totalsBar(context, state, colors, fmt),
             ],
+          ),
           ),
         ),
       ),
