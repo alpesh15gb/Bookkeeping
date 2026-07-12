@@ -1,8 +1,61 @@
 # ApexBooks — Session Handoff (Final)
 
-## Session: 2026-07-12 — Phase 2 Premium UI/UX Redesign
+## Session: 2026-07-12 — Production Bug Fix Sprint
 
-### Phase 2 Results
+### Production Bug Fixes
+
+#### 1. CRITICAL: Unsafe Type Casts (Root Cause of Invoice List Crash)
+
+**Problem:** Backend returns numeric values as strings (e.g., `"19900.0000"`) but frontend used `as num?` casts which crash on String values.
+
+**Fix:** Added `parseDoubleSafe()` and `parseIntSafe()` to `core/utils/formatters.dart`. Replaced **64+ unsafe casts** across **16 files**:
+
+| File | Unsafe fields fixed |
+|------|-------------------|
+| `invoice.dart` | 19 fields |
+| `invoice_line.dart` | 16 fields |
+| `dashboard_models.dart` | 18 fields |
+| `payment_models.dart` | 3 fields |
+| `outstanding_invoice.dart` | 2 fields |
+| `adjustment_service.dart` | 3 fields |
+| `transfer_service.dart` | 2 fields |
+| `ledger_posting_service.dart` | 3 CRITICAL non-nullable casts |
+| `receivable_posting_service.dart` | 2 fields |
+| `payable_posting_service.dart` | 2 fields |
+| `inventory_posting_service.dart` | 2 fields |
+| `auth_models.dart` | 1 field |
+| `invoice_service.dart` | 1 field |
+| `dio_extensions.dart` | 3 fields |
+| `tax_template.dart` | 1 field |
+| `payment_term.dart` | 1 field |
+
+#### 2. Backend API Audit
+
+Verified all backend endpoints exist and are registered:
+- `/api/v1/auth/*` - Auth endpoints ✅
+- `/api/v1/invoices/*` - Invoice CRUD ✅
+- `/api/v1/bills/*` - Bill CRUD ✅
+- `/api/v1/purchase-orders/*` - PO CRUD ✅
+- `/api/v1/returns/*` - Returns (sales + purchase) ✅
+- `/api/v1/payments/*` - Payments (receipts + disbursements) ✅
+- `/api/v1/masters/*` - Contacts, Products, Accounts ✅
+- `/api/v1/accounting/*` - Journals, Ledger, Trial Balance ✅
+- `/api/v1/dashboard/*` - KPIs, Metrics, Trends ✅
+- `/api/v1/expenses/*` - Expenses CRUD ✅
+- `/api/v1/inventory-adjustments/*` - Inventory adjustments ✅
+- `/api/v1/bank-reconciliation/*` - Bank reconciliation ✅
+- `/api/v1/reports/*` - Report generation ✅
+
+#### 3. Auth Flow Verified
+- Token storage (SecureStorage + SharedPreferences) ✅
+- Token restore on app launch ✅
+- Auth interceptor attaches Bearer token ✅
+- Tenant interceptor attaches X-Tenant-ID header ✅
+- Idempotency interceptor adds key headers ✅
+
+### Build Status
+- `flutter analyze`: **0 errors, 0 warnings**, ~132 info-level lints
+- `flutter build web`: ✅ Success (53.4s)
 
 #### All HIGH Issues Fixed
 1. ✅ **Dashboard chart** — fl_chart BarChart replaces CustomPainter (interactive tooltips, 600ms animation, gradient fills)
