@@ -176,10 +176,7 @@ class _PurchaseOrderListScreenState
                   _selected!.poNumber.isNotEmpty
                       ? _selected!.poNumber
                       : 'Purchase Order',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: Theme.of(context).textTheme.titleMedium,
                 ),
                 leading: IconButton(
                   icon: const Icon(Icons.close_rounded),

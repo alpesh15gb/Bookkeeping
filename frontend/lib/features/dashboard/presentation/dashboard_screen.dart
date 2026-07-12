@@ -602,7 +602,10 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: Center(child: LoadingSpinner(size: 24)),
         ),
       ),
-      error: (_, _) => const SizedBox.shrink(),
+      error: (e, _) => _Panel(
+        colors: colors,
+        child: _errorCard(colors, 'Could not load GST summary', () => ref.read(dashboardProvider.notifier).refresh()),
+      ),
       data: (m) {
         final cgst = m.cgstTotal;
         final sgst = m.sgstTotal;

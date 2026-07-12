@@ -149,14 +149,24 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 child: Center(
                   child: ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 1200),
-                    child: ListView(
-                      padding: const EdgeInsets.all(16),
-                      children: [
-                        _headerCard(state, notifier, colors, contactsList),
-                        const SizedBox(height: 12),
-                        _linesCard(state, notifier, colors, fmt, productsList),
-                        const SizedBox(height: 80), // extra space so content isn't hidden behind totals bar
-                      ],
+                    child: ListView.builder(
+                    padding: const EdgeInsets.all(16),
+                    itemCount: 3,
+                    itemBuilder: (context, idx) {
+                      switch (idx) {
+                        case 0:
+                          return _headerCard(state, notifier, colors, contactsList);
+                        case 1:
+                          return Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: _linesCard(state, notifier, colors, fmt, productsList),
+                          );
+                        case 2:
+                          return const SizedBox(height: 80);
+                        default:
+                          return const SizedBox.shrink();
+                      }
+                    },
                     ),
                   ),
                 ),
