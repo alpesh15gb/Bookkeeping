@@ -8,6 +8,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 /// A single journal line for posting.
@@ -58,8 +59,8 @@ class LedgerPostingService {
     required String customerAccountId,
     required String revenueAccountId,
     required double total,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final lines = <Map<String, dynamic>>[
         {
           'account_id': customerAccountId,
@@ -85,29 +86,10 @@ class LedgerPostingService {
       });
 
       final data = res.data as Map<String, dynamic>;
-      return Success(PostingResult(
-        journalEntryId: data['id'] as String,
-        entryNumber: data['reference_number'] as String? ?? '',
-        lines: (data['lines'] as List?)?.map((l) => PostingLine(
-              accountId: (l as Map)['account_id'] as String,
-              debit: ((l as Map)['direction'] as String) == 'DEBIT'
-                  ? ((l as Map)['amount'] as num).toDouble()
-                  : 0,
-              credit: ((l as Map)['direction'] as String) == 'CREDIT'
-                  ? ((l as Map)['amount'] as num).toDouble()
-                  : 0,
-              description: (l as Map)['narration'] as String?,
-            )).toList() ??
-            [],
-      ));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? 'Failed to post to ledger'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return _parseResult(data);
+    });
   }
 
-  /// Post a payment receipt to the ledger.
   Future<Result<PostingResult>> postPaymentReceipt({
     required String tenantId,
     required String paymentId,
@@ -116,8 +98,8 @@ class LedgerPostingService {
     required String bankAccountId,
     required String customerAccountId,
     required double amount,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final lines = <Map<String, dynamic>>[
         {
           'account_id': bankAccountId,
@@ -143,35 +125,16 @@ class LedgerPostingService {
       });
 
       final data = res.data as Map<String, dynamic>;
-      return Success(PostingResult(
-        journalEntryId: data['id'] as String,
-        entryNumber: data['reference_number'] as String? ?? '',
-        lines: (data['lines'] as List?)?.map((l) => PostingLine(
-              accountId: (l as Map)['account_id'] as String,
-              debit: ((l as Map)['direction'] as String) == 'DEBIT'
-                  ? ((l as Map)['amount'] as num).toDouble()
-                  : 0,
-              credit: ((l as Map)['direction'] as String) == 'CREDIT'
-                  ? ((l as Map)['amount'] as num).toDouble()
-                  : 0,
-              description: (l as Map)['narration'] as String?,
-            )).toList() ??
-            [],
-      ));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? 'Failed to post payment'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return _parseResult(data);
+    });
   }
 
-  /// Reverse a previously-posted entry (e.g. on cancellation).
   Future<Result<PostingResult>> reverseEntry({
     required String tenantId,
     required String originalEntryId,
     required String reversalReason,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       // Fetch the original entry to reverse its lines
       final orig = await _dio.get('/accounting/journals/$originalEntryId');
       final origData = orig.data as Map<String, dynamic>;
@@ -198,26 +161,28 @@ class LedgerPostingService {
       });
 
       final data = res.data as Map<String, dynamic>;
-      return Success(PostingResult(
-        journalEntryId: data['id'] as String,
-        entryNumber: data['reference_number'] as String? ?? '',
-        lines: (data['lines'] as List?)?.map((l) => PostingLine(
-              accountId: (l as Map)['account_id'] as String,
-              debit: ((l as Map)['direction'] as String) == 'DEBIT'
-                  ? ((l as Map)['amount'] as num).toDouble()
+      return _parseResult(data);
+    });
+  }
+
+  PostingResult _parseResult(Map<String, dynamic> data) {
+    return PostingResult(
+      journalEntryId: data['id'] as String,
+      entryNumber: data['reference_number'] as String? ?? '',
+      lines: (data['lines'] as List?)?.map((l) {
+            final m = l as Map<String, dynamic>;
+            return PostingLine(
+              accountId: m['account_id'] as String,
+              debit: (m['direction'] as String) == 'DEBIT'
+                  ? (m['amount'] as num).toDouble()
                   : 0,
-              credit: ((l as Map)['direction'] as String) == 'CREDIT'
-                  ? ((l as Map)['amount'] as num).toDouble()
+              credit: (m['direction'] as String) == 'CREDIT'
+                  ? (m['amount'] as num).toDouble()
                   : 0,
-              description: (l as Map)['narration'] as String?,
-            )).toList() ??
-            [],
-      ));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? 'Failed to reverse entry'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+              description: m['narration'] as String?,
+            );
+          }).toList() ?? [],
+    );
   }
 }
 

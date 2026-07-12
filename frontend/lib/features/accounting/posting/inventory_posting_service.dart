@@ -7,6 +7,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 /// Inventory movement direction.
@@ -74,15 +75,14 @@ class InventoryPostingService {
   InventoryPostingService(this._dio);
   final Dio _dio;
 
-  /// Record stock-in (purchase, receipt, production).
   Future<Result<List<StockMovement>>> recordStockIn({
     required String productId,
     required double quantity,
     required double unitValue,
     String? warehouseId,
     String? purchaseOrderId,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final res = await _dio.post('/inventory-adjustments', data: {
         'type': 'IN',
         'items': [
@@ -96,37 +96,29 @@ class InventoryPostingService {
         if (purchaseOrderId != null) 'reference_id': purchaseOrderId,
         'description': 'Stock in — purchase/receipt',
       });
-
       final data = res.data;
-      final items = (data is Map && data['items'] is List)
+      return (data is Map && data['items'] is List)
           ? (data['items'] as List)
               .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
               .toList()
           : <StockMovement>[];
-      return Success(items);
-    } on DioException catch (e) {
-      return Failure(
-          ApiError.network(e.message ?? 'Failed to record stock-in'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
-  /// Record stock-out (sale, consumption, wastage).
   Future<Result<List<StockMovement>>> recordStockOut({
     required String productId,
     required double quantity,
     required double unitValue,
     String? warehouseId,
     String? invoiceId,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final res = await _dio.post('/inventory-adjustments', data: {
         'type': 'OUT',
         'items': [
           {
             'product_id': productId,
-            'quantity': -quantity,  // negative for stock-out
+            'quantity': -quantity,
             'unit_value': unitValue,
             if (warehouseId != null) 'warehouse_id': warehouseId,
           },
@@ -134,31 +126,23 @@ class InventoryPostingService {
         if (invoiceId != null) 'reference_id': invoiceId,
         'description': 'Stock out — sale/consumption',
       });
-
       final data = res.data;
-      final items = (data is Map && data['items'] is List)
+      return (data is Map && data['items'] is List)
           ? (data['items'] as List)
               .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
               .toList()
           : <StockMovement>[];
-      return Success(items);
-    } on DioException catch (e) {
-      return Failure(
-          ApiError.network(e.message ?? 'Failed to record stock-out'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
-  /// Record stock adjustment (damage, loss, write-off).
   Future<Result<List<StockMovement>>> recordAdjustment({
     required String productId,
     required double quantity,
     required double unitValue,
     required String reason,
     String? warehouseId,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final res = await _dio.post('/inventory-adjustments', data: {
         'type': 'ADJUSTMENT',
         'items': [
@@ -171,20 +155,13 @@ class InventoryPostingService {
         ],
         'description': reason,
       });
-
       final data = res.data;
-      final items = (data is Map && data['items'] is List)
+      return (data is Map && data['items'] is List)
           ? (data['items'] as List)
               .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
               .toList()
           : <StockMovement>[];
-      return Success(items);
-    } on DioException catch (e) {
-      return Failure(
-          ApiError.network(e.message ?? 'Failed to record adjustment'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 }
 

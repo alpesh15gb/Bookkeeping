@@ -7,6 +7,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/features/inventory/stock/models/stock_models.dart';
 
@@ -14,14 +15,13 @@ class MovementService {
   MovementService(this._dio);
   final Dio _dio;
 
-  /// Get movement history for a product (paginated).
   Future<Result<List<StockMovement>>> getProductHistory({
     required String productId,
     int page = 1,
     int limit = 50,
     String? referenceType,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final q = <String, dynamic>{
         'page': page,
         'limit': limit,
@@ -31,25 +31,19 @@ class MovementService {
         '/products/$productId/stock-ledger',
         queryParameters: q,
       );
-      final items = (res.data as List)
+      return (res.data as List)
           .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
           .toList();
-      return Success(items);
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
-  /// Get movement history across all products (admin view).
   Future<Result<List<StockMovement>>> getAllMovements({
     int page = 1,
     int limit = 50,
     String? productId,
     String? referenceType,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final q = <String, dynamic>{
         'page': page,
         'limit': limit,
@@ -57,15 +51,10 @@ class MovementService {
         if (referenceType != null) 'reference_type': referenceType,
       };
       final res = await _dio.get('/stock-ledger', queryParameters: q);
-      final items = (res.data as List)
+      return (res.data as List)
           .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
           .toList();
-      return Success(items);
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
   /// Reconcile current stock by replaying movements.

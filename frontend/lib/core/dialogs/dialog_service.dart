@@ -7,7 +7,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apexbooks/core/theme/app_colors.dart';
 
 import '../theme/app_colors.dart';
 import '../widgets/states.dart';

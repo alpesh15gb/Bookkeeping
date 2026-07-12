@@ -77,37 +77,36 @@ class ApexTableBody<T extends BaseModel> extends StatelessWidget {
           final row = rows[i];
           final selected = controller.value.selectedIds.contains(rowKey(row));
           final focused = i == focusedRow;
-          // RepaintBoundary isolates each row's painting for scroll performance
-          return RepaintBoundary(
-            child: DataRow(
-              selected: selected,
-              onSelectChanged: (v) => controller.toggleSelection(rowKey(row)),
-              color: WidgetStateProperty.resolveWith<Color?>((states) {
-                if (states.contains(WidgetState.selected)) {
-                  return colors.primaryContainer;
-                }
-                if (focused) return colors.surfaceMuted;
-                return null;
-              }),
-              cells: [
-                DataCell(
-                  Checkbox(
-                    value: selected,
-                    onChanged: (v) => controller.toggleSelection(rowKey(row)),
-                  ),
+          return DataRow(
+            selected: selected,
+            onSelectChanged: (v) => controller.toggleSelection(rowKey(row)),
+            color: WidgetStateProperty.resolveWith<Color?>((states) {
+              if (states.contains(WidgetState.selected)) {
+                return colors.primaryContainer;
+              }
+              if (focused) return colors.surfaceMuted;
+              return null;
+            }),
+            cells: [
+              DataCell(
+                Checkbox(
+                  value: selected,
+                  onChanged: (v) => controller.toggleSelection(rowKey(row)),
                 ),
-                ...visibleCols.map(
-                  (c) => DataCell(
-                    onTap: onRowTap == null ? null : () => onRowTap!(row),
-                    c.cellBuilder?.call(context, row, i) ??
+              ),
+              ...visibleCols.map(
+                (c) => DataCell(
+                  RepaintBoundary(
+                    child: c.cellBuilder?.call(context, row, i) ??
                         Text(
                           _stringify(c.readValue(row)),
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                   ),
+                  onTap: onRowTap == null ? null : () => onRowTap!(row),
                 ),
-              ],
-            ),
+              ),
+            ],
           );
         }),
       ),

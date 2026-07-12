@@ -7,6 +7,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 /// Vendor balance snapshot from the backend.
@@ -81,25 +82,19 @@ class PayablePostingService {
     }
   }
 
-  /// Get vendor outstanding balance.
-  Future<Result<VendorBalance>> getVendorBalance(String contactId) async {
-    try {
+  Future<Result<VendorBalance>> getVendorBalance(String contactId) {
+    return guardDio(() async {
       final res = await _dio.get('/payments/disbursements', queryParameters: {
         'contact_id': contactId,
         'status': 'POSTED',
         'limit': 1,
       });
-      // Parse outstanding from the response envelope
       final data = res.data;
       if (data is Map<String, dynamic>) {
-        return Success(VendorBalance.fromJson(data));
+        return VendorBalance.fromJson(data);
       }
-      return Success(VendorBalance(contactId: contactId));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? 'Failed to fetch vendor balance'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return VendorBalance(contactId: contactId);
+    });
   }
 }
 

@@ -1,10 +1,11 @@
 /// Inventory adjustment services — create, list, confirm adjustments.
 library;
 
+import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter/foundation.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 /// An adjustment line — changes stock for one product.
@@ -137,8 +138,8 @@ class AdjustmentService {
     required String adjustmentDate,
     String? reason,
     required List<AdjustmentLine> lines,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final payload = <String, dynamic>{
         'adjustment_number': adjustmentNumber,
         'adjustment_date': adjustmentDate,
@@ -146,60 +147,37 @@ class AdjustmentService {
         'line_items': [...lines.map((l) => l.toCreatePayload())],
       };
       final res = await _dio.post('/inventory-adjustments', data: payload);
-      return Success(
-        InventoryAdjustment.fromJson(res.data as Map<String, dynamic>),
-      );
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return InventoryAdjustment.fromJson(res.data as Map<String, dynamic>);
+    });
   }
 
   Future<Result<List<AdjustmentListItem>>> list({
     int page = 1,
     int limit = 50,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final res = await _dio.get(
         '/inventory-adjustments',
         queryParameters: {'page': page, 'limit': limit},
       );
-      final items = (res.data as List)
+      return (res.data as List)
           .map((e) => AdjustmentListItem.fromJson(e as Map<String, dynamic>))
           .toList();
-      return Success(items);
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
-  Future<Result<InventoryAdjustment>> get(String id) async {
-    try {
+  Future<Result<InventoryAdjustment>> get(String id) {
+    return guardDio(() async {
       final res = await _dio.get('/inventory-adjustments/$id');
-      return Success(
-        InventoryAdjustment.fromJson(res.data as Map<String, dynamic>),
-      );
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return InventoryAdjustment.fromJson(res.data as Map<String, dynamic>);
+    });
   }
 
-  Future<Result<InventoryAdjustment>> confirm(String id) async {
-    try {
+  Future<Result<InventoryAdjustment>> confirm(String id) {
+    return guardDio(() async {
       final res = await _dio.post('/inventory-adjustments/$id/confirm');
-      return Success(
-        InventoryAdjustment.fromJson(res.data as Map<String, dynamic>),
-      );
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return InventoryAdjustment.fromJson(res.data as Map<String, dynamic>);
+    });
   }
 }
 

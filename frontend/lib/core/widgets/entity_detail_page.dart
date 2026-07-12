@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../actions/action_menu.dart';
+import '../theme/app_colors.dart';
 import '../theme/responsive.dart';
 import '../timeline/audit_timeline.dart';
 
@@ -146,6 +147,7 @@ class EntityDetailPage extends ConsumerWidget {
 
   Widget _buildRow(DetailRow r, BuildContext context) {
     final isMobile = ResponsiveLayout.isMobile(context);
+    final labelColors = apexColors(context);
     return Padding(
     padding: const EdgeInsets.symmetric(vertical: 4),
     child: Row(
@@ -155,7 +157,7 @@ class EntityDetailPage extends ConsumerWidget {
           width: isMobile ? 80 : 100,
           child: Text(
             r.label,
-            style: TextStyle(color: colors.textSecondary, fontSize: 13),
+            style: TextStyle(color: labelColors.textSecondary, fontSize: 13),
           ),
         ),
         Expanded(

@@ -32,15 +32,9 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
     onError: colors.onPrimary,
   );
 
-  // -- Font loaders (Google Fonts caches after first use) -------------------
-  final displayFont = GoogleFonts.instrumentSans;
-  final bodyFont = GoogleFonts.inter;
-  final monoFont = GoogleFonts.jetBrainsMono;
-
-  // Cache text themes so Google Fonts loads them once at startup
+  // -- Font themes (Google Fonts caches after first use) -------------------
   final bodyText = GoogleFonts.interTextTheme();
   final displayText = GoogleFonts.instrumentSansTextTheme();
-  final monoText = GoogleFonts.jetBrainsMonoTextTheme();
 
   final textTheme = bodyText.copyWith(
     // Display/headings → Instrument Sans

@@ -7,6 +7,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 /// Customer balance snapshot from the backend.
@@ -82,25 +83,18 @@ class ReceivablePostingService {
     }
   }
 
-  /// Get customer outstanding balance.
-  Future<Result<CustomerBalance>> getCustomerBalance(
-      String contactId) async {
-    try {
+  Future<Result<CustomerBalance>> getCustomerBalance(String contactId) {
+    return guardDio(() async {
       final res = await _dio.get('/invoices', queryParameters: {
         'contact_id': contactId,
         'limit': 1,
       });
       final data = res.data;
       if (data is Map<String, dynamic>) {
-        return Success(CustomerBalance.fromJson(data));
+        return CustomerBalance.fromJson(data);
       }
-      return Success(CustomerBalance(contactId: contactId));
-    } on DioException catch (e) {
-      return Failure(
-          ApiError.network(e.message ?? 'Failed to fetch customer balance'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return CustomerBalance(contactId: contactId);
+    });
   }
 }
 

@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 /// Transfer line item.
@@ -99,43 +100,30 @@ class TransferService {
   TransferService(this._dio);
   final Dio _dio;
 
-  Future<Result<Transfer>> create(Map<String, dynamic> payload) async {
-    try {
+  Future<Result<Transfer>> create(Map<String, dynamic> payload) {
+    return guardDio(() async {
       final res = await _dio.post('/transfers', data: payload);
-      return Success(Transfer.fromJson(res.data as Map<String, dynamic>));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return Transfer.fromJson(res.data as Map<String, dynamic>);
+    });
   }
 
-  Future<Result<List<Transfer>>> list({int page = 1, int limit = 50}) async {
-    try {
+  Future<Result<List<Transfer>>> list({int page = 1, int limit = 50}) {
+    return guardDio(() async {
       final res = await _dio.get(
         '/transfers',
         queryParameters: {'page': page, 'limit': limit},
       );
-      final items = (res.data as List)
+      return (res.data as List)
           .map((e) => Transfer.fromJson(e as Map<String, dynamic>))
           .toList();
-      return Success(items);
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
-  Future<Result<Transfer>> complete(String id) async {
-    try {
+  Future<Result<Transfer>> complete(String id) {
+    return guardDio(() async {
       final res = await _dio.post('/transfers/$id/complete');
-      return Success(Transfer.fromJson(res.data as Map<String, dynamic>));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return Transfer.fromJson(res.data as Map<String, dynamic>);
+    });
   }
 }
 

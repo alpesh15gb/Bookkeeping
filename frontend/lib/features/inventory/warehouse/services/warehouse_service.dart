@@ -8,6 +8,7 @@ import 'package:flutter/foundation.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 /// Warehouse entity.
@@ -41,34 +42,23 @@ class WarehouseService {
   WarehouseService(this._dio);
   final Dio _dio;
 
-  /// List all warehouses.
-  Future<Result<List<Warehouse>>> list({int page = 1, int limit = 50}) async {
-    try {
+  Future<Result<List<Warehouse>>> list({int page = 1, int limit = 50}) {
+    return guardDio(() async {
       final res = await _dio.get(
         '/warehouses',
         queryParameters: {'page': page, 'limit': limit},
       );
-      final items = (res.data as List)
+      return (res.data as List)
           .map((e) => Warehouse.fromJson(e as Map<String, dynamic>))
           .toList();
-      return Success(items);
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
-  /// Get warehouse by ID.
-  Future<Result<Warehouse>> get(String id) async {
-    try {
+  Future<Result<Warehouse>> get(String id) {
+    return guardDio(() async {
       final res = await _dio.get('/warehouses/$id');
-      return Success(Warehouse.fromJson(res.data as Map<String, dynamic>));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return Warehouse.fromJson(res.data as Map<String, dynamic>);
+    });
   }
 }
 

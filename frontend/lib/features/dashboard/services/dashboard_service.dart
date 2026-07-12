@@ -5,6 +5,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 import '../models/dashboard_models.dart';
@@ -59,8 +60,8 @@ class DashboardService {
     String path,
     T Function(Map<String, dynamic>) fromJson, {
     Map<String, dynamic>? query,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final q = <String, dynamic>{};
       if (query != null) {
         q.addAll(query);
@@ -70,20 +71,16 @@ class DashboardService {
         path,
         queryParameters: q.isNotEmpty ? q : null,
       );
-      return Success(fromJson(res.data as Map<String, dynamic>));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? 'Request failed'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return fromJson(res.data as Map<String, dynamic>);
+    });
   }
 
   Future<Result<List<T>>> _getList<T>(
     String path,
     T Function(Map<String, dynamic>) fromJson, {
     Map<String, dynamic>? query,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final q = <String, dynamic>{};
       if (query != null) {
         q.addAll(query);
@@ -96,12 +93,8 @@ class DashboardService {
       final list = (res.data as List)
           .map((e) => fromJson(e as Map<String, dynamic>))
           .toList();
-      return Success(list);
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? 'Request failed'));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return list;
+    });
   }
 }
 

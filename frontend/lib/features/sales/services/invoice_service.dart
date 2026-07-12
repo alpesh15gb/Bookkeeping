@@ -4,6 +4,7 @@ library;
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../models/invoice.dart';
 
@@ -13,47 +14,31 @@ class InvoiceService {
 
   // -- Helpers -------------------------------------------------------------
 
-  Future<Result<Invoice>> _get(String path) async {
-    try {
-      return Success(
-        Invoice.fromJson((await _dio.get(path)).data as Map<String, dynamic>),
+  Future<Result<Invoice>> _get(String path) {
+    return guardDio(() async {
+      return Invoice.fromJson(
+        (await _dio.get(path)).data as Map<String, dynamic>,
       );
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
   Future<Result<Invoice>> _post(
     String path, [
     Map<String, dynamic>? body,
-  ]) async {
-    try {
-      return Success(
-        Invoice.fromJson(
-          (await _dio.post(path, data: body)).data as Map<String, dynamic>,
-        ),
+  ]) {
+    return guardDio(() async {
+      return Invoice.fromJson(
+        (await _dio.post(path, data: body)).data as Map<String, dynamic>,
       );
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
-  Future<Result<Invoice>> _put(String path, Map<String, dynamic> body) async {
-    try {
-      return Success(
-        Invoice.fromJson(
-          (await _dio.put(path, data: body)).data as Map<String, dynamic>,
-        ),
+  Future<Result<Invoice>> _put(String path, Map<String, dynamic> body) {
+    return guardDio(() async {
+      return Invoice.fromJson(
+        (await _dio.put(path, data: body)).data as Map<String, dynamic>,
       );
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
   // -- CRUD ----------------------------------------------------------------
@@ -64,15 +49,10 @@ class InvoiceService {
   Future<Result<Invoice>> update(String id, Map<String, dynamic> payload) =>
       _put('/invoices/$id', payload);
 
-  Future<Result<void>> delete(String id) async {
-    try {
+  Future<Result<void>> delete(String id) {
+    return guardDio(() async {
       await _dio.delete('/invoices/$id');
-      return const Success(null);
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
   Future<Result<Invoice>> get(String id) => _get('/invoices/$id');
@@ -85,8 +65,8 @@ class InvoiceService {
     String? contactId,
     String? dateFrom,
     String? dateTo,
-  }) async {
-    try {
+  }) {
+    return guardDio(() async {
       final q = <String, dynamic>{
         'page': page,
         'limit': limit,
@@ -101,15 +81,8 @@ class InvoiceService {
       final items = (data['items'] as List)
           .map((e) => InvoiceListItem.fromJson(e as Map<String, dynamic>))
           .toList();
-      return Success((
-        items: items,
-        total: (data['total'] as num?)?.toInt() ?? items.length,
-      ));
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+      return (items: items, total: (data['total'] as num?)?.toInt() ?? items.length);
+    });
   }
 
   // -- Workflow actions ----------------------------------------------------
@@ -143,20 +116,15 @@ class InvoiceService {
     'allocations': allocations ?? [],
   });
 
-  Future<Result<void>> email(String id, {String? recipientEmail}) async {
-    try {
+  Future<Result<void>> email(String id, {String? recipientEmail}) {
+    return guardDio(() async {
       await _dio.post(
         '/invoices/$id/email',
         data: recipientEmail != null
             ? {'recipient_email': recipientEmail}
             : null,
       );
-      return const Success(null);
-    } on DioException catch (e) {
-      return Failure(ApiError.network(e.message ?? ''));
-    } catch (e) {
-      return Failure(ApiError.network(e.toString()));
-    }
+    });
   }
 
   /// Returns the /print path for downloading PDF from the backend.
