@@ -42,3 +42,8 @@ export 'reports/presentation/sales_register_screen.dart';
 export 'reports/presentation/purchase_register_screen.dart';
 export 'reports/presentation/customer_ledger_screen.dart';
 export 'reports/presentation/vendor_ledger_screen.dart';
+export 'gst/presentation/gst_shell.dart';
+export 'gst/presentation/gst_dashboard_screen.dart';
+export 'gst/presentation/gstr1_screen.dart';
+export 'gst/presentation/gstr3b_screen.dart';
+export 'gst/presentation/gst_returns_screen.dart';

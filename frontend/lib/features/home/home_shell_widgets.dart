@@ -165,6 +165,12 @@ List<(String, IconData, String, Widget)> getScreensList() {
       ),
     ),
     (
+      'GST',
+      Icons.fact_check_rounded,
+      'FINANCIALS',
+      const GstShell(),
+    ),
+    (
       'Reports',
       Icons.assessment_rounded,
       'REPORTS',
