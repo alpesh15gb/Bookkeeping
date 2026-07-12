@@ -61,7 +61,7 @@ class _GoodsReceiptDetailScreenState
     return Scaffold(
       backgroundColor: colors.surfaceMuted,
       body: asyncVal.when(
-        loading: () => const Center(child: LoadingSpinner(size: 36)),
+        loading: () => const Center(child: LoadingSpinner(size: 32)),
         error: (err, _) => ErrorView(
           message: err.toString(),
           onRetry: () =>

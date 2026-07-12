@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
@@ -72,7 +73,12 @@ class _AdjustmentListScreenState extends ConsumerState<AdjustmentListScreen> {
           ),
           Expanded(
             child: async.when(
-              loading: () => const Center(child: LoadingSpinner(size: 36)),
+              loading: () => Column(
+                children: [
+                  for (int i = 0; i < 6; i++)
+                    const ListItemSkeleton(),
+                ],
+              ),
               error: (err, _) => ErrorView(
                 message: err.toString(),
                 onRetry: () => ref.invalidate(adjustmentListProvider),

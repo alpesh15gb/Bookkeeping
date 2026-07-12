@@ -131,7 +131,12 @@ class _BrandPanel extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: [
             colors.primary,
-            Color.lerp(colors.primary, Colors.black, 0.35)!,
+            HSLColor.fromAHSL(
+              1.0,
+              HSLColor.fromColor(colors.primary).hue,
+              HSLColor.fromColor(colors.primary).saturation * 0.7,
+              HSLColor.fromColor(colors.primary).lightness * 0.5,
+            ).toColor(),
           ],
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/api/base_model.dart';
@@ -99,7 +100,15 @@ class _BillListScreenState extends ConsumerState<BillListScreen> {
           ),
           Expanded(
             child: asyncVals.when(
-              loading: () => const Center(child: LoadingSpinner(size: 36)),
+              loading: () => Column(
+                children: [
+                  for (int i = 0; i < 6; i++)
+                    const TableRowSkeleton(
+                      columns: 4,
+                      columnWidths: [140, 140, 100, 100],
+                    ),
+                ],
+              ),
               error: (err, _) => ErrorView(
                 message: err.toString(),
                 onRetry: () => ref.invalidate(billsListProvider),
