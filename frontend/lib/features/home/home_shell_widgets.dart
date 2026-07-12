@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/inventory/warehouse/presentation/warehouse_providers.dart';
+import '../settings/presentation/settings_shell.dart';
 import '../screens.dart';
 
 Widget selectorWidget(
@@ -198,14 +199,7 @@ List<(String, IconData, String, Widget)> getScreensList() {
       'Settings',
       Icons.tune_rounded,
       'SYSTEM',
-      const HubTabWidget(
-        tabs: ['Taxes', 'Terms', 'Categories'],
-        views: [
-          TaxTemplateListScreen(),
-          PaymentTermListScreen(),
-          ExpenseCategoryListScreen(),
-        ],
-      ),
+      const SettingsShell(),
     ),
   ];
 }
