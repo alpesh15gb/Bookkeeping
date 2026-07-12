@@ -97,7 +97,7 @@ class DialogService {
             ),
           TextButton(
             style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).extension<ApexColors>()?.danger ?? Colors.red,
+              foregroundColor: Theme.of(context).extension<ApexColors>()?.danger ?? const Color(0xFFDC2626),
             ),
             onPressed: () => Navigator.pop(ctx, DialogResult.discard),
             child: const Text('Discard'),

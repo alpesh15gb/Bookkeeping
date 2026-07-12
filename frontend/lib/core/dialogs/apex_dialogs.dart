@@ -115,7 +115,7 @@ class ApexDialogs {
       title: 'Delete $itemType',
       message: 'Are you sure you want to delete "$itemName"?\n\nThis action cannot be undone.',
       confirmText: 'Delete',
-      confirmColor: Theme.of(context).extension<ApexColors>()?.danger ?? Colors.red,
+      confirmColor: Theme.of(context).extension<ApexColors>()?.danger ?? const Color(0xFFDC2626),
     );
   }
 
@@ -147,7 +147,7 @@ class ApexDialogs {
     final overlay = Overlay.of(context);
     final entry = OverlayEntry(
       builder: (ctx) => Material(
-        color: Colors.black45,
+        color: Colors.black.withValues(alpha: 0.27),
         child: Center(
           child: Card(
             margin: const EdgeInsets.symmetric(horizontal: 32),

@@ -23,7 +23,7 @@ class CommandPalette extends StatefulWidget {
       context: context,
       useSafeArea: false,
       barrierDismissible: true,
-      barrierColor: Colors.black45,
+      barrierColor: Colors.black.withValues(alpha: 0.27),
       builder: (_) => const _CommandPaletteDialog(),
     );
   }
