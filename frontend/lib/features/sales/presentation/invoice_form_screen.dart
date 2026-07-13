@@ -16,6 +16,7 @@ import 'package:apexbooks/core/crud/base_crud.dart';
 import '../models/invoice_line.dart';
 import 'invoice_form_notifier.dart';
 import 'invoice_form_state.dart';
+import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 
 class InvoiceFormScreen extends ConsumerStatefulWidget {
   const InvoiceFormScreen({super.key});
@@ -71,6 +72,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(invoiceFormProvider);
+    final gstEnabled = ref.watch(gstEnabledProvider);
     final notifier = ref.read(invoiceFormProvider.notifier);
     final colors = apexColors(context);
     final fmt = ref.watch(numberFormatterProvider);
@@ -181,7 +183,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                         case 1:
                           return Padding(
                             padding: const EdgeInsets.only(top: 12),
-                            child: _linesCard(state, notifier, colors, fmt, productsList),
+                            child: _linesCard(state, notifier, colors, fmt, productsList, gstEnabled),
                           );
                         case 2:
                           return const SizedBox(height: 80);
@@ -193,7 +195,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   ),
                 ),
               ),
-              _totalsBar(context, state, colors, fmt),
+              _totalsBar(context, state, colors, fmt, gstEnabled),
             ],
           ),
           ),
@@ -293,6 +295,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     ApexColors colors,
     NumberFormatter fmt,
     List<Product> products,
+    bool gstEnabled,
   ) {
     final isMobile = ResponsiveLayout.isMobile(context);
     final lineTable = Column(
@@ -308,16 +311,16 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
               ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: const Row(
+            child: Row(
               children: [
-                _HCell('ITEM', flex: 34),
+                _HCell('ITEM', flex: gstEnabled ? 34 : 44),
                 _HCell('HSN', flex: 12),
                 _HCell('QTY', flex: 10, right: true),
                 _HCell('RATE', flex: 14, right: true),
                 _HCell('DISC%', flex: 10, right: true),
-                _HCell('GST%', flex: 10, right: true),
+                if (gstEnabled) _HCell('GST%', flex: 10, right: true),
                 _HCell('AMOUNT', flex: 14, right: true),
-                SizedBox(width: 36),
+                const SizedBox(width: 36),
               ],
             ),
           ),
@@ -329,6 +332,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             products: products,
             colors: colors,
             fmt: fmt,
+            gstEnabled: gstEnabled,
             canRemove: state.lines.length > 1,
             onChanged: (l) => notifier.updateLine(e.key, l),
             onRemove: () => notifier.removeLine(e.key),
@@ -384,6 +388,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     InvoiceFormState state,
     ApexColors colors,
     NumberFormatter fmt,
+    bool gstEnabled,
   ) {
     final isMobile = ResponsiveLayout.isMobile(context);
     return Container(
@@ -424,7 +429,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   children: [
                     _tot('Subtotal', fmt.currency(state.subtotal), colors),
                     _tot('Discount', fmt.currency(state.discountTotal), colors),
-                    _tot('Tax', fmt.currency(state.totalTax), colors),
+                    if (gstEnabled) _tot('Tax', fmt.currency(state.totalTax), colors),
                     FilledButton.icon(
                       onPressed: state.saving ? null : _save,
                       icon: state.saving
@@ -453,8 +458,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 _tot('Subtotal', fmt.currency(state.subtotal), colors),
                 _sep(colors),
                 _tot('Discount', fmt.currency(state.discountTotal), colors),
-                _sep(colors),
-                _tot('Tax', fmt.currency(state.totalTax), colors),
+                if (gstEnabled) _sep(colors),
+                if (gstEnabled) _tot('Tax', fmt.currency(state.totalTax), colors),
                 _sep(colors),
                 _tot('Total', fmt.currency(state.total), colors, emphasize: true),
                 const SizedBox(width: 24),
@@ -701,6 +706,7 @@ class _LineRow extends StatefulWidget {
     required this.products,
     required this.colors,
     required this.fmt,
+    required this.gstEnabled,
     required this.canRemove,
     required this.onChanged,
     required this.onRemove,
@@ -711,6 +717,7 @@ class _LineRow extends StatefulWidget {
   final List<Product> products;
   final ApexColors colors;
   final NumberFormatter fmt;
+  final bool gstEnabled;
   final bool canRemove;
   final void Function(InvoiceLine) onChanged;
   final VoidCallback onRemove;
@@ -845,8 +852,9 @@ class _LineRowState extends State<_LineRow> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Row(children: [
               _chip(c, 'HSN', widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac),
-              const SizedBox(width: 8),
-              _chip(c, 'GST', '${widget.line.gstRate.toInt()}%'),
+              if (widget.gstEnabled) const SizedBox(width: 8),
+              if (widget.gstEnabled)
+                _chip(c, 'GST', '${widget.line.gstRate.toInt()}%'),
               const Spacer(),
               Text(widget.fmt.currency(widget.line.total),
                 style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.textPrimary)),
@@ -864,7 +872,7 @@ class _LineRowState extends State<_LineRow> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(flex: 34, child: _ProductField(products: widget.products, current: widget.line.productName ?? widget.line.description ?? '', colors: c, onSelected: widget.onProduct)),
+          Expanded(flex: widget.gstEnabled ? 34 : 44, child: _ProductField(products: widget.products, current: widget.line.productName ?? widget.line.description ?? '', colors: c, onSelected: widget.onProduct)),
           const SizedBox(width: 8),
           Expanded(flex: 12, child: Text(widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac, style: TextStyle(fontSize: 13, color: c.textSecondary))),
           const SizedBox(width: 8),
@@ -874,8 +882,9 @@ class _LineRowState extends State<_LineRow> {
           const SizedBox(width: 8),
           Expanded(flex: 10, child: _numField(_disc, right: true, onChanged: (v) => widget.onChanged(widget.line.copyWith(discount: double.tryParse(v) ?? 0)))),
           const SizedBox(width: 8),
-          Expanded(flex: 10, child: Text('${_num(widget.line.gstRate)}%', textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: c.textSecondary))),
-          const SizedBox(width: 8),
+          if (widget.gstEnabled)
+            Expanded(flex: 10, child: Text('${_num(widget.line.gstRate)}%', textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: c.textSecondary))),
+          if (widget.gstEnabled) const SizedBox(width: 8),
           Expanded(flex: 14, child: Text(widget.fmt.currency(widget.line.total), textAlign: TextAlign.right, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.textPrimary))),
           SizedBox(width: 36, child: IconButton(visualDensity: VisualDensity.compact, icon: Icon(Icons.close_rounded, size: 16, color: widget.canRemove ? c.textMuted : c.border), onPressed: widget.canRemove ? widget.onRemove : null, tooltip: 'Remove line')),
         ],

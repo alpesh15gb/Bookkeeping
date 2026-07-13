@@ -16,6 +16,7 @@ import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/cache/cache_service.dart';
 import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 import '../data/models/product.dart';
 import 'product_controller.dart';
 
@@ -84,6 +85,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final gstEnabled = ref.watch(gstEnabledProvider);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
@@ -146,6 +148,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 onChanged: (v) =>
                     setState(() => _type = v ?? ProductType.goods),
               ),
+              if (gstEnabled) ...[
               const SizedBox(height: 12),
               TextFormField(
                 controller: _hsnCtrl,
@@ -158,6 +161,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 keyboardType: TextInputType.number,
                 validator: _validateHsn,
               ),
+              ],
               const SizedBox(height: 12),
               TextFormField(
                 controller: _uomCtrl,
@@ -188,6 +192,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 initialValue: _purchasePrice,
                 onChanged: (v) => _purchasePrice = v ?? 0,
               ),
+              if (gstEnabled) ...[
               const SizedBox(height: 16),
               _section('Tax'),
               const SizedBox(height: 8),
@@ -197,6 +202,7 @@ class _ProductFormScreenState extends ConsumerState<ProductFormScreen> {
                 initialValue: _gstRate,
                 onChanged: (v) => _gstRate = v ?? 0,
               ),
+              ],
               if (_isGoods) ...[
                 const SizedBox(height: 16),
                 _section('Inventory'),

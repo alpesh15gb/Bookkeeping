@@ -16,6 +16,7 @@ import 'package:apexbooks/core/crud/base_crud.dart';
 import '../models/bill_line.dart';
 import 'bill_form_notifier.dart';
 import 'bill_form_state.dart';
+import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 
 class BillFormScreen extends ConsumerStatefulWidget {
   const BillFormScreen({super.key});
@@ -73,6 +74,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
     final notifier = ref.read(billFormProvider.notifier);
     final colors = apexColors(context);
     final fmt = ref.watch(numberFormatterProvider);
+    final gstEnabled = ref.watch(gstEnabledProvider);
 
     final contactsState = ref.watch(contactControllerProvider);
     final allContacts = contactsState is ListData<Contact>
@@ -195,15 +197,15 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
                       children: [
                         _headerCard(state, notifier, colors, contacts),
                         const SizedBox(height: 16),
-                        _linesCard(state, notifier, colors, fmt, products),
+                        _linesCard(state, notifier, colors, fmt, products, gstEnabled),
                         const SizedBox(height: 16),
-                        _optionsCard(state, notifier, colors),
+                        _optionsCard(state, notifier, colors, gstEnabled),
                       ],
                     ),
                   ),
                 ),
               ),
-              _totalsBar(state, colors, fmt),
+              _totalsBar(state, colors, fmt, gstEnabled),
             ],
           ),
           ),
@@ -337,6 +339,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
     ApexColors colors,
     NumberFormatter fmt,
     List<Product> products,
+    bool gstEnabled,
   ) {
     final lineTable = Column(
       mainAxisSize: MainAxisSize.min,
@@ -349,16 +352,16 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: const Row(
+          child: Row(
             children: [
-              _HCell('ITEM', flex: 34),
-              _HCell('HSN', flex: 12),
-              _HCell('QTY', flex: 10, right: true),
-              _HCell('RATE', flex: 14, right: true),
-              _HCell('DISC%', flex: 10, right: true),
-              _HCell('GST%', flex: 10, right: true),
-              _HCell('AMOUNT', flex: 14, right: true),
-              SizedBox(width: 36),
+              const _HCell('ITEM', flex: 34),
+              const _HCell('HSN', flex: 12),
+              const _HCell('QTY', flex: 10, right: true),
+              const _HCell('RATE', flex: 14, right: true),
+              const _HCell('DISC%', flex: 10, right: true),
+              if (gstEnabled) const _HCell('GST%', flex: 10, right: true),
+              const _HCell('AMOUNT', flex: 14, right: true),
+              const SizedBox(width: 36),
             ],
           ),
         ),
@@ -369,6 +372,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
             products: products,
             colors: colors,
             fmt: fmt,
+            gstEnabled: gstEnabled,
             canRemove: state.lines.length > 1,
             onChanged: (l) => notifier.updateLine(e.key, l),
             onRemove: () => notifier.removeLine(e.key),
@@ -419,6 +423,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
     BillFormState state,
     BillFormNotifier notifier,
     ApexColors colors,
+    bool gstEnabled,
   ) {
     return _Card(
       colors: colors,
@@ -448,27 +453,29 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
                   colors,
                 ),
               ),
-              const SizedBox(width: 24),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'ITC ELIGIBLE',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: colors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                      letterSpacing: 0.4,
+              if (gstEnabled) ...[
+                const SizedBox(width: 24),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'ITC ELIGIBLE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.4,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  Switch(
-                    value: state.itcEligible,
-                    onChanged: notifier.setItcEligible,
-                    activeThumbColor: colors.primary,
-                  ),
-                ],
-              ),
+                    const SizedBox(height: 4),
+                    Switch(
+                      value: state.itcEligible,
+                      onChanged: notifier.setItcEligible,
+                      activeThumbColor: colors.primary,
+                    ),
+                  ],
+                ),
+              ],
             ],
           ),
           const SizedBox(height: 16),
@@ -490,6 +497,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
     BillFormState state,
     ApexColors colors,
     NumberFormatter fmt,
+    bool gstEnabled,
   ) {
     final isMobile = ResponsiveLayout.isMobile(context);
     final netPayable = state.total - state.tdsAmount;
@@ -537,7 +545,8 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _tot('Subtotal', fmt.currency(state.subtotal), colors),
-                    _tot('Tax', fmt.currency(state.totalTax), colors),
+                    if (gstEnabled)
+                      _tot('Tax', fmt.currency(state.totalTax), colors),
                     if (state.tdsRate > 0)
                       _tot('TDS', fmt.currency(state.tdsAmount), colors),
                     FilledButton.icon(
@@ -591,8 +600,10 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
                   _tot('IGST', fmt.currency(state.igstAmount), colors),
                   _sep(colors),
                 ],
-                _tot('Tax', fmt.currency(state.totalTax), colors),
-                _sep(colors),
+                if (gstEnabled) ...[
+                  _tot('Tax', fmt.currency(state.totalTax), colors),
+                  _sep(colors),
+                ],
                 if (state.tdsRate > 0) ...[
                   _tot('TDS', fmt.currency(state.tdsAmount), colors),
                   _sep(colors),
@@ -846,6 +857,7 @@ class _BillLineRow extends StatefulWidget {
     required this.products,
     required this.colors,
     required this.fmt,
+    required this.gstEnabled,
     required this.canRemove,
     required this.onChanged,
     required this.onRemove,
@@ -855,6 +867,7 @@ class _BillLineRow extends StatefulWidget {
   final List<Product> products;
   final ApexColors colors;
   final NumberFormatter fmt;
+  final bool gstEnabled;
   final bool canRemove;
   final void Function(BillLine) onChanged;
   final VoidCallback onRemove;
@@ -974,15 +987,17 @@ class _BillLineRowState extends State<_BillLineRow> {
                 ),
           ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 10,
-          child: Text(
-            '${_num(widget.line.gstRate)}%',
-            textAlign: TextAlign.right,
-            style: TextStyle(fontSize: 13, color: c.textSecondary),
+        if (widget.gstEnabled) ...[
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 10,
+            child: Text(
+              '${_num(widget.line.gstRate)}%',
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
           ),
-        ),
+        ],
         const SizedBox(width: 8),
         Expanded(
           flex: 14,
@@ -1122,10 +1137,11 @@ class _BillLineRowState extends State<_BillLineRow> {
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
             child: Row(children: [
-              Text(
-                'GST ${widget.line.gstRate.toInt()}%',
-                style: TextStyle(fontSize: 12, color: c.textSecondary),
-              ),
+              if (widget.gstEnabled)
+                Text(
+                  'GST ${widget.line.gstRate.toInt()}%',
+                  style: TextStyle(fontSize: 12, color: c.textSecondary),
+                ),
               const Spacer(),
               Text(
                 widget.fmt.currency(widget.line.total),

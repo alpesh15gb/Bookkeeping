@@ -271,3 +271,11 @@ class AuthController extends Notifier<AuthState> {
 final authControllerProvider = NotifierProvider<AuthController, AuthState>(
   AuthController.new,
 );
+
+/// Single source of truth for whether GST features are enabled.
+/// Derived from the active membership's tax_mode.
+final gstEnabledProvider = Provider<bool>((ref) {
+  final membership = ref.watch(authControllerProvider).activeMembership;
+  if (membership == null) return false;
+  return membership.taxMode != null && membership.taxMode != 'NON_GST';
+});
