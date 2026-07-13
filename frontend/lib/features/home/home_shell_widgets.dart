@@ -4,6 +4,7 @@ import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/inventory/warehouse/presentation/warehouse_providers.dart';
 import '../settings/presentation/settings_shell.dart';
+import '../gst/presentation/gst_shell.dart';
 import '../screens.dart';
 
 Widget selectorWidget(
@@ -83,7 +84,7 @@ class HubTabWidget extends StatelessWidget {
   }
 }
 
-List<(String, IconData, String, Widget)> getScreensList() {
+List<(String, IconData, String, Widget)> getScreensList({bool gstEnabled = true}) {
   return [
     ('Dashboard', Icons.grid_view_rounded, 'OVERVIEW', const DashboardScreen()),
     (
@@ -171,12 +172,13 @@ List<(String, IconData, String, Widget)> getScreensList() {
         ],
       ),
     ),
-    (
-      'GST',
-      Icons.fact_check_rounded,
-      'FINANCIALS',
-      const GstShell(),
-    ),
+    if (gstEnabled)
+      (
+        'GST',
+        Icons.fact_check_rounded,
+        'FINANCIALS',
+        const GstShell(),
+      ),
     (
       'Reports',
       Icons.assessment_rounded,

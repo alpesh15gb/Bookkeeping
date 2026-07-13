@@ -35,8 +35,12 @@ class HomeShell extends ConsumerStatefulWidget {
 class _HomeShellState extends ConsumerState<HomeShell> {
   int _selIdx = 0;
   bool _coll = false;
-  late final List<(String, IconData, String, Widget)> _screens =
-      getScreensList();
+  List<(String, IconData, String, Widget)> get _screens {
+    final membership = ref.watch(authControllerProvider).activeMembership;
+    final gstEnabled = membership?.taxMode != null &&
+        membership!.taxMode != 'NON_GST';
+    return getScreensList(gstEnabled: gstEnabled);
+  }
 
   @override
   Widget build(BuildContext context) {
