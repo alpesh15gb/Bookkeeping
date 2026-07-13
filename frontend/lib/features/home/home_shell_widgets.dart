@@ -71,7 +71,13 @@ class HubTabWidget extends StatelessWidget {
             ),
           ),
         ),
-        body: TabBarView(children: views),
+        body: Column(
+          children: [
+            Expanded(
+              child: TabBarView(children: views),
+            ),
+          ],
+        ),
       ),
     );
   }
