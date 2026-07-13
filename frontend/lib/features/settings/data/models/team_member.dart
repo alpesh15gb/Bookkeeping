@@ -51,7 +51,7 @@ class TeamMember {
 
   factory TeamMember.fromJson(Map<String, dynamic> json) {
     return TeamMember(
-      id: json['id'] as String,
+      id: (json['user_id'] as String?) ?? (json['id'] as String?) ?? '',
       email: json['email'] as String,
       fullName: (json['full_name'] as String?) ?? '',
       role: MemberRoleX.fromWire(json['role'] as String?),

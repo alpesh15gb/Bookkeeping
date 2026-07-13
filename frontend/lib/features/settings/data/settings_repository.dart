@@ -45,15 +45,15 @@ class SettingsRepository {
   // Financial Years
   // ---------------------------------------------------------------------------
 
-  /// `GET /companies/{id}/financial-years` — list all financial years.
+  /// `GET /financial-years` — list all financial years.
   Future<Result<List<FinancialYear>>> getFinancialYears(String companyId) {
     return guardDio(() async {
-      final res = await _dio.get('/companies/$companyId/financial-years');
+      final res = await _dio.get('/financial-years');
       return _parseList(res.data, FinancialYear.fromJson);
     });
   }
 
-  /// `POST /companies/{id}/financial-years` — create a new financial year.
+  /// `POST /financial-years` — create a new financial year.
   Future<Result<FinancialYear>> createFinancialYear(
     String companyId, {
     required String name,
@@ -62,27 +62,26 @@ class SettingsRepository {
   }) {
     return guardDio(() async {
       final res = await _dio.post(
-        '/companies/$companyId/financial-years',
+        '/financial-years',
         data: {
           'name': name,
-          'start_date': startDate.toIso8601String(),
-          'end_date': endDate.toIso8601String(),
+          'start_date': startDate.toIso8601String().split('T')[0],
+          'end_date': endDate.toIso8601String().split('T')[0],
         },
       );
       return FinancialYear.fromJson(res.data as Map<String, dynamic>);
     });
   }
 
-  /// `PUT /companies/{id}/financial-years/{fyId}` — set as current financial
-  /// year. The backend is expected to toggle the flag server-side.
+  /// `POST /financial-years/switch` — set as current financial year.
   Future<Result<void>> setCurrentFinancialYear(
     String companyId,
     String fyId,
   ) {
     return guardDio(() async {
-      await _dio.put(
-        '/companies/$companyId/financial-years/$fyId',
-        data: {'is_current': true},
+      await _dio.post(
+        '/financial-years/switch',
+        data: {'financial_year_id': fyId},
       );
     });
   }
@@ -99,7 +98,7 @@ class SettingsRepository {
     });
   }
 
-  /// `POST /companies/{id}/members/invite` — send an invitation.
+  /// `POST /companies/{id}/invite` — send an invitation.
   Future<Result<void>> inviteMember(
     String companyId, {
     required String email,
@@ -107,13 +106,13 @@ class SettingsRepository {
   }) {
     return guardDio(() async {
       await _dio.post(
-        '/companies/$companyId/members/invite',
+        '/companies/$companyId/invite',
         data: {'email': email, 'role': role},
       );
     });
   }
 
-  /// `PUT /companies/{id}/members/{memberId}/role` — change a member's role.
+  /// `PUT /companies/{id}/members/{userId}` — change a member's role.
   Future<Result<void>> updateMemberRole(
     String companyId,
     String memberId, {
@@ -121,7 +120,7 @@ class SettingsRepository {
   }) {
     return guardDio(() async {
       await _dio.put(
-        '/companies/$companyId/members/$memberId/role',
+        '/companies/$companyId/members/$memberId',
         data: {'role': role},
       );
     });
