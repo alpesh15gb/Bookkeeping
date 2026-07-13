@@ -46,7 +46,11 @@ class _ApexTableToolbarState<T extends BaseModel>
   void initState() {
     super.initState();
     _search = TextEditingController(text: widget.controller.value.search);
-    widget.controller.addListener(_sync);
+    try {
+      widget.controller.addListener(_sync);
+    } catch (_) {
+      // Controller was disposed (HubTabWidget tab switch). Ignore.
+    }
   }
 
   @override
