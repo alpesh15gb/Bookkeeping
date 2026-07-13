@@ -73,6 +73,7 @@ class _SettingsGstConfigScreenState
     if (gstResult is Success) {
       ref.invalidate(gstConfigProvider);
       ref.invalidate(companyProfileProvider(companyId));
+      await ref.read(authControllerProvider.notifier).refreshMemberships();
       ref.read(notificationServiceProvider).success(
         context,
         'GST configuration updated.',

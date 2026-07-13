@@ -189,6 +189,23 @@ class AuthController extends Notifier<AuthState> {
     };
   }
 
+  /// Re-fetches memberships to pick up changes like tax_mode.
+  Future<void> refreshMemberships() async {
+    final result = await _repo.memberships();
+    if (result is Success<List<Membership>>) {
+      final memberships = result.value;
+      final current = state.activeMembership;
+      Membership? updated;
+      if (current != null) {
+        updated = memberships.where((m) => m.tenantId == current.tenantId).firstOrNull;
+      }
+      state = state.copyWith(
+        memberships: memberships,
+        activeMembership: updated ?? memberships.firstOrNull,
+      );
+    }
+  }
+
   /// Selects the active company/tenant. Persists the choice and primes the
   /// token holder's tenant id so subsequent requests carry the header.
   Future<void> selectTenant(Membership membership) async {

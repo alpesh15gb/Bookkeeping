@@ -346,10 +346,14 @@ def generate_invoice_pdf(
         
         total_data = [
             [Paragraph("Subtotal:", normal_style), Paragraph(f"Rs. {subtotal:.2f}", right_style)],
-            [Paragraph("CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)],
-            [Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)],
-            [Paragraph("Total:", bold_style), Paragraph(f"Rs. {total:.2f}", bold_right)],
         ]
+        if cgst and cgst > 0:
+            total_data.append([Paragraph("CGST:", normal_style), Paragraph(f"Rs. {cgst:.2f}", right_style)])
+        if sgst and sgst > 0:
+            total_data.append([Paragraph("SGST:", normal_style), Paragraph(f"Rs. {sgst:.2f}", right_style)])
+        if igst and igst > 0:
+            total_data.append([Paragraph("IGST:", normal_style), Paragraph(f"Rs. {igst:.2f}", right_style)])
+        total_data.append([Paragraph("Total:", bold_style), Paragraph(f"Rs. {total:.2f}", bold_right)])
         if has_payments:
             total_data.append([Paragraph("Amount Paid:", normal_style), Paragraph(f"Rs. {amount_paid:.2f}", right_style)])
             total_data.append([Paragraph("<b>Balance Due:</b>", bold_style), Paragraph(f"<b>Rs. {balance_due:.2f}</b>", bold_right)])
