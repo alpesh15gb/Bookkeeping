@@ -9,11 +9,18 @@ import 'gstr1_screen.dart';
 import 'gstr3b_screen.dart';
 import 'gst_returns_screen.dart';
 
-class GstShell extends StatelessWidget {
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../auth/presentation/auth_controller.dart';
+
+class GstShell extends ConsumerWidget {
   const GstShell({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gstEnabled = ref.watch(gstEnabledProvider);
+    if (!gstEnabled) {
+      return const Center(child: Text('GST is not enabled for this company.'));
+    }
     return const HubTabWidget(
       tabs: [
         'Dashboard',
