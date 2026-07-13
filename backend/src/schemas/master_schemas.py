@@ -14,9 +14,9 @@ class ContactCreate(BaseModel):
     gstin: Optional[str] = Field(None, pattern="^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
     pan: Optional[str] = Field(None, pattern="^[A-Z]{5}[0-9]{4}[A-Z]{1}$")
     registration_type: str = Field("CONSUMER", pattern="^(REGULAR|COMPOSITION|SEZ|UNREGISTERED|CONSUMER)$")
-    billing_address: AddressSchema
+    billing_address: Optional[AddressSchema] = None
     shipping_address: Optional[AddressSchema] = None
-    state_code: str = Field(..., min_length=2, max_length=2, pattern="^[0-9]{2}$")
+    state_code: Optional[str] = Field(None, max_length=2, pattern="^[0-9]{2}$")
 
 class ContactUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=150)
