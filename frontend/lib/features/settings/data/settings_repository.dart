@@ -168,18 +168,10 @@ class SettingsRepository {
   // Export / Import / Purge
   // ---------------------------------------------------------------------------
 
-  /// `GET /companies/{id}/exports` — fetch export history.
-  Future<Result<List<ExportRecord>>> getExportHistory(String companyId) {
-    return guardDio(() async {
-      final res = await _dio.get('/companies/$companyId/exports');
-      return _parseList(res.data, ExportRecord.fromJson);
-    });
-  }
-
-  /// `POST /companies/{id}/export` — trigger a new data export.
+  /// `GET /companies/{id}/export` — trigger and fetch data export.
   Future<Result<ExportRecord>> triggerExport(String companyId) {
     return guardDio(() async {
-      final res = await _dio.post('/companies/$companyId/export');
+      final res = await _dio.get('/companies/$companyId/export');
       return ExportRecord.fromJson(res.data as Map<String, dynamic>);
     });
   }
@@ -193,9 +185,7 @@ class SettingsRepository {
     return guardDio(() async {
       await _dio.post(
         '/companies/$companyId/import',
-        data: FormData.fromMap({
-          'file': MultipartFile.fromBytes(fileBytes, filename: fileName),
-        }),
+        data: fileBytes,  // Backend expects raw JSON content as dict
       );
     });
   }

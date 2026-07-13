@@ -11,6 +11,7 @@ import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/result/result.dart';
+import '../../../core/theme/theme_controller.dart';
 import '../data/models/preferences.dart';
 import '../data/settings_repository.dart';
 import 'settings_providers.dart';
@@ -55,6 +56,13 @@ class _SettingsPreferencesScreenState
 
     if (!mounted) return;
     if (result is Success) {
+      // Apply theme immediately to local state
+      final themeMode = switch (_themeMode) {
+        'light' => ApexThemeMode.light,
+        'dark' => ApexThemeMode.dark,
+        _ => ApexThemeMode.system,
+      };
+      await ref.read(themeControllerProvider.notifier).set(themeMode);
       ref.invalidate(userPreferencesProvider);
       ref.read(notificationServiceProvider).success(
         context,
