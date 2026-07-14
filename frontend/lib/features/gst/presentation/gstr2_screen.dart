@@ -97,7 +97,7 @@ class _Gstr2ScreenState extends ConsumerState<Gstr2Screen> {
 
   Future<void> _reconcilePortalJson() async {
     if (_reconciling) return;
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['json'],
       withData: true,

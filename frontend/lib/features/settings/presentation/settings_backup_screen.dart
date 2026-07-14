@@ -73,7 +73,7 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
   }
 
   Future<void> _importData() async {
-    final selected = await FilePicker.platform.pickFiles(
+    final selected = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['json'],
       withData: true,

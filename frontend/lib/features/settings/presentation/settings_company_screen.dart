@@ -145,7 +145,7 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
   }
 
   Future<void> _uploadLogo() async {
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.image,
       withData: true,
     );

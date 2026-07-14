@@ -32,7 +32,7 @@ class _BillScanScreenState extends ConsumerState<BillScanScreen> {
   String? _sourceName;
 
   Future<void> _chooseAndScan() async {
-    final picked = await FilePicker.platform.pickFiles(
+    final picked = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const [
         'jpg',
