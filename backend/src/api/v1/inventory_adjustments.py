@@ -18,6 +18,7 @@ from src.domains.inventory.services import (
     resolve_default_warehouse_id,
     resolve_reversal_warehouse_id,
     get_warehouse_stock,
+    get_stock_balance_after,
 )
 from src.api.deps import get_tenant_context, enforce_permission
 
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/inventory-adjustments", tags=["Inventory Adjustments
 def create_inventory_adjustment(
     payload: InventoryAdjustmentCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))  # Reusing invoice:create permission for now
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:adjust"))
 ):
     from src.domains.accounting.period_lock import validate_period_open
     validate_period_open(db, tenant_id, payload.adjustment_date)
@@ -92,7 +93,7 @@ def list_inventory_adjustments(
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:view"))
 ):
     offset = (page - 1) * limit
     results = db.query(InventoryAdjustment).filter(
@@ -116,7 +117,7 @@ def list_inventory_adjustments(
 def get_inventory_adjustment(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:view"))
 ):
     adjustment = db.query(InventoryAdjustment).filter(
         InventoryAdjustment.id == id,
@@ -133,7 +134,7 @@ def update_inventory_adjustment(
     id: uuid.UUID,
     payload: InventoryAdjustmentUpdate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:update"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:adjust"))
 ):
     adjustment = db.query(InventoryAdjustment).filter(
         InventoryAdjustment.id == id,
@@ -206,7 +207,7 @@ def update_inventory_adjustment(
 def confirm_inventory_adjustment(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:finalize"))
 ):
     adjustment = db.query(InventoryAdjustment).filter(
         InventoryAdjustment.id == id,
@@ -283,13 +284,17 @@ def confirm_inventory_adjustment(
                     detail=f"Insufficient stock for {product.name} in the default warehouse. Available: {effective_stock}, reduction: {abs(line.quantity_change)}",
                 )
             product.current_stock = current_stock + line.quantity_change
+            balance_after = get_stock_balance_after(
+                db, tenant_id, warehouse_id, line.product_id,
+                line.quantity_change, product.current_stock,
+            )
             # Create stock ledger entry
             stock_ledger_entries.append(StockLedger(
                 tenant_id=tenant_id,
                 product_id=line.product_id,
                 warehouse_id=warehouse_id,
                 quantity=line.quantity_change,
-                balance_quantity=product.current_stock,
+                balance_quantity=balance_after,
                 reference_type="INVENTORY_ADJUSTMENT",
                 reference_id=adjustment.id,
                 rate=line.unit_cost
@@ -324,7 +329,7 @@ def confirm_inventory_adjustment(
 def cancel_inventory_adjustment(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:finalize"))
 ):
     adjustment = db.query(InventoryAdjustment).filter(
         InventoryAdjustment.id == id,
@@ -394,12 +399,16 @@ def cancel_inventory_adjustment(
                         detail=f"Cannot cancel: {product.name} stock from this increase has been consumed in its warehouse. Available: {effective_stock}, required: {line.quantity_change}",
                     )
                 product.current_stock = current_stock - line.quantity_change
+                balance_after = get_stock_balance_after(
+                    db, tenant_id, warehouse_id, line.product_id,
+                    -line.quantity_change, product.current_stock,
+                )
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
                     warehouse_id=warehouse_id,
                     quantity=-line.quantity_change,
-                    balance_quantity=product.current_stock,
+                    balance_quantity=balance_after,
                     reference_type="INVENTORY_ADJUSTMENT_REVERSAL",
                     reference_id=adjustment.id,
                     rate=line.unit_cost

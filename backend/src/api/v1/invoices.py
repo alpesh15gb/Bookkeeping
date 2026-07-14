@@ -34,6 +34,7 @@ from src.domains.inventory.services import (
     resolve_default_warehouse_id,
     resolve_reversal_warehouse_id,
     get_warehouse_stock,
+    get_stock_balance_after,
 )
 from src.api.deps import enforce_permission, get_current_user
 from src.core.rate_limiter import limiter
@@ -919,14 +920,19 @@ def finalize_credit_note(
             ).with_for_update().first()
             if product and product.product_type == "GOODS":
                 product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
+                warehouse_id = resolve_default_warehouse_id(db, tenant_id)
+                balance_after = get_stock_balance_after(
+                    db, tenant_id, warehouse_id, line.product_id,
+                    line.quantity, product.current_stock,
+                )
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
-                    warehouse_id=resolve_default_warehouse_id(db, tenant_id),
+                    warehouse_id=warehouse_id,
                     reference_type="CREDIT_NOTE",
                     reference_id=cn.id,
                     quantity=line.quantity,
-                    balance_quantity=product.current_stock,
+                    balance_quantity=balance_after,
                     rate=line.rate,
                 ))
 
@@ -1031,6 +1037,10 @@ def cancel_credit_note(
                     detail="Returned stock has already been consumed; reverse downstream stock movements first.",
                 )
             product.current_stock = available - move.quantity
+            balance_after = get_stock_balance_after(
+                db, tenant_id, move.warehouse_id, move.product_id,
+                -move.quantity, product.current_stock,
+            )
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=move.product_id,
@@ -1038,7 +1048,7 @@ def cancel_credit_note(
                 reference_type="CREDIT_NOTE_REVERSAL",
                 reference_id=cn.id,
                 quantity=-move.quantity,
-                balance_quantity=product.current_stock,
+                balance_quantity=balance_after,
                 rate=move.rate,
             ))
 
@@ -1940,16 +1950,21 @@ def cancel_invoice(
         if product:
             restore_quantity = -move.quantity
             product.current_stock = (product.current_stock or Decimal("0")) + restore_quantity
+            warehouse_id = move.warehouse_id or resolve_reversal_warehouse_id(
+                db, tenant_id, "INVOICE", invoice.id, move.product_id
+            )
+            balance_after = get_stock_balance_after(
+                db, tenant_id, warehouse_id, move.product_id,
+                restore_quantity, product.current_stock,
+            )
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=move.product_id,
-                warehouse_id=move.warehouse_id or resolve_reversal_warehouse_id(
-                    db, tenant_id, "INVOICE", invoice.id, move.product_id
-                ),
+                warehouse_id=warehouse_id,
                 reference_type="INVOICE_REVERSAL",
                 reference_id=invoice.id,
                 quantity=restore_quantity,
-                balance_quantity=product.current_stock,
+                balance_quantity=balance_after,
                 rate=move.rate,
             ))
 

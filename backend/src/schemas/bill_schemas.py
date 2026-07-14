@@ -573,7 +573,7 @@ class TransferLineSchema(SchemaBase):
     rate: Decimal = Decimal("0")
 
 class TransferCreate(SchemaBase):
-    transfer_number: str = Field(..., min_length=1, max_length=50)
+    transfer_number: Optional[str] = Field(None, min_length=1, max_length=50)
     transfer_date: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     from_warehouse_id: uuid.UUID
     from_warehouse_name: str = ""

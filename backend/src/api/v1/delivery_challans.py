@@ -18,7 +18,11 @@ from src.schemas.document import InvoiceResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
 from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
-from src.domains.inventory.services import resolve_default_warehouse_id, get_warehouse_stock
+from src.domains.inventory.services import (
+    resolve_default_warehouse_id,
+    get_warehouse_stock,
+    get_stock_balance_after,
+)
 from src.api.deps import get_tenant_context, enforce_permission
 
 router = APIRouter(prefix="/delivery-challans", tags=["Delivery Challans"])
@@ -341,6 +345,10 @@ def issue_delivery_challan(
                     detail=f"Insufficient stock for {product.name} in the default warehouse. Available: {effective_available}, Required: {quantity}",
                 )
             product.current_stock = available - quantity
+            balance_after = get_stock_balance_after(
+                db, tenant_id, warehouse_id, product_id,
+                -quantity, product.current_stock,
+            )
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=product_id,
@@ -348,7 +356,7 @@ def issue_delivery_challan(
                 reference_type="DELIVERY_CHALLAN",
                 reference_id=dc.id,
                 quantity=-quantity,
-                balance_quantity=product.current_stock,
+                balance_quantity=balance_after,
                 rate=rates_by_product[product_id],
             ))
     dc.status = "ISSUED"
@@ -459,6 +467,10 @@ def cancel_delivery_challan(
         if product:
             restore_quantity = -move.quantity
             product.current_stock = (product.current_stock or Decimal("0")) + restore_quantity
+            balance_after = get_stock_balance_after(
+                db, tenant_id, move.warehouse_id, move.product_id,
+                restore_quantity, product.current_stock,
+            )
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=move.product_id,
@@ -466,7 +478,7 @@ def cancel_delivery_challan(
                 reference_type="DELIVERY_CHALLAN_REVERSAL",
                 reference_id=dc.id,
                 quantity=restore_quantity,
-                balance_quantity=product.current_stock,
+                balance_quantity=balance_after,
                 rate=move.rate,
             ))
 

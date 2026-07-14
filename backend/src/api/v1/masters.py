@@ -20,7 +20,11 @@ from src.schemas.master_schemas import (
 )
 from src.api.deps import enforce_permission
 from src.domains.accounting.services import LedgerValidationError
-from src.domains.inventory.services import resolve_default_warehouse_id, get_warehouse_stock
+from src.domains.inventory.services import (
+    resolve_default_warehouse_id,
+    get_warehouse_stock,
+)
+from src.domains.inventory.barcodes import normalize_barcode, barcode_validation_error
 
 router = APIRouter(prefix="/masters", tags=["Master Data"])
 
@@ -226,10 +230,14 @@ def create_product(
                 status_code=409,
                 detail="SKU is already assigned to another product.",
             )
-    if payload.barcode:
+    normalized_barcode = normalize_barcode(payload.barcode)
+    barcode_error = barcode_validation_error(normalized_barcode)
+    if barcode_error:
+        raise HTTPException(status_code=422, detail=barcode_error)
+    if normalized_barcode:
         duplicate = db.query(Product.id).filter(
             Product.tenant_id == tenant_id,
-            Product.barcode == payload.barcode,
+            func.upper(func.trim(Product.barcode)) == normalized_barcode,
             Product.deleted_at == None,
         ).first()
         if duplicate:
@@ -238,7 +246,7 @@ def create_product(
         tenant_id=tenant_id,
         name=payload.name,
         sku=payload.sku,
-        barcode=payload.barcode,
+        barcode=normalized_barcode,
         hsn_sac=payload.hsn_sac,
         product_type=payload.product_type,
         uom=payload.uom,
@@ -289,6 +297,30 @@ def list_products(
         )
     return q.offset(offset).limit(limit).all()
 
+
+@router.get("/products/barcode/lookup", response_model=ProductResponse)
+def lookup_product_by_barcode(
+    code: str = Query(..., min_length=4, max_length=128),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+):
+    """Resolve scanner input to one active product using an exact barcode."""
+    normalized = normalize_barcode(code)
+    if not normalized:
+        raise HTTPException(status_code=422, detail="Enter or scan a barcode.")
+    product = db.query(Product).filter(
+        Product.tenant_id == tenant_id,
+        func.upper(func.trim(Product.barcode)) == normalized,
+        Product.deleted_at == None,
+        Product.is_active == True,
+    ).first()
+    if not product:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No active item is assigned to barcode {normalized}.",
+        )
+    return product
+
 @router.get("/products/{id}", response_model=ProductResponse)
 def get_product(
     id: uuid.UUID,
@@ -324,16 +356,20 @@ def update_product(
     if payload.sku is not None:
         product.sku = payload.sku
     if "barcode" in payload.model_fields_set:
-        if payload.barcode:
+        normalized_barcode = normalize_barcode(payload.barcode)
+        barcode_error = barcode_validation_error(normalized_barcode)
+        if barcode_error:
+            raise HTTPException(status_code=422, detail=barcode_error)
+        if normalized_barcode:
             duplicate = db.query(Product.id).filter(
                 Product.tenant_id == tenant_id,
-                Product.barcode == payload.barcode,
+                func.upper(func.trim(Product.barcode)) == normalized_barcode,
                 Product.id != product.id,
                 Product.deleted_at == None,
             ).first()
             if duplicate:
                 raise HTTPException(status_code=409, detail="Barcode is already assigned to another product.")
-        product.barcode = payload.barcode
+        product.barcode = normalized_barcode
     if payload.hsn_sac is not None:
         product.hsn_sac = payload.hsn_sac
     if payload.product_type is not None:
@@ -379,7 +415,7 @@ def update_product(
                 product_id=product.id,
                 warehouse_id=warehouse_id,
                 quantity=delta,
-                balance_quantity=new_balance,
+                balance_quantity=location_after,
                 reference_type="OPENING",
                 reference_id=product.id,
                 rate=product.purchase_price,

@@ -9,12 +9,13 @@ import '../services/invoice_service.dart';
 import '../services/invoice_calculation_service.dart';
 import '../services/invoice_validation_service.dart';
 import 'invoice_form_state.dart';
+import 'package:apexbooks/features/masters/products/data/models/product.dart';
 
 class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
   InvoiceFormNotifier(this._service, this._calc, this._validation)
     : super(
-        InvoiceFormState(
-          lines: const [InvoiceLine(productId: '', hsnSac: '', gstRate: 18)],
+        const InvoiceFormState(
+          lines: [InvoiceLine(productId: '', hsnSac: '', gstRate: 18)],
         ),
       );
 
@@ -80,6 +81,33 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
         ],
       ),
     );
+  }
+
+  void addScannedProduct(Product product) {
+    final lines = [...state.lines];
+    final existing = lines.indexWhere((line) => line.productId == product.id);
+    if (existing >= 0) {
+      lines[existing] = lines[existing].copyWith(
+        quantity: lines[existing].quantity + 1,
+      );
+    } else {
+      final scanned = InvoiceLine(
+        productId: product.id,
+        productName: product.name,
+        description: product.name,
+        quantity: 1,
+        rate: product.salesPrice,
+        gstRate: product.gstRate,
+        hsnSac: product.hsnSac,
+      );
+      final empty = lines.indexWhere((line) => line.productId.isEmpty);
+      if (empty >= 0) {
+        lines[empty] = scanned;
+      } else {
+        lines.add(scanned);
+      }
+    }
+    _recalc(state.copyWith(lines: lines, clearError: true));
   }
 
   void removeLine(int index) {

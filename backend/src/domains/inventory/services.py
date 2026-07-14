@@ -72,3 +72,24 @@ def get_warehouse_stock(
         StockLedger.warehouse_id == warehouse_id,
         StockLedger.product_id == product_id,
     ).scalar()
+
+
+def get_stock_balance_after(
+    db: Session,
+    tenant_id: uuid.UUID,
+    warehouse_id: Optional[uuid.UUID],
+    product_id: uuid.UUID,
+    quantity_change: Decimal,
+    global_balance_after: Decimal,
+) -> Decimal:
+    """Return the running balance that belongs on a new stock-ledger row.
+
+    ``Product.current_stock`` is the company-wide on-hand quantity.  A stock
+    ledger row with a warehouse, however, must carry that warehouse's running
+    balance.  Keeping this rule here prevents document workflows from silently
+    mixing the two balances after multi-warehouse inventory is enabled.
+    """
+    location_before = get_warehouse_stock(db, tenant_id, warehouse_id, product_id)
+    if location_before is None:
+        return global_balance_after
+    return location_before + quantity_change

@@ -28,6 +28,7 @@ export 'masters/products/presentation/product_list_screen.dart';
 export 'masters/banking_profiles/presentation/banking_profile_list_screen.dart';
 export 'masters/accounts/presentation/account_list_screen.dart';
 export 'accounting/journal/presentation/journal_list_screen.dart';
+export 'expenses/expense_screen.dart';
 export 'accounting/financial_statements/presentation/trial_balance_screen.dart';
 export 'accounting/financial_statements/presentation/profit_loss_screen.dart';
 export 'accounting/financial_statements/presentation/balance_sheet_screen.dart';

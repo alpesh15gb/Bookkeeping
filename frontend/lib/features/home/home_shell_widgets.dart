@@ -123,6 +123,12 @@ List<(String, IconData, String, Widget)> getScreensList({
       ),
     ),
     (
+      'Expenses',
+      Icons.payments_outlined,
+      'TRANSACTIONS',
+      const ExpenseScreen(),
+    ),
+    (
       'Inventory',
       Icons.inventory_2_outlined,
       'TRANSACTIONS',

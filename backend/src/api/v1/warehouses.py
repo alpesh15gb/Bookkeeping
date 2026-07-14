@@ -53,7 +53,7 @@ def list_warehouses(
     page: int = 1,
     limit: int = 50,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:view")),
 ):
     offset = (page - 1) * limit
     q = db.query(Branch).filter(
@@ -69,7 +69,7 @@ def list_warehouses(
 def get_warehouse(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:view")),
 ):
     branch = db.query(Branch).filter(
         Branch.id == id,
@@ -85,7 +85,7 @@ def get_warehouse(
 def create_warehouse(
     payload: WarehouseCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:adjust")),
 ):
     branch = Branch(
         tenant_id=tenant_id,
@@ -105,7 +105,7 @@ def update_warehouse(
     id: uuid.UUID,
     payload: WarehouseUpdate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:update")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:adjust")),
 ):
     branch = db.query(Branch).filter(
         Branch.id == id,
@@ -145,7 +145,7 @@ def update_warehouse(
 def delete_warehouse(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:update")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:adjust")),
 ):
     branch = db.query(Branch).filter(
         Branch.id == id,

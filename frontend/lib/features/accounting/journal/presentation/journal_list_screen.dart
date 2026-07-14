@@ -10,6 +10,7 @@ import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../models/journal_entry.dart';
 import '../services/journal_service.dart';
+import 'journal_form_screen.dart';
 
 final journalsListProvider = FutureProvider.autoDispose<List<JournalEntry>>((
   ref,
@@ -42,17 +43,32 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
       backgroundColor: colors.surfaceMuted,
       body: Column(
         children: [
-          const PageHeader(
+          PageHeader(
             title: 'Journal Entries',
             subtitle:
                 'Double-entry postings from invoices, bills, and manual journals.',
+            actions: [
+              FilledButton.icon(
+                onPressed: () async {
+                  final created = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (_) => const JournalFormScreen(),
+                    ),
+                  );
+                  if (created == true) ref.invalidate(journalsListProvider);
+                },
+                icon: const Icon(Icons.add_rounded),
+                label: const Text('New journal'),
+              ),
+            ],
           ),
           Expanded(
             child: asyncVals.when(
               loading: () => ShimmerSkeleton(
                 child: Column(
                   children: [
-                    for (int i = 0; i < 6; i++) const TableRowSkeleton(columns: 4),
+                    for (int i = 0; i < 6; i++)
+                      const TableRowSkeleton(columns: 4),
                   ],
                 ),
               ),
@@ -87,7 +103,12 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                 return Column(
                   children: [
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.sm),
+                      padding: const EdgeInsets.fromLTRB(
+                        ApexSpacing.xl,
+                        0,
+                        ApexSpacing.xl,
+                        ApexSpacing.sm,
+                      ),
                       child: ApexSearchBar(
                         controller: _searchCtrl,
                         hintText: 'Search by account, description, reference…',
@@ -102,7 +123,12 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                               subtitle: 'Try a different search term.',
                             )
                           : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.lg),
+                              padding: const EdgeInsets.fromLTRB(
+                                ApexSpacing.xl,
+                                0,
+                                ApexSpacing.xl,
+                                ApexSpacing.lg,
+                              ),
                               itemCount: filtered.length,
                               itemBuilder: (context, idx) =>
                                   _entryCard(filtered[idx], colors, fmt),
@@ -136,7 +162,10 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                 top: Radius.circular(ApexRadius.lg),
               ),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ApexSpacing.lg,
+              vertical: ApexSpacing.sm,
+            ),
             child: Row(
               children: [
                 Text(
@@ -176,7 +205,10 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
           ),
           // Debit | Credit columns
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.sm),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ApexSpacing.lg,
+              vertical: ApexSpacing.sm,
+            ),
             child: Column(
               children: [
                 Row(
@@ -206,7 +238,9 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
                 const SizedBox(height: 4),
                 ...e.lines.map(
                   (l) => Padding(
-                    padding: const EdgeInsets.symmetric(vertical: ApexSpacing.xs),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: ApexSpacing.xs,
+                    ),
                     child: Row(
                       children: [
                         Expanded(

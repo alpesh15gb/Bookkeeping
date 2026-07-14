@@ -22,6 +22,7 @@ from src.infrastructure.database.models import (
 )
 from src.api.deps import enforce_permission
 from src.domains.company.services import NumberingSeriesService
+from src.domains.inventory.services import resolve_default_warehouse_id
 
 router = APIRouter(prefix="/import", tags=["Data Import"])
 
@@ -1256,51 +1257,43 @@ def import_vyapar_backup(
         # ── 12. Import stock from kb_item_stock_tracking + kb_item_adjustments ─
         try:
             vy_stock = vconn.execute("SELECT * FROM kb_item_stock_tracking").fetchall()
+            warehouse_id = resolve_default_warehouse_id(db, tenant_id)
             for st in vy_stock:
                 item_id = st["ist_item_id"]
                 if item_id not in item_map:
                     continue
                 prod_uuid = uuid.UUID(item_map[item_id])
                 qty = float(st["ist_current_quantity"] or 0)
-                opening_qty = float(st["ist_opening_quantity"] or 0)
-                if qty == 0 and opening_qty == 0:
+                quantity = Decimal(str(qty))
+                product = db.query(Product).filter(
+                    Product.id == prod_uuid,
+                    Product.tenant_id == tenant_id,
+                    Product.deleted_at == None,
+                ).with_for_update().first()
+                if not product or product.product_type != "GOODS":
                     continue
-
-                # Create stock ledger entry for opening stock
-                if opening_qty > 0:
-                    sl = StockLedger(
-                        tenant_id=tenant_id,
-                        product_id=prod_uuid,
-                        quantity=Decimal(str(opening_qty)),
-                        balance_quantity=Decimal(str(opening_qty)),
-                        reference_type="ADJUSTMENT",
-                        reference_id=None,
-                        rate=Decimal("0"),
-                    )
-                    db.add(sl)
-                    summary.stock_entries_imported += 1
-
-            # Import stock adjustments
-            vy_adj = vconn.execute("SELECT * FROM kb_item_adjustments").fetchall()
-            for adj in vy_adj:
-                item_id = adj["item_adj_item_id"]
-                if item_id not in item_map:
+                already_imported = db.query(StockLedger.id).filter(
+                    StockLedger.tenant_id == tenant_id,
+                    StockLedger.product_id == prod_uuid,
+                ).first()
+                if already_imported:
                     continue
-                prod_uuid = uuid.UUID(item_map[item_id])
-                qty = float(adj["item_adj_quantity"] or 0)
-                if qty == 0:
-                    continue
-                sl = StockLedger(
+                product.opening_stock = quantity
+                product.current_stock = quantity
+                db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=prod_uuid,
-                    quantity=Decimal(str(qty)),
-                    balance_quantity=Decimal(str(qty)),
-                    reference_type="ADJUSTMENT",
-                    reference_id=None,
-                    rate=Decimal(str(float(adj["item_adj_atprice"] or 0))),
-                )
-                db.add(sl)
+                    warehouse_id=warehouse_id,
+                    quantity=quantity,
+                    balance_quantity=quantity,
+                    reference_type="VYAPAR_OPENING",
+                    reference_id=prod_uuid,
+                    rate=product.purchase_price or Decimal("0"),
+                ))
                 summary.stock_entries_imported += 1
+
+            # Historical item adjustments are already included in
+            # ist_current_quantity and must not be replayed a second time.
 
         except Exception as e:
             summary.errors.append(f"Stock import: {e}")

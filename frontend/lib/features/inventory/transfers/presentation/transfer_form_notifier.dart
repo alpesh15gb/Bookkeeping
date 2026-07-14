@@ -6,6 +6,7 @@ import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/features/inventory/warehouse/services/warehouse_service.dart';
 import '../services/transfer_service.dart';
 import 'transfer_form_state.dart';
+import 'package:apexbooks/features/masters/products/data/models/product.dart';
 
 class TransferFormNotifier extends StateNotifier<TransferFormState> {
   TransferFormNotifier(this._service, this._warehouseService)
@@ -45,12 +46,34 @@ class TransferFormNotifier extends StateNotifier<TransferFormState> {
     state = state.copyWith(lines: lines);
   }
 
+  void addScannedProduct(Product product) {
+    final lines = [...state.lines];
+    final existing = lines.indexWhere((line) => line.productId == product.id);
+    if (existing >= 0) {
+      final line = lines[existing];
+      lines[existing] = line.copyWith(quantity: line.quantity + 1);
+    } else {
+      final empty = lines.indexWhere((line) => line.productId.isEmpty);
+      final scanned = TransferLine(
+        productId: product.id,
+        productName: product.name,
+        quantity: 1,
+        rate: product.purchasePrice,
+      );
+      if (empty >= 0) {
+        lines[empty] = scanned;
+      } else {
+        lines.add(scanned);
+      }
+    }
+    state = state.copyWith(lines: lines, clearError: true);
+  }
+
   String? _validate() {
-    if (state.transferNumber.trim().isEmpty)
-      return 'Transfer number is required';
     if (state.transferDate.isEmpty) return 'Transfer date is required';
-    if (!state.hasValidRoute)
+    if (!state.hasValidRoute) {
       return 'Select different source and destination warehouses';
+    }
     final valid = state.lines
         .where((l) => l.productId.isNotEmpty && l.quantity > 0)
         .toList();
@@ -66,7 +89,8 @@ class TransferFormNotifier extends StateNotifier<TransferFormState> {
       return null;
     }
     final payload = <String, dynamic>{
-      'transfer_number': state.transferNumber.trim(),
+      if (state.transferNumber.trim().isNotEmpty)
+        'transfer_number': state.transferNumber.trim(),
       'transfer_date': state.transferDate,
       'from_warehouse_id': state.fromWarehouseId,
       'to_warehouse_id': state.toWarehouseId,

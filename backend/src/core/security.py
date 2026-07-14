@@ -86,6 +86,12 @@ class Permissions:
     BILL_DELETE = "bill:delete"
     DATA_IMPORT = "data:import"
 
+    # Inventory & Warehousing
+    INVENTORY_VIEW = "inventory:view"
+    INVENTORY_ADJUST = "inventory:adjust"
+    INVENTORY_TRANSFER = "inventory:transfer"
+    INVENTORY_FINALIZE = "inventory:finalize"
+
 ROLE_PERMISSIONS = {
 
 "owner": [
@@ -106,6 +112,8 @@ ROLE_PERMISSIONS = {
     Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
     Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
     Permissions.DATA_IMPORT,
+    Permissions.INVENTORY_VIEW, Permissions.INVENTORY_ADJUST,
+    Permissions.INVENTORY_TRANSFER, Permissions.INVENTORY_FINALIZE,
 ],
 "accountant": [
     Permissions.TENANT_VIEW,
@@ -122,12 +130,15 @@ ROLE_PERMISSIONS = {
     Permissions.EXPENSE_VIEW, Permissions.EXPENSE_CREATE, Permissions.EXPENSE_FINALIZE,
     Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
     Permissions.DATA_IMPORT,
+    Permissions.INVENTORY_VIEW, Permissions.INVENTORY_ADJUST,
+    Permissions.INVENTORY_TRANSFER, Permissions.INVENTORY_FINALIZE,
 ],
 "salesperson": [
     Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
     Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW, Permissions.INVOICE_UPDATE,
     Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
     Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE,
+    Permissions.INVENTORY_VIEW,
 ],
 "auditor": [
     Permissions.TENANT_VIEW,
@@ -140,6 +151,7 @@ ROLE_PERMISSIONS = {
     Permissions.CREDIT_NOTE_VIEW, Permissions.DEBIT_NOTE_VIEW,
     Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
     Permissions.EXPENSE_VIEW, Permissions.BILL_VIEW,
+    Permissions.INVENTORY_VIEW,
 ],
 }
 

@@ -10,7 +10,7 @@ class TransferFormState {
     this.transferDate = '',
     this.fromWarehouseId = '',
     this.toWarehouseId = '',
-    this.lines = const [],
+    this.lines = const [TransferLine(productId: '', quantity: 0)],
     this.warehouses = const [],
     this.saving = false,
     this.error,

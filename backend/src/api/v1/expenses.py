@@ -186,9 +186,10 @@ def create_expense(
                 Account.tenant_id == tenant_id,
                 Account.deleted_at == None,
                 Account.account_type == "ASSET",
+                Account.account_group == "Cash & Bank",
             ).first()
             if not bank_account:
-                raise HTTPException(status_code=400, detail="Payment account must be an active asset account in this company.")
+                raise HTTPException(status_code=400, detail="Payment account must be an active Cash & Bank account in this company.")
 
         expense_number = _gen_expense_number(db, tenant_id)
         place_of_supply = payload.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
@@ -323,9 +324,10 @@ def update_expense(
             Account.tenant_id == tenant_id,
             Account.deleted_at == None,
             Account.account_type == "ASSET",
+            Account.account_group == "Cash & Bank",
         ).first()
         if not bank_account:
-            raise HTTPException(status_code=400, detail="Payment account must be an active asset account in this company.")
+            raise HTTPException(status_code=400, detail="Payment account must be an active Cash & Bank account in this company.")
         expense.bank_account_id = payload.bank_account_id
     if payload.expense_date is not None:
         expense.expense_date = payload.expense_date

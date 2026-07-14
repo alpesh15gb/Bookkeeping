@@ -7,6 +7,7 @@ import '../models/vendor_bill.dart';
 import '../models/bill_line.dart';
 import '../services/vendor_bill_service.dart';
 import 'bill_form_state.dart';
+import 'package:apexbooks/features/masters/products/data/models/product.dart';
 
 // ---------------------------------------------------------------------------
 // Calculation engine — pure math, mirrors PO but calculates CGST/SGST/IGST
@@ -164,6 +165,33 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
         ],
       ),
     );
+  }
+
+  void addScannedProduct(Product product) {
+    final lines = [...state.lines];
+    final existing = lines.indexWhere((line) => line.productId == product.id);
+    if (existing >= 0) {
+      lines[existing] = lines[existing].copyWith(
+        quantity: lines[existing].quantity + 1,
+      );
+    } else {
+      final scanned = BillLine(
+        productId: product.id,
+        productName: product.name,
+        description: product.name,
+        quantity: 1,
+        rate: product.purchasePrice,
+        gstRate: product.gstRate,
+        hsnSac: product.hsnSac,
+      );
+      final empty = lines.indexWhere((line) => line.productId.isEmpty);
+      if (empty >= 0) {
+        lines[empty] = scanned;
+      } else {
+        lines.add(scanned);
+      }
+    }
+    _recalc(state.copyWith(lines: lines, clearError: true));
   }
 
   void removeLine(int index) {

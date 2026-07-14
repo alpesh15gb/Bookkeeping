@@ -149,12 +149,13 @@ void main() {
       // discount = 1250 * 0.05 = 62.50
       // taxable = 1250 - 62.50 = 1187.50
       // totalTax = (1000*0.09*2) + (250*0.06*2) = 180 + 30 = 210
-      // total = 1187.50 + 210 = 1397.50
+      // raw total = 1187.50 + 210 = 1397.50; invoice payable is rounded
+      // to the nearest rupee to match the backend, so total = 1398.00.
       final r = calc.calculateAll(lines: lines, discountRate: 5);
       expect(r.subtotal, closeTo(1250, _eps));
       expect(r.discountTotal, closeTo(62.50, _eps));
       expect(r.totalTax, closeTo(210, _eps));
-      expect(r.total, closeTo(1397.50, _eps));
+      expect(r.total, closeTo(1398.00, _eps));
     });
   });
 }

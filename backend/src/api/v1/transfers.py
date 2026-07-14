@@ -17,6 +17,7 @@ from src.schemas.bill_schemas import (
     TransferListResponse, PaginatedTransferResponse,
 )
 from src.api.deps import enforce_permission
+from src.domains.company.services import NumberingSeriesService
 
 router = APIRouter(prefix="/transfers", tags=["Transfers"])
 
@@ -34,7 +35,7 @@ def _validate_transfer_date(db: Session, tenant_id: uuid.UUID, value: str) -> No
 def create_transfer(
     payload: TransferCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:transfer")),
 ):
     """Create a new inter-warehouse transfer in DRAFT status."""
     _validate_transfer_date(db, tenant_id, payload.transfer_date)
@@ -67,7 +68,9 @@ def create_transfer(
 
     transfer = Transfer(
         tenant_id=tenant_id,
-        transfer_number=payload.transfer_number,
+        transfer_number=payload.transfer_number or NumberingSeriesService.generate_next_number(
+            db, tenant_id, "TRANSFER"
+        ),
         transfer_date=payload.transfer_date,
         from_warehouse_id=payload.from_warehouse_id,
         from_warehouse_name=warehouse_map[payload.from_warehouse_id].name,
@@ -95,7 +98,7 @@ def list_transfers(
     status_filter: str = None,
     search: str = None,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:view")),
 ):
     """List transfers with server-side pagination."""
     query = db.query(Transfer).filter(
@@ -143,7 +146,7 @@ def list_transfers(
 def get_transfer(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:view")),
 ):
     """Get a single transfer by ID."""
     transfer = db.query(Transfer).filter(
@@ -161,7 +164,7 @@ def update_transfer(
     id: uuid.UUID,
     payload: TransferUpdate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:update")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:transfer")),
 ):
     """Update a DRAFT transfer."""
     transfer = db.query(Transfer).filter(
@@ -236,7 +239,7 @@ def update_transfer(
 def complete_transfer(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:finalize")),
 ):
     """Complete a transfer: move stock from source warehouse to destination."""
     transfer = db.query(Transfer).filter(
@@ -355,7 +358,7 @@ def complete_transfer(
 def cancel_transfer(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:finalize")),
 ):
     """Cancel a draft or in-transit transfer."""
     transfer = db.query(Transfer).filter(

@@ -11,6 +11,7 @@ import 'package:apexbooks/features/masters/contacts/presentation/contact_control
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
+import 'package:apexbooks/features/masters/products/presentation/barcode_product_field.dart';
 import 'package:apexbooks/features/masters/shared/presentation/quick_create_dialogs.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/permissions/permissions_constants.dart';
@@ -416,6 +417,14 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
       padding: EdgeInsets.zero,
       child: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+            child: BarcodeProductField(
+              label:
+                  'Scan received item barcode (repeated scans increase quantity)',
+              onProduct: notifier.addScannedProduct,
+            ),
+          ),
           if (ResponsiveLayout.isMobile(context))
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,

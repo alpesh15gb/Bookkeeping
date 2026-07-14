@@ -51,7 +51,7 @@ void main() {
       expect(r.total, closeTo(0, _eps));
     });
 
-    test('100% discount', () {
+    test('fixed 100 currency-unit discount', () {
       const line = InvoiceLine(
         productId: 'p5',
         hsnSac: '12345678',
@@ -61,12 +61,12 @@ void main() {
         discount: 100,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(1000, _eps));
-      expect(r.cgstAmount, closeTo(0, _eps));
-      expect(r.total, closeTo(0, _eps));
+      expect(r.subtotal, closeTo(900, _eps));
+      expect(r.cgstAmount, closeTo(81, _eps));
+      expect(r.total, closeTo(1062, _eps));
     });
 
-    test('10% partial discount', () {
+    test('fixed 10 currency-unit discount', () {
       const line = InvoiceLine(
         productId: 'p6',
         hsnSac: '12345678',
@@ -76,9 +76,9 @@ void main() {
         discount: 10,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(1000, _eps));
-      expect(r.cgstAmount, closeTo(81, _eps));
-      expect(r.total, closeTo(1062, _eps));
+      expect(r.subtotal, closeTo(990, _eps));
+      expect(r.cgstAmount, closeTo(89.1, _eps));
+      expect(r.total, closeTo(1168.2, _eps));
     });
 
     test('6% GST low rate', () {

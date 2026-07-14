@@ -14,6 +14,7 @@ import 'package:apexbooks/features/inventory/warehouse/services/warehouse_servic
 import 'package:apexbooks/features/inventory/transfers/services/transfer_service.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
+import 'package:apexbooks/features/masters/products/presentation/barcode_product_field.dart';
 import 'transfer_form_notifier.dart';
 import 'transfer_form_state.dart';
 
@@ -289,6 +290,11 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
           ],
         ),
         const SizedBox(height: 8),
+        BarcodeProductField(
+          label: 'Scan item barcode (repeated scans increase quantity)',
+          onProduct: notifier.addScannedProduct,
+        ),
+        const SizedBox(height: 12),
         ...state.lines.asMap().entries.map(
           (e) => _lineRow(
             e.key,

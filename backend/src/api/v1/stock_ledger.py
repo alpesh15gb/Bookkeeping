@@ -45,7 +45,7 @@ def list_stock_ledger(
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:view")),
 ):
     offset = (page - 1) * limit
     q = db.query(StockLedger).options(
@@ -93,7 +93,7 @@ def list_stock_ledger(
 def get_stock_ledger_entry(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("inventory:view")),
 ):
     entry = db.query(StockLedger).options(
         joinedload(StockLedger.product)
