@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
@@ -16,7 +17,11 @@ import 'package:apexbooks/core/tables/table_controller.dart';
 import 'package:apexbooks/core/tables/table_pagination.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/permissions/permission_gate.dart';
+import 'package:apexbooks/core/permissions/permissions.dart';
 import 'proforma_form_screen.dart';
+import 'proforma_detail_screen.dart';
+import 'invoice_search_bar.dart';
 
 // ---------------------------------------------------------------------------
 // Model
@@ -62,16 +67,27 @@ class ProformaListItem {
 // ---------------------------------------------------------------------------
 
 class ProformaListQuery {
-  const ProformaListQuery({this.page = 1, this.limit = 25, this.status});
+  const ProformaListQuery({
+    this.page = 1,
+    this.limit = 25,
+    this.status,
+    this.search,
+  });
   final int page, limit;
   final String? status;
+  final String? search;
 
-  ProformaListQuery copyWith({int? page, int? limit, String? status}) =>
-      ProformaListQuery(
-        page: page ?? this.page,
-        limit: limit ?? this.limit,
-        status: status ?? this.status,
-      );
+  ProformaListQuery copyWith({
+    int? page,
+    int? limit,
+    String? status,
+    String? search,
+  }) => ProformaListQuery(
+    page: page ?? this.page,
+    limit: limit ?? this.limit,
+    status: status ?? this.status,
+    search: search ?? this.search,
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -90,9 +106,19 @@ final proformaListProvider = FutureProvider.autoDispose
       final rawItems = (raw as List)
           .map((e) => ProformaListItem.fromJson(e as Map<String, dynamic>))
           .toList();
-      final items = query.status == null
+      var items = query.status == null
           ? rawItems
           : rawItems.where((e) => e.status == query.status).toList();
+      final search = query.search?.trim().toLowerCase();
+      if (search != null && search.isNotEmpty) {
+        items = items
+            .where(
+              (item) =>
+                  item.proformaNumber.toLowerCase().contains(search) ||
+                  item.contactName.toLowerCase().contains(search),
+            )
+            .toList();
+      }
       final total = rawItems.length < query.limit
           ? (query.page - 1) * query.limit + items.length
           : query.page * query.limit + 1;
@@ -138,34 +164,12 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
       page: s.page,
       limit: s.limit,
       status: s.statusFilter,
+      search: s.search.trim().isEmpty ? null : s.search.trim(),
     );
   }
 
   void _onTableChange() {
     setState(() => _query = _buildQuery());
-  }
-
-  Future<void> _workflowAction(ProformaListItem item, String action) async {
-    try {
-      final suffix = action == 'issue' ? 'issue' : 'convert-to-sales-order';
-      await ref
-          .read(apiClientProvider)
-          .post('/proforma-invoices/${item.id}/$suffix');
-      ref.invalidate(proformaListProvider);
-      if (mounted)
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              action == 'issue' ? 'Quotation issued.' : 'Sales order created.',
-            ),
-          ),
-        );
-    } catch (error) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Action failed: $error')));
-    }
   }
 
   @override
@@ -181,20 +185,23 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
             title: 'Quotations',
             subtitle: 'Proforma invoices and estimates.',
             actions: [
-              FilledButton.icon(
-                icon: const Icon(Icons.add_rounded, size: 20),
-                label: const Text('New Quotation'),
-                onPressed: () => Navigator.of(context)
-                    .push(
-                      MaterialPageRoute(
-                        builder: (_) => const ProformaFormScreen(),
-                      ),
-                    )
-                    .then((_) => ref.invalidate(proformaListProvider)),
+              PermissionGate(
+                permission: Permissions.invoiceCreate,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('New Quotation'),
+                  onPressed: () => Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) => const ProformaFormScreen(),
+                        ),
+                      )
+                      .then((_) => ref.invalidate(proformaListProvider)),
+                ),
               ),
             ],
           ),
-          // Status filter
+          // Search + status filter
           Padding(
             padding: EdgeInsets.fromLTRB(
               ResponsiveLayout.isMobile(context) ? 12 : 24,
@@ -202,7 +209,30 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
               ResponsiveLayout.isMobile(context) ? 12 : 24,
               8,
             ),
-            child: _StatusFilterBar(controller: _tableCtrl),
+            child: ResponsiveLayout.isMobile(context)
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      InvoiceSearchBar(
+                        controller: _tableCtrl,
+                        hintText: 'Search quotations by number or customer…',
+                      ),
+                      const SizedBox(height: 8),
+                      _StatusFilterBar(controller: _tableCtrl),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: InvoiceSearchBar(
+                          controller: _tableCtrl,
+                          hintText: 'Search quotations by number or customer…',
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      _StatusFilterBar(controller: _tableCtrl),
+                    ],
+                  ),
           ),
           // Table body + pagination
           Expanded(
@@ -221,7 +251,8 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
               ),
               data: (data) {
                 if (data.items.isEmpty) {
-                  final filtering = _query.status != null;
+                  final filtering =
+                      _query.status != null || _query.search != null;
                   return EmptyState(
                     icon: Icons.description_outlined,
                     title: filtering
@@ -257,7 +288,9 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
                         items: data.items,
                         colors: colors,
                         fmt: fmt,
-                        onWorkflow: _workflowAction,
+                        selectedId: _selectedItem?.id,
+                        onSelect: (item) =>
+                            setState(() => _selectedItem = item),
                       ),
                     ),
                     ApexPaginationControls(
@@ -273,7 +306,52 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
       ),
     );
 
-    return list;
+    Widget content;
+    if (_selectedItem == null) {
+      content = list;
+    } else if (ResponsiveLayout.isMobile(context)) {
+      content = PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) setState(() => _selectedItem = null);
+        },
+        child: ProformaDetailScreen(
+          proformaId: _selectedItem!.id,
+          embedded: true,
+          onClose: () => setState(() => _selectedItem = null),
+        ),
+      );
+    } else {
+      content = Row(
+        children: [
+          Expanded(flex: 3, child: list),
+          const VerticalDivider(width: 1),
+          SizedBox(
+            width: MediaQuery.sizeOf(context).width >= 1440 ? 560 : 460,
+            child: ProformaDetailScreen(
+              proformaId: _selectedItem!.id,
+              embedded: true,
+              onClose: () => setState(() => _selectedItem = null),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
+            Navigator.of(context)
+                .push(
+                  MaterialPageRoute(builder: (_) => const ProformaFormScreen()),
+                )
+                .then((_) => ref.invalidate(proformaListProvider)),
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (_selectedItem != null) setState(() => _selectedItem = null);
+        },
+      },
+      child: Focus(autofocus: true, child: content),
+    );
   }
 }
 
@@ -286,16 +364,81 @@ class _TableBody extends StatelessWidget {
     required this.items,
     required this.colors,
     required this.fmt,
-    required this.onWorkflow,
+    required this.selectedId,
+    required this.onSelect,
   });
 
   final List<ProformaListItem> items;
   final ApexColors colors;
   final NumberFormatter fmt;
-  final void Function(ProformaListItem, String) onWorkflow;
+  final String? selectedId;
+  final void Function(ProformaListItem) onSelect;
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return Card(
+            margin: EdgeInsets.zero,
+            color: item.id == selectedId ? colors.primaryContainer : null,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              onTap: () => onSelect(item),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.proformaNumber,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        MonetaryText(
+                          value: fmt.currency(item.total),
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.contactName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        StatusBadge(
+                          label: item.status,
+                          tone: toneForStatus(item.status),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Valid until ${item.dueDate}',
+                        style: TextStyle(fontSize: 12, color: colors.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
     final textTheme = Theme.of(context).textTheme;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -328,13 +471,7 @@ class _TableBody extends StatelessWidget {
                 itemBuilder: (context, i) {
                   final item = items[i];
                   return InkWell(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => ProformaFormScreen(editId: item.id),
-                        ),
-                      );
-                    },
+                    onTap: () => onSelect(item),
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -389,23 +526,6 @@ class _TableBody extends StatelessWidget {
                               tone: toneForStatus(item.status),
                             ),
                           ),
-                          if (item.status == 'DRAFT' || item.status == 'ISSUED')
-                            PopupMenuButton<String>(
-                              tooltip: 'Workflow actions',
-                              onSelected: (value) => onWorkflow(item, value),
-                              itemBuilder: (_) => [
-                                if (item.status == 'DRAFT')
-                                  const PopupMenuItem(
-                                    value: 'issue',
-                                    child: Text('Issue quotation'),
-                                  ),
-                                if (item.status == 'ISSUED')
-                                  const PopupMenuItem(
-                                    value: 'convert',
-                                    child: Text('Create sales order'),
-                                  ),
-                              ],
-                            ),
                         ],
                       ),
                     ),
@@ -463,49 +583,56 @@ class _StatusFilterBar extends StatelessWidget {
       valueListenable: controller,
       builder: (context, state, _) {
         final active = state.statusFilter;
-        return Container(
-          decoration: BoxDecoration(
-            color: colors.surfaceMuted,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
-            border: Border.all(color: colors.border),
-          ),
-          padding: const EdgeInsets.all(3),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: _options.map((o) {
-              final selected = active == o.$2;
-              return GestureDetector(
-                onTap: () => controller.setStatusFilter(o.$2),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected ? colors.surfaceRaised : Colors.transparent,
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    o.$1,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: selected ? colors.primary : colors.textSecondary,
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colors.surfaceMuted,
+              borderRadius: BorderRadius.circular(ApexRadius.md),
+              border: Border.all(color: colors.border),
+            ),
+            padding: const EdgeInsets.all(3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: _options.map((o) {
+                final selected = active == o.$2;
+                return GestureDetector(
+                  onTap: () => controller.setStatusFilter(o.$2),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? colors.surfaceRaised
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      o.$1,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: selected ? colors.primary : colors.textSecondary,
+                      ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+            ),
           ),
         );
       },

@@ -47,7 +47,7 @@ class AccountController extends BaseCrudController<Account> {
           '(${value['skipped']} already existed).',
         );
         // Reload with a generous limit to show the full seeded chart.
-        await load(const ListQuery(limit: 1000));
+        await load(const ListQuery(limit: 100));
       case Failure(:final error):
         _notif.error(context, error.message);
       case Loading():

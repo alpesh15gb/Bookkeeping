@@ -44,7 +44,7 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
     Future.microtask(
       () => ref
           .read(accountControllerProvider.notifier)
-          .load(const ListQuery(limit: 1000)),
+          .load(const ListQuery(limit: 100)),
     );
   }
 
@@ -87,7 +87,7 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
   void _reload() {
     ref
         .read(accountControllerProvider.notifier)
-        .load(const ListQuery(limit: 1000));
+        .load(const ListQuery(limit: 100));
   }
 
   bool _matches(Account a) {
@@ -264,7 +264,9 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
           onExit: (_) => setState(() => _hoveredId = null),
           child: Container(
             decoration: BoxDecoration(
-              color: _hoveredId == node.account.id ? colors.surfaceMuted : Colors.transparent,
+              color: _hoveredId == node.account.id
+                  ? colors.surfaceMuted
+                  : Colors.transparent,
             ),
             child: InkWell(
               onTap: () => _openDetail(a),
@@ -276,66 +278,70 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
                   bottom: 8,
                 ),
                 child: Row(
-              children: [
-                if (hasChildren)
-                  InkWell(
-                    borderRadius: BorderRadius.circular(ApexRadius.xl),
-                    onTap: () => setState(() {
-                      if (isExpanded) {
-                        _expanded.remove(a.id);
-                      } else {
-                        _expanded.add(a.id);
-                      }
-                    }),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        isExpanded
-                            ? Icons.expand_more_rounded
-                            : Icons.chevron_right_rounded,
-                        size: 20,
-                        color: colors.textSecondary,
+                  children: [
+                    if (hasChildren)
+                      InkWell(
+                        borderRadius: BorderRadius.circular(ApexRadius.xl),
+                        onTap: () => setState(() {
+                          if (isExpanded) {
+                            _expanded.remove(a.id);
+                          } else {
+                            _expanded.add(a.id);
+                          }
+                        }),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(
+                            isExpanded
+                                ? Icons.expand_more_rounded
+                                : Icons.chevron_right_rounded,
+                            size: 20,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      )
+                    else
+                      const SizedBox(width: 28),
+                    Icon(
+                      a.accountType.icon,
+                      size: 18,
+                      color: colors.textSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    SizedBox(
+                      width: 70,
+                      child: Text(
+                        a.code,
+                        style: const TextStyle(
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
                       ),
                     ),
-                  )
-                else
-                  const SizedBox(width: 28),
-                Icon(a.accountType.icon, size: 18, color: colors.textSecondary),
-                const SizedBox(width: 8),
-                SizedBox(
-                  width: 70,
-                  child: Text(
-                    a.code,
-                    style: const TextStyle(
-                      fontFeatures: [FontFeature.tabularFigures()],
+                    Expanded(
+                      child: Text(
+                        a.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    a.name,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                SizedBox(
-                  width: 120,
-                  child: Text(
-                    fmt.currency(node.totalBalance),
-                    textAlign: TextAlign.right,
-                    style: TextStyle(
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                      color: a.isActive ? null : colors.textSecondary,
+                    SizedBox(
+                      width: 120,
+                      child: Text(
+                        fmt.currency(node.totalBalance),
+                        textAlign: TextAlign.right,
+                        style: TextStyle(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                          color: a.isActive ? null : colors.textSecondary,
+                        ),
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 12),
+                    _typeBadge(a.accountType, colors),
+                  ],
                 ),
-                const SizedBox(width: 12),
-                _typeBadge(a.accountType, colors),
-              ],
+              ),
             ),
           ),
-        ),
-        ),
         ),
         if (hasChildren && isExpanded)
           ...node.children.map((c) => _treeTile(c, depth + 1, fmt, colors)),
@@ -379,7 +385,8 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
     final ok = await const DialogService().confirm(
       context,
       title: 'Seed Standard Accounts',
-      message: 'This creates the standard ApexBooks chart of accounts '
+      message:
+          'This creates the standard ApexBooks chart of accounts '
           '(Cash, Bank, Receivables, Inventory, GST, Sales, Purchases, etc.). '
           'Existing accounts with the same code are skipped. Continue?',
       confirmLabel: 'Seed',

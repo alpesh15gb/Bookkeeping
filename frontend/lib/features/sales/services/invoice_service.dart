@@ -23,10 +23,7 @@ class InvoiceService {
     });
   }
 
-  Future<Result<Invoice>> _post(
-    String path, [
-    Map<String, dynamic>? body,
-  ]) {
+  Future<Result<Invoice>> _post(String path, [Map<String, dynamic>? body]) {
     return guardDio(() async {
       return Invoice.fromJson(
         (await _dio.post(path, data: body)).data as Map<String, dynamic>,
@@ -82,7 +79,10 @@ class InvoiceService {
       final items = (data['items'] as List)
           .map((e) => InvoiceListItem.fromJson(e as Map<String, dynamic>))
           .toList();
-      return (items: items, total: parseIntSafe(data['total'], defaultValue: items.length));
+      return (
+        items: items,
+        total: parseIntSafe(data['total'], defaultValue: items.length),
+      );
     });
   }
 

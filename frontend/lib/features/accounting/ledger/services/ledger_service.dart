@@ -23,7 +23,7 @@ class LedgerService {
     int limit = 100,
   }) {
     return guardDio(() async {
-      final q = <String, dynamic>{'page': page, 'limit': limit};
+      final q = <String, dynamic>{'page': page, 'limit': limit.clamp(1, 100)};
       if (fromDate != null) q['from_date'] = fromDate;
       if (toDate != null) q['to_date'] = toDate;
       final res = await _dio.get(

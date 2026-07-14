@@ -11,16 +11,26 @@ import 'package:apexbooks/core/download/download_service.dart';
 import 'package:apexbooks/core/widgets/transaction_detail_layout.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/permissions/permissions.dart';
+import 'package:apexbooks/core/dialogs/dialog_service.dart';
 import '../models/invoice.dart';
 import '../models/invoice_line.dart';
 import '../models/invoice_status.dart';
 import '../services/invoice_service.dart';
 import 'invoice_form_notifier.dart';
+import 'invoice_form_screen.dart';
+import 'invoice_list_provider.dart';
 import '../payments/presentation/payment_form_screen.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
-  const InvoiceDetailScreen({super.key, required this.invoiceId});
+  const InvoiceDetailScreen({
+    super.key,
+    required this.invoiceId,
+    this.embedded = false,
+    this.onClose,
+  });
   final String invoiceId;
+  final bool embedded;
+  final VoidCallback? onClose;
   @override
   ConsumerState<InvoiceDetailScreen> createState() =>
       _InvoiceDetailScreenState();
@@ -71,6 +81,8 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         lines: _linesCard(inv, colors, fmt),
         totals: _totalsCard(inv, colors, fmt),
         actions: _buildActions(inv, service, colors),
+        embedded: widget.embedded,
+        onClose: widget.onClose,
         notes:
             (inv.notes ?? '').isNotEmpty ||
                 (inv.termsAndConditions ?? '').isNotEmpty
@@ -134,6 +146,53 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     ref.invalidate(invoiceDetailProvider(widget.invoiceId));
   }
 
+  Future<void> _editInvoice(Invoice inv) async {
+    final changed = await Navigator.of(context).push<Invoice>(
+      MaterialPageRoute(builder: (_) => InvoiceFormScreen(editId: inv.id)),
+    );
+    if (changed != null) {
+      ref.invalidate(invoiceDetailProvider(widget.invoiceId));
+      ref.invalidate(invoiceListProvider);
+    }
+  }
+
+  Future<void> _cloneInvoice(Invoice inv, InvoiceService service) async {
+    setState(() => _operating = true);
+    final result = await service.clone(inv.id);
+    if (!mounted) return;
+    setState(() => _operating = false);
+    switch (result) {
+      case Success(:final value):
+        ref.invalidate(invoiceListProvider);
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) => InvoiceFormScreen(editId: value.id),
+          ),
+        );
+        ref.invalidate(invoiceListProvider);
+      case Failure(:final error):
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Unable to duplicate invoice: ${error.message}'),
+          ),
+        );
+      default:
+        break;
+    }
+  }
+
+  Future<void> _cancelInvoice(Invoice inv, InvoiceService service) async {
+    final confirmed = await const DialogService().confirm(
+      context,
+      title: 'Cancel ${inv.invoiceNumber}?',
+      message:
+          'This creates accounting and stock reversals. It cannot be used when payments are allocated or the GST period is filed.',
+      confirmLabel: 'Cancel invoice',
+      destructive: true,
+    );
+    if (confirmed) await _act(() => service.cancel(inv.id));
+  }
+
   // ── Action buttons for the AppBar ──────────────────────────────────────────
   List<Widget> _buildActions(
     Invoice inv,
@@ -141,10 +200,25 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     ApexColors colors,
   ) {
     return [
+      if (inv.status == InvoiceStatus.draft ||
+          inv.status == InvoiceStatus.posted)
+        PermissionGate(
+          permission: Permissions.invoiceUpdate,
+          child: OutlinedButton.icon(
+            onPressed: _operating ? null : () => _editInvoice(inv),
+            icon: const Icon(Icons.edit_outlined, size: 18),
+            label: const Text('Edit'),
+          ),
+        ),
       OutlinedButton.icon(
         onPressed: () => _printInvoice(inv),
         icon: const Icon(Icons.print_rounded, size: 18),
         label: const Text('Print'),
+      ),
+      OutlinedButton.icon(
+        onPressed: _operating ? null : () => _cloneInvoice(inv, service),
+        icon: const Icon(Icons.copy_outlined, size: 18),
+        label: const Text('Duplicate'),
       ),
       if (inv.status != InvoiceStatus.draft &&
           inv.status != InvoiceStatus.cancelled)
@@ -179,13 +253,11 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
           label: const Text('Finalize'),
         ),
       if (inv.status == InvoiceStatus.posted ||
-          inv.status == InvoiceStatus.paid)
+          inv.status == InvoiceStatus.partiallyPaid)
         PermissionGate(
           permission: Permissions.invoiceCancel,
           child: OutlinedButton.icon(
-            onPressed: _operating
-                ? null
-                : () => _act(() => service.cancel(inv.id)),
+            onPressed: _operating ? null : () => _cancelInvoice(inv, service),
             icon: Icon(Icons.cancel_outlined, size: 18, color: colors.danger),
             label: Text('Cancel', style: TextStyle(color: colors.danger)),
             style: OutlinedButton.styleFrom(
@@ -271,6 +343,46 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
 
   // ── Line items table ──────────────────────────────────────────────────────
   Widget _linesCard(Invoice inv, ApexColors colors, NumberFormatter fmt) {
+    final isMobile = ResponsiveLayout.isMobile(context);
+    if (isMobile) {
+      return Column(
+        children: inv.lines.asMap().entries.map((entry) {
+          final line = entry.value;
+          return Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              border: entry.key == inv.lines.length - 1
+                  ? null
+                  : Border(bottom: BorderSide(color: colors.border)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        line.productName ?? line.description ?? 'Item',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Text(
+                      fmt.currency(line.total),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  '${fmt.quantity(line.quantity)} × ${fmt.currency(line.rate)} · GST ${line.gstRate.toStringAsFixed(0)}%${line.hsnSac.isEmpty ? '' : ' · HSN ${line.hsnSac}'}',
+                  style: TextStyle(fontSize: 12, color: colors.textMuted),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      );
+    }
     final lineTable = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -325,13 +437,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         ),
       ],
     );
-    final isMobile = ResponsiveLayout.isMobile(context);
-    return isMobile
-        ? SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: lineTable,
-          )
-        : lineTable;
+    return lineTable;
   }
 
   Widget _lineRow(

@@ -32,6 +32,8 @@ class TransactionDetailLayout extends StatefulWidget {
     this.actions = const [],
     this.notes,
     this.footer,
+    this.embedded = false,
+    this.onClose,
   });
 
   /// Transaction number / title displayed in the AppBar.
@@ -54,6 +56,12 @@ class TransactionDetailLayout extends StatefulWidget {
 
   /// Optional bottom content (audit trail, timeline, etc.).
   final Widget? footer;
+
+  /// Renders inside an existing split-view shell without nesting a Scaffold.
+  final bool embedded;
+
+  /// Close callback for an embedded inspector.
+  final VoidCallback? onClose;
 
   @override
   State<TransactionDetailLayout> createState() =>
@@ -80,10 +88,7 @@ class _TransactionDetailLayoutState extends State<TransactionDetailLayout>
     _slideAnimation = Tween<Offset>(
       begin: const Offset(0, 0.03),
       end: Offset.zero,
-    ).animate(CurvedAnimation(
-      parent: _fadeController,
-      curve: Curves.easeOut,
-    ));
+    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
     _fadeController.forward();
   }
 
@@ -103,6 +108,73 @@ class _TransactionDetailLayoutState extends State<TransactionDetailLayout>
     final colors = apexColors(context);
     final isMobile = ResponsiveLayout.isMobile(context);
 
+    final body = FadeTransition(
+      opacity: _fadeAnimation,
+      child: SlideTransition(
+        position: _slideAnimation,
+        child: Scrollbar(
+          child: ListView(
+            padding: _responsivePadding(context),
+            children: [
+              Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: widget.embedded ? 720 : 900,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Header / summary card
+                      ApexCard(child: widget.header),
+                      const SizedBox(height: 16),
+
+                      // Line items
+                      ApexCard(padding: EdgeInsets.zero, child: widget.lines),
+                      const SizedBox(height: 16),
+
+                      // Totals
+                      if (widget.totals != null) ...[
+                        widget.totals!,
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Notes
+                      if (widget.notes != null) ...[
+                        ApexCard(child: widget.notes!),
+                        const SizedBox(height: 16),
+                      ],
+
+                      // Footer (audit trail, etc.)
+                      if (widget.footer != null) widget.footer!,
+
+                      // Bottom spacing
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (widget.embedded) {
+      return ColoredBox(
+        color: colors.surfaceMuted,
+        child: Column(
+          children: [
+            _EmbeddedTransactionHeader(
+              title: widget.title,
+              actions: widget.actions,
+              onClose: widget.onClose,
+            ),
+            Expanded(child: body),
+          ],
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: colors.surfaceMuted,
       appBar: _TransactionAppBar(
@@ -110,53 +182,60 @@ class _TransactionDetailLayoutState extends State<TransactionDetailLayout>
         actions: widget.actions,
         isMobile: isMobile,
       ),
-      body: FadeTransition(
-        opacity: _fadeAnimation,
-        child: SlideTransition(
-          position: _slideAnimation,
-          child: Scrollbar(
-            child: ListView(
-              padding: _responsivePadding(context),
-              children: [
-                Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 900),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        // Header / summary card
-                        ApexCard(child: widget.header),
-                        const SizedBox(height: 16),
+      body: body,
+    );
+  }
+}
 
-                        // Line items
-                        ApexCard(padding: EdgeInsets.zero, child: widget.lines),
-                        const SizedBox(height: 16),
+class _EmbeddedTransactionHeader extends StatelessWidget {
+  const _EmbeddedTransactionHeader({
+    required this.title,
+    required this.actions,
+    this.onClose,
+  });
 
-                        // Totals
-                        if (widget.totals != null) ...[
-                          widget.totals!,
-                          const SizedBox(height: 16),
-                        ],
+  final String title;
+  final List<Widget> actions;
+  final VoidCallback? onClose;
 
-                        // Notes
-                        if (widget.notes != null) ...[
-                          ApexCard(child: widget.notes!),
-                          const SizedBox(height: 16),
-                        ],
-
-                        // Footer (audit trail, etc.)
-                        if (widget.footer != null) widget.footer!,
-
-                        // Bottom spacing
-                        const SizedBox(height: 32),
-                      ],
-                    ),
+  @override
+  Widget build(BuildContext context) {
+    final colors = apexColors(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: colors.surfaceRaised,
+        border: Border(bottom: BorderSide(color: colors.border)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-              ],
-            ),
+              ),
+              if (onClose != null)
+                IconButton(
+                  tooltip: 'Close (Esc)',
+                  onPressed: onClose,
+                  icon: const Icon(Icons.close_rounded),
+                ),
+            ],
           ),
-        ),
+          if (actions.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Wrap(spacing: 8, runSpacing: 8, children: actions),
+          ],
+        ],
       ),
     );
   }
@@ -179,7 +258,9 @@ class _TransactionAppBar extends StatelessWidget
   final bool isMobile;
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight + 12);
+  Size get preferredSize => Size.fromHeight(
+    isMobile && actions.isNotEmpty ? 128 : kToolbarHeight + 12,
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -225,8 +306,10 @@ class _TransactionAppBar extends StatelessWidget
                   size: 20,
                 ),
                 padding: EdgeInsets.zero,
-                constraints:
-                    const BoxConstraints.tightFor(width: 32, height: 32),
+                constraints: const BoxConstraints.tightFor(
+                  width: 32,
+                  height: 32,
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -245,11 +328,7 @@ class _TransactionAppBar extends StatelessWidget
         ),
         if (actions.isNotEmpty) ...[
           const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: actions,
-          ),
+          Wrap(spacing: 8, runSpacing: 8, children: actions),
         ],
       ],
     );
@@ -292,10 +371,12 @@ class _TransactionAppBar extends StatelessWidget
           Row(
             mainAxisSize: MainAxisSize.min,
             children: actions
-                .map((w) => Padding(
-                      padding: const EdgeInsets.only(left: 8),
-                      child: w,
-                    ))
+                .map(
+                  (w) => Padding(
+                    padding: const EdgeInsets.only(left: 8),
+                    child: w,
+                  ),
+                )
                 .toList(),
           ),
         ],

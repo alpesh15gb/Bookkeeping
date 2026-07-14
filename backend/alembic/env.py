@@ -75,7 +75,13 @@ def run_migrations_online() -> None:
         # Alembic baseline.  A genuinely empty database therefore needs the
         # current declarative schema once; existing databases always follow
         # the normal revision-by-revision migration path below.
-        if not inspect(connection).get_table_names():
+        existing_tables = inspect(connection).get_table_names()
+        # SQLAlchemy 2 starts an implicit transaction for the inspection query.
+        # Alembic will not commit a transaction it considers externally owned,
+        # so leaving this open makes a successful upgrade roll back silently
+        # when the connection closes. End inspection before Alembic takes over.
+        connection.commit()
+        if not existing_tables:
             target_metadata.create_all(connection)
             MigrationContext.configure(connection).stamp(
                 ScriptDirectory.from_config(config), "head"

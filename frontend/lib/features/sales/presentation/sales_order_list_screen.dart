@@ -15,6 +15,7 @@ import 'package:apexbooks/core/tables/table_controller.dart';
 import 'package:apexbooks/core/tables/table_pagination.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/core/download/download_service.dart';
 import 'sales_order_form_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -147,6 +148,25 @@ class _SalesOrderListScreenState extends ConsumerState<SalesOrderListScreen> {
   }
 
   Future<void> _workflowAction(SalesOrderListItem item, String action) async {
+    if (action == 'print') {
+      final result = await ref
+          .read(downloadServiceProvider)
+          .download(
+            relativeUrl: '/sales-orders/${item.id}/print',
+            filename: 'Sales_Order_${item.soNumber}',
+            kind: ExportKind.pdf,
+          );
+      if (!mounted) return;
+      final message = switch (result) {
+        Success() => 'Sales order PDF saved.',
+        Failure(:final error) => 'Unable to create PDF: ${error.message}',
+        _ => 'Unable to create PDF.',
+      };
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(message)));
+      return;
+    }
     try {
       final suffix = action == 'confirm'
           ? 'confirm'
@@ -301,6 +321,94 @@ class _TableBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (ResponsiveLayout.isMobile(context)) {
+      return ListView.separated(
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        itemBuilder: (context, index) {
+          final item = items[index];
+          return Card(
+            margin: EdgeInsets.zero,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              onTap: item.status == 'DRAFT'
+                  ? () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SalesOrderFormScreen(editId: item.id),
+                      ),
+                    )
+                  : null,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.soNumber,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        MonetaryText(
+                          value: fmt.currency(item.total),
+                          fontWeight: FontWeight.w800,
+                        ),
+                        PopupMenuButton<String>(
+                          tooltip: 'Order actions',
+                          onSelected: (value) => onWorkflow(item, value),
+                          itemBuilder: (_) => [
+                            const PopupMenuItem(
+                              value: 'print',
+                              child: Text('Download PDF'),
+                            ),
+                            if (item.status == 'DRAFT')
+                              const PopupMenuItem(
+                                value: 'confirm',
+                                child: Text('Confirm order'),
+                              ),
+                            if (item.status == 'CONFIRMED')
+                              const PopupMenuItem(
+                                value: 'dispatch',
+                                child: Text('Create delivery challan'),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            item.contactName,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        StatusBadge(
+                          label: item.status,
+                          tone: toneForStatus(item.status),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Required by ${item.dueDate}',
+                        style: TextStyle(fontSize: 12, color: colors.textMuted),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
     final textTheme = Theme.of(context).textTheme;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -332,13 +440,14 @@ class _TableBody extends StatelessWidget {
                 itemBuilder: (context, i) {
                   final item = items[i];
                   return InkWell(
-                    onTap: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => SalesOrderFormScreen(editId: item.id),
-                        ),
-                      );
-                    },
+                    onTap: item.status == 'DRAFT'
+                        ? () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  SalesOrderFormScreen(editId: item.id),
+                            ),
+                          )
+                        : null,
                     child: Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 12,
@@ -405,24 +514,26 @@ class _TableBody extends StatelessWidget {
                               tone: toneForStatus(item.status),
                             ),
                           ),
-                          if (item.status == 'DRAFT' ||
-                              item.status == 'CONFIRMED')
-                            PopupMenuButton<String>(
-                              tooltip: 'Workflow actions',
-                              onSelected: (value) => onWorkflow(item, value),
-                              itemBuilder: (_) => [
-                                if (item.status == 'DRAFT')
-                                  const PopupMenuItem(
-                                    value: 'confirm',
-                                    child: Text('Confirm order'),
-                                  ),
-                                if (item.status == 'CONFIRMED')
-                                  const PopupMenuItem(
-                                    value: 'dispatch',
-                                    child: Text('Create delivery challan'),
-                                  ),
-                              ],
-                            ),
+                          PopupMenuButton<String>(
+                            tooltip: 'Workflow actions',
+                            onSelected: (value) => onWorkflow(item, value),
+                            itemBuilder: (_) => [
+                              const PopupMenuItem(
+                                value: 'print',
+                                child: Text('Download PDF'),
+                              ),
+                              if (item.status == 'DRAFT')
+                                const PopupMenuItem(
+                                  value: 'confirm',
+                                  child: Text('Confirm order'),
+                                ),
+                              if (item.status == 'CONFIRMED')
+                                const PopupMenuItem(
+                                  value: 'dispatch',
+                                  child: Text('Create delivery challan'),
+                                ),
+                            ],
+                          ),
                         ],
                       ),
                     ),
@@ -480,49 +591,56 @@ class _StatusFilterBar extends StatelessWidget {
       valueListenable: controller,
       builder: (context, state, _) {
         final active = state.statusFilter;
-        return Container(
-          decoration: BoxDecoration(
-            color: colors.surfaceMuted,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
-            border: Border.all(color: colors.border),
-          ),
-          padding: const EdgeInsets.all(3),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: _options.map((o) {
-              final selected = active == o.$2;
-              return GestureDetector(
-                onTap: () => controller.setStatusFilter(o.$2),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected ? colors.surfaceRaised : Colors.transparent,
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    o.$1,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: selected ? colors.primary : colors.textSecondary,
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colors.surfaceMuted,
+              borderRadius: BorderRadius.circular(ApexRadius.md),
+              border: Border.all(color: colors.border),
+            ),
+            padding: const EdgeInsets.all(3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: _options.map((o) {
+                final selected = active == o.$2;
+                return GestureDetector(
+                  onTap: () => controller.setStatusFilter(o.$2),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? colors.surfaceRaised
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      o.$1,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: selected ? colors.primary : colors.textSecondary,
+                      ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+            ),
           ),
         );
       },

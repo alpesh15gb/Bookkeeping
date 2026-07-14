@@ -40,7 +40,9 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     Future.microtask(() async {
       await ref
           .read(contactControllerProvider.notifier)
-          .load(const ListQuery(limit: 200));
+          .load(
+            const ListQuery(limit: 100, extra: {'contact_type': 'CUSTOMER'}),
+          );
       final notifier = ref.read(paymentFormProvider.notifier);
       _date.text = _today();
       notifier.setPaymentDate(_date.text);

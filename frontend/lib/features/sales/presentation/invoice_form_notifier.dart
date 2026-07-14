@@ -108,6 +108,8 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
       contactId: state.contactId,
       lines: state.lines,
       posStateCode: state.posStateCode,
+      issueDate: state.issueDate,
+      dueDate: state.dueDate,
     );
     if (!check.$1) {
       state = state.copyWith(saving: false, error: check.$2);
@@ -124,6 +126,17 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
 
   Future<Invoice?> update(String id) async {
     state = state.copyWith(saving: true, error: null, clearError: true);
+    final check = _validation.validateForSave(
+      contactId: state.contactId,
+      lines: state.lines,
+      posStateCode: state.posStateCode,
+      issueDate: state.issueDate,
+      dueDate: state.dueDate,
+    );
+    if (!check.$1) {
+      state = state.copyWith(saving: false, error: check.$2);
+      return null;
+    }
     final result = await _service.update(id, _buildPayload());
     state = state.copyWith(saving: false);
     if (result is Success<Invoice>) return result.value;

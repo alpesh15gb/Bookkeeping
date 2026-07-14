@@ -23,7 +23,7 @@ final purchaseReturnListProvider =
 /// (Bill list has no server-side status filter, so we filter client-side.)
 final returnableBillsProvider =
     FutureProvider.autoDispose<List<VendorBillListItem>>((ref) async {
-      final res = await ref.watch(vendorBillServiceProvider).list(limit: 200);
+      final res = await ref.watch(vendorBillServiceProvider).list(limit: 100);
       return switch (res) {
         Success(:final value) =>
           value

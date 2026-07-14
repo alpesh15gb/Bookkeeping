@@ -71,21 +71,20 @@ class DeliveryChallanFormState {
     bool? saving,
     String? error,
     bool clearError = false,
-  }) =>
-      DeliveryChallanFormState(
-        contactId: contactId ?? this.contactId,
-        contactName: contactName ?? this.contactName,
-        challanDate: challanDate ?? this.challanDate,
-        dueDate: dueDate ?? this.dueDate,
-        posStateCode: posStateCode ?? this.posStateCode,
-        lines: lines ?? this.lines,
-        subtotal: subtotal ?? this.subtotal,
-        discountTotal: discountTotal ?? this.discountTotal,
-        totalTax: totalTax ?? this.totalTax,
-        total: total ?? this.total,
-        saving: saving ?? this.saving,
-        error: clearError ? null : (error ?? this.error),
-      );
+  }) => DeliveryChallanFormState(
+    contactId: contactId ?? this.contactId,
+    contactName: contactName ?? this.contactName,
+    challanDate: challanDate ?? this.challanDate,
+    dueDate: dueDate ?? this.dueDate,
+    posStateCode: posStateCode ?? this.posStateCode,
+    lines: lines ?? this.lines,
+    subtotal: subtotal ?? this.subtotal,
+    discountTotal: discountTotal ?? this.discountTotal,
+    totalTax: totalTax ?? this.totalTax,
+    total: total ?? this.total,
+    saving: saving ?? this.saving,
+    error: clearError ? null : (error ?? this.error),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -93,7 +92,7 @@ class DeliveryChallanFormState {
 // ---------------------------------------------------------------------------
 
 ({List<InvoiceLine> lines, double subtotal, double discountTotal, double total})
-    _dcCalculateAll(List<InvoiceLine> lines) {
+_dcCalculateAll(List<InvoiceLine> lines) {
   double subtotal = 0;
   double discountTotal = 0;
   final updated = lines.map((l) {
@@ -116,10 +115,14 @@ class DeliveryChallanFormState {
 // Form notifier
 // ---------------------------------------------------------------------------
 
-class DeliveryChallanFormNotifier extends StateNotifier<DeliveryChallanFormState> {
-  DeliveryChallanFormNotifier(this._dio) : super(const DeliveryChallanFormState(lines: [
-    InvoiceLine(productId: '', hsnSac: '', gstRate: 18),
-  ]));
+class DeliveryChallanFormNotifier
+    extends StateNotifier<DeliveryChallanFormState> {
+  DeliveryChallanFormNotifier(this._dio)
+    : super(
+        const DeliveryChallanFormState(
+          lines: [InvoiceLine(productId: '', hsnSac: '', gstRate: 18)],
+        ),
+      );
 
   final Dio _dio;
 
@@ -128,9 +131,9 @@ class DeliveryChallanFormNotifier extends StateNotifier<DeliveryChallanFormState
       final res = await _dio.get('/delivery-challans/$id');
       final json = res.data as Map<String, dynamic>;
       final contactName = json['contact_name'] as String? ?? '';
-      final lines = (json['lines'] as List?)
-              ?.map((e) =>
-                  InvoiceLine.fromResponse(e as Map<String, dynamic>))
+      final lines =
+          (json['lines'] as List?)
+              ?.map((e) => InvoiceLine.fromResponse(e as Map<String, dynamic>))
               .toList() ??
           [];
       state = DeliveryChallanFormState(
@@ -142,7 +145,8 @@ class DeliveryChallanFormNotifier extends StateNotifier<DeliveryChallanFormState
         lines: lines,
         subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
         discountTotal: (json['discount_total'] as num?)?.toDouble() ?? 0,
-        totalTax: ((json['cgst_amount'] as num?)?.toDouble() ?? 0) +
+        totalTax:
+            ((json['cgst_amount'] as num?)?.toDouble() ?? 0) +
             ((json['sgst_amount'] as num?)?.toDouble() ?? 0) +
             ((json['igst_amount'] as num?)?.toDouble() ?? 0),
         total: (json['total'] as num?)?.toDouble() ?? 0,
@@ -211,7 +215,8 @@ class DeliveryChallanFormNotifier extends StateNotifier<DeliveryChallanFormState
     } on DioException catch (e) {
       state = state.copyWith(
         saving: false,
-        error: e.response?.data?['detail']?.toString() ??
+        error:
+            e.response?.data?['detail']?.toString() ??
             e.message ??
             'Failed to save',
       );
@@ -228,7 +233,8 @@ class DeliveryChallanFormNotifier extends StateNotifier<DeliveryChallanFormState
     } on DioException catch (e) {
       state = state.copyWith(
         saving: false,
-        error: e.response?.data?['detail']?.toString() ??
+        error:
+            e.response?.data?['detail']?.toString() ??
             e.message ??
             'Failed to update',
       );
@@ -245,10 +251,11 @@ class DeliveryChallanFormNotifier extends StateNotifier<DeliveryChallanFormState
   };
 }
 
-final deliveryChallanFormProvider = StateNotifierProvider.autoDispose<
-    DeliveryChallanFormNotifier, DeliveryChallanFormState>(
-  (ref) => DeliveryChallanFormNotifier(ref.watch(apiClientProvider)),
-);
+final deliveryChallanFormProvider =
+    StateNotifierProvider.autoDispose<
+      DeliveryChallanFormNotifier,
+      DeliveryChallanFormState
+    >((ref) => DeliveryChallanFormNotifier(ref.watch(apiClientProvider)));
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -263,7 +270,8 @@ class DeliveryChallanFormScreen extends ConsumerStatefulWidget {
       _DeliveryChallanFormScreenState();
 }
 
-class _DeliveryChallanFormScreenState extends ConsumerState<DeliveryChallanFormScreen> {
+class _DeliveryChallanFormScreenState
+    extends ConsumerState<DeliveryChallanFormScreen> {
   final _customerFocus = FocusNode();
 
   @override
@@ -278,7 +286,9 @@ class _DeliveryChallanFormScreenState extends ConsumerState<DeliveryChallanFormS
           .load(const ListQuery(limit: 100));
       final now = DateTime.now();
       if (widget.editId != null) {
-        ref.read(deliveryChallanFormProvider.notifier).loadForEdit(widget.editId!);
+        ref
+            .read(deliveryChallanFormProvider.notifier)
+            .loadForEdit(widget.editId!);
       } else {
         final n = ref.read(deliveryChallanFormProvider.notifier);
         n.setChallanDate(_fmtDate(now));
@@ -343,8 +353,9 @@ class _DeliveryChallanFormScreenState extends ConsumerState<DeliveryChallanFormS
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -693,10 +704,7 @@ class _DeliveryChallanFormScreenState extends ConsumerState<DeliveryChallanFormS
                   children: [
                     Text(
                       '${state.lines.where((l) => l.productId.isNotEmpty).length} item(s)',
-                      style: TextStyle(
-                        color: colors.textMuted,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: colors.textMuted, fontSize: 12),
                     ),
                     const Spacer(),
                     _tot(
@@ -714,11 +722,7 @@ class _DeliveryChallanFormScreenState extends ConsumerState<DeliveryChallanFormS
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _tot('Subtotal', fmt.currency(state.subtotal), colors),
-                    _tot(
-                      'Discount',
-                      fmt.currency(state.discountTotal),
-                      colors,
-                    ),
+                    _tot('Discount', fmt.currency(state.discountTotal), colors),
                     FilledButton.icon(
                       onPressed: state.saving ? null : _save,
                       icon: state.saving
@@ -751,7 +755,12 @@ class _DeliveryChallanFormScreenState extends ConsumerState<DeliveryChallanFormS
                 _sep(colors),
                 _tot('Discount', fmt.currency(state.discountTotal), colors),
                 _sep(colors),
-                _tot('Total', fmt.currency(state.total), colors, emphasize: true),
+                _tot(
+                  'Total',
+                  fmt.currency(state.total),
+                  colors,
+                  emphasize: true,
+                ),
                 const SizedBox(width: 24),
                 FilledButton.icon(
                   onPressed: state.saving ? null : _save,
@@ -780,34 +789,33 @@ class _DeliveryChallanFormScreenState extends ConsumerState<DeliveryChallanFormS
     String value,
     ApexColors colors, {
     bool emphasize = false,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              color: colors.textMuted,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 2),
-          MonetaryText(
-            value: value,
-            fontSize: emphasize ? 20 : 15,
-            fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
-            color: emphasize ? colors.primary : colors.textPrimary,
-          ),
-        ],
-      );
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          color: colors.textMuted,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+      const SizedBox(height: 2),
+      MonetaryText(
+        value: value,
+        fontSize: emphasize ? 20 : 15,
+        fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
+        color: emphasize ? colors.primary : colors.textPrimary,
+      ),
+    ],
+  );
 
   Widget _sep(ApexColors colors) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(width: 1, height: 34, color: colors.border),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    child: Container(width: 1, height: 34, color: colors.border),
+  );
 
   Widget _labeled(
     String label,
@@ -815,45 +823,40 @@ class _DeliveryChallanFormScreenState extends ConsumerState<DeliveryChallanFormS
     ApexColors colors, {
     int flex = 1,
     bool required = false,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
         children: [
-          Row(
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: colors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4,
-                ),
-              ),
-              if (required)
-                Text(
-                  ' *',
-                  style: TextStyle(
-                    color: colors.danger,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-            ],
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              color: colors.textSecondary,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
           ),
-          const SizedBox(height: 6),
-          field,
+          if (required)
+            Text(
+              ' *',
+              style: TextStyle(
+                color: colors.danger,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
         ],
-      );
+      ),
+      const SizedBox(height: 6),
+      field,
+    ],
+  );
 }
 
 // ── Shared building blocks ────────────────────────────────────────────────────
 
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;
@@ -1043,11 +1046,7 @@ class _LineRowState extends State<_LineRow> {
     _syncIfChanged(_disc, widget.line.discount, old.line.discount);
   }
 
-  void _syncIfChanged(
-    TextEditingController c,
-    double now,
-    double before,
-  ) {
+  void _syncIfChanged(TextEditingController c, double now, double before) {
     if (now != before && (double.tryParse(c.text) ?? 0) != now) {
       c.text = _num(now);
     }
@@ -1153,8 +1152,7 @@ class _LineRowState extends State<_LineRow> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: _ProductField(
               products: widget.products,
-              current:
-                  widget.line.productName ?? widget.line.description ?? '',
+              current: widget.line.productName ?? widget.line.description ?? '',
               colors: c,
               onSelected: widget.onProduct,
             ),
@@ -1164,25 +1162,37 @@ class _LineRowState extends State<_LineRow> {
             child: Row(
               children: [
                 Expanded(
-                  child: _mobileField(c, 'QTY', _qty,
-                      onChanged: (v) => widget.onChanged(
-                          widget.line.copyWith(
-                              quantity: double.tryParse(v) ?? 0))),
+                  child: _mobileField(
+                    c,
+                    'QTY',
+                    _qty,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   flex: 2,
-                  child: _mobileField(c, 'RATE', _rate,
-                      onChanged: (v) => widget.onChanged(
-                          widget.line.copyWith(
-                              rate: double.tryParse(v) ?? 0))),
+                  child: _mobileField(
+                    c,
+                    'RATE',
+                    _rate,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _mobileField(c, 'DISC%', _disc,
-                      onChanged: (v) => widget.onChanged(
-                          widget.line.copyWith(
-                              discount: double.tryParse(v) ?? 0))),
+                  child: _mobileField(
+                    c,
+                    'DISC%',
+                    _disc,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1191,8 +1201,11 @@ class _LineRowState extends State<_LineRow> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Row(
               children: [
-                _chip(c, 'HSN',
-                    widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac),
+                _chip(
+                  c,
+                  'HSN',
+                  widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
+                ),
                 const SizedBox(width: 8),
                 _chip(c, 'GST', '${widget.line.gstRate.toInt()}%'),
                 const Spacer(),
@@ -1223,8 +1236,7 @@ class _LineRowState extends State<_LineRow> {
             flex: 34,
             child: _ProductField(
               products: widget.products,
-              current:
-                  widget.line.productName ?? widget.line.description ?? '',
+              current: widget.line.productName ?? widget.line.description ?? '',
               colors: c,
               onSelected: widget.onProduct,
             ),
@@ -1233,35 +1245,42 @@ class _LineRowState extends State<_LineRow> {
           Expanded(
             flex: 12,
             child: Text(
-              widget.line.hsnSac.isEmpty
-                  ? '—'
-                  : widget.line.hsnSac,
+              widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
               style: TextStyle(fontSize: 13, color: c.textSecondary),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 10,
-            child: _numField(_qty,
-                right: true,
-                onChanged: (v) => widget.onChanged(
-                    widget.line.copyWith(quantity: double.tryParse(v) ?? 0))),
+            child: _numField(
+              _qty,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 14,
-            child: _numField(_rate,
-                right: true,
-                onChanged: (v) => widget.onChanged(
-                    widget.line.copyWith(rate: double.tryParse(v) ?? 0))),
+            child: _numField(
+              _rate,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 10,
-            child: _numField(_disc,
-                right: true,
-                onChanged: (v) => widget.onChanged(
-                    widget.line.copyWith(discount: double.tryParse(v) ?? 0))),
+            child: _numField(
+              _disc,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1346,7 +1365,9 @@ class _LineRowState extends State<_LineRow> {
           controller: ctrl,
           textAlign: TextAlign.right,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
@@ -1456,9 +1477,7 @@ class _ProductField extends StatelessWidget {
               size: isMobile ? 20 : 16,
               color: colors.textMuted,
             ),
-            prefixIconConstraints: BoxConstraints(
-              minWidth: isMobile ? 40 : 32,
-            ),
+            prefixIconConstraints: BoxConstraints(minWidth: isMobile ? 40 : 32),
             contentPadding: EdgeInsets.symmetric(
               horizontal: isMobile ? 12 : 8,
               vertical: isMobile ? 14 : 8,
@@ -1488,21 +1507,20 @@ InputDecoration _dec(
   String? hint,
   IconData? icon,
   bool isMobile = false,
-}) =>
-    InputDecoration(
-      isDense: true,
-      hintText: hint,
-      prefixIcon: icon == null
-          ? null
-          : Icon(icon, size: isMobile ? 22 : 18, color: colors.textMuted),
-      contentPadding: EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: isMobile ? 16 : 14,
-      ),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
-      ),
-    );
+}) => InputDecoration(
+  isDense: true,
+  hintText: hint,
+  prefixIcon: icon == null
+      ? null
+      : Icon(icon, size: isMobile ? 22 : 18, color: colors.textMuted),
+  contentPadding: EdgeInsets.symmetric(
+    horizontal: 12,
+    vertical: isMobile ? 16 : 14,
+  ),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(ApexRadius.sm),
+  ),
+);
 
 Widget _optionsPanel<T extends Object>(
   BuildContext context,

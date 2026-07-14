@@ -10,7 +10,8 @@ class InvoiceCalculationService {
   /// Recalculate a single line item from its raw inputs.
   InvoiceLine calculateLine({required InvoiceLine line}) {
     final lineSubtotal = line.rate * line.quantity;
-    final discountAmt = lineSubtotal * (line.discount / 100);
+    // API line-item `discount` is an amount, not a percentage.
+    final discountAmt = line.discount.clamp(0, lineSubtotal).toDouble();
     final taxable = lineSubtotal - discountAmt;
     // For intra-state: CGST + SGST; inter-state: IGST.
     // We use half/half by default; override via isInterState param.
@@ -22,7 +23,7 @@ class InvoiceCalculationService {
     final total = taxable + gst + cess;
 
     return line.copyWith(
-      subtotal: round2(lineSubtotal),
+      subtotal: round2(taxable),
       cgstRate: round2(line.gstRate / 2),
       cgstAmount: round2(cgst),
       sgstRate: round2(line.gstRate / 2),
@@ -48,14 +49,20 @@ class InvoiceCalculationService {
   }) {
     final updatedLines = lines.map((l) => calculateLine(line: l)).toList();
     final subtotal = updatedLines.fold<double>(0, (s, l) => s + l.subtotal);
-    final discountTotal = subtotal * (discountRate / 100);
-    final taxable = subtotal - discountTotal + shippingCharges;
+    final headerDiscount = subtotal * (discountRate / 100);
+    final lineDiscounts = updatedLines.fold<double>(
+      0,
+      (s, l) => s + l.discount,
+    );
+    final discountTotal = lineDiscounts + headerDiscount;
+    final taxable = subtotal - headerDiscount + shippingCharges;
     final cgst = updatedLines.fold<double>(0, (s, l) => s + l.cgstAmount);
     final sgst = updatedLines.fold<double>(0, (s, l) => s + l.sgstAmount);
     final igst = updatedLines.fold<double>(0, (s, l) => s + l.igstAmount);
     final cess = updatedLines.fold<double>(0, (s, l) => s + l.cessAmount);
     final totalTax = cgst + sgst + igst + cess;
-    final total = taxable + totalTax;
+    // Match the backend payable amount, which is rounded to the nearest rupee.
+    final total = (taxable + totalTax).roundToDouble();
 
     return (
       lines: updatedLines,

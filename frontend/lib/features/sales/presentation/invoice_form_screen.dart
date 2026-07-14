@@ -21,18 +21,24 @@ import 'package:apexbooks/features/settings/presentation/settings_providers.dart
 import 'package:apexbooks/core/result/result.dart';
 
 class InvoiceFormScreen extends ConsumerStatefulWidget {
-  const InvoiceFormScreen({super.key});
+  const InvoiceFormScreen({super.key, this.editId});
+
+  /// Existing invoice to edit. The backend remains the source of truth for
+  /// status, period-lock and payment-allocation edit restrictions.
+  final String? editId;
   @override
   ConsumerState<InvoiceFormScreen> createState() => _InvoiceFormScreenState();
 }
 
 class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   final _customerFocus = FocusNode();
+  bool _loadingEdit = false;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    _loadingEdit = widget.editId != null;
+    Future.microtask(() async {
       ref
           .read(contactControllerProvider.notifier)
           .load(
@@ -41,14 +47,19 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       ref
           .read(productControllerProvider.notifier)
           .load(const ListQuery(limit: 100));
-      // Sensible defaults reduce clicks: issue = today, due = +30d.
-      final now = DateTime.now();
       final n = ref.read(invoiceFormProvider.notifier);
-      n.setIssueDate(_fmtDate(now));
-      n.setDueDate(_fmtDate(now.add(const Duration(days: 30))));
+      if (widget.editId != null) {
+        await n.loadForEdit(widget.editId!);
+        if (mounted) setState(() => _loadingEdit = false);
+      } else {
+        // Sensible defaults reduce clicks: issue = today, due = +30d.
+        final now = DateTime.now();
+        n.setIssueDate(_fmtDate(now));
+        n.setDueDate(_fmtDate(now.add(const Duration(days: 30))));
+      }
       ref.read(settingsRepositoryProvider).getTenantSettings().then((result) {
         final settings = result.dataOrNull;
-        if (settings != null && mounted) {
+        if (widget.editId == null && settings != null && mounted) {
           final terms = settings.extraSettings['terms']?.toString() ?? '';
           if (terms.isNotEmpty &&
               ref.read(invoiceFormProvider).termsAndConditions == null) {
@@ -56,7 +67,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           }
         }
       });
-      _customerFocus.requestFocus();
+      if (widget.editId == null) _customerFocus.requestFocus();
     });
   }
 
@@ -79,7 +90,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   Future<void> _save() async {
     final notifier = ref.read(invoiceFormProvider.notifier);
     if (ref.read(invoiceFormProvider).saving) return;
-    if (await notifier.create() != null && mounted) Navigator.of(context).pop();
+    final saved = widget.editId == null
+        ? await notifier.create()
+        : await notifier.update(widget.editId!);
+    if (saved != null && mounted) Navigator.of(context).pop(saved);
   }
 
   @override
@@ -98,6 +112,14 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     final productsList = productsState is ListData<Product>
         ? productsState.paged.items
         : <Product>[];
+
+    if (_loadingEdit) {
+      return Scaffold(
+        backgroundColor: colors.surfaceMuted,
+        appBar: AppBar(title: const Text('Loading invoice…')),
+        body: const Center(child: LoadingSpinner()),
+      );
+    }
 
     return CallbackShortcuts(
       bindings: {
@@ -134,7 +156,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 onPressed: () => Navigator.of(context).maybePop(),
               ),
               title: Text(
-                'New Invoice',
+                widget.editId == null ? 'New Invoice' : 'Edit Invoice',
                 style: TextStyle(
                   fontWeight: FontWeight.w700,
                   fontSize: 18,
@@ -168,7 +190,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                             child: LoadingSpinner(size: 16),
                           )
                         : const Icon(Icons.check_rounded, size: 18),
-                    label: const Text('Save draft'),
+                    label: Text(
+                      widget.editId == null ? 'Save draft' : 'Update',
+                    ),
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 14,
@@ -370,7 +394,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 _HCell('HSN', flex: 12),
                 _HCell('QTY', flex: 10, right: true),
                 _HCell('RATE', flex: 14, right: true),
-                _HCell('DISC%', flex: 10, right: true),
+                _HCell('DISC ₹', flex: 10, right: true),
                 if (gstEnabled) _HCell('GST%', flex: 10, right: true),
                 _HCell('AMOUNT', flex: 14, right: true),
                 const SizedBox(width: 36),
@@ -540,7 +564,11 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                           child: LoadingSpinner(size: 16),
                         )
                       : const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save draft  (Ctrl+S)'),
+                  label: Text(
+                    widget.editId == null
+                        ? 'Save draft  (Ctrl+S)'
+                        : 'Update  (Ctrl+S)',
+                  ),
                   style: FilledButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 20,
@@ -961,7 +989,7 @@ class _LineRowState extends State<_LineRow> {
                 Expanded(
                   child: _mobileField(
                     c,
-                    'DISC%',
+                    'DISC ₹',
                     _disc,
                     onChanged: (v) => widget.onChanged(
                       widget.line.copyWith(discount: double.tryParse(v) ?? 0),

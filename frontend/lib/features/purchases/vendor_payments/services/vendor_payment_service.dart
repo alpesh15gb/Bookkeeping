@@ -19,40 +19,48 @@ class VendorPaymentService {
   Future<Result<VendorPayment>> create(VendorPayment payment) {
     return guardDio(() async {
       final res = await _dio.post(
-        '/bills/payments',
+        '/payments/disbursements',
         data: payment.toCreatePayload(),
       );
       return VendorPayment.fromJson(res.data as Map<String, dynamic>);
     });
   }
 
-  Future<Result<List<VendorPayment>>> list({
-    int page = 1,
-    int limit = 50,
-  }) {
+  Future<Result<List<VendorPayment>>> list({int page = 1, int limit = 50}) {
     return guardDio(() async {
       final res = await _dio.get(
-        '/bills/payments',
+        '/payments/disbursements',
         queryParameters: {'page': page, 'limit': limit},
       );
       return (res.data as List)
-          .map((e) => VendorPayment.fromJson(e as Map<String, dynamic>))
+          .whereType<Map>()
+          .map((e) => VendorPayment.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
   }
 
   Future<Result<VendorPayment>> cancel(String id) {
     return guardDio(() async {
-      final res = await _dio.post('/bills/payments/$id/cancel');
+      final res = await _dio.post(
+        '/payments/disbursements/$id/cancel',
+        data: {'reason': 'Cancelled by user'},
+      );
       return VendorPayment.fromJson(res.data as Map<String, dynamic>);
     });
   }
 
   Future<Result<List<OutstandingBill>>> outstandingBills(String contactId) {
     return guardDio(() async {
-      final res = await _dio.get('/contacts/$contactId/outstanding-bills');
-      return (res.data as List)
-          .map((e) => OutstandingBill.fromJson(e as Map<String, dynamic>))
+      final res = await _dio.get(
+        '/payments/disbursements/outstanding/$contactId',
+      );
+      final rows = res.data;
+      if (rows is! List) {
+        throw const FormatException('Invalid outstanding bill response.');
+      }
+      return rows
+          .whereType<Map>()
+          .map((e) => OutstandingBill.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
   }

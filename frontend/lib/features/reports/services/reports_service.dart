@@ -26,9 +26,13 @@ class ReportsService {
       if (dateFrom != null) q['date_from'] = dateFrom;
       if (dateTo != null) q['date_to'] = dateTo;
       final res = await _dio.get('/sales/transactions', queryParameters: q);
-      final list = res.data as List;
-      return list
-          .map((e) => SalesTransaction.fromJson(e as Map<String, dynamic>))
+      final rows = res.data;
+      if (rows is! List) {
+        throw const FormatException('Invalid sales register response.');
+      }
+      return rows
+          .whereType<Map>()
+          .map((e) => SalesTransaction.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
   }

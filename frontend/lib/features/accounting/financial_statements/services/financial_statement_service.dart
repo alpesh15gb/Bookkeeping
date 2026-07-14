@@ -48,9 +48,7 @@ class FinancialStatementService {
     String? endDate,
   }) {
     return guardDio(() async {
-      final q = <String, dynamic>{};
-      if (startDate != null) q['start_date'] = startDate;
-      if (endDate != null) q['end_date'] = endDate;
+      final q = _requiredPeriod(startDate, endDate);
       final res = await _dio.get('/reports/cash-book', queryParameters: q);
       return CashBookReport.fromJson(res.data as Map<String, dynamic>);
     });
@@ -61,9 +59,7 @@ class FinancialStatementService {
     String? endDate,
   }) {
     return guardDio(() async {
-      final q = <String, dynamic>{};
-      if (startDate != null) q['start_date'] = startDate;
-      if (endDate != null) q['end_date'] = endDate;
+      final q = _requiredPeriod(startDate, endDate);
       final res = await _dio.get('/reports/bank-book', queryParameters: q);
       return CashBookReport.fromJson(res.data as Map<String, dynamic>);
     });
@@ -77,11 +73,10 @@ class FinancialStatementService {
   }) {
     return guardDio(() async {
       final q = <String, dynamic>{
+        ..._requiredPeriod(startDate, endDate),
         'page': page,
-        'limit': limit,
+        'limit': limit.clamp(1, 100),
       };
-      if (startDate != null) q['start_date'] = startDate;
-      if (endDate != null) q['end_date'] = endDate;
       final res = await _dio.get('/reports/day-book', queryParameters: q);
       return DayBookReport.fromJson(res.data as Map<String, dynamic>);
     });
@@ -100,6 +95,22 @@ class FinancialStatementService {
     if (v is num) return v.toDouble();
     if (v is String) return double.tryParse(v) ?? 0;
     return 0;
+  }
+
+  /// Cash, bank, and day-book endpoints require both dates. Providers are
+  /// evaluated before a screen's initState callback, so the service must also
+  /// supply a deterministic initial period instead of issuing an invalid call.
+  static Map<String, dynamic> _requiredPeriod(String? start, String? end) {
+    final now = DateTime.now();
+    final firstDay = DateTime(now.year, now.month, 1);
+    String format(DateTime value) =>
+        '${value.year.toString().padLeft(4, '0')}-'
+        '${value.month.toString().padLeft(2, '0')}-'
+        '${value.day.toString().padLeft(2, '0')}';
+    return {
+      'start_date': start ?? format(firstDay),
+      'end_date': end ?? format(now),
+    };
   }
 }
 

@@ -23,16 +23,19 @@ class MovementService {
   }) {
     return guardDio(() async {
       final q = <String, dynamic>{
+        'product_id': productId,
         'page': page,
-        'limit': limit,
+        'limit': limit.clamp(1, 100),
         if (referenceType != null) 'reference_type': referenceType,
       };
-      final res = await _dio.get(
-        '/products/$productId/stock-ledger',
-        queryParameters: q,
-      );
-      return (res.data as List)
-          .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
+      final res = await _dio.get('/stock-ledger', queryParameters: q);
+      final rows = res.data;
+      if (rows is! List) {
+        throw const FormatException('Invalid stock movement response.');
+      }
+      return rows
+          .whereType<Map>()
+          .map((e) => StockMovement.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
   }
@@ -47,14 +50,19 @@ class MovementService {
     return guardDio(() async {
       final q = <String, dynamic>{
         'page': page,
-        'limit': limit,
+        'limit': limit.clamp(1, 100),
         if (productId != null) 'product_id': productId,
         if (referenceType != null) 'reference_type': referenceType,
         if (warehouseId != null) 'warehouse_id': warehouseId,
       };
       final res = await _dio.get('/stock-ledger', queryParameters: q);
-      return (res.data as List)
-          .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
+      final rows = res.data;
+      if (rows is! List) {
+        throw const FormatException('Invalid stock movement response.');
+      }
+      return rows
+          .whereType<Map>()
+          .map((e) => StockMovement.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
   }

@@ -13,7 +13,8 @@ from src.infrastructure.database.models import (
 from src.schemas.payment_schemas import (
     PaymentCreate, PaymentResponse, PaymentListResponse, PaymentCancel,
     OutstandingInvoiceResponse,
-    BillPaymentCreate, BillPaymentResponse, BillPaymentListResponse
+    BillPaymentCreate, BillPaymentResponse, BillPaymentListResponse,
+    OutstandingBillResponse,
 )
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.company.services import NumberingSeriesService
@@ -500,6 +501,53 @@ def list_vendor_payments(
             created_at=pay.created_at
         ))
     return response
+
+
+@router.get(
+    "/disbursements/outstanding/{contact_id}",
+    response_model=List[OutstandingBillResponse],
+)
+def list_vendor_outstanding_bills(
+    contact_id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("payment:view")),
+):
+    contact = db.query(Contact).filter(
+        Contact.id == contact_id,
+        Contact.tenant_id == tenant_id,
+        Contact.deleted_at == None,
+        Contact.contact_type.in_(("VENDOR", "BOTH")),
+    ).first()
+    if not contact:
+        raise HTTPException(status_code=404, detail="Vendor not found in this company context.")
+
+    bills = db.query(Bill).filter(
+        Bill.tenant_id == tenant_id,
+        Bill.contact_id == contact_id,
+        Bill.deleted_at == None,
+        Bill.status.in_(("POSTED", "PARTIALLY_PAID")),
+    ).order_by(Bill.due_date.asc(), Bill.issue_date.asc(), Bill.bill_number.asc()).all()
+
+    result = []
+    for bill in bills:
+        payable_total = bill.total - (bill.tds_amount or Decimal("0.0000"))
+        outstanding = payable_total - bill.amount_paid
+        if outstanding <= 0:
+            continue
+        result.append(OutstandingBillResponse(
+            id=bill.id,
+            bill_number=bill.bill_number,
+            issue_date=bill.issue_date,
+            due_date=bill.due_date,
+            total=bill.total,
+            tds_amount=bill.tds_amount or Decimal("0.0000"),
+            amount_paid=bill.amount_paid,
+            outstanding=outstanding,
+            contact_id=contact.id,
+            contact_name=contact.name,
+            status=bill.status,
+        ))
+    return result
 
 @router.get("/disbursements/{id}", response_model=BillPaymentResponse)
 def get_vendor_payment(

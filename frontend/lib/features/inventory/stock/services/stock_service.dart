@@ -19,8 +19,12 @@ class StockService {
   }) {
     return guardDio(() async {
       final res = await _dio.get(
-        '/products/$productId/movements',
-        queryParameters: {'page': page, 'limit': limit},
+        '/stock-ledger',
+        queryParameters: {
+          'product_id': productId,
+          'page': page,
+          'limit': limit.clamp(1, 100),
+        },
       );
       return (res.data as List)
           .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
@@ -30,14 +34,19 @@ class StockService {
 
   Future<Result<List<StockBalance>>> getAllBalances({
     int page = 1,
-    int limit = 200,
+    int limit = 100,
     bool? lowStock,
   }) {
     return guardDio(() async {
-      final q = <String, dynamic>{'page': page, 'limit': limit};
-      final res = await _dio.get('/products', queryParameters: q);
-      var items = (res.data as List)
-          .map((e) => StockBalance.fromProductJson(e as Map<String, dynamic>))
+      final q = <String, dynamic>{'page': page, 'limit': limit.clamp(1, 100)};
+      final res = await _dio.get('/masters/products', queryParameters: q);
+      final rows = res.data;
+      if (rows is! List) {
+        throw const FormatException('Invalid product stock response.');
+      }
+      var items = rows
+          .whereType<Map>()
+          .map((e) => StockBalance.fromProductJson(e.cast<String, dynamic>()))
           .toList();
       if (lowStock == true) {
         items = items.where((b) => b.isLowStock).toList();
@@ -48,7 +57,7 @@ class StockService {
 
   Future<Result<StockBalance>> getProductBalance(String productId) {
     return guardDio(() async {
-      final res = await _dio.get('/products/$productId');
+      final res = await _dio.get('/masters/products/$productId');
       return StockBalance.fromProductJson(res.data as Map<String, dynamic>);
     });
   }

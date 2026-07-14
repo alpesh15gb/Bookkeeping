@@ -34,8 +34,13 @@ class PaymentService {
         if (contactId != null) 'contact_id': contactId,
       };
       final res = await _dio.get('/payments/receipts', queryParameters: q);
-      return (res.data as List)
-          .map((e) => PaymentListItem.fromJson(e as Map<String, dynamic>))
+      final rows = res.data;
+      if (rows is! List) {
+        throw const FormatException('Invalid receipt list response.');
+      }
+      return rows
+          .whereType<Map>()
+          .map((e) => PaymentListItem.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
   }
@@ -51,10 +56,15 @@ class PaymentService {
   Future<Result<List<OutstandingInvoice>>> outstanding(String contactId) {
     return guardDio(() async {
       final res = await _dio.get('/payments/receipts/outstanding/$contactId');
-      return (res.data as List)
+      final rows = res.data;
+      if (rows is! List) {
+        throw const FormatException('Invalid outstanding invoice response.');
+      }
+      return rows
+          .whereType<Map>()
           .map(
             (e) =>
-                OutstandingInvoice.fromInvoiceJson(e as Map<String, dynamic>),
+                OutstandingInvoice.fromInvoiceJson(e.cast<String, dynamic>()),
           )
           .toList();
     });

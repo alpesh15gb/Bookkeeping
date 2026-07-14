@@ -123,3 +123,17 @@ class BillPaymentListResponse(SchemaBase):
     status: str
     created_at: datetime
 
+
+class OutstandingBillResponse(SchemaBase):
+    id: uuid.UUID
+    bill_number: str
+    issue_date: date
+    due_date: date
+    total: Decimal
+    tds_amount: Decimal
+    amount_paid: Decimal
+    outstanding: Decimal
+    contact_id: uuid.UUID
+    contact_name: str
+    status: str
+

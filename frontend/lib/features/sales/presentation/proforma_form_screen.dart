@@ -72,44 +72,61 @@ class ProformaFormState {
     bool? saving,
     String? error,
     bool clearError = false,
-  }) =>
-      ProformaFormState(
-        contactId: contactId ?? this.contactId,
-        contactName: contactName ?? this.contactName,
-        issueDate: issueDate ?? this.issueDate,
-        dueDate: dueDate ?? this.dueDate,
-        posStateCode: posStateCode ?? this.posStateCode,
-        lines: lines ?? this.lines,
-        subtotal: subtotal ?? this.subtotal,
-        discountTotal: discountTotal ?? this.discountTotal,
-        totalTax: totalTax ?? this.totalTax,
-        total: total ?? this.total,
-        saving: saving ?? this.saving,
-        error: clearError ? null : (error ?? this.error),
-      );
+  }) => ProformaFormState(
+    contactId: contactId ?? this.contactId,
+    contactName: contactName ?? this.contactName,
+    issueDate: issueDate ?? this.issueDate,
+    dueDate: dueDate ?? this.dueDate,
+    posStateCode: posStateCode ?? this.posStateCode,
+    lines: lines ?? this.lines,
+    subtotal: subtotal ?? this.subtotal,
+    discountTotal: discountTotal ?? this.discountTotal,
+    totalTax: totalTax ?? this.totalTax,
+    total: total ?? this.total,
+    saving: saving ?? this.saving,
+    error: clearError ? null : (error ?? this.error),
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Calculation helpers
 // ---------------------------------------------------------------------------
 
-({List<InvoiceLine> lines, double subtotal, double discountTotal, double total})
-    _calculateAll(List<InvoiceLine> lines) {
+({
+  List<InvoiceLine> lines,
+  double subtotal,
+  double discountTotal,
+  double totalTax,
+  double total,
+})
+_calculateAll(List<InvoiceLine> lines) {
   double subtotal = 0;
   double discountTotal = 0;
+  double totalTax = 0;
   final updated = lines.map((l) {
-    final lineSubtotal = l.quantity * l.rate;
-    final disc = l.discount;
-    final lineTotal = lineSubtotal - disc;
-    subtotal += lineSubtotal;
+    final gross = l.quantity * l.rate;
+    final disc = l.discount.clamp(0, gross).toDouble();
+    final taxable = gross - disc;
+    final gst = taxable * l.gstRate / 100;
+    final lineTotal = taxable + gst;
+    subtotal += taxable;
     discountTotal += disc;
-    return l.copyWith(subtotal: lineTotal, total: lineTotal);
+    totalTax += gst;
+    return l.copyWith(
+      subtotal: taxable,
+      cgstRate: l.gstRate / 2,
+      sgstRate: l.gstRate / 2,
+      cgstAmount: gst / 2,
+      sgstAmount: gst / 2,
+      total: lineTotal,
+    );
   }).toList();
   return (
     lines: updated,
     subtotal: subtotal,
     discountTotal: discountTotal,
-    total: subtotal - discountTotal,
+    totalTax: totalTax,
+    total: subtotal + totalTax,
   );
 }
 
@@ -118,9 +135,12 @@ class ProformaFormState {
 // ---------------------------------------------------------------------------
 
 class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
-  ProformaFormNotifier(this._dio) : super(const ProformaFormState(lines: [
-    InvoiceLine(productId: '', hsnSac: '', gstRate: 18),
-  ]));
+  ProformaFormNotifier(this._dio)
+    : super(
+        const ProformaFormState(
+          lines: [InvoiceLine(productId: '', hsnSac: '', gstRate: 18)],
+        ),
+      );
 
   final Dio _dio;
 
@@ -128,10 +148,14 @@ class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
     try {
       final res = await _dio.get('/proforma-invoices/$id');
       final json = res.data as Map<String, dynamic>;
-      final contactName = json['contact_name'] as String? ?? '';
-      final lines = (json['lines'] as List?)
-              ?.map((e) =>
-                  InvoiceLine.fromResponse(e as Map<String, dynamic>))
+      final contact = json['contact'];
+      final contactName =
+          json['contact_name'] as String? ??
+          (contact is Map ? contact['name']?.toString() : null) ??
+          '';
+      final lines =
+          (json['lines'] as List?)
+              ?.map((e) => InvoiceLine.fromResponse(e as Map<String, dynamic>))
               .toList() ??
           [];
       state = ProformaFormState(
@@ -143,15 +167,16 @@ class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
         lines: lines,
         subtotal: (json['subtotal'] as num?)?.toDouble() ?? 0,
         discountTotal: (json['discount_total'] as num?)?.toDouble() ?? 0,
-        totalTax: ((json['cgst_amount'] as num?)?.toDouble() ?? 0) +
+        totalTax:
+            ((json['cgst_amount'] as num?)?.toDouble() ?? 0) +
             ((json['sgst_amount'] as num?)?.toDouble() ?? 0) +
-            ((json['igst_amount'] as num?)?.toDouble() ?? 0),
+            ((json['igst_amount'] as num?)?.toDouble() ?? 0) +
+            ((json['utgst_amount'] as num?)?.toDouble() ?? 0) +
+            ((json['cess_amount'] as num?)?.toDouble() ?? 0),
         total: (json['total'] as num?)?.toDouble() ?? 0,
       );
     } on DioException catch (e) {
-      state = state.copyWith(
-        error: e.message ?? 'Failed to load quotation',
-      );
+      state = state.copyWith(error: e.message ?? 'Failed to load quotation');
     }
   }
 
@@ -188,24 +213,16 @@ class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
       lines: r.lines,
       subtotal: r.subtotal,
       discountTotal: r.discountTotal,
+      totalTax: r.totalTax,
       total: r.total,
     );
   }
 
   Future<bool> create() async {
     state = state.copyWith(saving: true, error: null, clearError: true);
-    if (state.contactId == null) {
-      state = state.copyWith(
-        saving: false,
-        error: 'Please select a customer.',
-      );
-      return false;
-    }
-    if (!state.lines.any((l) => l.productId.isNotEmpty)) {
-      state = state.copyWith(
-        saving: false,
-        error: 'Please add at least one line item.',
-      );
+    final validationError = _validationError();
+    if (validationError != null) {
+      state = state.copyWith(saving: false, error: validationError);
       return false;
     }
     try {
@@ -215,7 +232,8 @@ class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
     } on DioException catch (e) {
       state = state.copyWith(
         saving: false,
-        error: e.response?.data?['detail']?.toString() ??
+        error:
+            e.response?.data?['detail']?.toString() ??
             e.message ??
             'Failed to save',
       );
@@ -225,6 +243,11 @@ class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
 
   Future<bool> update(String id) async {
     state = state.copyWith(saving: true, error: null, clearError: true);
+    final validationError = _validationError();
+    if (validationError != null) {
+      state = state.copyWith(saving: false, error: validationError);
+      return false;
+    }
     try {
       await _dio.put('/proforma-invoices/$id', data: _buildPayload());
       state = state.copyWith(saving: false);
@@ -232,7 +255,8 @@ class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
     } on DioException catch (e) {
       state = state.copyWith(
         saving: false,
-        error: e.response?.data?['detail']?.toString() ??
+        error:
+            e.response?.data?['detail']?.toString() ??
             e.message ??
             'Failed to update',
       );
@@ -242,11 +266,42 @@ class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
 
   Map<String, dynamic> _buildPayload() => {
     'contact_id': state.contactId,
+    // Empty tells the backend numbering-series service to assign the number.
+    'proforma_number': '',
     'issue_date': state.issueDate,
     'due_date': state.dueDate,
     'pos_state_code': state.posStateCode,
     'line_items': state.lines.map((l) => l.toCreatePayload()).toList(),
   };
+
+  String? _validationError() {
+    if (state.contactId == null || state.contactId!.isEmpty) {
+      return 'Please select a customer.';
+    }
+    if (state.posStateCode.length != 2) {
+      return 'Place of supply is required.';
+    }
+    final issue = DateTime.tryParse(state.issueDate);
+    final due = DateTime.tryParse(state.dueDate);
+    if (issue == null || due == null)
+      return 'Issue and validity dates are required.';
+    if (due.isBefore(issue))
+      return 'Valid until date cannot be before the issue date.';
+    if (state.lines.isEmpty) return 'Please add at least one line item.';
+    for (var index = 0; index < state.lines.length; index++) {
+      final line = state.lines[index];
+      if (line.productId.isEmpty) return 'Select an item on line ${index + 1}.';
+      if (line.quantity <= 0)
+        return 'Quantity must be greater than zero on line ${index + 1}.';
+      if (line.rate < 0) return 'Rate cannot be negative on line ${index + 1}.';
+      if (line.discount < 0 || line.discount > line.quantity * line.rate) {
+        return 'Discount cannot exceed the line amount on line ${index + 1}.';
+      }
+      if (line.hsnSac.length < 4)
+        return 'Enter a valid HSN/SAC on line ${index + 1}.';
+    }
+    return null;
+  }
 }
 
 final proformaFormProvider =
@@ -263,18 +318,18 @@ class ProformaFormScreen extends ConsumerStatefulWidget {
   final String? editId;
 
   @override
-  ConsumerState<ProformaFormScreen> createState() =>
-      _ProformaFormScreenState();
+  ConsumerState<ProformaFormScreen> createState() => _ProformaFormScreenState();
 }
 
 class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
   final _customerFocus = FocusNode();
-  bool _loaded = true;
+  bool _loadingEdit = false;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
+    _loadingEdit = widget.editId != null;
+    Future.microtask(() async {
       ref
           .read(contactControllerProvider.notifier)
           .load(const ListQuery(limit: 100));
@@ -283,14 +338,16 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
           .load(const ListQuery(limit: 100));
       final now = DateTime.now();
       if (widget.editId != null) {
-        ref.read(proformaFormProvider.notifier).loadForEdit(widget.editId!);
+        await ref
+            .read(proformaFormProvider.notifier)
+            .loadForEdit(widget.editId!);
+        if (mounted) setState(() => _loadingEdit = false);
       } else {
         final n = ref.read(proformaFormProvider.notifier);
         n.setIssueDate(_fmtDate(now));
         n.setDueDate(_fmtDate(now.add(const Duration(days: 30))));
         _customerFocus.requestFocus();
       }
-      _loaded = true;
     });
   }
 
@@ -335,6 +392,14 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
         ? productsState.paged.items
         : <Product>[];
 
+    if (_loadingEdit) {
+      return Scaffold(
+        backgroundColor: colors.surfaceMuted,
+        appBar: AppBar(title: const Text('Loading quotation…')),
+        body: const Center(child: LoadingSpinner()),
+      );
+    }
+
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
@@ -349,8 +414,9 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -605,7 +671,7 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
                 _HCell('HSN', flex: 12),
                 _HCell('QTY', flex: 10, right: true),
                 _HCell('RATE', flex: 14, right: true),
-                _HCell('DISC%', flex: 10, right: true),
+                _HCell('DISC ₹', flex: 10, right: true),
                 _HCell('GST%', flex: 10, right: true),
                 _HCell('AMOUNT', flex: 14, right: true),
                 SizedBox(width: 36),
@@ -701,10 +767,7 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
                   children: [
                     Text(
                       '${state.lines.where((l) => l.productId.isNotEmpty).length} item(s)',
-                      style: TextStyle(
-                        color: colors.textMuted,
-                        fontSize: 12,
-                      ),
+                      style: TextStyle(color: colors.textMuted, fontSize: 12),
                     ),
                     const Spacer(),
                     _tot(
@@ -722,11 +785,8 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     _tot('Subtotal', fmt.currency(state.subtotal), colors),
-                    _tot(
-                      'Discount',
-                      fmt.currency(state.discountTotal),
-                      colors,
-                    ),
+                    _tot('Discount', fmt.currency(state.discountTotal), colors),
+                    _tot('GST', fmt.currency(state.totalTax), colors),
                     FilledButton.icon(
                       onPressed: state.saving ? null : _save,
                       icon: state.saving
@@ -759,7 +819,14 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
                 _sep(colors),
                 _tot('Discount', fmt.currency(state.discountTotal), colors),
                 _sep(colors),
-                _tot('Total', fmt.currency(state.total), colors, emphasize: true),
+                _tot('GST', fmt.currency(state.totalTax), colors),
+                _sep(colors),
+                _tot(
+                  'Total',
+                  fmt.currency(state.total),
+                  colors,
+                  emphasize: true,
+                ),
                 const SizedBox(width: 24),
                 FilledButton.icon(
                   onPressed: state.saving ? null : _save,
@@ -788,34 +855,33 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
     String value,
     ApexColors colors, {
     bool emphasize = false,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.end,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              fontSize: 10,
-              color: colors.textMuted,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 2),
-          MonetaryText(
-            value: value,
-            fontSize: emphasize ? 20 : 15,
-            fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
-            color: emphasize ? colors.primary : colors.textPrimary,
-          ),
-        ],
-      );
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.end,
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 10,
+          color: colors.textMuted,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.5,
+        ),
+      ),
+      const SizedBox(height: 2),
+      MonetaryText(
+        value: value,
+        fontSize: emphasize ? 20 : 15,
+        fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
+        color: emphasize ? colors.primary : colors.textPrimary,
+      ),
+    ],
+  );
 
   Widget _sep(ApexColors colors) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Container(width: 1, height: 34, color: colors.border),
-      );
+    padding: const EdgeInsets.symmetric(horizontal: 20),
+    child: Container(width: 1, height: 34, color: colors.border),
+  );
 
   Widget _labeled(
     String label,
@@ -823,45 +889,40 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
     ApexColors colors, {
     int flex = 1,
     bool required = false,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
         children: [
-          Row(
-            children: [
-              Text(
-                label.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 11,
-                  color: colors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                  letterSpacing: 0.4,
-                ),
-              ),
-              if (required)
-                Text(
-                  ' *',
-                  style: TextStyle(
-                    color: colors.danger,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-            ],
+          Text(
+            label.toUpperCase(),
+            style: TextStyle(
+              fontSize: 11,
+              color: colors.textSecondary,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+            ),
           ),
-          const SizedBox(height: 6),
-          field,
+          if (required)
+            Text(
+              ' *',
+              style: TextStyle(
+                color: colors.danger,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
         ],
-      );
+      ),
+      const SizedBox(height: 6),
+      field,
+    ],
+  );
 }
 
 // ── Shared building blocks ────────────────────────────────────────────────────
 
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;
@@ -948,14 +1009,15 @@ class _CustomerField extends StatelessWidget {
           ),
         );
       },
-      optionsViewBuilder: (context, onSelected, options) => _optionsPanel<Contact>(
-        context,
-        colors,
-        options,
-        onSelected,
-        (c) => c.name,
-        (c) => c.gstin ?? c.email ?? '',
-      ),
+      optionsViewBuilder: (context, onSelected, options) =>
+          _optionsPanel<Contact>(
+            context,
+            colors,
+            options,
+            onSelected,
+            (c) => c.name,
+            (c) => c.gstin ?? c.email ?? '',
+          ),
     );
   }
 }
@@ -1050,11 +1112,7 @@ class _LineRowState extends State<_LineRow> {
     _syncIfChanged(_disc, widget.line.discount, old.line.discount);
   }
 
-  void _syncIfChanged(
-    TextEditingController c,
-    double now,
-    double before,
-  ) {
+  void _syncIfChanged(TextEditingController c, double now, double before) {
     if (now != before && (double.tryParse(c.text) ?? 0) != now) {
       c.text = _num(now);
     }
@@ -1160,8 +1218,7 @@ class _LineRowState extends State<_LineRow> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: _ProductField(
               products: widget.products,
-              current:
-                  widget.line.productName ?? widget.line.description ?? '',
+              current: widget.line.productName ?? widget.line.description ?? '',
               colors: c,
               onSelected: widget.onProduct,
             ),
@@ -1171,25 +1228,37 @@ class _LineRowState extends State<_LineRow> {
             child: Row(
               children: [
                 Expanded(
-                  child: _mobileField(c, 'QTY', _qty,
-                      onChanged: (v) => widget.onChanged(
-                          widget.line.copyWith(
-                              quantity: double.tryParse(v) ?? 0))),
+                  child: _mobileField(
+                    c,
+                    'QTY',
+                    _qty,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
                   flex: 2,
-                  child: _mobileField(c, 'RATE', _rate,
-                      onChanged: (v) => widget.onChanged(
-                          widget.line.copyWith(
-                              rate: double.tryParse(v) ?? 0))),
+                  child: _mobileField(
+                    c,
+                    'RATE',
+                    _rate,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _mobileField(c, 'DISC%', _disc,
-                      onChanged: (v) => widget.onChanged(
-                          widget.line.copyWith(
-                              discount: double.tryParse(v) ?? 0))),
+                  child: _mobileField(
+                    c,
+                    'DISC ₹',
+                    _disc,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -1198,8 +1267,11 @@ class _LineRowState extends State<_LineRow> {
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
             child: Row(
               children: [
-                _chip(c, 'HSN',
-                    widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac),
+                _chip(
+                  c,
+                  'HSN',
+                  widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
+                ),
                 const SizedBox(width: 8),
                 _chip(c, 'GST', '${widget.line.gstRate.toInt()}%'),
                 const Spacer(),
@@ -1230,8 +1302,7 @@ class _LineRowState extends State<_LineRow> {
             flex: 34,
             child: _ProductField(
               products: widget.products,
-              current:
-                  widget.line.productName ?? widget.line.description ?? '',
+              current: widget.line.productName ?? widget.line.description ?? '',
               colors: c,
               onSelected: widget.onProduct,
             ),
@@ -1240,35 +1311,42 @@ class _LineRowState extends State<_LineRow> {
           Expanded(
             flex: 12,
             child: Text(
-              widget.line.hsnSac.isEmpty
-                  ? '—'
-                  : widget.line.hsnSac,
+              widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
               style: TextStyle(fontSize: 13, color: c.textSecondary),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 10,
-            child: _numField(_qty,
-                right: true,
-                onChanged: (v) => widget.onChanged(
-                    widget.line.copyWith(quantity: double.tryParse(v) ?? 0))),
+            child: _numField(
+              _qty,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 14,
-            child: _numField(_rate,
-                right: true,
-                onChanged: (v) => widget.onChanged(
-                    widget.line.copyWith(rate: double.tryParse(v) ?? 0))),
+            child: _numField(
+              _rate,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
             flex: 10,
-            child: _numField(_disc,
-                right: true,
-                onChanged: (v) => widget.onChanged(
-                    widget.line.copyWith(discount: double.tryParse(v) ?? 0))),
+            child: _numField(
+              _disc,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+              ),
+            ),
           ),
           const SizedBox(width: 8),
           Expanded(
@@ -1353,7 +1431,9 @@ class _LineRowState extends State<_LineRow> {
           controller: ctrl,
           textAlign: TextAlign.right,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
           style: TextStyle(
             fontSize: 15,
             fontWeight: FontWeight.w600,
@@ -1463,9 +1543,7 @@ class _ProductField extends StatelessWidget {
               size: isMobile ? 20 : 16,
               color: colors.textMuted,
             ),
-            prefixIconConstraints: BoxConstraints(
-              minWidth: isMobile ? 40 : 32,
-            ),
+            prefixIconConstraints: BoxConstraints(minWidth: isMobile ? 40 : 32),
             contentPadding: EdgeInsets.symmetric(
               horizontal: isMobile ? 12 : 8,
               vertical: isMobile ? 14 : 8,
@@ -1495,21 +1573,20 @@ InputDecoration _dec(
   String? hint,
   IconData? icon,
   bool isMobile = false,
-}) =>
-    InputDecoration(
-      isDense: true,
-      hintText: hint,
-      prefixIcon: icon == null
-          ? null
-          : Icon(icon, size: isMobile ? 22 : 18, color: colors.textMuted),
-      contentPadding: EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: isMobile ? 16 : 14,
-      ),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
-      ),
-    );
+}) => InputDecoration(
+  isDense: true,
+  hintText: hint,
+  prefixIcon: icon == null
+      ? null
+      : Icon(icon, size: isMobile ? 22 : 18, color: colors.textMuted),
+  contentPadding: EdgeInsets.symmetric(
+    horizontal: 12,
+    vertical: isMobile ? 16 : 14,
+  ),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(ApexRadius.sm),
+  ),
+);
 
 Widget _optionsPanel<T extends Object>(
   BuildContext context,

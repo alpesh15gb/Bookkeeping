@@ -7,6 +7,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
@@ -18,6 +19,11 @@ ThemeData apexLightTheme() => _buildTheme(lightApexColors, Brightness.light);
 ThemeData apexDarkTheme() => _buildTheme(darkApexColors, Brightness.dark);
 
 ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
+  final isDesktop =
+      defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
+  final controlHeight = isDesktop ? 40.0 : 48.0;
   final base = ColorScheme(
     brightness: brightness,
     primary: colors.primary,
@@ -39,7 +45,9 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
   final textTheme = bodyText.copyWith(
     // Display/headings → Instrument Sans
     displayLarge: displayText.displayLarge?.copyWith(color: colors.textPrimary),
-    displayMedium: displayText.displayMedium?.copyWith(color: colors.textPrimary),
+    displayMedium: displayText.displayMedium?.copyWith(
+      color: colors.textPrimary,
+    ),
     displaySmall: displayText.displaySmall?.copyWith(color: colors.textPrimary),
     headlineLarge: displayText.headlineLarge?.copyWith(
       color: colors.textPrimary,
@@ -84,6 +92,10 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
 
   return ThemeData(
     useMaterial3: true,
+    visualDensity: isDesktop ? VisualDensity.compact : VisualDensity.standard,
+    materialTapTargetSize: isDesktop
+        ? MaterialTapTargetSize.shrinkWrap
+        : MaterialTapTargetSize.padded,
     brightness: brightness,
     colorScheme: base,
     scaffoldBackgroundColor: colors.surface,
@@ -120,8 +132,11 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(ApexRadius.md),
         ),
-        textStyle: GoogleFonts.instrumentSans(fontSize: 15, fontWeight: FontWeight.w600),
-        minimumSize: const Size(0, 48),
+        textStyle: GoogleFonts.instrumentSans(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+        minimumSize: Size(0, controlHeight),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -132,14 +147,22 @@ ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
           borderRadius: BorderRadius.circular(ApexRadius.md),
         ),
         side: BorderSide(color: colors.border),
-        textStyle: GoogleFonts.instrumentSans(fontSize: 15, fontWeight: FontWeight.w600),
-        minimumSize: const Size(0, 48),
+        textStyle: GoogleFonts.instrumentSans(
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+        minimumSize: Size(0, controlHeight),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: colors.primary,
         textStyle: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w600),
+      ),
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: IconButton.styleFrom(
+        minimumSize: Size.square(isDesktop ? 36 : 44),
       ),
     ),
     chipTheme: ChipThemeData(

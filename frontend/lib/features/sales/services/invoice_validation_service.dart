@@ -12,12 +12,24 @@ class InvoiceValidationService {
     required String? contactId,
     required List<InvoiceLine> lines,
     required String posStateCode,
+    String? issueDate,
+    String? dueDate,
   }) {
     if (contactId == null || contactId.isEmpty) {
       return (false, 'Customer is required');
     }
     if (posStateCode.isEmpty || posStateCode.length != 2) {
       return (false, 'Place of Supply is required');
+    }
+    if (issueDate != null || dueDate != null) {
+      final issue = DateTime.tryParse(issueDate ?? '');
+      final due = DateTime.tryParse(dueDate ?? '');
+      if (issue == null || due == null) {
+        return (false, 'Invoice and due dates are required');
+      }
+      if (due.isBefore(issue)) {
+        return (false, 'Due date cannot be before invoice date');
+      }
     }
     if (lines.isEmpty) {
       return (false, 'At least one line item is required');
@@ -38,6 +50,9 @@ class InvoiceValidationService {
     }
     if (line.rate < 0) {
       return (false, 'Rate cannot be negative');
+    }
+    if (line.discount < 0 || line.discount > line.quantity * line.rate) {
+      return (false, 'Line discount cannot exceed the line amount');
     }
     if (line.hsnSac.isEmpty || line.hsnSac.length < 4) {
       return (false, 'HSN/SAC code is required (min 4 digits)');

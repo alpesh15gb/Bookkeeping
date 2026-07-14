@@ -32,6 +32,15 @@ class InvoiceTableBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return _MobileInvoiceList(
+        items: items,
+        selectedId: selectedId,
+        onSelect: onSelect,
+        fmt: fmt,
+        colors: colors,
+      );
+    }
     final textTheme = Theme.of(context).textTheme;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -192,9 +201,113 @@ class InvoiceTableBody extends StatelessWidget {
       InvoiceStatus.paid => StatusTone.success,
       InvoiceStatus.cancelled => StatusTone.danger,
     };
-    return StatusBadge(
-      label: status.value.replaceAll('_', ' '),
-      tone: tone,
-    );
+    return StatusBadge(label: status.value.replaceAll('_', ' '), tone: tone);
   }
+}
+
+class _MobileInvoiceList extends StatelessWidget {
+  const _MobileInvoiceList({
+    required this.items,
+    required this.selectedId,
+    required this.onSelect,
+    required this.fmt,
+    required this.colors,
+  });
+
+  final List<InvoiceListItem> items;
+  final String? selectedId;
+  final void Function(InvoiceListItem) onSelect;
+  final NumberFormatter fmt;
+  final ApexColors colors;
+
+  @override
+  Widget build(BuildContext context) => ListView.separated(
+    padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+    itemCount: items.length,
+    separatorBuilder: (_, __) => const SizedBox(height: 8),
+    itemBuilder: (context, index) {
+      final item = items[index];
+      final overdue =
+          item.outstanding > 0 &&
+          DateTime.tryParse(item.dueDate)?.isBefore(DateTime.now()) == true;
+      return Card(
+        margin: EdgeInsets.zero,
+        color: item.id == selectedId ? colors.primaryContainer : null,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          onTap: () => onSelect(item),
+          child: Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.invoiceNumber,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    Text(
+                      fmt.currency(item.total),
+                      style: const TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        item.contactName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: colors.textSecondary),
+                      ),
+                    ),
+                    StatusBadge(
+                      label: item.status.value.replaceAll('_', ' '),
+                      tone: overdue
+                          ? StatusTone.warning
+                          : toneForStatus(item.status.value),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.event_outlined,
+                      size: 15,
+                      color: colors.textMuted,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      overdue
+                          ? 'Overdue ${item.dueDate}'
+                          : 'Due ${item.dueDate}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: overdue ? colors.warning : colors.textMuted,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (item.outstanding > 0)
+                      Text(
+                        '${fmt.currency(item.outstanding)} due',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: colors.danger,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
 }

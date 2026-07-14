@@ -61,6 +61,20 @@ for handler in root_logger.handlers:
 
 logger = logging.getLogger("bookkeeping")
 
+# Keep this in sync with the single Alembic head. The ORM is allowed to start
+# so operators can still reach /health, but readiness becomes degraded until
+# migrations are applied. `create_all()` cannot add columns to existing tables.
+REQUIRED_SCHEMA_REVISION = "20260714_0007"
+
+
+def _database_schema_revision(connection) -> Optional[str]:
+    try:
+        return connection.execute(
+            text("SELECT version_num FROM alembic_version")
+        ).scalar_one_or_none()
+    except Exception:
+        return None
+
 # ---------------------------------------------------------------------------
 # Routers
 # ---------------------------------------------------------------------------
@@ -122,6 +136,16 @@ async def lifespan(app: FastAPI):
     # Create tables that don't exist yet (safe for all environments)
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified.")
+
+    with engine.connect() as connection:
+        current_revision = _database_schema_revision(connection)
+    if current_revision != REQUIRED_SCHEMA_REVISION:
+        logger.critical(
+            "Database schema is out of date (current=%s, required=%s). "
+            "Run `alembic upgrade head` before serving application traffic.",
+            current_revision or "unknown",
+            REQUIRED_SCHEMA_REVISION,
+        )
 
     # Add columns needed for Vyapar import
     from src.core.database import ensure_vyapar_import_columns
@@ -484,7 +508,13 @@ def health_check():
     try:
         with engine.connect() as conn:
             conn.execute(text("SELECT 1"))
+            current_revision = _database_schema_revision(conn)
         checks["database"] = "ok"
+        checks["schema"] = (
+            "ok"
+            if current_revision == REQUIRED_SCHEMA_REVISION
+            else f"outdated:{current_revision or 'unknown'}"
+        )
     except OperationalError as e:
         logger.error(f"Health check — DB unreachable: {e}")
         checks["database"] = "error"

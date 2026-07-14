@@ -10,6 +10,7 @@ class OutstandingBill {
     this.billNumber = '',
     this.total = 0,
     this.amountPaid = 0,
+    this.outstandingAmount,
     this.dueDate = '',
     this.contactName = '',
     this.status = '',
@@ -19,11 +20,13 @@ class OutstandingBill {
   final String billNumber;
   final double total;
   final double amountPaid;
+  final double? outstandingAmount;
   final String dueDate;
   final String contactName;
   final String status;
 
-  double get outstanding => (total - amountPaid).clamp(0, double.infinity);
+  double get outstanding =>
+      outstandingAmount ?? (total - amountPaid).clamp(0, double.infinity);
   bool get isOverdue =>
       dueDate.isNotEmpty && dueDate.compareTo(_today()) < 0 && outstanding > 0;
   bool get isClosed => outstanding <= 0;
@@ -46,6 +49,9 @@ class OutstandingBill {
         billNumber: json['bill_number'] as String? ?? '',
         total: _num(json['total']),
         amountPaid: _num(json['amount_paid']),
+        outstandingAmount: json['outstanding'] == null
+            ? null
+            : _num(json['outstanding']),
         dueDate: json['due_date'] as String? ?? '',
         contactName: json['contact_name'] as String? ?? '',
         status: json['status'] as String? ?? '',

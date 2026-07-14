@@ -33,11 +33,16 @@ class PurchaseReturnService {
     return guardDio(() async {
       final res = await _dio.get(
         '/returns/purchase',
-        queryParameters: {'page': page, 'limit': limit},
+        queryParameters: {'page': page, 'limit': limit.clamp(1, 100)},
       );
-      return (res.data as List)
+      final rows = res.data;
+      if (rows is! List) {
+        throw const FormatException('Invalid purchase return response.');
+      }
+      return rows
+          .whereType<Map>()
           .map(
-            (e) => PurchaseReturnListItem.fromJson(e as Map<String, dynamic>),
+            (e) => PurchaseReturnListItem.fromJson(e.cast<String, dynamic>()),
           )
           .toList();
     });

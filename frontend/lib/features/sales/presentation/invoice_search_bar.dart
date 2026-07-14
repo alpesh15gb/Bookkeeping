@@ -6,8 +6,13 @@ import 'package:apexbooks/core/theme/app_colors.dart';
 
 /// Debounced search bar driven by an [ApexTableController].
 class InvoiceSearchBar extends StatefulWidget {
-  const InvoiceSearchBar({super.key, required this.controller});
+  const InvoiceSearchBar({
+    super.key,
+    required this.controller,
+    this.hintText = 'Search invoices by number or client…',
+  });
   final ApexTableController controller;
+  final String hintText;
 
   @override
   State<InvoiceSearchBar> createState() => _InvoiceSearchBarState();
@@ -47,13 +52,21 @@ class _InvoiceSearchBarState extends State<InvoiceSearchBar> {
       controller: _ctrl,
       onChanged: _onChanged,
       decoration: InputDecoration(
-        hintText: 'Search invoices by number or client\u2026',
-        prefixIcon: Icon(Icons.search_rounded, size: 20, color: colors.textMuted),
+        hintText: widget.hintText,
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          size: 20,
+          color: colors.textMuted,
+        ),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(vertical: 10),
         suffixIcon: _ctrl.text.isNotEmpty
             ? IconButton(
-                icon: Icon(Icons.clear_rounded, size: 18, color: colors.textMuted),
+                icon: Icon(
+                  Icons.clear_rounded,
+                  size: 18,
+                  color: colors.textMuted,
+                ),
                 onPressed: () {
                   _ctrl.clear();
                   widget.controller.setSearch('');

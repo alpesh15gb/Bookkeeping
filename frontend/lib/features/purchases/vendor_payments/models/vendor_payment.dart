@@ -86,28 +86,35 @@ class VendorPayment {
   };
 
   factory VendorPayment.fromJson(Map<String, dynamic> json) {
-    final contact = json['contact'] as Map<String, dynamic>?;
+    final rawContact = json['contact'];
+    final contact = rawContact is Map
+        ? rawContact.cast<String, dynamic>()
+        : const <String, dynamic>{};
+    final rawAllocations = json['allocations'];
+    final allocations = rawAllocations is List
+        ? rawAllocations
+              .whereType<Map>()
+              .map((e) => PaymentAllocation.fromJson(e.cast<String, dynamic>()))
+              .toList()
+        : <PaymentAllocation>[];
     return VendorPayment(
       id: (json['id'] ?? '').toString(),
       paymentNumber: json['payment_number'] as String? ?? '',
       contactId: (json['contact_id'] ?? '').toString(),
-      contactName: contact?['name'] as String? ?? '',
+      contactName:
+          json['contact_name'] as String? ?? contact['name'] as String? ?? '',
       paymentDate: json['payment_date'] as String? ?? '',
       paymentMode: PaymentMode.fromString(
         json['payment_mode'] as String? ?? '',
       ),
       amount: _num(json['amount']),
-      amountAllocated: _num(json['amount_allocated']),
+      amountAllocated: json['amount_allocated'] == null
+          ? allocations.fold<double>(0, (sum, item) => sum + item.amount)
+          : _num(json['amount_allocated']),
       referenceNumber: json['reference_number'] as String?,
       description: json['description'] as String?,
       status: VendorPaymentStatus.fromString(json['status'] as String? ?? ''),
-      allocations:
-          (json['allocations'] as List?)
-              ?.map(
-                (e) => PaymentAllocation.fromJson(e as Map<String, dynamic>),
-              )
-              .toList() ??
-          [],
+      allocations: allocations,
       createdAt: json['created_at'] as String?,
     );
   }

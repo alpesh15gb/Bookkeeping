@@ -32,8 +32,14 @@ class VendorBillService {
         '/bills',
         queryParameters: {'page': page, 'limit': limit},
       );
-      return (res.data as List)
-          .map((e) => VendorBillListItem.fromJson(e as Map<String, dynamic>))
+      final data = res.data;
+      final rows = data is Map ? data['items'] : data;
+      if (rows is! List) {
+        throw const FormatException('Invalid bill list response.');
+      }
+      return rows
+          .whereType<Map>()
+          .map((e) => VendorBillListItem.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
   }

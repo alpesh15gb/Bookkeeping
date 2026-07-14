@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
@@ -7,8 +8,11 @@ import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/tables/table_controller.dart';
+import 'package:apexbooks/core/api/base_model.dart' show SortDirection;
 import 'package:apexbooks/core/tables/table_pagination.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
+import 'package:apexbooks/core/permissions/permission_gate.dart';
+import 'package:apexbooks/core/permissions/permissions.dart';
 import '../models/invoice.dart';
 import 'invoice_list_provider.dart';
 import 'invoice_detail_screen.dart';
@@ -60,6 +64,25 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
     setState(() => _query = _buildQuery());
   }
 
+  List<InvoiceListItem> _sortedItems(List<InvoiceListItem> source) {
+    final sort = _tableCtrl.value.sort;
+    if (sort.columnId == null) return source;
+    final items = [...source];
+    int compare(InvoiceListItem a, InvoiceListItem b) =>
+        switch (sort.columnId) {
+          'invoiceNumber' => a.invoiceNumber.compareTo(b.invoiceNumber),
+          'contactName' => a.contactName.compareTo(b.contactName),
+          'issueDate' => a.issueDate.compareTo(b.issueDate),
+          'total' => a.total.compareTo(b.total),
+          _ => 0,
+        };
+    items.sort((a, b) {
+      final result = compare(a, b);
+      return sort.direction == SortDirection.descending ? -result : result;
+    });
+    return items;
+  }
+
   @override
   Widget build(BuildContext context) {
     final asyncPaged = ref.watch(invoiceListProvider(_query));
@@ -73,16 +96,19 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
             title: 'Sales Invoices',
             subtitle: 'Billing and collections.',
             actions: [
-              FilledButton.icon(
-                icon: const Icon(Icons.add_rounded, size: 20),
-                label: const Text('New Invoice'),
-                onPressed: () => Navigator.of(context)
-                    .push(
-                      MaterialPageRoute(
-                        builder: (_) => const InvoiceFormScreen(),
-                      ),
-                    )
-                    .then((_) => ref.invalidate(invoiceListProvider)),
+              PermissionGate(
+                permission: Permissions.invoiceCreate,
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.add_rounded, size: 20),
+                  label: const Text('New Invoice'),
+                  onPressed: () => Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) => const InvoiceFormScreen(),
+                        ),
+                      )
+                      .then((_) => ref.invalidate(invoiceListProvider)),
+                ),
               ),
             ],
           ),
@@ -117,7 +143,8 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
               loading: () => ShimmerSkeleton(
                 child: Column(
                   children: [
-                    for (int i = 0; i < 6; i++) const TableRowSkeleton(columns: 4),
+                    for (int i = 0; i < 6; i++)
+                      const TableRowSkeleton(columns: 4),
                   ],
                 ),
               ),
@@ -126,7 +153,8 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 onRetry: () => ref.invalidate(invoiceListProvider),
               ),
               data: (data) {
-                if (data.items.isEmpty) {
+                final visibleItems = _sortedItems(data.items);
+                if (visibleItems.isEmpty) {
                   final filtering =
                       _query.search != null || _query.status != null;
                   return EmptyState(
@@ -159,7 +187,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                   children: [
                     Expanded(
                       child: InvoiceTableBody(
-                        items: data.items,
+                        items: visibleItems,
                         sort: _tableCtrl.value.sort,
                         onSort: (id) => _tableCtrl.toggleSort(id),
                         selectedId: _selectedItem?.id,
@@ -182,62 +210,51 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
       ),
     );
 
+    Widget content;
     if (_selectedItem == null) {
-      return list;
-    }
-
-    if (ResponsiveLayout.isMobile(context)) {
-      return PopScope(
+      content = list;
+    } else if (ResponsiveLayout.isMobile(context)) {
+      content = PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
           if (!didPop) setState(() => _selectedItem = null);
         },
-        child: Scaffold(
-          appBar: AppBar(
-            title: Text(
-              _selectedItem!.invoiceNumber,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-            ),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_rounded),
-              onPressed: () => setState(() => _selectedItem = null),
+        child: InvoiceDetailScreen(
+          invoiceId: _selectedItem!.id,
+          embedded: true,
+          onClose: () => setState(() => _selectedItem = null),
+        ),
+      );
+    } else {
+      content = Row(
+        children: [
+          Expanded(flex: 3, child: list),
+          const VerticalDivider(width: 1),
+          SizedBox(
+            width: MediaQuery.sizeOf(context).width >= 1440 ? 560 : 460,
+            child: InvoiceDetailScreen(
+              invoiceId: _selectedItem!.id,
+              embedded: true,
+              onClose: () => setState(() => _selectedItem = null),
             ),
           ),
-          body: InvoiceDetailScreen(invoiceId: _selectedItem!.id),
-        ),
+        ],
       );
     }
 
-    return Row(
-      children: [
-        Expanded(flex: 3, child: list),
-        const VerticalDivider(width: 1),
-        Container(
-          width: 380,
-          color: colors.surfaceMuted,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AppBar(
-                title: Text(
-                  _selectedItem!.invoiceNumber,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                leading: IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => setState(() => _selectedItem = null),
-                ),
-              ),
-              Expanded(
-                child: InvoiceDetailScreen(invoiceId: _selectedItem!.id),
-              ),
-            ],
-          ),
-        ),
-      ],
+    return CallbackShortcuts(
+      bindings: {
+        const SingleActivator(LogicalKeyboardKey.keyN, control: true): () =>
+            Navigator.of(context)
+                .push(
+                  MaterialPageRoute(builder: (_) => const InvoiceFormScreen()),
+                )
+                .then((_) => ref.invalidate(invoiceListProvider)),
+        const SingleActivator(LogicalKeyboardKey.escape): () {
+          if (_selectedItem != null) setState(() => _selectedItem = null);
+        },
+      },
+      child: Focus(autofocus: true, child: content),
     );
   }
 }
@@ -263,49 +280,56 @@ class _StatusFilterBar extends StatelessWidget {
       valueListenable: controller,
       builder: (context, state, _) {
         final active = state.statusFilter;
-        return Container(
-          decoration: BoxDecoration(
-            color: colors.surfaceMuted,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
-            border: Border.all(color: colors.border),
-          ),
-          padding: const EdgeInsets.all(3),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: _options.map((o) {
-              final selected = active == o.$2;
-              return GestureDetector(
-                onTap: () => controller.setStatusFilter(o.$2),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 120),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected ? colors.surfaceRaised : Colors.transparent,
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
-                    boxShadow: selected
-                        ? [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.03),
-                              blurRadius: 4,
-                              offset: const Offset(0, 1),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    o.$1,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                      color: selected ? colors.primary : colors.textSecondary,
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Container(
+            decoration: BoxDecoration(
+              color: colors.surfaceMuted,
+              borderRadius: BorderRadius.circular(ApexRadius.md),
+              border: Border.all(color: colors.border),
+            ),
+            padding: const EdgeInsets.all(3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: _options.map((o) {
+                final selected = active == o.$2;
+                return GestureDetector(
+                  onTap: () => controller.setStatusFilter(o.$2),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 7,
+                    ),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? colors.surfaceRaised
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                      boxShadow: selected
+                          ? [
+                              BoxShadow(
+                                color: Colors.black.withValues(alpha: 0.03),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ]
+                          : null,
+                    ),
+                    child: Text(
+                      o.$1,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: selected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: selected ? colors.primary : colors.textSecondary,
+                      ),
                     ),
                   ),
-                ),
-              );
-            }).toList(),
+                );
+              }).toList(),
+            ),
           ),
         );
       },

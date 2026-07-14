@@ -91,12 +91,16 @@ class VendorBill {
   };
 
   factory VendorBill.fromJson(Map<String, dynamic> json) {
-    final contact = json['contact'] as Map<String, dynamic>?;
+    final rawContact = json['contact'];
+    final contact = rawContact is Map
+        ? rawContact.cast<String, dynamic>()
+        : const <String, dynamic>{};
     return VendorBill(
       id: (json['id'] ?? '').toString(),
       billNumber: json['bill_number'] as String? ?? '',
       contactId: (json['contact_id'] ?? '').toString(),
-      contactName: contact?['name'] as String? ?? '',
+      contactName:
+          json['contact_name'] as String? ?? contact['name'] as String? ?? '',
       issueDate: json['issue_date'] as String? ?? '',
       dueDate: json['due_date'] as String? ?? '',
       status: BillStatus.fromString(json['status'] as String? ?? ''),
@@ -120,7 +124,8 @@ class VendorBill {
       isGstInclusive: json['is_gst_inclusive'] as bool? ?? false,
       lines:
           (json['lines'] as List?)
-              ?.map((e) => BillLine.fromJson(e as Map<String, dynamic>))
+              ?.whereType<Map>()
+              .map((e) => BillLine.fromJson(e.cast<String, dynamic>()))
               .toList() ??
           [],
       purchaseOrderId: json['purchase_order_id']?.toString(),

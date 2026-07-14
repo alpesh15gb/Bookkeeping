@@ -22,7 +22,7 @@ final stockMovementsProvider = FutureProvider.autoDispose
       final res = await ref
           .watch(movementServiceProvider)
           .getAllMovements(
-            limit: 200,
+            limit: 100,
             referenceType: query.referenceType?.value,
           );
       return switch (res) {
