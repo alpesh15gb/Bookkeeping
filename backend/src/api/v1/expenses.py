@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 from src.api.deps import get_db_session, enforce_permission, get_current_user
-from src.infrastructure.database.models import Expense, ExpenseCategory, User
+from src.infrastructure.database.models import Expense, ExpenseCategory, User, Account
 from src.core.rate_limiter import limiter
 from src.core.config import settings
 from src.schemas.expense_schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse, ExpenseListResponse, ExpensePreviewRequest, ExpensePreviewResponse
@@ -19,6 +19,7 @@ from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
 from src.domains.accounting.auto_post import auto_post_expense, cancel_expense as cancel_expense_fn
 from src.domains.taxation.services import GSTEngine
 from src.domains.company.services import resolve_origin_state_code
+from src.domains.taxation.filing_lock import ensure_gst_period_mutable, GSTPeriodFiledError
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -81,6 +82,7 @@ def _expense_to_response(e: Expense) -> ExpenseResponse:
         description=e.description,
         amount=e.amount,
         gst_rate=e.gst_rate,
+        place_of_supply_state_code=e.place_of_supply_state_code,
         cgst_amount=e.cgst_amount,
         sgst_amount=e.sgst_amount,
         igst_amount=e.igst_amount,
@@ -89,6 +91,8 @@ def _expense_to_response(e: Expense) -> ExpenseResponse:
         round_off=e.round_off,
         total=e.total,
         status=e.status,
+        notes=e.notes,
+        reference_number=e.reference_number,
         category_name=e.category.name if e.category else None,
         created_at=e.created_at,
         updated_at=e.updated_at,
@@ -166,6 +170,7 @@ def create_expense(
 
     try:
         validate_period_open(db, tenant_id, payload.expense_date)
+        ensure_gst_period_mutable(db, tenant_id, payload.expense_date)
 
         category = db.query(ExpenseCategory).filter(
             ExpenseCategory.id == payload.expense_category_id,
@@ -174,6 +179,16 @@ def create_expense(
         ).first()
         if not category:
             raise HTTPException(status_code=404, detail="Expense category not found.")
+
+        if payload.bank_account_id:
+            bank_account = db.query(Account).filter(
+                Account.id == payload.bank_account_id,
+                Account.tenant_id == tenant_id,
+                Account.deleted_at == None,
+                Account.account_type == "ASSET",
+            ).first()
+            if not bank_account:
+                raise HTTPException(status_code=400, detail="Payment account must be an active asset account in this company.")
 
         expense_number = _gen_expense_number(db, tenant_id)
         place_of_supply = payload.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
@@ -189,6 +204,7 @@ def create_expense(
             description=payload.description,
             amount=payload.amount,
             gst_rate=payload.gst_rate,
+            place_of_supply_state_code=place_of_supply,
             cgst_amount=totals["cgst_amount"],
             sgst_amount=totals["sgst_amount"],
             igst_amount=totals["igst_amount"],
@@ -204,6 +220,10 @@ def create_expense(
         db.commit()
         db.refresh(expense)
         return _expense_to_response(expense)
+    except HTTPException:
+        raise
+    except GSTPeriodFiledError as e:
+        raise HTTPException(status_code=409, detail=str(e))
     except Exception as e:
         logger.error(f"Error creating expense: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create expense: {str(e)}")
@@ -298,6 +318,14 @@ def update_expense(
             raise HTTPException(status_code=404, detail="Expense category not found.")
         expense.expense_category_id = payload.expense_category_id
     if payload.bank_account_id is not None:
+        bank_account = db.query(Account).filter(
+            Account.id == payload.bank_account_id,
+            Account.tenant_id == tenant_id,
+            Account.deleted_at == None,
+            Account.account_type == "ASSET",
+        ).first()
+        if not bank_account:
+            raise HTTPException(status_code=400, detail="Payment account must be an active asset account in this company.")
         expense.bank_account_id = payload.bank_account_id
     if payload.expense_date is not None:
         expense.expense_date = payload.expense_date
@@ -305,14 +333,19 @@ def update_expense(
         expense.vendor_name = payload.vendor_name
     if payload.description is not None:
         expense.description = payload.description
-    recompute = payload.amount is not None or payload.gst_rate is not None
+    if payload.notes is not None:
+        expense.notes = payload.notes
+    if payload.reference_number is not None:
+        expense.reference_number = payload.reference_number
+    recompute = payload.amount is not None or payload.gst_rate is not None or payload.place_of_supply_state_code is not None
     if payload.amount is not None:
         expense.amount = payload.amount
     if payload.gst_rate is not None:
         expense.gst_rate = payload.gst_rate
 
     if recompute:
-        pos_state = payload.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
+        pos_state = payload.place_of_supply_state_code or expense.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id)
+        expense.place_of_supply_state_code = pos_state
         totals = _compute_expense_totals(db, tenant_id, expense.amount, expense.gst_rate, pos_state)
         expense.cgst_amount = totals["cgst_amount"]
         expense.sgst_amount = totals["sgst_amount"]
@@ -362,6 +395,10 @@ def post_expense(
 
     from src.domains.accounting.period_lock import validate_period_open
     validate_period_open(db, tenant_id, expense.expense_date)
+    try:
+        ensure_gst_period_mutable(db, tenant_id, expense.expense_date)
+    except GSTPeriodFiledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
     if expense.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft expenses can be posted.")
@@ -446,7 +483,11 @@ def cancel_expense(
         raise HTTPException(status_code=404, detail="Expense not found.")
 
     from src.domains.accounting.period_lock import validate_period_open
-    validate_period_open(db, tenant_id, date.today())
+    validate_period_open(db, tenant_id, expense.expense_date)
+    try:
+        ensure_gst_period_mutable(db, tenant_id, expense.expense_date)
+    except GSTPeriodFiledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
     if expense.status != "POSTED":
         raise HTTPException(status_code=400, detail="Only posted expenses can be cancelled.")
@@ -476,7 +517,7 @@ def cancel_expense(
         tenant_id=tenant_id,
         expense_id=expense.id,
         expense_number=expense.expense_number,
-        cancel_date=date.today(),
+        cancel_date=expense.expense_date,
         expense_account_id=category.linked_account_id,
         cash_account_id=cash_account_id,
         amount=expense.amount,

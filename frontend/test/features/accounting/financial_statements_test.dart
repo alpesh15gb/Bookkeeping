@@ -39,7 +39,8 @@ void main() {
       final bs = BalanceSheetReport.fromJson({
         'total_assets': '100000',
         'total_liabilities': '40000',
-        'total_equity': '50000',
+        // Backend total_equity includes the current-period profit line.
+        'total_equity': '60000',
         'net_profit': '10000',
         'assets': [
           {'account_name': 'Cash', 'account_code': '10001', 'balance': '50000'},
@@ -54,17 +55,22 @@ void main() {
             'account_code': '30001',
             'balance': '50000',
           },
+          {
+            'account_name': 'Net Profit',
+            'account_code': '--',
+            'balance': '10000',
+          },
         ],
       });
       expect(bs.totalAssets, 100000);
       expect(bs.totalLiabilities, 40000);
-      expect(bs.totalEquity, 50000);
+      expect(bs.totalEquity, 60000);
       expect(bs.netProfit, 10000);
       expect(bs.totalLiabilitiesEquity, 100000);
       expect(bs.isBalanced, true);
     });
 
-    test('isBalanced false when A != L+E+NP', () {
+    test('isBalanced false when A != L+E', () {
       final bs = BalanceSheetReport(
         totalAssets: 100000,
         totalLiabilities: 50000,

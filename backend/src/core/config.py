@@ -73,6 +73,8 @@ class Settings(BaseSettings):
     IRP_CLIENT_SECRET: str = ""
     IRP_USERNAME: str = ""
     IRP_PASSWORD: str = ""
+    # Explicit opt-in for automated tests/local demos. Never enable in production.
+    COMPLIANCE_MOCK_ENABLED: bool = False
 
     # ----------------------------------------------------------------
     # GST Verification (gstverify.dubey.app)

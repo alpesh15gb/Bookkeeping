@@ -49,7 +49,14 @@ class EInvoiceService:
 
         url = f"{settings.IRP_BASE_URL}/ic/irp/api/v1/irn/generate"
 
+        if not settings.COMPLIANCE_MOCK_ENABLED and (
+            not settings.IRP_USERNAME or not settings.IRP_PASSWORD
+        ):
+            raise RuntimeError("IRP credentials are not configured.")
+
         try:
+            if settings.COMPLIANCE_MOCK_ENABLED:
+                raise requests.exceptions.ConnectionError("Explicit compliance test mode")
             resp = requests.post(url, json=payload, headers=headers, timeout=30)
             resp.raise_for_status()
             data = resp.json()
@@ -60,10 +67,8 @@ class EInvoiceService:
                 "ack_date": data.get("ackDt", datetime.now(timezone.utc).isoformat()),
             }
         except requests.exceptions.RequestException as exc:
-            # Fallback to mock if API unreachable (dev/staging)
-            import logging
-            logger = logging.getLogger("einvoice")
-            logger.warning(f"IRP API unreachable, using mock: {exc}")
+            if not settings.COMPLIANCE_MOCK_ENABLED:
+                raise RuntimeError(f"IRP gateway unavailable: {exc}") from exc
             qr_data = {
                 "SupplierGSTIN": tenant.gstin,
                 "RecipientGSTIN": contact.gstin,
@@ -80,6 +85,28 @@ class EInvoiceService:
                 "ack_number": str(100000000000000 + uuid.uuid4().int % 100000000000000),
                 "ack_date": datetime.now(timezone.utc).isoformat(),
             }
+
+    @staticmethod
+    def _call_irp_cancel(tenant: Tenant, invoice: Invoice, reason: str, remarks: str) -> None:
+        from src.core.config import settings
+        if settings.COMPLIANCE_MOCK_ENABLED:
+            return
+        if not settings.IRP_USERNAME or not settings.IRP_PASSWORD:
+            raise RuntimeError("IRP credentials are not configured.")
+        import requests
+        try:
+            response = requests.post(
+                f"{settings.IRP_BASE_URL}/ic/irp/api/v1/irn/cancel",
+                json={"Irn": invoice.irn, "CnlRsn": reason, "CnlRem": remarks},
+                headers={
+                    "Content-Type": "application/json", "gstin": tenant.gstin or "",
+                    "user_name": settings.IRP_USERNAME, "password": settings.IRP_PASSWORD,
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as exc:
+            raise RuntimeError(f"IRP cancellation failed: {exc}") from exc
 
     @staticmethod
     def generate_einvoice(db: Session, tenant_id: uuid.UUID, invoice_id: uuid.UUID):
@@ -215,7 +242,13 @@ class EInvoiceService:
                 detail="IRP Error [912]: Cancellation not allowed after 24 hours of generation."
             )
 
-        # 4. Update status
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        try:
+            EInvoiceService._call_irp_cancel(tenant, invoice, cancel_reason, cancel_remarks)
+        except Exception as exc:
+            raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc))
+
+        # 4. Update local status only after portal acknowledgement.
         invoice.e_invoice_status = "CANCELLED"
         invoice.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
 

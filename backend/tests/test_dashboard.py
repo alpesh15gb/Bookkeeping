@@ -159,22 +159,16 @@ class TestDashboard(unittest.TestCase):
         self.assertAlmostEqual(data["sgst_total"], 2700.0, places=2)
 
     def test_revenue_trend_empty(self):
-        """Test revenue trend with no data returns empty list.
-        NOTE: Uses PostgreSQL EXTRACT() syntax, fails with SQLite."""
-        try:
-            res = self.client.get("/api/v1/dashboard/revenue-trend", headers=self.headers_a)
-            self.assertIn(res.status_code, (200, 500))
-        except Exception:
-            pass  # Pre-existing: PostgreSQL EXTRACT() not supported by SQLite
+        """Test revenue trend with no data returns an empty list."""
+        res = self.client.get("/api/v1/dashboard/revenue-trend", headers=self.headers_a)
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json(), [])
 
     def test_expense_trend_empty(self):
-        """Test expense trend with no data.
-        NOTE: Uses PostgreSQL EXTRACT() syntax, fails with SQLite."""
-        try:
-            res = self.client.get("/api/v1/dashboard/expense-trend", headers=self.headers_a)
-            self.assertIn(res.status_code, (200, 500))
-        except Exception:
-            pass  # Pre-existing: PostgreSQL EXTRACT() not supported by SQLite
+        """Test expense trend with no data returns an empty list."""
+        res = self.client.get("/api/v1/dashboard/expense-trend", headers=self.headers_a)
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(res.json(), [])
 
     def test_metrics_includes_posted_invoices(self):
         """Test that POSTED invoices are included in metrics"""
@@ -217,28 +211,15 @@ class TestDashboard(unittest.TestCase):
         self.assertEqual(data["igst_total"], 0.0)
 
     def test_revenue_trend_with_data(self):
-        """Test revenue trend returns data for posted invoices.
-        NOTE: Uses PostgreSQL EXTRACT() syntax, fails with SQLite."""
-        try:
-            self._create_posted_invoice(amount=10000.00)
-        except Exception:
-            self.skipTest("Invoice creation/finalization failed")
-
-        try:
-            res = self.client.get("/api/v1/dashboard/revenue-trend", headers=self.headers_a)
-            self.assertIn(res.status_code, (200, 500))
-            if res.status_code == 200:
-                data = res.json()
-                self.assertIsInstance(data, list)
-                self.assertGreater(len(data), 0)
-                entry = data[0]
-                self.assertIn("month", entry)
-                self.assertIn("year", entry)
-                self.assertIn("total", entry)
-        except unittest.SkipTest:
-            raise
-        except Exception:
-            pass  # Pre-existing: PostgreSQL EXTRACT() not supported by SQLite
+        """Test revenue trend returns data for posted invoices."""
+        self._create_posted_invoice(amount=10000.00)
+        res = self.client.get("/api/v1/dashboard/revenue-trend", headers=self.headers_a)
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertGreater(len(data), 0)
+        self.assertIn("month", data[0])
+        self.assertIn("year", data[0])
+        self.assertIn("total", data[0])
 
     def test_tenant_isolation(self):
         """Test that tenant A cannot see tenant B's dashboard data"""

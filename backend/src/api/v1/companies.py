@@ -650,7 +650,7 @@ def verify_and_execute_purge(
         db.query(BillLine).filter(BillLine.bill_id.in_(db.query(Bill.id).filter(Bill.tenant_id == tenant_id))).delete(synchronize_session=False)
         db.query(ProformaInvoiceLine).filter(ProformaInvoiceLine.proforma_invoice_id.in_(db.query(ProformaInvoice.id).filter(ProformaInvoice.tenant_id == tenant_id))).delete(synchronize_session=False)
         db.query(JournalLine).filter(JournalLine.entry_id.in_(db.query(JournalEntry.id).filter(JournalEntry.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(InventoryAdjustmentLine).filter(InventoryAdjustmentLine.inventory_adjustment_id.in_(db.query(InventoryAdjustment.id).filter(InventoryAdjustment.tenant_id == tenant_id))).delete(synchronize_session=False)
+        db.query(InventoryAdjustmentLine).filter(InventoryAdjustmentLine.adjustment_id.in_(db.query(InventoryAdjustment.id).filter(InventoryAdjustment.tenant_id == tenant_id))).delete(synchronize_session=False)
         db.query(CreditNoteLine).filter(CreditNoteLine.credit_note_id.in_(db.query(CreditNote.id).filter(CreditNote.tenant_id == tenant_id))).delete(synchronize_session=False)
         db.query(DebitNoteLine).filter(DebitNoteLine.debit_note_id.in_(db.query(DebitNote.id).filter(DebitNote.tenant_id == tenant_id))).delete(synchronize_session=False)
         db.query(DeliveryChallanLine).filter(DeliveryChallanLine.delivery_challan_id.in_(db.query(DeliveryChallan.id).filter(DeliveryChallan.tenant_id == tenant_id))).delete(synchronize_session=False)
@@ -743,8 +743,11 @@ def export_tenant_data(
     request: Request,
     db: Session = Depends(get_db_session),
     current_user: User = Depends(get_current_user),
+    authorized_tenant_id: uuid.UUID = Depends(enforce_permission("data:import")),
 ):
     """Export all tenant data as a JSON backup."""
+    if tenant_id != authorized_tenant_id:
+        raise HTTPException(status_code=403, detail="Cannot export another tenant's data.")
     from sqlalchemy import inspect
     from src.infrastructure.database.models import (
         Contact, Product, Invoice, Bill, Expense, JournalEntry, Account,
@@ -753,20 +756,17 @@ def export_tenant_data(
         EWayBill, BankingProfile, ExpenseCategory, TenantSetting, NumberingSeries,
     )
 
-    membership = db.query(TenantMembership).filter(
-        TenantMembership.user_id == current_user.id,
-        TenantMembership.tenant_id == tenant_id,
-    ).first()
-    if not membership:
-        raise HTTPException(status_code=403, detail="Access denied.")
-
     def serialize_rows(rows):
         result = []
         for row in rows:
             d = {}
             for col in inspect(row).mapper.column_attrs:
                 val = getattr(row, col.key)
-                if val is None:
+                if any(part in col.key.lower() for part in ("password", "secret", "token", "credential")):
+                    # Integration credentials are intentionally not portable.
+                    # Users must reconnect external services after a restore.
+                    d[col.key] = None
+                elif val is None:
                     d[col.key] = None
                 elif isinstance(val, (datetime, date)):
                     d[col.key] = val.isoformat()
@@ -819,7 +819,9 @@ def export_tenant_data(
             d = dict(zip(col_names, row))
             for key in d:
                 val = d[key]
-                if val is None:
+                if any(part in key.lower() for part in ("password", "secret", "token", "credential")):
+                    d[key] = None
+                elif val is None:
                     d[key] = None
                 elif isinstance(val, (datetime, date)):
                     d[key] = val.isoformat()
@@ -867,7 +869,7 @@ def import_tenant_data(
     tenant_id: uuid.UUID,
     payload: dict,
     db: Session = Depends(get_db_session),
-    current_user: User = Depends(get_current_user),
+    authorized_tenant_id: uuid.UUID = Depends(enforce_permission("data:import")),
 ):
     """
     Restore a previously exported JSON backup into the current tenant.
@@ -889,12 +891,8 @@ def import_tenant_data(
         EWayBill
     )
 
-    membership = db.query(TenantMembership).filter(
-        TenantMembership.user_id == current_user.id,
-        TenantMembership.tenant_id == tenant_id,
-    ).first()
-    if not membership:
-        raise HTTPException(status_code=403, detail="Access denied.")
+    if tenant_id != authorized_tenant_id:
+        raise HTTPException(status_code=403, detail="Cannot import into another tenant.")
 
     if not isinstance(payload, dict) or "tenant_id" not in payload:
         raise HTTPException(status_code=400, detail="Missing tenant_id in backup.")

@@ -16,9 +16,11 @@ from src.infrastructure.database.models import (
 )
 
 from sqlalchemy import text
+from src.core.config import settings
 
 class TestEWayBillFlow(unittest.TestCase):
     def setUp(self):
+        settings.COMPLIANCE_MOCK_ENABLED = True
         # Reset test database tables
         Base.metadata.drop_all(bind=engine)
         Base.metadata.create_all(bind=engine)
@@ -145,6 +147,9 @@ class TestEWayBillFlow(unittest.TestCase):
             "X-Tenant-ID": str(self.tenant_b_id),
             "Authorization": f"Bearer {self.token_b}"
         }
+
+    def tearDown(self):
+        settings.COMPLIANCE_MOCK_ENABLED = False
 
     def test_eway_bill_lifecycle_and_validations(self):
         # 1. Post a sales invoice with goods (auto-posted to POSTED by auto_post_invoice)

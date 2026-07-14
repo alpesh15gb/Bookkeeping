@@ -13,7 +13,7 @@ class ExpenseCreate(SchemaBase):
     description: Optional[str] = None
     amount: Decimal = Field(..., gt=Decimal("0.00"))
     gst_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
-    place_of_supply_state_code: Optional[str] = None
+    place_of_supply_state_code: Optional[str] = Field(None, pattern="^[0-9]{2}$")
     notes: Optional[str] = None
     reference_number: Optional[str] = Field(None, max_length=50)
 
@@ -25,7 +25,7 @@ class ExpenseUpdate(SchemaBase):
     description: Optional[str] = None
     amount: Optional[Decimal] = Field(None, gt=Decimal("0.00"))
     gst_rate: Optional[Decimal] = Field(None, ge=0, le=100)
-    place_of_supply_state_code: Optional[str] = None
+    place_of_supply_state_code: Optional[str] = Field(None, pattern="^[0-9]{2}$")
     notes: Optional[str] = None
     reference_number: Optional[str] = None
 
@@ -40,6 +40,7 @@ class ExpenseResponse(SchemaBase):
     description: Optional[str]
     amount: Decimal
     gst_rate: Decimal = Decimal("0.00")
+    place_of_supply_state_code: Optional[str] = Field(None, pattern="^[0-9]{2}$")
     cgst_amount: Decimal = Decimal("0.00")
     sgst_amount: Decimal = Decimal("0.00")
     igst_amount: Decimal = Decimal("0.00")
@@ -71,7 +72,7 @@ class ExpenseListResponse(SchemaBase):
 class ExpensePreviewRequest(SchemaBase):
     amount: Decimal = Field(..., gt=Decimal("0.00"))
     gst_rate: Decimal = Field(default=Decimal("0.00"), ge=0, le=100)
-    place_of_supply_state_code: Optional[str] = None
+    place_of_supply_state_code: Optional[str] = Field(None, pattern="^[0-9]{2}$")
 
 class ExpensePreviewResponse(SchemaBase):
     amount: Decimal

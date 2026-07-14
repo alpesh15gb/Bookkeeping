@@ -26,10 +26,6 @@ class PaymentValidationService {
     if (amount <= 0) {
       return (false, 'Amount must be greater than zero');
     }
-    if (allocations.isEmpty) {
-      return (false, 'At least one allocation is required');
-    }
-
     final modeValid = PaymentMode.values.any(
       (m) => m.value == paymentMode.toUpperCase(),
     );

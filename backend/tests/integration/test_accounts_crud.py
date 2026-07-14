@@ -252,6 +252,39 @@ class TestAccountsCrud:
         resp = await async_client.get(f"/api/v1/masters/accounts/{account_id}", headers=hb)
         assert resp.status_code == status.HTTP_404_NOT_FOUND
 
+    @pytest.mark.asyncio
+    async def test_delete_account_with_balance_requires_deactivation(self, async_client, owner_headers):
+        headers, _ = owner_headers
+        created = await async_client.post("/api/v1/masters/accounts", json={
+            "name": "Opening Cash", "code": "1301", "account_type": "ASSET",
+            "opening_balance": 100,
+        }, headers=headers)
+
+        response = await async_client.delete(
+            f"/api/v1/masters/accounts/{created.json()['id']}", headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Deactivate it instead" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_delete_parent_account_with_children_is_blocked(self, async_client, owner_headers):
+        headers, _ = owner_headers
+        parent = await async_client.post("/api/v1/masters/accounts", json={
+            "name": "Cash Group", "code": "1302", "account_type": "ASSET", "opening_balance": 0,
+        }, headers=headers)
+        await async_client.post("/api/v1/masters/accounts", json={
+            "name": "Till", "code": "1303", "account_type": "ASSET", "opening_balance": 0,
+            "parent_id": parent.json()["id"],
+        }, headers=headers)
+
+        response = await async_client.delete(
+            f"/api/v1/masters/accounts/{parent.json()['id']}", headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "child accounts" in response.json()["detail"]
+
     # ── UPDATE ──────────────────────────────────────────────────────────
 
     @pytest.mark.asyncio
@@ -296,6 +329,41 @@ class TestAccountsCrud:
         }, headers=headers)
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
         assert "Parent account not found" in resp.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_account_parent_must_have_same_type(self, async_client, owner_headers):
+        headers, _ = owner_headers
+        parent = await async_client.post("/api/v1/masters/accounts", json={
+            "name": "Assets", "code": "1510", "account_type": "ASSET", "opening_balance": 0,
+        }, headers=headers)
+
+        response = await async_client.post("/api/v1/masters/accounts", json={
+            "name": "Wrong Child", "code": "1511", "account_type": "EXPENSE",
+            "parent_id": parent.json()["id"], "opening_balance": 0,
+        }, headers=headers)
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "same account type" in response.json()["detail"]
+
+    @pytest.mark.asyncio
+    async def test_update_account_rejects_indirect_parent_cycle(self, async_client, owner_headers):
+        headers, _ = owner_headers
+        first = await async_client.post("/api/v1/masters/accounts", json={
+            "name": "Parent", "code": "1520", "account_type": "ASSET", "opening_balance": 0,
+        }, headers=headers)
+        second = await async_client.post("/api/v1/masters/accounts", json={
+            "name": "Child", "code": "1521", "account_type": "ASSET",
+            "parent_id": first.json()["id"], "opening_balance": 0,
+        }, headers=headers)
+
+        response = await async_client.put(
+            f"/api/v1/masters/accounts/{first.json()['id']}",
+            json={"parent_id": second.json()["id"]},
+            headers=headers,
+        )
+
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "cycle" in response.json()["detail"]
 
     @pytest.mark.asyncio
     async def test_update_account_duplicate_code(self, async_client, owner_headers):

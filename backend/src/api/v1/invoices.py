@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status, Request, Body
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from typing import List, Optional
 import uuid
 from decimal import Decimal
@@ -25,6 +26,7 @@ from src.schemas.document import (
 )
 from src.schemas.einvoice_schemas import EInvoiceResponse, EInvoiceCancelRequest, EInvoiceCancelResponse
 from src.domains.taxation.services import GSTEngine
+from src.domains.taxation.filing_lock import ensure_outward_period_mutable, GSTPeriodFiledError
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.accounting.auto_post import auto_post_invoice, cancel_invoice, get_display_status
 from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
@@ -53,6 +55,10 @@ def create_invoice(
     ).first()
     if not contact:
         raise HTTPException(status_code=404, detail="Customer not found in this company context.")
+    if contact.contact_type not in ("CUSTOMER", "BOTH"):
+        raise HTTPException(status_code=400, detail="Selected contact must be a Customer.")
+    if not contact.is_active:
+        raise HTTPException(status_code=400, detail="Selected customer is inactive.")
 
     # 1. Sequence Auto-Generation
     invoice_number = payload.invoice_number
@@ -247,7 +253,12 @@ def create_invoice(
 
     # Auto-post: create journal entry immediately
     try:
-        auto_post_invoice(db, tenant_id, invoice)
+        auto_post_invoice(
+            db,
+            tenant_id,
+            invoice,
+            move_stock=invoice.source_document_type != "DELIVERY_CHALLAN",
+        )
     except ValueError as ve:
         db.rollback()
         raise HTTPException(status_code=422, detail=str(ve))
@@ -287,8 +298,8 @@ def invoice_stats(
         func.count(case((Invoice.status == "PARTIALLY_PAID", 1))).label("partially_paid"),
         func.count(case((Invoice.status == "PAID", 1))).label("paid"),
         func.count(case((Invoice.status == "CANCELLED", 1))).label("cancelled"),
-        func.coalesce(func.sum(Invoice.total), 0).label("total_amount"),
-        func.coalesce(func.sum(Invoice.amount_paid), 0).label("collected"),
+        func.coalesce(func.sum(case((Invoice.status.in_(("POSTED", "SENT", "PARTIALLY_PAID", "PAID")), Invoice.total), else_=0)), 0).label("total_amount"),
+        func.coalesce(func.sum(case((Invoice.status.in_(("POSTED", "SENT", "PARTIALLY_PAID", "PAID")), Invoice.amount_paid), else_=0)), 0).label("collected"),
     ).filter(
         Invoice.tenant_id == tenant_id,
         Invoice.deleted_at == None,
@@ -300,7 +311,7 @@ def invoice_stats(
     ).filter(
         Invoice.tenant_id == tenant_id,
         Invoice.deleted_at == None,
-        Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
+        Invoice.status.in_(["POSTED", "SENT", "PARTIALLY_PAID"]),
         Invoice.due_date < func.current_date(),
     ).scalar() or 0
 
@@ -366,7 +377,7 @@ def list_invoices(
             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD.")
 
     total = q.count()
-    results = q.offset(offset).limit(limit).all()
+    results = q.order_by(Invoice.issue_date.desc(), Invoice.created_at.desc()).offset(offset).limit(limit).all()
 
     items = []
     for inv, contact_name in results:
@@ -546,6 +557,10 @@ def create_credit_note(
         inv = db.query(Invoice).filter(Invoice.id == payload.invoice_id, Invoice.tenant_id == tenant_id).first()
         if not inv:
             raise HTTPException(status_code=404, detail="Invoice not found.")
+        if inv.status in ("DRAFT", "CANCELLED"):
+            raise HTTPException(status_code=400, detail="Credit notes require a posted invoice.")
+    elif payload.restock_items:
+        raise HTTPException(status_code=400, detail="Stock-return credit notes must reference an invoice.")
 
     cn_number = payload.credit_note_number
     if not cn_number:
@@ -563,6 +578,15 @@ def create_credit_note(
     cess = Decimal("0.0000")
 
     for line in payload.line_items:
+        if payload.invoice_id:
+            invoice_quantity = sum(
+                (invoice_line.quantity for invoice_line in inv.lines if invoice_line.product_id == line.product_id),
+                Decimal("0"),
+            )
+            if invoice_quantity <= 0:
+                raise HTTPException(status_code=400, detail="Credit note item was not sold on the referenced invoice.")
+            if line.quantity > invoice_quantity:
+                raise HTTPException(status_code=400, detail="Credit note quantity exceeds the invoiced quantity.")
         resolved_gst_rate = GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
         line_discount = line.discount if hasattr(line, 'discount') and line.discount else Decimal("0.0000")
         line_subtotal = (line.quantity * line.rate) - line_discount
@@ -611,6 +635,7 @@ def create_credit_note(
         credit_note_number=cn_number,
         issue_date=payload.issue_date,
         reason=payload.reason,
+        restock_items=payload.restock_items,
         status="DRAFT",
         subtotal=subtotal,
         cgst_amount=cgst,
@@ -784,7 +809,7 @@ def finalize_credit_note(
         CreditNote.id == cn_id,
         CreditNote.tenant_id == tenant_id,
         CreditNote.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not cn:
         raise HTTPException(status_code=404, detail="Credit Note not found.")
 
@@ -793,6 +818,30 @@ def finalize_credit_note(
 
     if cn.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft Credit Notes can be finalized.")
+
+    if cn.restock_items:
+        if not cn.invoice:
+            raise HTTPException(status_code=400, detail="Stock-return credit notes require an invoice.")
+        for line in cn.lines:
+            sold_quantity = sum(
+                (item.quantity for item in cn.invoice.lines if item.product_id == line.product_id),
+                Decimal("0"),
+            )
+            already_returned = db.query(func.coalesce(func.sum(CreditNoteLine.quantity), 0)).join(
+                CreditNote, CreditNote.id == CreditNoteLine.credit_note_id
+            ).filter(
+                CreditNote.tenant_id == tenant_id,
+                CreditNote.invoice_id == cn.invoice_id,
+                CreditNote.id != cn.id,
+                CreditNote.status == "POSTED",
+                CreditNote.restock_items == True,
+                CreditNoteLine.product_id == line.product_id,
+            ).scalar() or Decimal("0")
+            if already_returned + line.quantity > sold_quantity:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Cumulative returned quantity exceeds the quantity sold.",
+                )
 
     # Guard against double-posting
     from src.domains.accounting.auto_post import _check_no_existing_posting
@@ -856,6 +905,25 @@ def finalize_credit_note(
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
+    if cn.restock_items:
+        for line in cn.lines:
+            product = db.query(Product).filter(
+                Product.id == line.product_id,
+                Product.tenant_id == tenant_id,
+                Product.deleted_at == None,
+            ).with_for_update().first()
+            if product and product.product_type == "GOODS":
+                product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
+                db.add(StockLedger(
+                    tenant_id=tenant_id,
+                    product_id=line.product_id,
+                    reference_type="CREDIT_NOTE",
+                    reference_id=cn.id,
+                    quantity=line.quantity,
+                    balance_quantity=product.current_stock,
+                    rate=line.rate,
+                ))
+
     # Reduce the linked invoice's outstanding by treating the CN as a credit
     if cn.invoice_id:
         inv = db.query(Invoice).filter(Invoice.id == cn.invoice_id, Invoice.tenant_id == tenant_id).first()
@@ -876,13 +944,14 @@ def finalize_credit_note(
 def cancel_credit_note(
     cn_id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
+    current_user: User = Depends(get_current_user),
 ):
     cn = db.query(CreditNote).filter(
         CreditNote.id == cn_id,
         CreditNote.tenant_id == tenant_id,
         CreditNote.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not cn:
         raise HTTPException(status_code=404, detail="Credit Note not found.")
 
@@ -891,6 +960,10 @@ def cancel_credit_note(
 
     if cn.status != "POSTED":
         raise HTTPException(status_code=400, detail="Only posted Credit Notes can be cancelled.")
+    try:
+        ensure_outward_period_mutable(db, tenant_id, cn.issue_date)
+    except GSTPeriodFiledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
     contact_id = cn.invoice.contact_id if cn.invoice else None
     if not contact_id:
@@ -930,6 +1003,34 @@ def cancel_credit_note(
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
+    stock_moves = db.query(StockLedger).filter(
+        StockLedger.tenant_id == tenant_id,
+        StockLedger.reference_type == "CREDIT_NOTE",
+        StockLedger.reference_id == cn.id,
+    ).all()
+    for move in stock_moves:
+        product = db.query(Product).filter(
+            Product.id == move.product_id,
+            Product.tenant_id == tenant_id,
+        ).with_for_update().first()
+        if product:
+            available = product.current_stock or Decimal("0")
+            if available < move.quantity:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Returned stock has already been consumed; reverse downstream stock movements first.",
+                )
+            product.current_stock = available - move.quantity
+            db.add(StockLedger(
+                tenant_id=tenant_id,
+                product_id=move.product_id,
+                reference_type="CREDIT_NOTE_REVERSAL",
+                reference_id=cn.id,
+                quantity=-move.quantity,
+                balance_quantity=product.current_stock,
+                rate=move.rate,
+            ))
+
     # Reverse the outstanding impact on the linked invoice
     if cn.invoice_id:
         inv = db.query(Invoice).filter(Invoice.id == cn.invoice_id, Invoice.tenant_id == tenant_id).first()
@@ -942,6 +1043,8 @@ def cancel_credit_note(
                 inv.status = "PARTIALLY_PAID"
 
     cn.status = "CANCELLED"
+    cn.cancelled_at = datetime.now(timezone.utc)
+    cn.cancelled_by = current_user.id
     db.commit()
     db.refresh(cn)
     return cn
@@ -1403,6 +1506,10 @@ def update_invoice(
         )
 
     if invoice.status == "POSTED":
+        try:
+            ensure_outward_period_mutable(db, tenant_id, invoice.issue_date)
+        except GSTPeriodFiledError as exc:
+            raise HTTPException(status_code=409, detail=str(exc))
         existing_allocations = db.query(PaymentAllocation).filter(PaymentAllocation.invoice_id == invoice.id).first()
         if existing_allocations:
             raise HTTPException(
@@ -1592,7 +1699,12 @@ def update_invoice(
             db.delete(entry)
 
         # Re-post with new amounts (creates new JE + stock entries)
-        auto_post_invoice(db, tenant_id, invoice)
+        auto_post_invoice(
+            db,
+            tenant_id,
+            invoice,
+            move_stock=invoice.source_document_type != "DELIVERY_CHALLAN",
+        )
 
     db.commit()
     db.refresh(invoice)
@@ -1608,7 +1720,7 @@ def finalize_invoice(
         Invoice.id == id,
         Invoice.tenant_id == tenant_id,
         Invoice.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found in this company context.")
 
@@ -1623,46 +1735,16 @@ def finalize_invoice(
         db.refresh(invoice)
         return invoice
 
-    # Guard against double-posting
-    from src.domains.accounting.auto_post import _check_no_existing_posting
-    _check_no_existing_posting(db, tenant_id, "INVOICE", invoice.id)
-
-    resolver = AccountResolver(db, tenant_id)
-    customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
-    sales_revenue_account_id = resolver.resolve("sales_revenue")
-    cgst_account_id = resolver.resolve("cgst_output")
-    sgst_account_id = resolver.resolve("sgst_output")
-    igst_account_id = resolver.resolve("igst_output")
-    utgst_account_id = resolver.resolve("utgst_output")
-    cess_account_id = resolver.resolve("cess_output")
-    round_off_account_id = resolver.resolve("round_off") if invoice.round_off != 0 else None
-
-    ledger_draft = LedgerPostingEngine.create_invoice_posting(
-        tenant_id=tenant_id,
-        invoice_id=invoice.id,
-        invoice_number=invoice.invoice_number,
-        invoice_date=invoice.issue_date,
-        customer_account_id=customer_account_id,
-        sales_revenue_account_id=sales_revenue_account_id,
-        subtotal=invoice.subtotal,
-        discount_total=invoice.discount_total,
-        cgst_account_id=cgst_account_id,
-        cgst_amount=invoice.cgst_amount,
-        sgst_account_id=sgst_account_id,
-        sgst_amount=invoice.sgst_amount,
-        igst_account_id=igst_account_id,
-        igst_amount=invoice.igst_amount,
-        utgst_account_id=utgst_account_id,
-        utgst_amount=invoice.utgst_amount,
-        cess_account_id=cess_account_id,
-        cess_amount=invoice.cess_amount,
-        round_off_account_id=round_off_account_id,
-        round_off_amount=invoice.round_off,
-    )
-
-    journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
-
-    invoice.status = "POSTED"
+    try:
+        auto_post_invoice(
+            db,
+            tenant_id,
+            invoice,
+            move_stock=invoice.source_document_type != "DELIVERY_CHALLAN",
+        )
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc))
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -1766,7 +1848,7 @@ def record_invoice_payment(
 def cancel_invoice(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:cancel")),
     current_user: User = Depends(get_current_user)
 ):
     invoice = db.query(Invoice).filter(
@@ -1776,6 +1858,10 @@ def cancel_invoice(
     ).with_for_update().first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found.")
+    try:
+        ensure_outward_period_mutable(db, tenant_id, invoice.issue_date)
+    except GSTPeriodFiledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
     from src.domains.accounting.period_lock import validate_period_open
     validate_period_open(db, tenant_id, invoice.issue_date)
@@ -1827,23 +1913,31 @@ def cancel_invoice(
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
 
-    for line in invoice.lines:
-        if line.product_id and line.quantity:
-            product = db.query(Product).filter(
-                Product.id == line.product_id,
-                Product.tenant_id == tenant_id
-            ).with_for_update().first()
-            if product and product.product_type == "GOODS":
-                product.current_stock = (product.current_stock or Decimal("0")) + line.quantity
-                db.add(StockLedger(
-                    tenant_id=tenant_id,
-                    product_id=line.product_id,
-                    reference_type="INVOICE_REVERSAL",
-                    reference_id=invoice.id,
-                    quantity=line.quantity,
-                    balance_quantity=product.current_stock,
-                    rate=line.rate,
-                ))
+    # Restore only stock that this invoice actually moved. Invoices sourced
+    # from delivery challans have no INVOICE stock rows and therefore cannot
+    # incorrectly put already-delivered goods back on hand.
+    stock_moves = db.query(StockLedger).filter(
+        StockLedger.tenant_id == tenant_id,
+        StockLedger.reference_type == "INVOICE",
+        StockLedger.reference_id == invoice.id,
+    ).all()
+    for move in stock_moves:
+        product = db.query(Product).filter(
+            Product.id == move.product_id,
+            Product.tenant_id == tenant_id,
+        ).with_for_update().first()
+        if product:
+            restore_quantity = -move.quantity
+            product.current_stock = (product.current_stock or Decimal("0")) + restore_quantity
+            db.add(StockLedger(
+                tenant_id=tenant_id,
+                product_id=move.product_id,
+                reference_type="INVOICE_REVERSAL",
+                reference_id=invoice.id,
+                quantity=restore_quantity,
+                balance_quantity=product.current_stock,
+                rate=move.rate,
+            ))
 
     invoice.status = "CANCELLED"
     invoice.cancelled_at = datetime.now(timezone.utc)
@@ -2328,7 +2422,7 @@ def email_invoice(
     id: uuid.UUID,
     payload: EmailInvoiceRequest = None,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:update")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:email")),
 ):
     """Queues an invoice email to the customer. Defaults to contact email."""
     invoice = db.query(Invoice).filter(

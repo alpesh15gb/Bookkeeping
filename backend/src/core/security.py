@@ -41,6 +41,9 @@ class Permissions:
     INVOICE_UPDATE = "invoice:update"
     INVOICE_FINALIZE = "invoice:finalize"
     INVOICE_DELETE = "invoice:delete"
+    INVOICE_CANCEL = "invoice:cancel"
+    INVOICE_EMAIL = "invoice:email"
+    SALES_CONVERT = "sales:convert"
 
     # Payments Context
     PAYMENT_CREATE = "payment:create"
@@ -92,6 +95,7 @@ ROLE_PERMISSIONS = {
     Permissions.CONTACT_UPDATE, Permissions.CONTACT_DELETE,
     Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW,
     Permissions.INVOICE_UPDATE, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_DELETE,
+    Permissions.INVOICE_CANCEL, Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
     Permissions.PAYMENT_CREATE, Permissions.PAYMENT_VIEW, Permissions.PAYMENT_DELETE, Permissions.PAYMENT_CANCEL,
     Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
     Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
@@ -107,7 +111,8 @@ ROLE_PERMISSIONS = {
     Permissions.TENANT_VIEW,
     Permissions.SETTINGS_VIEW, Permissions.SETTINGS_UPDATE,
     Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
-    Permissions.INVOICE_VIEW, Permissions.INVOICE_FINALIZE,
+    Permissions.INVOICE_VIEW, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_CANCEL,
+    Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
     Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE, Permissions.PAYMENT_CANCEL,
     Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
     Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
@@ -121,10 +126,12 @@ ROLE_PERMISSIONS = {
 "salesperson": [
     Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
     Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW, Permissions.INVOICE_UPDATE,
+    Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
     Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE,
 ],
 "auditor": [
     Permissions.TENANT_VIEW,
+    Permissions.SETTINGS_VIEW,
     Permissions.CONTACT_VIEW,
     Permissions.INVOICE_VIEW,
     Permissions.PAYMENT_VIEW,
@@ -132,6 +139,7 @@ ROLE_PERMISSIONS = {
     Permissions.GST_REPORT_VIEW,
     Permissions.CREDIT_NOTE_VIEW, Permissions.DEBIT_NOTE_VIEW,
     Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+    Permissions.EXPENSE_VIEW, Permissions.BILL_VIEW,
 ],
 }
 

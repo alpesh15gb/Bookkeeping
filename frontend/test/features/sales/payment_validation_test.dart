@@ -56,7 +56,7 @@ void main() {
       expect(r.$1, false);
     });
 
-    test('rejects empty allocations', () {
+    test('accepts empty allocations as customer advance', () {
       final r = validation.validateForCreate(
         contactId: 'c1',
         paymentDate: '2025-07-01',
@@ -65,7 +65,7 @@ void main() {
         allocations: const [],
         availableInvoices: [validInvoice],
       );
-      expect(r.$1, false);
+      expect(r.$1, true);
     });
 
     test('rejects invalid payment mode', () {

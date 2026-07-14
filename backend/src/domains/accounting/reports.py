@@ -114,6 +114,7 @@ class FinancialReportingService:
             JOIN journal_lines jl ON a.id = jl.account_id
             JOIN journal_entries je ON jl.entry_id = je.id
             WHERE je.entry_date BETWEEN :start_date AND :end_date
+              AND COALESCE(je.source_type, '') <> 'YEAR_END'
               AND a.account_type IN ('REVENUE', 'EXPENSE')
               AND a.tenant_id = :tenant_id
               AND a.deleted_at IS NULL
@@ -223,8 +224,24 @@ class FinancialReportingService:
         
         # Guard: ensure P&L period is valid (start <= end)
         if fy_start <= as_of_date:
-            pl_data = FinancialReportingService.get_profit_and_loss(db, fy_start, as_of_date, tenant_id)
-            current_year_earnings = Decimal(str(pl_data["net_profit"]))
+            # A year-end journal has already transferred that FY's result to
+            # retained earnings. Adding P&L again would double-count equity.
+            closing_entry_exists = db.execute(text("""
+                SELECT 1 FROM journal_entries
+                WHERE tenant_id = :tenant_id
+                  AND source_type = 'YEAR_END'
+                  AND entry_date BETWEEN :fy_start AND :as_of_date
+                LIMIT 1
+            """), {
+                "tenant_id": tenant_id.hex,
+                "fy_start": fy_start,
+                "as_of_date": as_of_date,
+            }).first() is not None
+            if closing_entry_exists:
+                current_year_earnings = Decimal("0.00")
+            else:
+                pl_data = FinancialReportingService.get_profit_and_loss(db, fy_start, as_of_date, tenant_id)
+                current_year_earnings = Decimal(str(pl_data["net_profit"]))
         else:
             current_year_earnings = Decimal("0.00")
         total_equity += current_year_earnings

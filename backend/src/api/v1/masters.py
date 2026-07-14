@@ -360,6 +360,13 @@ def create_account(
         parent = db.query(Account).filter(Account.id == payload.parent_id, Account.tenant_id == tenant_id, Account.deleted_at == None).first()
         if not parent:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Parent account not found.")
+        if not parent.is_active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Parent account is inactive.")
+        if parent.account_type != payload.account_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent and child accounts must have the same account type.",
+            )
 
     # Check for duplicate code
     dup = db.query(Account).filter(Account.tenant_id == tenant_id, Account.code == payload.code, Account.deleted_at == None).first()
@@ -511,6 +518,37 @@ def update_account(
         parent = db.query(Account).filter(Account.id == payload.parent_id, Account.tenant_id == tenant_id, Account.deleted_at == None).first()
         if not parent:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Parent account not found.")
+        if not parent.is_active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Parent account is inactive.")
+        if parent.account_type != account.account_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent and child accounts must have the same account type.",
+            )
+
+        # Walk upward from the proposed parent. A self-check alone does not
+        # prevent A -> B -> A cycles, which break COA traversal and reporting.
+        ancestor = parent
+        visited = set()
+        while ancestor is not None:
+            if ancestor.id == account.id:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Account hierarchy cannot contain a cycle.",
+                )
+            if ancestor.id in visited:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Existing account hierarchy contains a cycle.",
+                )
+            visited.add(ancestor.id)
+            if ancestor.parent_id is None:
+                break
+            ancestor = db.query(Account).filter(
+                Account.id == ancestor.parent_id,
+                Account.tenant_id == tenant_id,
+                Account.deleted_at == None,
+            ).first()
         account.parent_id = payload.parent_id
 
     if payload.name is not None:
@@ -548,6 +586,29 @@ def delete_account(
     ).first()
     if not account:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Account not found.")
+
+    from src.infrastructure.database.models import JournalLine
+
+    child_count = db.query(Account).filter(
+        Account.tenant_id == tenant_id,
+        Account.parent_id == account.id,
+        Account.deleted_at == None,
+    ).count()
+    if child_count:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete an account with child accounts. Reassign or deactivate the children first.",
+        )
+
+    has_journal_activity = db.query(JournalLine.id).filter(
+        JournalLine.account_id == account.id,
+    ).first() is not None
+    has_balance = account.opening_balance != 0 or account.current_balance != 0
+    if has_journal_activity or has_balance:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete an account with balances or posted journal activity. Deactivate it instead.",
+        )
     account.deleted_at = datetime.now(timezone.utc)
     db.commit()
 

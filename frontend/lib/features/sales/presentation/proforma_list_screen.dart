@@ -62,11 +62,7 @@ class ProformaListItem {
 // ---------------------------------------------------------------------------
 
 class ProformaListQuery {
-  const ProformaListQuery({
-    this.page = 1,
-    this.limit = 25,
-    this.status,
-  });
+  const ProformaListQuery({this.page = 1, this.limit = 25, this.status});
   final int page, limit;
   final String? status;
 
@@ -88,10 +84,7 @@ final proformaListProvider = FutureProvider.autoDispose
       query,
     ) async {
       final dio = ref.watch(apiClientProvider);
-      final q = <String, dynamic>{
-        'page': query.page,
-        'limit': query.limit,
-      };
+      final q = <String, dynamic>{'page': query.page, 'limit': query.limit};
       final res = await dio.get('/proforma-invoices', queryParameters: q);
       final raw = res.data;
       final rawItems = (raw as List)
@@ -150,6 +143,29 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
 
   void _onTableChange() {
     setState(() => _query = _buildQuery());
+  }
+
+  Future<void> _workflowAction(ProformaListItem item, String action) async {
+    try {
+      final suffix = action == 'issue' ? 'issue' : 'convert-to-sales-order';
+      await ref
+          .read(apiClientProvider)
+          .post('/proforma-invoices/${item.id}/$suffix');
+      ref.invalidate(proformaListProvider);
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              action == 'issue' ? 'Quotation issued.' : 'Sales order created.',
+            ),
+          ),
+        );
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Action failed: $error')));
+    }
   }
 
   @override
@@ -223,8 +239,9 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
                                   builder: (_) => const ProformaFormScreen(),
                                 ),
                               )
-                              .then((_) =>
-                                  ref.invalidate(proformaListProvider)),
+                              .then(
+                                (_) => ref.invalidate(proformaListProvider),
+                              ),
                   );
                 }
                 final paged = Paged<ProformaListItem>(
@@ -235,7 +252,14 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
                 );
                 return Column(
                   children: [
-                    Expanded(child: _TableBody(items: data.items, colors: colors, fmt: fmt)),
+                    Expanded(
+                      child: _TableBody(
+                        items: data.items,
+                        colors: colors,
+                        fmt: fmt,
+                        onWorkflow: _workflowAction,
+                      ),
+                    ),
                     ApexPaginationControls(
                       controller: _tableCtrl,
                       paged: paged,
@@ -262,11 +286,13 @@ class _TableBody extends StatelessWidget {
     required this.items,
     required this.colors,
     required this.fmt,
+    required this.onWorkflow,
   });
 
   final List<ProformaListItem> items;
   final ApexColors colors;
   final NumberFormatter fmt;
+  final void Function(ProformaListItem, String) onWorkflow;
 
   @override
   Widget build(BuildContext context) {
@@ -363,6 +389,23 @@ class _TableBody extends StatelessWidget {
                               tone: toneForStatus(item.status),
                             ),
                           ),
+                          if (item.status == 'DRAFT' || item.status == 'ISSUED')
+                            PopupMenuButton<String>(
+                              tooltip: 'Workflow actions',
+                              onSelected: (value) => onWorkflow(item, value),
+                              itemBuilder: (_) => [
+                                if (item.status == 'DRAFT')
+                                  const PopupMenuItem(
+                                    value: 'issue',
+                                    child: Text('Issue quotation'),
+                                  ),
+                                if (item.status == 'ISSUED')
+                                  const PopupMenuItem(
+                                    value: 'convert',
+                                    child: Text('Create sales order'),
+                                  ),
+                              ],
+                            ),
                         ],
                       ),
                     ),
@@ -376,8 +419,12 @@ class _TableBody extends StatelessWidget {
     );
   }
 
-  Widget _header(String label, double width, ApexColors colors,
-      {bool alignRight = false}) {
+  Widget _header(
+    String label,
+    double width,
+    ApexColors colors, {
+    bool alignRight = false,
+  }) {
     return SizedBox(
       width: width,
       child: Text(

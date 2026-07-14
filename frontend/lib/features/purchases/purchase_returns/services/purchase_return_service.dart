@@ -19,7 +19,7 @@ class PurchaseReturnService {
   Future<Result<PurchaseReturn>> create(PurchaseReturn ret) {
     return guardDio(() async {
       final res = await _dio.post(
-        '/purchase-returns',
+        '/returns/purchase',
         data: ret.toCreatePayload(),
       );
       return PurchaseReturn.fromJson(res.data as Map<String, dynamic>);
@@ -32,32 +32,27 @@ class PurchaseReturnService {
   }) {
     return guardDio(() async {
       final res = await _dio.get(
-        '/purchase-returns',
+        '/returns/purchase',
         queryParameters: {'page': page, 'limit': limit},
       );
       return (res.data as List)
-          .map((e) => PurchaseReturnListItem.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) => PurchaseReturnListItem.fromJson(e as Map<String, dynamic>),
+          )
           .toList();
     });
   }
 
   Future<Result<PurchaseReturn>> get(String id) {
     return guardDio(() async {
-      final res = await _dio.get('/purchase-returns/$id');
-      return PurchaseReturn.fromJson(res.data as Map<String, dynamic>);
-    });
-  }
-
-  Future<Result<PurchaseReturn>> post(String id) {
-    return guardDio(() async {
-      final res = await _dio.post('/purchase-returns/$id/post');
+      final res = await _dio.get('/returns/purchase/$id');
       return PurchaseReturn.fromJson(res.data as Map<String, dynamic>);
     });
   }
 
   Future<Result<PurchaseReturn>> cancel(String id) {
     return guardDio(() async {
-      final res = await _dio.post('/purchase-returns/$id/cancel');
+      final res = await _dio.post('/returns/purchase/$id/cancel');
       return PurchaseReturn.fromJson(res.data as Map<String, dynamic>);
     });
   }

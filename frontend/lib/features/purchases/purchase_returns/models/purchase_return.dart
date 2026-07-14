@@ -14,6 +14,7 @@ class PurchaseReturn {
     this.billNumber = '',
     this.contactId = '',
     this.contactName,
+    this.posStateCode = '',
     this.returnDate = '',
     this.status = PurchaseReturnStatus.draft,
     this.subtotal = 0,
@@ -30,6 +31,7 @@ class PurchaseReturn {
   final String billNumber;
   final String contactId;
   final String? contactName;
+  final String posStateCode;
   final String returnDate;
   final PurchaseReturnStatus status;
   final double subtotal;
@@ -40,9 +42,11 @@ class PurchaseReturn {
   final String? createdAt;
 
   Map<String, dynamic> toCreatePayload() => {
-    if (billId != null) 'bill_id': billId,
-    'return_date': returnDate,
-    'lines': lines.map((l) => l.toCreatePayload()).toList(),
+    'bill_id': billId,
+    'contact_id': contactId,
+    'issue_date': returnDate,
+    'pos_state_code': posStateCode,
+    'line_items': lines.map((l) => l.toCreatePayload()).toList(),
     if (notes != null) 'notes': notes,
   };
 
@@ -55,10 +59,16 @@ class PurchaseReturn {
       billNumber: json['bill_number'] as String? ?? '',
       contactId: (json['contact_id'] ?? '').toString(),
       contactName: contact?['name'] as String? ?? '',
-      returnDate: json['return_date'] as String? ?? '',
+      posStateCode: json['pos_state_code'] as String? ?? '',
+      returnDate: json['issue_date'] as String? ?? '',
       status: PurchaseReturnStatus.fromString(json['status'] as String? ?? ''),
       subtotal: _num(json['subtotal']),
-      totalTax: _num(json['total_tax']),
+      totalTax:
+          _num(json['cgst_amount']) +
+          _num(json['sgst_amount']) +
+          _num(json['igst_amount']) +
+          _num(json['utgst_amount']) +
+          _num(json['cess_amount']),
       total: _num(json['total']),
       lines:
           (json['lines'] as List?)
@@ -104,7 +114,7 @@ class PurchaseReturnListItem {
       PurchaseReturnListItem(
         id: (json['id'] ?? '').toString(),
         returnNumber: json['return_number'] as String? ?? '',
-        returnDate: json['return_date'] as String? ?? '',
+        returnDate: json['issue_date'] as String? ?? '',
         status: PurchaseReturnStatus.fromString(
           json['status'] as String? ?? '',
         ),

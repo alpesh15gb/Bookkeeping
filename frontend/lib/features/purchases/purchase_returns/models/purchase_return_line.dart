@@ -11,7 +11,9 @@ class PurchaseReturnLine {
     this.productName,
     this.billLineId,
     this.quantityReturned = 0,
+    this.maximumQuantity = 0,
     this.rate = 0,
+    this.hsnSac = '',
     this.gstRate = 0,
     this.subtotal = 0,
     this.cgstAmount = 0,
@@ -26,7 +28,9 @@ class PurchaseReturnLine {
   final String? productName;
   final String? billLineId;
   final double quantityReturned;
+  final double maximumQuantity;
   final double rate;
+  final String hsnSac;
   final double gstRate;
   final double subtotal;
   final double cgstAmount;
@@ -41,7 +45,9 @@ class PurchaseReturnLine {
     String? productName,
     String? billLineId,
     double? quantityReturned,
+    double? maximumQuantity,
     double? rate,
+    String? hsnSac,
     double? gstRate,
     double? subtotal,
     double? cgstAmount,
@@ -55,7 +61,9 @@ class PurchaseReturnLine {
     productName: productName ?? this.productName,
     billLineId: billLineId ?? this.billLineId,
     quantityReturned: quantityReturned ?? this.quantityReturned,
+    maximumQuantity: maximumQuantity ?? this.maximumQuantity,
     rate: rate ?? this.rate,
+    hsnSac: hsnSac ?? this.hsnSac,
     gstRate: gstRate ?? this.gstRate,
     subtotal: subtotal ?? this.subtotal,
     cgstAmount: cgstAmount ?? this.cgstAmount,
@@ -67,11 +75,12 @@ class PurchaseReturnLine {
 
   Map<String, dynamic> toCreatePayload() => {
     'product_id': productId,
-    'quantity_returned': quantityReturned,
+    'quantity': quantityReturned,
     'rate': rate,
+    'hsn_sac': hsnSac,
     'gst_rate': gstRate,
-    if (billLineId != null) 'bill_line_id': billLineId,
-    if (reason != null) 'reason': reason,
+    'bill_line_id': billLineId,
+    if (reason != null) 'description': reason,
   };
 
   factory PurchaseReturnLine.fromJson(Map<String, dynamic> json) =>
@@ -80,15 +89,16 @@ class PurchaseReturnLine {
         productId: (json['product_id'] ?? '').toString(),
         productName: json['product_name'] as String?,
         billLineId: json['bill_line_id']?.toString(),
-        quantityReturned: _num(json['quantity_returned']),
+        quantityReturned: _num(json['quantity']),
         rate: _num(json['rate']),
+        hsnSac: json['hsn_sac'] as String? ?? '',
         gstRate: _num(json['gst_rate']),
         subtotal: _num(json['subtotal']),
         cgstAmount: _num(json['cgst_amount']),
         sgstAmount: _num(json['sgst_amount']),
         igstAmount: _num(json['igst_amount']),
         total: _num(json['total']),
-        reason: json['reason'] as String?,
+        reason: json['description'] as String?,
       );
 
   static double _num(dynamic v) {

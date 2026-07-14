@@ -18,6 +18,10 @@ class JournalEntryCreate(SchemaBase):
     description: str = Field(..., max_length=255)
     lines: List[JournalLineCreate]
 
+class JournalReversalCreate(SchemaBase):
+    reversal_date: date
+    reason: str = Field(..., min_length=3, max_length=255)
+
 class JournalLineResponse(SchemaBase):
     id: uuid.UUID
     account_id: uuid.UUID

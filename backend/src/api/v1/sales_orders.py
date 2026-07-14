@@ -3,13 +3,16 @@ from sqlalchemy.orm import Session
 from typing import List
 import uuid
 from decimal import Decimal
+from datetime import date
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    SalesOrder, SalesOrderLine, Contact, Product, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
+    SalesOrder, SalesOrderLine, DeliveryChallan, DeliveryChallanLine,
+    Contact, Product, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
 )
 from src.schemas.bill_schemas import (
-    SalesOrderCreate, SalesOrderUpdate, SalesOrderResponse, SalesOrderListResponse
+    SalesOrderCreate, SalesOrderUpdate, SalesOrderResponse, SalesOrderListResponse,
+    DeliveryChallanResponse,
 )
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
@@ -36,6 +39,8 @@ def create_sales_order(
     
     if contact.contact_type not in ("CUSTOMER", "BOTH"):
         raise HTTPException(status_code=400, detail="Selected contact must be a Customer.")
+    if not contact.is_active:
+        raise HTTPException(status_code=400, detail="Selected customer is inactive.")
 
     origin_state_code = resolve_origin_state_code(db, tenant_id)
 
@@ -146,6 +151,7 @@ def list_sales_orders(
     results = db.query(SalesOrder, Contact.name.label("contact_name"))\
         .join(Contact, SalesOrder.contact_id == Contact.id)\
         .filter(SalesOrder.tenant_id == tenant_id, SalesOrder.deleted_at == None)\
+        .order_by(SalesOrder.order_date.desc(), SalesOrder.created_at.desc())\
         .offset(offset).limit(limit).all()
 
     response = []
@@ -419,6 +425,56 @@ def deliver_sales_order(
     db.commit()
     db.refresh(so)
     return so
+
+
+@router.post("/{id}/create-delivery-challan", response_model=DeliveryChallanResponse)
+def create_delivery_challan_from_order(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("sales:convert")),
+):
+    order = db.query(SalesOrder).filter(
+        SalesOrder.id == id,
+        SalesOrder.tenant_id == tenant_id,
+        SalesOrder.deleted_at == None,
+    ).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Sales Order not found.")
+    existing = db.query(DeliveryChallan).filter(
+        DeliveryChallan.tenant_id == tenant_id,
+        DeliveryChallan.source_sales_order_id == order.id,
+        DeliveryChallan.deleted_at == None,
+    ).first()
+    if existing:
+        return existing
+    if order.status != "CONFIRMED":
+        raise HTTPException(status_code=400, detail="Only confirmed sales orders can be dispatched.")
+
+    challan = DeliveryChallan(
+        tenant_id=tenant_id, contact_id=order.contact_id,
+        source_sales_order_id=order.id,
+        challan_number=NumberingSeriesService.generate_next_number(db, tenant_id, "DELIVERY_CHALLAN"),
+        challan_date=date.today(), due_date=max(order.due_date, date.today()),
+        status="DRAFT", subtotal=order.subtotal, discount_total=order.discount_total,
+        cgst_amount=order.cgst_amount, sgst_amount=order.sgst_amount,
+        igst_amount=order.igst_amount, utgst_amount=order.utgst_amount,
+        cess_amount=order.cess_amount, total=order.total,
+        pos_state_code=order.pos_state_code,
+        lines=[DeliveryChallanLine(
+            product_id=line.product_id, description=line.description,
+            quantity=line.quantity, rate=line.rate, discount=line.discount,
+            subtotal=line.subtotal, hsn_sac=line.hsn_sac, gst_rate=line.gst_rate,
+            cgst_rate=line.cgst_rate, cgst_amount=line.cgst_amount,
+            sgst_rate=line.sgst_rate, sgst_amount=line.sgst_amount,
+            igst_rate=line.igst_rate, igst_amount=line.igst_amount,
+            utgst_rate=line.utgst_rate, utgst_amount=line.utgst_amount,
+            cess_rate=line.cess_rate, cess_amount=line.cess_amount, total=line.total,
+        ) for line in order.lines],
+    )
+    db.add(challan)
+    db.commit()
+    db.refresh(challan)
+    return challan
 
 
 @router.post("/{id}/cancel", response_model=SalesOrderResponse)

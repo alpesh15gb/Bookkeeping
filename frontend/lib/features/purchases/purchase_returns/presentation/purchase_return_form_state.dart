@@ -8,6 +8,8 @@ class PurchaseReturnFormState {
     this.billId,
     this.billNumber = '',
     this.contactName = '',
+    this.contactId = '',
+    this.posStateCode = '',
     this.returnDate = '',
     this.notes,
     this.lines = const [],
@@ -19,6 +21,8 @@ class PurchaseReturnFormState {
   final String? billId;
   final String billNumber;
   final String contactName;
+  final String contactId;
+  final String posStateCode;
   final String returnDate;
   final String? notes;
   final List<PurchaseReturnLine> lines;
@@ -42,6 +46,8 @@ class PurchaseReturnFormState {
     String? billId,
     String? billNumber,
     String? contactName,
+    String? contactId,
+    String? posStateCode,
     String? returnDate,
     String? notes,
     List<PurchaseReturnLine>? lines,
@@ -53,6 +59,8 @@ class PurchaseReturnFormState {
     billId: billId ?? this.billId,
     billNumber: billNumber ?? this.billNumber,
     contactName: contactName ?? this.contactName,
+    contactId: contactId ?? this.contactId,
+    posStateCode: posStateCode ?? this.posStateCode,
     returnDate: returnDate ?? this.returnDate,
     notes: notes ?? this.notes,
     lines: lines ?? this.lines,

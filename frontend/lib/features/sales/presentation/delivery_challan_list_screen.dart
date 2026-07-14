@@ -53,40 +53,40 @@ class DeliveryChallanListItem {
 }
 
 class DeliveryChallanListQuery {
-  const DeliveryChallanListQuery({
-    this.page = 1,
-    this.limit = 25,
-    this.status,
-  });
+  const DeliveryChallanListQuery({this.page = 1, this.limit = 25, this.status});
 
   final int page, limit;
   final String? status;
 }
 
-final deliveryChallanListProvider = FutureProvider.autoDispose.family<
-    ({List<DeliveryChallanListItem> items, int total}),
-    DeliveryChallanListQuery>((ref, query) async {
-  final dio = ref.watch(apiClientProvider);
-  final res = await dio.get('/delivery-challans', queryParameters: {
-    'page': query.page,
-    'limit': query.limit,
-  });
-  final rawItems = (res.data as List)
-      .map((e) => DeliveryChallanListItem.fromJson(e as Map<String, dynamic>))
-      .toList();
-  final items = query.status == null
-      ? rawItems
-      : rawItems.where((e) => e.status == query.status).toList();
-  final total = rawItems.length < query.limit
-      ? (query.page - 1) * query.limit + items.length
-      : query.page * query.limit + 1;
-  return (items: items, total: total);
-});
+final deliveryChallanListProvider = FutureProvider.autoDispose
+    .family<
+      ({List<DeliveryChallanListItem> items, int total}),
+      DeliveryChallanListQuery
+    >((ref, query) async {
+      final dio = ref.watch(apiClientProvider);
+      final res = await dio.get(
+        '/delivery-challans',
+        queryParameters: {'page': query.page, 'limit': query.limit},
+      );
+      final rawItems = (res.data as List)
+          .map(
+            (e) => DeliveryChallanListItem.fromJson(e as Map<String, dynamic>),
+          )
+          .toList();
+      final items = query.status == null
+          ? rawItems
+          : rawItems.where((e) => e.status == query.status).toList();
+      final total = rawItems.length < query.limit
+          ? (query.page - 1) * query.limit + items.length
+          : query.page * query.limit + 1;
+      return (items: items, total: total);
+    });
 
 final _dcTableCtrlProvider =
     ChangeNotifierProvider.autoDispose<ApexTableController>(
-  (ref) => ApexTableController(),
-);
+      (ref) => ApexTableController(),
+    );
 
 class DeliveryChallanListScreen extends ConsumerStatefulWidget {
   const DeliveryChallanListScreen({super.key});
@@ -99,8 +99,10 @@ class DeliveryChallanListScreen extends ConsumerStatefulWidget {
 class _DeliveryChallanListScreenState
     extends ConsumerState<DeliveryChallanListScreen> {
   late final ApexTableController _tableCtrl;
-  DeliveryChallanListQuery _query =
-      const DeliveryChallanListQuery(page: 1, limit: 25);
+  DeliveryChallanListQuery _query = const DeliveryChallanListQuery(
+    page: 1,
+    limit: 25,
+  );
 
   @override
   void initState() {
@@ -124,6 +126,34 @@ class _DeliveryChallanListScreenState
         status: s.statusFilter,
       );
     });
+  }
+
+  Future<void> _workflowAction(
+    DeliveryChallanListItem item,
+    String action,
+  ) async {
+    try {
+      final suffix = action == 'issue' ? 'issue' : 'convert-to-invoice';
+      await ref
+          .read(apiClientProvider)
+          .post('/delivery-challans/${item.id}/$suffix');
+      ref.invalidate(deliveryChallanListProvider);
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              action == 'issue'
+                  ? 'Delivery challan issued.'
+                  : 'Draft invoice created.',
+            ),
+          ),
+        );
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Action failed: $error')));
+    }
   }
 
   @override
@@ -196,8 +226,10 @@ class _DeliveryChallanListScreenState
                                       const DeliveryChallanFormScreen(),
                                 ),
                               )
-                              .then((_) => ref.invalidate(
-                                  deliveryChallanListProvider)),
+                              .then(
+                                (_) =>
+                                    ref.invalidate(deliveryChallanListProvider),
+                              ),
                   );
                 }
                 final paged = Paged<DeliveryChallanListItem>(
@@ -213,6 +245,7 @@ class _DeliveryChallanListScreenState
                         items: data.items,
                         colors: colors,
                         fmt: fmt,
+                        onWorkflow: _workflowAction,
                       ),
                     ),
                     ApexPaginationControls(
@@ -235,11 +268,13 @@ class _TableBody extends StatelessWidget {
     required this.items,
     required this.colors,
     required this.fmt,
+    required this.onWorkflow,
   });
 
   final List<DeliveryChallanListItem> items;
   final ApexColors colors;
   final NumberFormatter fmt;
+  final void Function(DeliveryChallanListItem, String) onWorkflow;
 
   @override
   Widget build(BuildContext context) {
@@ -335,6 +370,23 @@ class _TableBody extends StatelessWidget {
                               tone: toneForStatus(item.status),
                             ),
                           ),
+                          if (item.status == 'DRAFT' || item.status == 'ISSUED')
+                            PopupMenuButton<String>(
+                              tooltip: 'Workflow actions',
+                              onSelected: (value) => onWorkflow(item, value),
+                              itemBuilder: (_) => [
+                                if (item.status == 'DRAFT')
+                                  const PopupMenuItem(
+                                    value: 'issue',
+                                    child: Text('Issue challan'),
+                                  ),
+                                if (item.status == 'ISSUED')
+                                  const PopupMenuItem(
+                                    value: 'invoice',
+                                    child: Text('Create invoice'),
+                                  ),
+                              ],
+                            ),
                         ],
                       ),
                     ),
@@ -348,8 +400,12 @@ class _TableBody extends StatelessWidget {
     );
   }
 
-  Widget _header(String label, double width, ApexColors colors,
-      {bool alignRight = false}) {
+  Widget _header(
+    String label,
+    double width,
+    ApexColors colors, {
+    bool alignRight = false,
+  }) {
     return SizedBox(
       width: width,
       child: Text(

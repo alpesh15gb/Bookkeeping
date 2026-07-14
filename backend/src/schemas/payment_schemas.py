@@ -21,11 +21,12 @@ class PaymentCreate(SchemaBase):
     contact_id: uuid.UUID
     payment_number: Optional[str] = Field(None, max_length=50) # Auto-generated if omitted
     payment_date: date
-    payment_mode: str = Field(..., pattern="^(CASH|BANK|UPI|POS|OTHER)$")
+    payment_mode: str = Field(..., pattern="^(CASH|BANK|UPI|POS|CHEQUE|NEFT_RTGS|OTHER)$")
     amount: Decimal = Field(..., gt=0)
     reference_number: Optional[str] = None
     description: Optional[str] = None
-    allocations: List[PaymentAllocationCreate] = []
+    advance_supply_type: Optional[str] = Field(None, pattern="^(GOODS|SERVICES)$")
+    allocations: List[PaymentAllocationCreate] = Field(default_factory=list)
 
 class PaymentResponse(SchemaBase):
     id: uuid.UUID
@@ -37,7 +38,10 @@ class PaymentResponse(SchemaBase):
     amount: Decimal
     reference_number: Optional[str] = None
     description: Optional[str] = None
+    advance_supply_type: Optional[str] = None
     status: str
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None
@@ -52,6 +56,22 @@ class PaymentListResponse(SchemaBase):
     contact_name: str
     status: str
     created_at: datetime
+
+class PaymentCancel(SchemaBase):
+    reason: str = Field(..., min_length=3, max_length=500)
+    cancellation_date: Optional[date] = None
+
+class OutstandingInvoiceResponse(SchemaBase):
+    id: uuid.UUID
+    invoice_number: str
+    issue_date: date
+    due_date: date
+    total: Decimal
+    amount_paid: Decimal
+    outstanding: Decimal
+    contact_id: uuid.UUID
+    contact_name: str
+    status: str
 
 # Vendor Payment (Payment Out / Disbursement) Allocations
 class BillPaymentAllocationCreate(SchemaBase):
@@ -69,11 +89,11 @@ class BillPaymentCreate(SchemaBase):
     contact_id: uuid.UUID
     payment_number: Optional[str] = Field(None, max_length=50) # Auto-generated if omitted
     payment_date: date
-    payment_mode: str = Field(..., pattern="^(CASH|BANK|UPI|POS|OTHER)$")
+    payment_mode: str = Field(..., pattern="^(CASH|BANK|UPI|POS|CHEQUE|NEFT_RTGS|OTHER)$")
     amount: Decimal = Field(..., gt=0)
     reference_number: Optional[str] = None
     description: Optional[str] = None
-    allocations: List[BillPaymentAllocationCreate] = []
+    allocations: List[BillPaymentAllocationCreate] = Field(default_factory=list)
 
 class BillPaymentResponse(SchemaBase):
     id: uuid.UUID
@@ -86,6 +106,8 @@ class BillPaymentResponse(SchemaBase):
     reference_number: Optional[str] = None
     description: Optional[str] = None
     status: str
+    cancelled_at: Optional[datetime] = None
+    cancellation_reason: Optional[str] = None
     created_at: datetime
     updated_at: datetime
     deleted_at: Optional[datetime] = None

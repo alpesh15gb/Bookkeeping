@@ -13,7 +13,8 @@ from src.main import app
 from src.core.database import engine, Base, SessionLocal
 from src.infrastructure.database.models import (
     User, Tenant, TenantMembership, Contact, Product, Invoice, Bill,
-    JournalEntry, JournalLine, BankingProfile, Payment, BillPayment
+    JournalEntry, JournalLine, BankingProfile, Payment, BillPayment, GSTReturn,
+    StockLedger,
 )
 
 class TestPaymentsAndReceiptsFlow(unittest.TestCase):
@@ -461,6 +462,343 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
         # 4. Try to cancel Tenant A's receipt from Tenant B context
         res_can = self.client.post(f"/api/v1/payments/receipts/{receipt['id']}/cancel", headers=self.headers_b)
         self.assertEqual(res_can.status_code, 404)
+
+    def test_customer_advance_and_cancellation_restore_credit(self):
+        payload = {
+            "contact_id": str(self.customer_a_id),
+            "payment_date": str(date.today()),
+            "payment_mode": "NEFT_RTGS",
+            "amount": 2500.00,
+            "reference_number": "UTR-ADV-001",
+            "advance_supply_type": "GOODS",
+            "allocations": [],
+        }
+        created = self.client.post(
+            "/api/v1/payments/receipts", json=payload, headers=self.headers_a
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+
+        db = SessionLocal()
+        try:
+            customer = db.query(Contact).filter(Contact.id == self.customer_a_id).first()
+            self.assertEqual(customer.credit_balance, Decimal("2500.0000"))
+        finally:
+            db.close()
+
+        cancelled = self.client.post(
+            f"/api/v1/payments/receipts/{created.json()['id']}/cancel",
+            json={"reason": "Customer requested refund"},
+            headers=self.headers_a,
+        )
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        self.assertEqual(cancelled.json()["cancellation_reason"], "Customer requested refund")
+
+        db = SessionLocal()
+        try:
+            customer = db.query(Contact).filter(Contact.id == self.customer_a_id).first()
+            self.assertEqual(customer.credit_balance, Decimal("0.0000"))
+        finally:
+            db.close()
+
+    def test_quotation_to_receipt_traceable_workflow(self):
+        quotation_payload = {
+            "contact_id": str(self.customer_a_id),
+            "proforma_number": "QT-E2E-001",
+            "issue_date": str(date.today()),
+            "due_date": str(date.today()),
+            "pos_state_code": "27",
+            "line_items": [{
+                "product_id": str(self.product_a_id), "description": "Workflow item",
+                "quantity": 1, "rate": 1000, "discount": 100,
+                "hsn_sac": "84713010", "gst_rate": 18,
+            }],
+        }
+        quotation = self.client.post(
+            "/api/v1/proforma-invoices", json=quotation_payload, headers=self.headers_a
+        )
+        self.assertEqual(quotation.status_code, 201, quotation.text)
+        qid = quotation.json()["id"]
+        self.assertEqual(self.client.post(
+            f"/api/v1/proforma-invoices/{qid}/issue", headers=self.headers_a
+        ).status_code, 200)
+
+        order = self.client.post(
+            f"/api/v1/proforma-invoices/{qid}/convert-to-sales-order",
+            headers=self.headers_a,
+        )
+        self.assertEqual(order.status_code, 200, order.text)
+        self.assertEqual(order.json()["source_proforma_id"], qid)
+        order_id = order.json()["id"]
+        self.assertEqual(self.client.post(
+            f"/api/v1/sales-orders/{order_id}/confirm", headers=self.headers_a
+        ).status_code, 200)
+
+        challan = self.client.post(
+            f"/api/v1/sales-orders/{order_id}/create-delivery-challan",
+            headers=self.headers_a,
+        )
+        self.assertEqual(challan.status_code, 200, challan.text)
+        challan_id = challan.json()["id"]
+        self.assertEqual(self.client.post(
+            f"/api/v1/delivery-challans/{challan_id}/issue", headers=self.headers_a
+        ).status_code, 200)
+        db = SessionLocal()
+        try:
+            self.assertEqual(
+                db.query(Product).filter(Product.id == self.product_a_id).one().current_stock,
+                Decimal("99.00"),
+            )
+            self.assertEqual(db.query(StockLedger).filter(
+                StockLedger.reference_type == "DELIVERY_CHALLAN",
+                StockLedger.reference_id == uuid.UUID(challan_id),
+            ).count(), 1)
+        finally:
+            db.close()
+
+        invoice = self.client.post(
+            f"/api/v1/delivery-challans/{challan_id}/convert-to-invoice",
+            headers=self.headers_a,
+        )
+        self.assertEqual(invoice.status_code, 200, invoice.text)
+        invoice_id = invoice.json()["id"]
+        # Conversion is idempotent and must never duplicate a financial document.
+        duplicate = self.client.post(
+            f"/api/v1/delivery-challans/{challan_id}/convert-to-invoice",
+            headers=self.headers_a,
+        )
+        self.assertEqual(duplicate.json()["id"], invoice_id)
+
+        self.assertEqual(self.client.post(
+            f"/api/v1/invoices/{invoice_id}/finalize", headers=self.headers_a
+        ).status_code, 200)
+        db = SessionLocal()
+        try:
+            self.assertEqual(
+                db.query(Product).filter(Product.id == self.product_a_id).one().current_stock,
+                Decimal("99.00"),
+                "A delivery-based invoice must not deduct stock a second time",
+            )
+            self.assertEqual(db.query(StockLedger).filter(
+                StockLedger.reference_type == "INVOICE",
+                StockLedger.reference_id == uuid.UUID(invoice_id),
+            ).count(), 0)
+        finally:
+            db.close()
+        receipt = self.client.post("/api/v1/payments/receipts", json={
+            "contact_id": str(self.customer_a_id), "payment_date": str(date.today()),
+            "payment_mode": "UPI", "amount": 1062,
+            "allocations": [{"invoice_id": invoice_id, "amount": 1062}],
+        }, headers=self.headers_a)
+        self.assertEqual(receipt.status_code, 201, receipt.text)
+        self.assertEqual(self.client.get(
+            f"/api/v1/invoices/{invoice_id}", headers=self.headers_a
+        ).json()["status"], "PAID")
+
+    def test_direct_invoice_stock_moves_once_and_cancellation_restores_once(self):
+        payload = {
+            "contact_id": str(self.customer_a_id),
+            "issue_date": str(date.today()), "due_date": str(date.today()),
+            "pos_state_code": "27",
+            "line_items": [{
+                "product_id": str(self.product_a_id), "quantity": 3,
+                "rate": 100, "discount": 0, "hsn_sac": "84713010", "gst_rate": 0,
+            }],
+        }
+        created = self.client.post("/api/v1/invoices", json=payload, headers=self.headers_a)
+        self.assertEqual(created.status_code, 201, created.text)
+        invoice_id = created.json()["id"]
+        self.assertEqual(self.client.post(
+            f"/api/v1/invoices/{invoice_id}/finalize", headers=self.headers_a
+        ).status_code, 200)
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.query(Product).filter(Product.id == self.product_a_id).one().current_stock, Decimal("97.00"))
+            self.assertEqual(db.query(StockLedger).filter(
+                StockLedger.reference_type == "INVOICE",
+                StockLedger.reference_id == uuid.UUID(invoice_id),
+            ).count(), 1)
+        finally:
+            db.close()
+        cancelled = self.client.post(f"/api/v1/invoices/{invoice_id}/cancel", headers=self.headers_a)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.query(Product).filter(Product.id == self.product_a_id).one().current_stock, Decimal("100.00"))
+        finally:
+            db.close()
+
+    def test_partial_receipt_does_not_change_gstr1_and_filed_period_blocks_cancel(self):
+        invoice = self.client.post("/api/v1/invoices", json={
+            "contact_id": str(self.customer_a_id), "issue_date": str(date.today()),
+            "due_date": str(date.today()), "pos_state_code": "27",
+            "line_items": [{"product_id": str(self.product_a_id), "quantity": 1,
+                "rate": 1000, "discount": 0, "hsn_sac": "84713010", "gst_rate": 18}],
+        }, headers=self.headers_a)
+        self.assertEqual(invoice.status_code, 201, invoice.text)
+        invoice_id = invoice.json()["id"]
+        before = self.client.get("/api/v1/gst/gstr1", headers=self.headers_a).json()
+        receipt = self.client.post("/api/v1/payments/receipts", json={
+            "contact_id": str(self.customer_a_id), "payment_date": str(date.today()),
+            "payment_mode": "BANK", "amount": 500,
+            "allocations": [{"invoice_id": invoice_id, "amount": 500}],
+        }, headers=self.headers_a)
+        self.assertEqual(receipt.status_code, 201, receipt.text)
+        after = self.client.get("/api/v1/gst/gstr1", headers=self.headers_a).json()
+        for section in ("b2b", "b2cl", "b2cs", "cdnr", "cdnur", "hsn_summary"):
+            self.assertEqual(after.get(section), before.get(section), section)
+
+        db = SessionLocal()
+        try:
+            db.add(GSTReturn(
+                tenant_id=self.tenant_a_id, return_type="GSTR1",
+                period_start=date.today().replace(day=1), period_end=date.today(),
+                status="FILED",
+            ))
+            db.commit()
+        finally:
+            db.close()
+        blocked = self.client.post(f"/api/v1/invoices/{invoice_id}/cancel", headers=self.headers_a)
+        self.assertEqual(blocked.status_code, 409, blocked.text)
+
+    def test_service_advance_cannot_be_silently_posted_without_gst(self):
+        response = self.client.post("/api/v1/payments/receipts", json={
+            "contact_id": str(self.customer_a_id), "payment_date": str(date.today()),
+            "payment_mode": "UPI", "amount": 1000,
+            "advance_supply_type": "SERVICES", "allocations": [],
+        }, headers=self.headers_a)
+        self.assertEqual(response.status_code, 422, response.text)
+        self.assertIn("GST", response.json()["detail"])
+
+    def test_receipt_rejects_duplicate_or_other_customer_invoice(self):
+        db = SessionLocal()
+        try:
+            other = Contact(
+                tenant_id=self.tenant_a_id,
+                name="Other Customer",
+                contact_type="CUSTOMER",
+                registration_type="UNREGISTERED",
+                state_code="27",
+                billing_address={},
+                shipping_address={},
+                is_active=True,
+            )
+            db.add(other)
+            db.commit()
+            other_id = other.id
+        finally:
+            db.close()
+
+        inv_payload = {
+            "contact_id": str(other_id),
+            "issue_date": str(date.today()),
+            "due_date": str(date.today()),
+            "pos_state_code": "27",
+            "line_items": [{
+                "product_id": str(self.product_a_id), "quantity": 1,
+                "rate": 100, "discount": 0, "hsn_sac": "84713010", "gst_rate": 0,
+            }],
+        }
+        invoice = self.client.post("/api/v1/invoices", json=inv_payload, headers=self.headers_a).json()
+        base = {
+            "contact_id": str(self.customer_a_id),
+            "payment_date": str(date.today()),
+            "payment_mode": "BANK",
+            "amount": 100,
+        }
+        wrong_customer = {**base, "allocations": [{"invoice_id": invoice["id"], "amount": 100}]}
+        response = self.client.post("/api/v1/payments/receipts", json=wrong_customer, headers=self.headers_a)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("different customer", response.json()["detail"])
+
+        duplicate = {**base, "allocations": [
+            {"invoice_id": invoice["id"], "amount": 50},
+            {"invoice_id": invoice["id"], "amount": 50},
+        ]}
+        response = self.client.post("/api/v1/payments/receipts", json=duplicate, headers=self.headers_a)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("only be allocated once", response.json()["detail"])
+
+    def test_sales_return_is_source_bound_and_cancel_reverses_stock_and_ledger(self):
+        invoice = self.client.post("/api/v1/invoices", json={
+            "contact_id": str(self.customer_a_id), "issue_date": str(date.today()),
+            "due_date": str(date.today()), "pos_state_code": "27",
+            "line_items": [{"product_id": str(self.product_a_id), "quantity": 2,
+                "rate": 1000, "discount": 0, "hsn_sac": "84713010", "gst_rate": 18}],
+        }, headers=self.headers_a).json()
+        payload = {
+            "invoice_id": invoice["id"], "contact_id": str(self.customer_a_id),
+            "issue_date": str(date.today()), "pos_state_code": "27",
+            "line_items": [{"invoice_line_id": invoice["lines"][0]["id"],
+                "product_id": str(self.product_a_id), "quantity": 1,
+                "rate": 1, "hsn_sac": "84713010", "gst_rate": 0}],
+        }
+        created = self.client.post("/api/v1/returns/sales", json=payload, headers=self.headers_a)
+        self.assertEqual(created.status_code, 201, created.text)
+        sales_return = created.json()
+        self.assertEqual(Decimal(sales_return["subtotal"]), Decimal("1000.0000"))
+        self.assertEqual(Decimal(sales_return["cgst_amount"]), Decimal("90.0000"))
+
+        over_return = {**payload, "line_items": [{**payload["line_items"][0], "quantity": 2}]}
+        blocked = self.client.post("/api/v1/returns/sales", json=over_return, headers=self.headers_a)
+        self.assertEqual(blocked.status_code, 400)
+        self.assertIn("exceeds invoice quantity remaining", blocked.json()["detail"])
+
+        cancelled = self.client.post(
+            f"/api/v1/returns/sales/{sales_return['id']}/cancel", headers=self.headers_a)
+        self.assertEqual(cancelled.status_code, 200, cancelled.text)
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.get(Product, self.product_a_id).current_stock, Decimal("98.0000"))
+            reversal = db.query(JournalEntry).filter(
+                JournalEntry.source_type == "SALES_RETURN_REVERSAL",
+                JournalEntry.source_id == uuid.UUID(sales_return["id"])).one()
+            debits = sum(line.amount for line in reversal.lines if line.direction == "DEBIT")
+            credits = sum(line.amount for line in reversal.lines if line.direction == "CREDIT")
+            self.assertEqual(debits, credits)
+        finally:
+            db.close()
+
+    def test_purchase_gst_return_and_tds_cancellation_are_balanced(self):
+        bill = self.client.post("/api/v1/bills", json={
+            "contact_id": str(self.vendor_a_id), "bill_number": "KA-INTERSTATE-1",
+            "issue_date": str(date.today()), "due_date": str(date.today()),
+            "pos_state_code": "29", "tds_rate": 10,
+            "line_items": [{"product_id": str(self.product_a_id), "quantity": 2,
+                "rate": 1000, "discount": 0, "hsn_sac": "84713010", "gst_rate": 18}],
+        }, headers=self.headers_a)
+        self.assertEqual(bill.status_code, 201, bill.text)
+        bill_data = bill.json()
+        self.assertEqual(Decimal(bill_data["igst_amount"]), Decimal("360.0000"))
+        self.assertEqual(Decimal(bill_data["cgst_amount"]), Decimal("0.0000"))
+
+        ret = self.client.post("/api/v1/returns/purchase", json={
+            "bill_id": bill_data["id"], "contact_id": str(self.vendor_a_id),
+            "issue_date": str(date.today()), "pos_state_code": "29",
+            "line_items": [{"bill_line_id": bill_data["lines"][0]["id"],
+                "product_id": str(self.product_a_id), "quantity": 1,
+                "rate": 1, "hsn_sac": "84713010", "gst_rate": 0}],
+        }, headers=self.headers_a)
+        self.assertEqual(ret.status_code, 201, ret.text)
+        purchase_return = ret.json()
+        self.assertEqual(Decimal(purchase_return["subtotal"]), Decimal("1000.0000"))
+        self.assertEqual(Decimal(purchase_return["igst_amount"]), Decimal("180.0000"))
+        self.assertEqual(self.client.post(
+            f"/api/v1/returns/purchase/{purchase_return['id']}/cancel",
+            headers=self.headers_a).status_code, 200)
+        cancelled_bill = self.client.post(
+            f"/api/v1/bills/{bill_data['id']}/cancel", headers=self.headers_a)
+        self.assertEqual(cancelled_bill.status_code, 200, cancelled_bill.text)
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.get(Product, self.product_a_id).current_stock, Decimal("100.0000"))
+            reversal = db.query(JournalEntry).filter(
+                JournalEntry.source_type == "BILL_REVERSAL",
+                JournalEntry.source_id == uuid.UUID(bill_data["id"])).one()
+            debits = sum(line.amount for line in reversal.lines if line.direction == "DEBIT")
+            credits = sum(line.amount for line in reversal.lines if line.direction == "CREDIT")
+            self.assertEqual(debits, credits)
+        finally:
+            db.close()
 
 if __name__ == "__main__":
     unittest.main()

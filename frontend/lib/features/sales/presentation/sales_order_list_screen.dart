@@ -53,8 +53,7 @@ class SalesOrderListItem {
         dueDate: json['due_date'] as String? ?? '',
         status: json['status'] as String? ?? 'DRAFT',
         total: (json['total'] as num?)?.toDouble() ?? 0,
-        amountAdvanced:
-            (json['amount_advanced'] as num?)?.toDouble() ?? 0,
+        amountAdvanced: (json['amount_advanced'] as num?)?.toDouble() ?? 0,
         contactName: json['contact_name'] as String? ?? '',
         createdAt: json['created_at'] as String?,
       );
@@ -65,11 +64,7 @@ class SalesOrderListItem {
 // ---------------------------------------------------------------------------
 
 class SalesOrderListQuery {
-  const SalesOrderListQuery({
-    this.page = 1,
-    this.limit = 25,
-    this.status,
-  });
+  const SalesOrderListQuery({this.page = 1, this.limit = 25, this.status});
   final int page, limit;
   final String? status;
 
@@ -89,17 +84,11 @@ final salesOrderListProvider = FutureProvider.autoDispose
     .family<({List<SalesOrderListItem> items, int total}), SalesOrderListQuery>(
       (ref, query) async {
         final dio = ref.watch(apiClientProvider);
-        final q = <String, dynamic>{
-          'page': query.page,
-          'limit': query.limit,
-        };
+        final q = <String, dynamic>{'page': query.page, 'limit': query.limit};
         final res = await dio.get('/sales-orders', queryParameters: q);
         final raw = res.data;
         final rawItems = (raw as List)
-            .map(
-              (e) =>
-                  SalesOrderListItem.fromJson(e as Map<String, dynamic>),
-            )
+            .map((e) => SalesOrderListItem.fromJson(e as Map<String, dynamic>))
             .toList();
         final items = query.status == null
             ? rawItems
@@ -157,6 +146,33 @@ class _SalesOrderListScreenState extends ConsumerState<SalesOrderListScreen> {
     setState(() => _query = _buildQuery());
   }
 
+  Future<void> _workflowAction(SalesOrderListItem item, String action) async {
+    try {
+      final suffix = action == 'confirm'
+          ? 'confirm'
+          : 'create-delivery-challan';
+      await ref
+          .read(apiClientProvider)
+          .post('/sales-orders/${item.id}/$suffix');
+      ref.invalidate(salesOrderListProvider);
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              action == 'confirm'
+                  ? 'Sales order confirmed.'
+                  : 'Delivery challan created.',
+            ),
+          ),
+        );
+    } catch (error) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Action failed: $error')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final asyncPaged = ref.watch(salesOrderListProvider(_query));
@@ -179,9 +195,7 @@ class _SalesOrderListScreenState extends ConsumerState<SalesOrderListScreen> {
                         builder: (_) => const SalesOrderFormScreen(),
                       ),
                     )
-                    .then(
-                      (_) => ref.invalidate(salesOrderListProvider),
-                    ),
+                    .then((_) => ref.invalidate(salesOrderListProvider)),
               ),
             ],
           ),
@@ -227,13 +241,11 @@ class _SalesOrderListScreenState extends ConsumerState<SalesOrderListScreen> {
                         : () => Navigator.of(context)
                               .push(
                                 MaterialPageRoute(
-                                  builder: (_) =>
-                                      const SalesOrderFormScreen(),
+                                  builder: (_) => const SalesOrderFormScreen(),
                                 ),
                               )
                               .then(
-                                (_) =>
-                                    ref.invalidate(salesOrderListProvider),
+                                (_) => ref.invalidate(salesOrderListProvider),
                               ),
                   );
                 }
@@ -250,6 +262,7 @@ class _SalesOrderListScreenState extends ConsumerState<SalesOrderListScreen> {
                         items: data.items,
                         colors: colors,
                         fmt: fmt,
+                        onWorkflow: _workflowAction,
                       ),
                     ),
                     ApexPaginationControls(
@@ -278,11 +291,13 @@ class _TableBody extends StatelessWidget {
     required this.items,
     required this.colors,
     required this.fmt,
+    required this.onWorkflow,
   });
 
   final List<SalesOrderListItem> items;
   final ApexColors colors;
   final NumberFormatter fmt;
+  final void Function(SalesOrderListItem, String) onWorkflow;
 
   @override
   Widget build(BuildContext context) {
@@ -320,8 +335,7 @@ class _TableBody extends StatelessWidget {
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) =>
-                              SalesOrderFormScreen(editId: item.id),
+                          builder: (_) => SalesOrderFormScreen(editId: item.id),
                         ),
                       );
                     },
@@ -391,6 +405,24 @@ class _TableBody extends StatelessWidget {
                               tone: toneForStatus(item.status),
                             ),
                           ),
+                          if (item.status == 'DRAFT' ||
+                              item.status == 'CONFIRMED')
+                            PopupMenuButton<String>(
+                              tooltip: 'Workflow actions',
+                              onSelected: (value) => onWorkflow(item, value),
+                              itemBuilder: (_) => [
+                                if (item.status == 'DRAFT')
+                                  const PopupMenuItem(
+                                    value: 'confirm',
+                                    child: Text('Confirm order'),
+                                  ),
+                                if (item.status == 'CONFIRMED')
+                                  const PopupMenuItem(
+                                    value: 'dispatch',
+                                    child: Text('Create delivery challan'),
+                                  ),
+                              ],
+                            ),
                         ],
                       ),
                     ),
@@ -404,8 +436,12 @@ class _TableBody extends StatelessWidget {
     );
   }
 
-  Widget _header(String label, double width, ApexColors colors,
-      {bool alignRight = false}) {
+  Widget _header(
+    String label,
+    double width,
+    ApexColors colors, {
+    bool alignRight = false,
+  }) {
     return SizedBox(
       width: width,
       child: Text(

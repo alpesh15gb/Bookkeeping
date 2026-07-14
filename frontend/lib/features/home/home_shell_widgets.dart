@@ -30,7 +30,9 @@ Widget selectorWidget(
             Expanded(
               child: Text(
                 name,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 13),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontSize: 13),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
@@ -73,18 +75,16 @@ class HubTabWidget extends StatelessWidget {
           ),
         ),
         body: Column(
-          children: [
-            Expanded(
-              child: TabBarView(children: views),
-            ),
-          ],
+          children: [Expanded(child: TabBarView(children: views))],
         ),
       ),
     );
   }
 }
 
-List<(String, IconData, String, Widget)> getScreensList({bool gstEnabled = true}) {
+List<(String, IconData, String, Widget)> getScreensList({
+  bool gstEnabled = true,
+}) {
   return [
     ('Dashboard', Icons.grid_view_rounded, 'OVERVIEW', const DashboardScreen()),
     (
@@ -98,11 +98,12 @@ List<(String, IconData, String, Widget)> getScreensList({bool gstEnabled = true}
       Icons.shopping_bag_outlined,
       'TRANSACTIONS',
       const HubTabWidget(
-        tabs: ['Quotations', 'Orders', 'Challans'],
+        tabs: ['Quotations', 'Orders', 'Challans', 'Receipts'],
         views: [
           ProformaListScreen(),
           SalesOrderListScreen(),
           DeliveryChallanListScreen(),
+          PaymentListScreen(),
         ],
       ),
     ),
@@ -173,18 +174,8 @@ List<(String, IconData, String, Widget)> getScreensList({bool gstEnabled = true}
       ),
     ),
     if (gstEnabled)
-      (
-        'GST',
-        Icons.fact_check_rounded,
-        'FINANCIALS',
-        const GstShell(),
-      ),
-    (
-      'Reports',
-      Icons.assessment_rounded,
-      'REPORTS',
-      const ReportsShell(),
-    ),
+      ('GST', Icons.fact_check_rounded, 'FINANCIALS', const GstShell()),
+    ('Reports', Icons.assessment_rounded, 'REPORTS', const ReportsShell()),
     (
       'Contacts',
       Icons.people_alt_outlined,
@@ -203,12 +194,7 @@ List<(String, IconData, String, Widget)> getScreensList({bool gstEnabled = true}
       'FINANCIALS',
       const BankingProfileListScreen(),
     ),
-    (
-      'Settings',
-      Icons.tune_rounded,
-      'SYSTEM',
-      const SettingsShell(),
-    ),
+    ('Settings', Icons.tune_rounded, 'SYSTEM', const SettingsShell()),
   ];
 }
 
@@ -237,14 +223,19 @@ Widget buildProfileBox(
               children: [
                 Text(
                   email.split('@')[0],
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(fontSize: 13),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontSize: 13),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 if (role != null)
                   Text(
                     role,
-                    style: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 11, color: colors.textMuted),
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      fontSize: 11,
+                      color: colors.textMuted,
+                    ),
                   ),
               ],
             ),
@@ -252,8 +243,11 @@ Widget buildProfileBox(
           Tooltip(
             message: 'Log out',
             child: IconButton(
-              icon:
-                  Icon(Icons.logout_rounded, size: 16, color: colors.textMuted),
+              icon: Icon(
+                Icons.logout_rounded,
+                size: 16,
+                color: colors.textMuted,
+              ),
               onPressed: onLogout,
             ),
           ),
@@ -308,7 +302,11 @@ Widget buildToolbar(
                       Expanded(
                         child: Text(
                           'Search invoices, customers, products…',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 12.5, color: colors.textMuted),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                fontSize: 12.5,
+                                color: colors.textMuted,
+                              ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -348,7 +346,9 @@ Widget buildToolbar(
               const SizedBox(width: 6),
               Text(
                 display,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(fontSize: 12.5),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelLarge?.copyWith(fontSize: 12.5),
               ),
             ],
           ),
@@ -367,7 +367,11 @@ Widget _keycap(String label, ApexColors colors) => Container(
   ),
   child: Text(
     label,
-    style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: colors.textMuted),
+    style: TextStyle(
+      fontSize: 10.5,
+      fontWeight: FontWeight.w700,
+      color: colors.textMuted,
+    ),
   ),
 );
 
@@ -488,8 +492,7 @@ class _WarehouseStockTabViewState
                       ],
                     ),
                   )
-                : WarehouseStockScreen(
-                    warehouseId: _selectedWarehouseId!),
+                : WarehouseStockScreen(warehouseId: _selectedWarehouseId!),
           ),
         ],
       ),

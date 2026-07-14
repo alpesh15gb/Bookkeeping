@@ -7,10 +7,12 @@ from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    ProformaInvoice, ProformaInvoiceLine, Contact, Product, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
+    ProformaInvoice, ProformaInvoiceLine, SalesOrder, SalesOrderLine,
+    Contact, Product, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant
 )
 from src.schemas.bill_schemas import (
-    ProformaInvoiceCreate, ProformaInvoiceUpdate, ProformaInvoiceResponse, ProformaInvoiceListResponse
+    ProformaInvoiceCreate, ProformaInvoiceUpdate, ProformaInvoiceResponse, ProformaInvoiceListResponse,
+    SalesOrderResponse,
 )
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
@@ -261,7 +263,7 @@ def list_proforma_invoices(
         except ValueError:
             pass
 
-    results = q.offset(offset).limit(limit).all()
+    results = q.order_by(ProformaInvoice.issue_date.desc(), ProformaInvoice.created_at.desc()).offset(offset).limit(limit).all()
 
     response = []
     for pi, contact_name in results:
@@ -434,15 +436,18 @@ def issue_proforma_invoice(
 def convert_proforma_invoice(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("sales:convert"))
 ):
     pi = db.query(ProformaInvoice).filter(
         ProformaInvoice.id == id,
         ProformaInvoice.tenant_id == tenant_id,
         ProformaInvoice.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not pi:
         raise HTTPException(status_code=404, detail="Proforma Invoice not found in this company context.")
+
+    if pi.converted_to_invoice_id:
+        return pi
 
     if pi.status != "ISSUED":
         raise HTTPException(status_code=400, detail="Only issued proforma invoices can be converted.")
@@ -451,17 +456,19 @@ def convert_proforma_invoice(
     from src.infrastructure.database.models import Invoice, InvoiceLine
     from src.domains.company.services import NumberingSeriesService
 
-    inv_number = NumberingSeriesService.generate_number(db, tenant_id, "INVOICE")
+    inv_number = NumberingSeriesService.generate_next_number(db, tenant_id, "INVOICE")
 
     invoice = Invoice(
         tenant_id=tenant_id,
         contact_id=pi.contact_id,
+        source_document_type="PROFORMA_INVOICE",
+        source_document_id=pi.id,
         invoice_number=inv_number,
         issue_date=date.today(),
         due_date=date.today(),
         status="DRAFT",
         subtotal=pi.subtotal,
-        discount_total=pi.discount_total,
+        discount_total=Decimal("0.0000"),
         cgst_amount=pi.cgst_amount,
         sgst_amount=pi.sgst_amount,
         igst_amount=pi.igst_amount,
@@ -469,6 +476,7 @@ def convert_proforma_invoice(
         cess_amount=pi.cess_amount,
         total=pi.total,
         pos_state_code=pi.pos_state_code,
+        reference_number=pi.proforma_number,
     )
     db.add(invoice)
     db.flush()
@@ -505,6 +513,67 @@ def convert_proforma_invoice(
     db.commit()
     db.refresh(pi)
     return pi
+
+
+@router.post("/{id}/convert-to-sales-order", response_model=SalesOrderResponse)
+def convert_proforma_to_sales_order(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("sales:convert")),
+):
+    pi = db.query(ProformaInvoice).filter(
+        ProformaInvoice.id == id,
+        ProformaInvoice.tenant_id == tenant_id,
+        ProformaInvoice.deleted_at == None,
+    ).with_for_update().first()
+    if not pi:
+        raise HTTPException(status_code=404, detail="Quotation not found.")
+    if pi.converted_to_sales_order_id:
+        existing = db.query(SalesOrder).filter(
+            SalesOrder.id == pi.converted_to_sales_order_id,
+            SalesOrder.tenant_id == tenant_id,
+        ).first()
+        if existing:
+            return existing
+    if pi.status != "ISSUED":
+        raise HTTPException(status_code=400, detail="Only issued quotations can be converted to sales orders.")
+
+    order = SalesOrder(
+        tenant_id=tenant_id,
+        contact_id=pi.contact_id,
+        source_proforma_id=pi.id,
+        so_number=NumberingSeriesService.generate_next_number(db, tenant_id, "SALES_ORDER"),
+        order_date=date.today(),
+        due_date=max(pi.due_date, date.today()),
+        status="DRAFT",
+        subtotal=pi.subtotal,
+        discount_total=pi.discount_total,
+        cgst_amount=pi.cgst_amount,
+        sgst_amount=pi.sgst_amount,
+        igst_amount=pi.igst_amount,
+        utgst_amount=pi.utgst_amount,
+        cess_amount=pi.cess_amount,
+        total=pi.total,
+        amount_advanced=Decimal("0.0000"),
+        pos_state_code=pi.pos_state_code,
+        lines=[SalesOrderLine(
+            product_id=line.product_id, description=line.description,
+            quantity=line.quantity, rate=line.rate, discount=line.discount,
+            subtotal=line.subtotal, hsn_sac=line.hsn_sac, gst_rate=line.gst_rate,
+            cgst_rate=line.cgst_rate, cgst_amount=line.cgst_amount,
+            sgst_rate=line.sgst_rate, sgst_amount=line.sgst_amount,
+            igst_rate=line.igst_rate, igst_amount=line.igst_amount,
+            utgst_rate=line.utgst_rate, utgst_amount=line.utgst_amount,
+            cess_rate=line.cess_rate, cess_amount=line.cess_amount, total=line.total,
+        ) for line in pi.lines],
+    )
+    db.add(order)
+    db.flush()
+    pi.converted_to_sales_order_id = order.id
+    pi.status = "CONVERTED"
+    db.commit()
+    db.refresh(order)
+    return order
 
 
 @router.post("/{id}/cancel", response_model=ProformaInvoiceResponse)

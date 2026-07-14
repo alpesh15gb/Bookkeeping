@@ -193,9 +193,8 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
     db.refresh(user)
 
     # 5. Log verification token (dev mode — no real email sent)
-    verify_url = f"{settings.APP_URL}/verify-email?token={email_verify_token_raw}"
-    logger.info("Email verification token for %s: %s", payload.email, email_verify_token_raw)
-    logger.info("Verification URL: %s", verify_url)
+    # Verification secrets must never be written to application logs.
+    logger.info("Email verification challenge issued for user %s", user.id)
 
     return user
 

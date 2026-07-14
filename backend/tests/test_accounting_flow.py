@@ -166,6 +166,30 @@ class TestAccountingFlow(unittest.TestCase):
         finally:
             db.close()
 
+        # Financial journals are immutable; corrections are explicit, auditable reversals.
+        reversal = self.client.post(
+            f"/api/v1/accounting/journals/{jv['id']}/reverse",
+            json={"reversal_date": str(date.today()), "reason": "Entry posted in error"},
+            headers=self.headers_a,
+        )
+        self.assertEqual(reversal.status_code, 201, reversal.text)
+        self.assertEqual(reversal.json()["source_type"], "JOURNAL_REVERSAL")
+        self.assertEqual(reversal.json()["source_id"], jv["id"])
+        self.assertEqual(
+            self.client.post(
+                f"/api/v1/accounting/journals/{jv['id']}/reverse",
+                json={"reversal_date": str(date.today()), "reason": "Duplicate attempt"},
+                headers=self.headers_a,
+            ).status_code,
+            409,
+        )
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.get(Account, self.rent_id).current_balance, Decimal("0.0000"))
+            self.assertEqual(db.get(Account, self.bank_id).current_balance, Decimal("5000.0000"))
+        finally:
+            db.close()
+
         # 3. Test validation rules: unbalanced entry
         payload_unbalanced = {
             "entry_date": str(date.today()),

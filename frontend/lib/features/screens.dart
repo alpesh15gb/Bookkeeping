@@ -6,6 +6,8 @@ export 'sales/presentation/sales_order_list_screen.dart';
 export 'sales/presentation/sales_order_form_screen.dart';
 export 'sales/presentation/delivery_challan_list_screen.dart';
 export 'sales/presentation/delivery_challan_form_screen.dart';
+export 'sales/payments/presentation/payment_list_screen.dart';
+export 'sales/payments/presentation/payment_form_screen.dart';
 export 'purchases/vendor_bills/presentation/bill_form_screen.dart';
 export 'purchases/vendor_bills/presentation/bill_list_screen.dart';
 export 'purchases/purchase_orders/presentation/purchase_order_list_screen.dart';

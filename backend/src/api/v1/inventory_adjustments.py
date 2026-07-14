@@ -25,7 +25,21 @@ def create_inventory_adjustment(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))  # Reusing invoice:create permission for now
 ):
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.adjustment_date)
+    product_ids = [line.product_id for line in payload.line_items]
+    if not product_ids:
+        raise HTTPException(status_code=400, detail="At least one adjustment line is required.")
+    if len(product_ids) != len(set(product_ids)):
+        raise HTTPException(status_code=400, detail="Each product can appear only once in an inventory adjustment.")
+    if db.query(InventoryAdjustment.id).filter(
+        InventoryAdjustment.tenant_id == tenant_id,
+        InventoryAdjustment.adjustment_number == payload.adjustment_number,
+        InventoryAdjustment.deleted_at == None,
+    ).first():
+        raise HTTPException(status_code=400, detail="Adjustment number already exists in this company.")
     # Verify products belong to tenant
+    products = {}
     for line in payload.line_items:
         product = db.query(Product).filter(
             Product.id == line.product_id,
@@ -34,17 +48,21 @@ def create_inventory_adjustment(
         ).first()
         if not product:
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found in this context.")
+        products[line.product_id] = product
 
     db_lines = []
     for line in payload.line_items:
-        if line.unit_cost is not None and line.unit_cost < 0:
-            raise HTTPException(status_code=400, detail="Unit cost cannot be negative.")
-        total_cost = (line.quantity_change * line.unit_cost) if line.unit_cost else None
+        unit_cost = line.unit_cost if line.unit_cost is not None else products[line.product_id].purchase_price
+        if unit_cost is None or unit_cost <= 0:
+            raise HTTPException(status_code=400, detail=f"A positive unit cost is required for {products[line.product_id].name}.")
+        if line.quantity_change == 0:
+            raise HTTPException(status_code=400, detail="Quantity change cannot be zero.")
+        total_cost = abs(line.quantity_change) * unit_cost
         
         db_line = InventoryAdjustmentLine(
             product_id=line.product_id,
             quantity_change=line.quantity_change,
-            unit_cost=line.unit_cost,
+            unit_cost=unit_cost,
             total_cost=total_cost
         )
         db_lines.append(db_line)
@@ -123,8 +141,14 @@ def update_inventory_adjustment(
     if adjustment.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft inventory adjustments can be modified.")
 
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.adjustment_date or adjustment.adjustment_date)
+    candidate_lines = payload.line_items or []
+    product_ids = [line.product_id for line in candidate_lines]
+    if len(product_ids) != len(set(product_ids)):
+        raise HTTPException(status_code=400, detail="Each product can appear only once in an inventory adjustment.")
     # Verify products belong to tenant
-    for line in payload.line_items:
+    for line in candidate_lines:
         product = db.query(Product).filter(
             Product.id == line.product_id,
             Product.tenant_id == tenant_id,
@@ -147,15 +171,21 @@ def update_inventory_adjustment(
         
         db_lines = []
         for line in payload.line_items:
-            if line.unit_cost is not None and line.unit_cost < 0:
-                raise HTTPException(status_code=400, detail="Unit cost cannot be negative.")
-            total_cost = (line.quantity_change * line.unit_cost) if line.unit_cost else None
+            product = db.query(Product).filter(
+                Product.id == line.product_id, Product.tenant_id == tenant_id
+            ).first()
+            unit_cost = line.unit_cost if line.unit_cost is not None else product.purchase_price
+            if unit_cost is None or unit_cost <= 0:
+                raise HTTPException(status_code=400, detail=f"A positive unit cost is required for {product.name}.")
+            if line.quantity_change == 0:
+                raise HTTPException(status_code=400, detail="Quantity change cannot be zero.")
+            total_cost = abs(line.quantity_change) * unit_cost
             
             db_line = InventoryAdjustmentLine(
                 adjustment_id=adjustment.id,
                 product_id=line.product_id,
                 quantity_change=line.quantity_change,
-                unit_cost=line.unit_cost,
+                unit_cost=unit_cost,
                 total_cost=total_cost
             )
             db_lines.append(db_line)
@@ -177,13 +207,15 @@ def confirm_inventory_adjustment(
         InventoryAdjustment.id == id,
         InventoryAdjustment.tenant_id == tenant_id,
         InventoryAdjustment.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not adjustment:
         raise HTTPException(status_code=404, detail="Inventory Adjustment not found in this company context.")
 
     if adjustment.status != "DRAFT":
         raise HTTPException(status_code=400, detail="Only draft inventory adjustments can be confirmed.")
 
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, adjustment.adjustment_date)
     # Create ledger entries for inventory adjustments
     resolver = AccountResolver(db, tenant_id)
     
@@ -194,8 +226,9 @@ def confirm_inventory_adjustment(
         if line.total_cost is None or line.total_cost <= 0:
             raise HTTPException(status_code=400, detail=f"Total cost must be positive for product {line.product_id}.")
         
-        # Get or create inventory asset account for this product
-        inventory_account_id = resolver.resolve(f"assets.inventory.{line.product_id}")
+        # Inventory valuation is controlled through the shared inventory ledger;
+        # product-level quantities remain in the stock ledger.
+        inventory_account_id = resolver.resolve("assets.inventory")
         adjustment_account_id = resolver.resolve("inventory_adjustment")
         
         if line.quantity_change > 0:
@@ -234,6 +267,11 @@ def confirm_inventory_adjustment(
         ).with_for_update().first()
         if product:
             current_stock = product.current_stock or Decimal("0")
+            if line.quantity_change < 0 and current_stock < abs(line.quantity_change):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient stock for {product.name}. Available: {current_stock}, reduction: {abs(line.quantity_change)}",
+                )
             product.current_stock = current_stock + line.quantity_change
             # Create stock ledger entry
             stock_ledger_entries.append(StockLedger(
@@ -281,7 +319,7 @@ def cancel_inventory_adjustment(
         InventoryAdjustment.id == id,
         InventoryAdjustment.tenant_id == tenant_id,
         InventoryAdjustment.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not adjustment:
         raise HTTPException(status_code=404, detail="Inventory Adjustment not found.")
 
@@ -289,7 +327,9 @@ def cancel_inventory_adjustment(
         raise HTTPException(status_code=400, detail="Inventory adjustment is already cancelled.")
 
     if adjustment.status == "CONFIRMED":
-        # Reverse journal entries: find and delete the original journal entry
+        from src.domains.accounting.period_lock import validate_period_open
+        validate_period_open(db, tenant_id, adjustment.adjustment_date)
+        # Preserve the original entry and add an explicit reversal.
         original_je = db.query(JournalEntry).filter(
             JournalEntry.tenant_id == tenant_id,
             JournalEntry.source_type == "INVENTORY_ADJUSTMENT",
@@ -307,7 +347,7 @@ def cancel_inventory_adjustment(
                 ))
             reversal_entry = JournalEntry(
                 tenant_id=tenant_id,
-                entry_date=date.today(),
+                entry_date=adjustment.adjustment_date,
                 reference_number=f"REV-{adjustment.adjustment_number}",
                 description=f"Reversal of inventory adjustment {adjustment.adjustment_number}",
                 source_type="INVENTORY_ADJUSTMENT_REVERSAL",
@@ -315,9 +355,8 @@ def cancel_inventory_adjustment(
                 lines=reversal_lines
             )
             db.add(reversal_entry)
-            # Delete original journal lines and entry
-            db.query(JournalLine).filter(JournalLine.entry_id == original_je.id).delete()
-            db.delete(original_je)
+            db.flush()
+            update_account_balances(db, tenant_id, {line.account_id for line in reversal_lines})
 
         # Reverse stock changes: update product.current_stock
         for line in adjustment.lines:
@@ -327,6 +366,11 @@ def cancel_inventory_adjustment(
             ).with_for_update().first()
             if product:
                 current_stock = product.current_stock or Decimal("0")
+                if line.quantity_change > 0 and current_stock < line.quantity_change:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Cannot cancel: {product.name} stock from this increase has been consumed. Available: {current_stock}, required: {line.quantity_change}",
+                    )
                 product.current_stock = current_stock - line.quantity_change
                 db.add(StockLedger(
                     tenant_id=tenant_id,
@@ -337,13 +381,6 @@ def cancel_inventory_adjustment(
                     reference_id=adjustment.id,
                     rate=line.unit_cost
                 ))
-
-        # Delete original stock ledger entries
-        db.query(StockLedger).filter(
-            StockLedger.tenant_id == tenant_id,
-            StockLedger.reference_type == "INVENTORY_ADJUSTMENT",
-            StockLedger.reference_id == adjustment.id,
-        ).delete()
 
     adjustment.status = "CANCELLED"
     db.commit()

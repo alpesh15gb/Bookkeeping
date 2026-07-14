@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Boolean, UUID, Index, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, Boolean, UUID, Index, UniqueConstraint, Integer, Text
 from sqlalchemy.sql import func
 import uuid
 
@@ -18,4 +18,9 @@ class IdempotencyRecord(Base):
     method = Column(String(10), nullable=False)
     path = Column(String(500), nullable=False)
     is_processed = Column(Boolean, default=True)
+    request_hash = Column(String(64))
+    status = Column(String(20), nullable=False, default="PROCESSING")
+    response_status = Column(Integer)
+    response_body = Column(Text)
+    response_content_type = Column(String(100))
     created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())

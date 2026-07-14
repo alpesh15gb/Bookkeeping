@@ -50,11 +50,11 @@ class BalanceSheetReport {
   final double totalEquity;
   final double netProfit;
 
-  /// Total liabilities and equity (the balancing side).
-  double get totalLiabilitiesEquity =>
-      totalLiabilities + totalEquity + netProfit;
+  /// Total liabilities and equity (the balancing side). The API's
+  /// `total_equity` already includes the current-period profit line.
+  double get totalLiabilitiesEquity => totalLiabilities + totalEquity;
 
-  /// Whether the balance sheet balances (Assets = Liabilities + Equity + Net Profit).
+  /// Whether the balance sheet balances (Assets = Liabilities + Equity).
   bool get isBalanced => (totalAssets - totalLiabilitiesEquity).abs() < 0.01;
 
   factory BalanceSheetReport.fromJson(

@@ -25,6 +25,9 @@ class Permissions {
   static const invoiceUpdate = 'invoice:update';
   static const invoiceFinalize = 'invoice:finalize';
   static const invoiceDelete = 'invoice:delete';
+  static const invoiceCancel = 'invoice:cancel';
+  static const invoiceEmail = 'invoice:email';
+  static const salesConvert = 'sales:convert';
 
   // ─── Payments ───
   static const paymentCreate = 'payment:create';
@@ -67,4 +70,7 @@ class Permissions {
   static const billView = 'bill:view';
   static const billUpdate = 'bill:update';
   static const billDelete = 'bill:delete';
+
+  // â”€â”€â”€ Backup / Restore â”€â”€â”€
+  static const dataImport = 'data:import';
 }

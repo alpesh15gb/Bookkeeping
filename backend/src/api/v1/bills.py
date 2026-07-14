@@ -10,11 +10,12 @@ from src.infrastructure.database.models import Bill, BillLine, Contact, Product,
 from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate, PaginatedBillResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
-from src.domains.accounting.auto_post import auto_post_bill, cancel_bill, get_bill_display_status
+from src.domains.accounting.auto_post import auto_post_bill, cancel_bill as cancel_bill_posting, get_bill_display_status
 from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
 from src.api.deps import get_tenant_context, enforce_permission, get_current_user
 from src.core.rate_limiter import limiter
 from src.core.config import settings
+from src.domains.taxation.filing_lock import ensure_gst_period_mutable, GSTPeriodFiledError
 
 router = APIRouter(prefix="/bills", tags=["Vendor Bills (Purchases)"])
 
@@ -28,6 +29,10 @@ def create_bill(
 ):
     from src.domains.accounting.period_lock import validate_period_open
     validate_period_open(db, tenant_id, payload.issue_date)
+    try:
+        ensure_gst_period_mutable(db, tenant_id, payload.issue_date)
+    except GSTPeriodFiledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
     contact = db.query(Contact).filter(
         Contact.id == payload.contact_id,
@@ -40,7 +45,9 @@ def create_bill(
     if contact.contact_type not in ("VENDOR", "BOTH"):
         raise HTTPException(status_code=400, detail="Selected contact must be a Vendor.")
 
-    origin_state_code = contact.state_code or resolve_origin_state_code(db, tenant_id)
+    # For an inward supply the recipient company's state is the tax origin;
+    # using the vendor state here incorrectly converts interstate purchases to CGST/SGST.
+    origin_state_code = resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
     bill_subtotal = Decimal("0.0000")
@@ -191,7 +198,7 @@ def preview_bill(
         Contact.deleted_at == None
     ).first() if payload.contact_id else None
 
-    origin_state_code = contact.state_code if (contact and contact.state_code) else resolve_origin_state_code(db, tenant_id)
+    origin_state_code = resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
     bill_subtotal = Decimal("0.0000")
@@ -508,13 +515,23 @@ def update_bill(
     validate_period_open(db, tenant_id, bill.issue_date)
     if payload.issue_date:
         validate_period_open(db, tenant_id, payload.issue_date)
+    try:
+        ensure_gst_period_mutable(db, tenant_id, bill.issue_date)
+        if payload.issue_date:
+            ensure_gst_period_mutable(db, tenant_id, payload.issue_date)
+    except GSTPeriodFiledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
     if bill.status not in ("DRAFT", "POSTED"):
         raise HTTPException(status_code=400, detail="Only draft or posted bills can be modified.")
 
     if payload.contact_id:
-        contact = db.query(Contact).filter(Contact.id == payload.contact_id, Contact.tenant_id == tenant_id).first()
-        if not contact:
+        contact = db.query(Contact).filter(
+            Contact.id == payload.contact_id,
+            Contact.tenant_id == tenant_id,
+            Contact.deleted_at == None,
+        ).first()
+        if not contact or contact.contact_type not in ("VENDOR", "BOTH"):
             raise HTTPException(status_code=400, detail="Vendor not found in this context.")
         bill.contact_id = payload.contact_id
         
@@ -524,15 +541,19 @@ def update_bill(
         bill.issue_date = payload.issue_date
     if payload.due_date:
         bill.due_date = payload.due_date
+    if payload.pos_state_code and payload.line_items is None and payload.pos_state_code != bill.pos_state_code:
+        raise HTTPException(status_code=400, detail="Line items are required when changing place of supply so GST can be recalculated.")
     if payload.pos_state_code:
         bill.pos_state_code = payload.pos_state_code
 
+    if payload.is_gst_inclusive is not None and payload.line_items is None and payload.is_gst_inclusive != bill.is_gst_inclusive:
+        raise HTTPException(status_code=400, detail="Line items are required when changing GST-inclusive pricing so tax can be recalculated.")
     if payload.is_gst_inclusive is not None:
         bill.is_gst_inclusive = payload.is_gst_inclusive
 
+    rounded_total = bill.total
     if payload.line_items is not None:
-        contact = db.query(Contact).filter(Contact.id == bill.contact_id).first()
-        origin_state_code = contact.state_code if (contact and contact.state_code) else resolve_origin_state_code(db, tenant_id)
+        origin_state_code = resolve_origin_state_code(db, tenant_id)
 
         existing_lines = db.query(BillLine).filter(BillLine.bill_id == id).all()
         existing_by_id = {str(line.id): line for line in existing_lines if line.id}
@@ -785,6 +806,10 @@ def record_bill_payment(
 
     if bill.status in ("DRAFT", "CANCELLED", "PAID"):
         raise HTTPException(status_code=400, detail="Cannot record payment allocations on draft, cancelled, or settled bills.")
+    if payload.contact_id != bill.contact_id:
+        raise HTTPException(status_code=400, detail="Payment vendor must match the bill vendor.")
+    if len(payload.allocations) != 1:
+        raise HTTPException(status_code=400, detail="This bill payment endpoint requires exactly one allocation for the selected bill.")
 
     payment = BillPayment(
         tenant_id=tenant_id,
@@ -805,7 +830,8 @@ def record_bill_payment(
         if alloc.bill_id != id:
             raise HTTPException(status_code=400, detail="Allocation Bill ID mismatch.")
 
-        remaining = bill.total - bill.amount_paid
+        payable_total = bill.total - (bill.tds_amount or Decimal("0.0000"))
+        remaining = payable_total - bill.amount_paid
         if alloc.amount > remaining:
             raise HTTPException(status_code=400, detail=f"Allocation amount {alloc.amount} exceeds bill remaining total {remaining}")
 
@@ -824,7 +850,8 @@ def record_bill_payment(
         )
 
     bill.amount_paid += allocated_amount
-    if bill.amount_paid >= bill.total:
+    payable_total = bill.total - (bill.tds_amount or Decimal("0.0000"))
+    if bill.amount_paid >= payable_total:
         bill.status = "PAID"
     else:
         bill.status = "PARTIALLY_PAID"
@@ -851,7 +878,7 @@ def record_bill_payment(
 
 
 @router.post("/{id}/cancel", response_model=BillResponse)
-def cancel_bill(
+def cancel_bill_route(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
@@ -867,7 +894,11 @@ def cancel_bill(
         raise HTTPException(status_code=404, detail="Vendor Bill not found.")
 
     from src.domains.accounting.period_lock import validate_period_open
-    validate_period_open(db, tenant_id, date.today())
+    validate_period_open(db, tenant_id, bill.issue_date)
+    try:
+        ensure_gst_period_mutable(db, tenant_id, bill.issue_date)
+    except GSTPeriodFiledError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
     if bill.status not in ("POSTED", "PARTIALLY_PAID"):
         raise HTTPException(status_code=400, detail="Only posted or partially paid bills can be cancelled.")
@@ -879,70 +910,10 @@ def cancel_bill(
             detail="Cannot cancel a bill with applied payments. Reverse payments first."
         )
 
-    bill.amount_paid = Decimal("0.0000")
-
-    resolver = AccountResolver(db, tenant_id)
-    vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
-    purchase_expense_account_id = resolver.resolve("purchases")
-    cgst_account_id = resolver.resolve("cgst_input")
-    sgst_account_id = resolver.resolve("sgst_input")
-    igst_account_id = resolver.resolve("igst_input")
-    utgst_account_id = resolver.resolve("utgst_input")
-    cess_account_id = resolver.resolve("cess_input")
-    round_off_account_id = resolver.resolve("round_off") if bill.round_off != 0 else None
-
-    ledger_draft = LedgerPostingEngine.create_bill_reversal_posting(
-        tenant_id=tenant_id,
-        bill_id=bill.id,
-        bill_number=bill.bill_number,
-        cancel_date=date.today(),
-        vendor_account_id=vendor_account_id,
-        purchase_expense_account_id=purchase_expense_account_id,
-        subtotal=bill.subtotal,
-        discount_total=bill.discount_total,
-        cgst_account_id=cgst_account_id,
-        cgst_amount=bill.cgst_amount,
-        sgst_account_id=sgst_account_id,
-        sgst_amount=bill.sgst_amount,
-        igst_account_id=igst_account_id,
-        igst_amount=bill.igst_amount,
-        utgst_account_id=utgst_account_id,
-        utgst_amount=bill.utgst_amount,
-        cess_account_id=cess_account_id,
-        cess_amount=bill.cess_amount,
-        round_off_account_id=round_off_account_id,
-        round_off_amount=bill.round_off,
-    )
-
-    journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
-
-    for line in bill.lines:
-        if line.product_id and line.quantity:
-            product = db.query(Product).filter(
-                Product.id == line.product_id,
-                Product.tenant_id == tenant_id
-            ).with_for_update().first()
-            if product and product.product_type == "GOODS":
-                available = product.current_stock or Decimal("0")
-                if available < line.quantity:
-                    raise HTTPException(
-                        status_code=400,
-                        detail=f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}"
-                    )
-                product.current_stock = available - line.quantity
-                db.add(StockLedger(
-                    tenant_id=tenant_id,
-                    product_id=line.product_id,
-                    reference_type="BILL_REVERSAL",
-                    reference_id=bill.id,
-                    quantity=-line.quantity,
-                    balance_quantity=product.current_stock,
-                    rate=line.rate,
-                ))
-
-    bill.status = "CANCELLED"
-    bill.cancelled_at = datetime.now(timezone.utc)
-    bill.cancelled_by = current_user.id
+    try:
+        cancel_bill_posting(db, tenant_id, bill, current_user.id)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     db.commit()
     db.refresh(bill)
     return bill

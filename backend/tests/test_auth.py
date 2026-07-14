@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
 from src.infrastructure.database.models import User, Tenant, TenantMembership
+from src.core.security import Permissions, ROLE_PERMISSIONS
 
 class TestAuthentication(unittest.TestCase):
     def setUp(self):
@@ -19,6 +20,21 @@ class TestAuthentication(unittest.TestCase):
         Base.metadata.create_all(bind=engine)
 
         self.client = TestClient(app)
+
+    def test_sales_financial_actions_have_least_privilege_permissions(self):
+        owner = set(ROLE_PERMISSIONS["owner"])
+        accountant = set(ROLE_PERMISSIONS["accountant"])
+        salesperson = set(ROLE_PERMISSIONS["salesperson"])
+        auditor = set(ROLE_PERMISSIONS["auditor"])
+        self.assertTrue({Permissions.INVOICE_CANCEL, Permissions.INVOICE_EMAIL,
+                         Permissions.SALES_CONVERT, Permissions.PAYMENT_CANCEL} <= owner)
+        self.assertTrue({Permissions.INVOICE_CANCEL, Permissions.INVOICE_EMAIL,
+                         Permissions.SALES_CONVERT, Permissions.PAYMENT_CANCEL} <= accountant)
+        self.assertTrue({Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT} <= salesperson)
+        self.assertNotIn(Permissions.INVOICE_CANCEL, salesperson)
+        self.assertNotIn(Permissions.PAYMENT_CANCEL, salesperson)
+        self.assertFalse({Permissions.INVOICE_CANCEL, Permissions.INVOICE_EMAIL,
+                          Permissions.SALES_CONVERT, Permissions.PAYMENT_CANCEL} & auditor)
 
     def test_auth_registration_and_login_flow(self):
         # 1. Register a new user
@@ -119,6 +135,35 @@ class TestAuthentication(unittest.TestCase):
         }
         res_ok = self.client.get("/api/v1/invoices", headers=headers_ok)
         self.assertEqual(res_ok.status_code, 200)
+
+    def test_existing_access_token_is_rejected_after_user_deactivation(self):
+        payload = {
+            "email": "disabled@company.com",
+            "password": "SecurePassword123!",
+            "full_name": "Disabled User",
+            "company_legal_name": "Disabled Company",
+        }
+        response = self.client.post("/api/v1/auth/register", json=payload)
+        self.assertEqual(response.status_code, 201)
+        user_id = uuid.UUID(response.json()["id"])
+        token = self.client.post(
+            "/api/v1/auth/login",
+            json={"email": payload["email"], "password": payload["password"]},
+        ).json()["access_token"]
+
+        db = SessionLocal()
+        try:
+            user = db.query(User).filter(User.id == user_id).one()
+            user.is_active = False
+            db.commit()
+        finally:
+            db.close()
+
+        me = self.client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(me.status_code, 401)
 
 if __name__ == "__main__":
     unittest.main()

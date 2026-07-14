@@ -617,7 +617,6 @@ class TestP3_AccountingEngine:
         tenant, user, _, _ = self._setup(db_session)
         vendor = _seed_contact(db_session, tenant, name="Vendor Co", gstin="27AAACV9999F1Z5", state_code="27", contact_type="VENDOR")
         product = _seed_product(db_session, tenant, name="Purchase Item")
-        _seed_numbering_series(db_session, tenant)
         headers = _auth(user, tenant)
 
         resp = client.post("/api/v1/bills", json={
@@ -937,7 +936,28 @@ class TestP5_OfflineSyncValidation:
         headers2["Idempotency-Key"] = idempotency_key
         payload2 = _make_invoice_payload(contact.id, product.id, pos_state="27")
         resp2 = client.post("/api/v1/invoices", json=payload2, headers=headers2)
-        assert resp2.status_code in (200, 201, 409)
+        assert resp2.status_code == 201
+        assert resp2.headers.get("Idempotency-Replayed") == "true"
+        assert resp2.json()["id"] == resp1.json()["id"]
+        assert db_session.query(Invoice).filter(Invoice.tenant_id == tenant.id).count() == 1
+
+    def test_idempotency_key_rejects_changed_retry_payload(self, db_session, client):
+        tenant = _seed_tenant(db_session)
+        user = _seed_user(db_session, tenant)
+        contact = _seed_contact(db_session, tenant, gstin="27AAACB1234F1Z5", state_code="27")
+        product = _seed_product(db_session, tenant)
+        _seed_numbering_series(db_session, tenant)
+        headers = _auth(user, tenant)
+        headers["Idempotency-Key"] = str(uuid.uuid4())
+        payload = _make_invoice_payload(contact.id, product.id, pos_state="27")
+        first = client.post("/api/v1/invoices", json=payload, headers=headers)
+        assert first.status_code == 201
+        changed = dict(payload)
+        changed["notes"] = "This is not the original operation"
+        retry = client.post("/api/v1/invoices", json=changed, headers=headers)
+        assert retry.status_code == 422
+        assert retry.json()["code"] == "IDEMPOTENCY_PAYLOAD_MISMATCH"
+        assert db_session.query(Invoice).filter(Invoice.tenant_id == tenant.id).count() == 1
 
     def test_cancelled_invoice_cannot_be_edited(self, db_session, client):
         tenant = _seed_tenant(db_session)

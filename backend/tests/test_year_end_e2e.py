@@ -198,6 +198,25 @@ class TestYearEndScenario1_Profit:
         assert new_fy["status"] == "CURRENT"
         assert new_fy["is_current"] is True
 
+        # Closing journals must not erase the historical operating statement,
+        # and retained earnings must not be counted a second time on the B/S.
+        closed_pnl = client.get(
+            "/api/v1/accounting/profit-loss?start_date=2025-04-01&end_date=2026-03-31",
+            headers=h,
+        )
+        assert closed_pnl.status_code == 200
+        assert abs(float(closed_pnl.json()["net_profit"]) - 40000.0) < 0.01
+        closed_bs = client.get(
+            "/api/v1/accounting/balance-sheet?as_of_date=2026-03-31", headers=h
+        )
+        assert closed_bs.status_code == 200
+        closed_bs_data = closed_bs.json()
+        assert abs(
+            float(closed_bs_data["total_assets"])
+            - float(closed_bs_data["total_liabilities"])
+            - float(closed_bs_data["total_equity"])
+        ) < 0.01
+
         # ── Verify Retained Earnings increased by 40K ──────────────────────
         db = SessionLocal()
         try:

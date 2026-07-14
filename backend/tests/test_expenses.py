@@ -191,7 +191,7 @@ class TestExpenses(unittest.TestCase):
         self.assertEqual(get_res.status_code, 404)
 
     def test_bulk_delete_expenses(self):
-        """Test bulk deleting draft expenses (known bug: endpoint passes string IDs to UUID column)"""
+        """Bulk deletion accepts API UUID strings and reports every deleted draft."""
         ids = []
         for i in range(3):
             payload = {
@@ -204,11 +204,9 @@ class TestExpenses(unittest.TestCase):
             res = self.client.post("/api/v1/expenses", json=payload, headers=self.headers)
             ids.append(res.json()["id"])
 
-        try:
-            bulk_res = self.client.post("/api/v1/expenses/bulk-delete", json={"ids": ids}, headers=self.headers)
-            self.assertIn(bulk_res.status_code, (200, 500))
-        except Exception:
-            pass  # Pre-existing app bug
+        bulk_res = self.client.post("/api/v1/expenses/bulk-delete", json={"ids": ids}, headers=self.headers)
+        self.assertEqual(bulk_res.status_code, 200, bulk_res.text)
+        self.assertEqual(bulk_res.json()["deleted"], 3)
 
     # ------------------------------------------------------------------
     # Post / Cancel / Journal Tests
@@ -344,6 +342,17 @@ class TestExpenses(unittest.TestCase):
         self.assertEqual(Decimal(str(data["igst_amount"])), Decimal("1800.00"))
         self.assertEqual(Decimal(str(data["total"])), Decimal("11800.00"))
 
+        updated = self.client.put(
+            f"/api/v1/expenses/{data['id']}",
+            json={"amount": 20000.00, "notes": "Updated after verification"},
+            headers=self.headers,
+        )
+        self.assertEqual(updated.status_code, 200, updated.text)
+        self.assertEqual(updated.json()["place_of_supply_state_code"], "29")
+        self.assertEqual(Decimal(str(updated.json()["igst_amount"])), Decimal("3600.00"))
+        self.assertEqual(Decimal(str(updated.json()["cgst_amount"])), Decimal("0.00"))
+        self.assertEqual(updated.json()["notes"], "Updated after verification")
+
     def test_expense_gst_zero_rate(self):
         """Test expense with zero GST"""
         payload = {
@@ -366,30 +375,26 @@ class TestExpenses(unittest.TestCase):
     # ------------------------------------------------------------------
 
     def test_expense_preview(self):
-        """Test expense preview endpoint (known bug: server returns 500 due to missing gst_rate in totals dict)"""
+        """Test expense preview endpoint."""
         payload = {
             "amount": 10000.00,
             "gst_rate": 18.0,
             "place_of_supply_state_code": "27",
         }
-        try:
-            res = self.client.post("/api/v1/expenses/preview", json=payload, headers=self.headers)
-            self.assertIn(res.status_code, (200, 500))
-        except Exception:
-            pass  # Pre-existing app bug
+        res = self.client.post("/api/v1/expenses/preview", json=payload, headers=self.headers)
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(Decimal(str(res.json()["total"])), Decimal("11800.00"))
 
     def test_expense_preview_inter_state(self):
-        """Test expense preview with inter-state GST (known bug: server returns 500)"""
+        """Test expense preview with inter-state GST."""
         payload = {
             "amount": 10000.00,
             "gst_rate": 18.0,
             "place_of_supply_state_code": "29",
         }
-        try:
-            res = self.client.post("/api/v1/expenses/preview", json=payload, headers=self.headers)
-            self.assertIn(res.status_code, (200, 500))
-        except Exception:
-            pass  # Pre-existing app bug
+        res = self.client.post("/api/v1/expenses/preview", json=payload, headers=self.headers)
+        self.assertEqual(res.status_code, 200, res.text)
+        self.assertEqual(Decimal(str(res.json()["igst_amount"])), Decimal("1800.00"))
 
 
 if __name__ == "__main__":

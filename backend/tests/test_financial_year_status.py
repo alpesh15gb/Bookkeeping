@@ -48,11 +48,13 @@ def test_list_normalizes_single_current_and_marks_future_upcoming(client: TestCl
         res = _create_fy(client, headers, start_year)
         assert res.status_code == 201, res.json()
 
-    # Simulate bad production data: every FY has is_current=true.
+    # Simulate recoverable legacy data with no selected current FY. The database
+    # now prevents multiple current years, so normalization only needs to recover
+    # the missing-current case by selecting the date-matching FY.
     db = SessionLocal()
     try:
         db.query(FinancialYear).filter(FinancialYear.tenant_id == tenant_id).update({
-            "is_current": True,
+            "is_current": False,
             "status": "CURRENT",
         })
         db.commit()

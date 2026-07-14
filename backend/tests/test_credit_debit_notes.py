@@ -13,7 +13,7 @@ from src.core.database import engine, Base, SessionLocal
 from src.core.security import create_access_token, get_password_hash, ROLE_PERMISSIONS
 from src.infrastructure.database.models import (
     User, Tenant, TenantMembership, Contact, Product,
-    Invoice, CreditNote, DebitNote, JournalEntry,
+    Invoice, CreditNote, DebitNote, JournalEntry, StockLedger,
 )
 
 
@@ -259,6 +259,43 @@ class TestCreditNotes(unittest.TestCase):
             debit_sum = sum(l.amount for l in reversal.lines if l.direction == "DEBIT")
             credit_sum = sum(l.amount for l in reversal.lines if l.direction == "CREDIT")
             self.assertEqual(debit_sum, credit_sum)
+        finally:
+            db.close()
+
+    def test_credit_note_restock_and_cancel_are_exact_reversals(self):
+        invoice_id = self._create_finalized_invoice()
+        db = SessionLocal()
+        try:
+            stock_after_sale = db.query(Product).filter(Product.id == uuid.UUID(self.product_id)).one().current_stock
+            self.assertEqual(stock_after_sale, Decimal("998.00"))
+        finally:
+            db.close()
+        created = self.client.post("/api/v1/invoices/credit-notes", json={
+            "invoice_id": invoice_id, "issue_date": str(date.today()),
+            "reason": "Goods returned", "restock_items": True,
+            "line_items": [{"product_id": self.product_id, "quantity": 1,
+                "rate": 10000, "hsn_sac": "84713010", "gst_rate": 18}],
+        }, headers=self.headers)
+        self.assertEqual(created.status_code, 201, created.text)
+        cn_id = created.json()["id"]
+        self.assertEqual(self.client.post(
+            f"/api/v1/invoices/credit-notes/{cn_id}/finalize", headers=self.headers
+        ).status_code, 200)
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.query(Product).filter(Product.id == uuid.UUID(self.product_id)).one().current_stock, Decimal("999.00"))
+            self.assertEqual(db.query(StockLedger).filter(
+                StockLedger.reference_type == "CREDIT_NOTE",
+                StockLedger.reference_id == uuid.UUID(cn_id),
+            ).count(), 1)
+        finally:
+            db.close()
+        self.assertEqual(self.client.post(
+            f"/api/v1/invoices/credit-notes/{cn_id}/cancel", headers=self.headers
+        ).status_code, 200)
+        db = SessionLocal()
+        try:
+            self.assertEqual(db.query(Product).filter(Product.id == uuid.UUID(self.product_id)).one().current_stock, Decimal("998.00"))
         finally:
             db.close()
 

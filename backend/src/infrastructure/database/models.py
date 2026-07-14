@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime, date, timezone
 from sqlalchemy import (
     Column, String, Boolean, Numeric, Date, DateTime,
-    ForeignKey, Text, JSON, Integer, Index, UniqueConstraint, CheckConstraint
+    ForeignKey, Text, JSON, Integer, Index, UniqueConstraint, CheckConstraint, text
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -211,6 +211,10 @@ class Invoice(Base):
         Index("ix_invoices_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "invoice_number", name="uq_invoices_tenant_number"),
         UniqueConstraint("irn", name="uq_invoices_irn"),
+        UniqueConstraint(
+            "tenant_id", "source_document_type", "source_document_id",
+            name="uq_invoices_source_document",
+        ),
         CheckConstraint(
             "status IN ('DRAFT', 'POSTED', 'SENT', 'PARTIALLY_PAID', 'PAID', 'CANCELLED')",
             name="ck_invoices_status",
@@ -227,11 +231,15 @@ class Invoice(Base):
             "amount_paid <= total",
             name="ck_invoices_amount_paid",
         ),
+        CheckConstraint("amount_paid >= 0", name="ck_invoices_amount_paid_nonnegative"),
+        CheckConstraint("due_date >= issue_date", name="ck_invoices_due_date"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    source_document_type = Column(String(30))
+    source_document_id = Column(UUID(as_uuid=True))
     invoice_number = Column(String(50), nullable=False)
     issue_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=False)
@@ -321,11 +329,18 @@ class Payment(Base):
     __tablename__ = "payments"
     __table_args__ = (
         Index("ix_payments_tenant_date", "tenant_id", "payment_date"),
+        Index("ix_payments_tenant_contact_date", "tenant_id", "contact_id", "payment_date"),
+        Index("ix_payments_tenant_status_date", "tenant_id", "status", "payment_date"),
         Index("ix_payments_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "payment_number", name="uq_payments_tenant_number"),
         CheckConstraint(
-            "payment_mode IN ('CASH', 'BANK', 'UPI', 'POS', 'OTHER')",
+            "payment_mode IN ('CASH', 'BANK', 'UPI', 'POS', 'CHEQUE', 'NEFT_RTGS', 'OTHER')",
             name="ck_payments_payment_mode",
+        ),
+        CheckConstraint("amount > 0", name="ck_payments_amount_positive"),
+        CheckConstraint(
+            "status IN ('ACTIVE', 'CANCELLED')",
+            name="ck_payments_status",
         ),
     )
 
@@ -338,7 +353,10 @@ class Payment(Base):
     amount = Column(Numeric(15, 4), nullable=False)
     reference_number = Column(String(50))
     description = Column(Text)
+    advance_supply_type = Column(String(10))
     status = Column(String(20), nullable=False, default="ACTIVE")
+    cancelled_at = Column(DateTime(timezone=True))
+    cancellation_reason = Column(Text)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -352,6 +370,9 @@ class PaymentAllocation(Base):
         Index("ix_payment_allocations_payment_id", "payment_id"),
         Index("ix_payment_allocations_invoice_id", "invoice_id"),
         Index("ix_payment_allocations_payment_invoice", "payment_id", "invoice_id"),
+        UniqueConstraint(
+            "payment_id", "invoice_id", name="uq_payment_allocations_payment_invoice"
+        ),
         CheckConstraint("amount > 0", name="ck_payment_allocations_amount"),
     )
 
@@ -470,9 +491,11 @@ class BillPayment(Base):
         Index("ix_bill_payments_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "payment_number", name="uq_bill_payments_tenant_number"),
         CheckConstraint(
-            "payment_mode IN ('CASH', 'BANK', 'UPI', 'POS', 'OTHER')",
+            "payment_mode IN ('CASH', 'BANK', 'UPI', 'POS', 'CHEQUE', 'NEFT_RTGS', 'OTHER')",
             name="ck_bill_payments_payment_mode",
         ),
+        CheckConstraint("amount > 0", name="ck_bill_payments_amount_positive"),
+        CheckConstraint("status IN ('ACTIVE', 'CANCELLED')", name="ck_bill_payments_status"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -485,6 +508,8 @@ class BillPayment(Base):
     reference_number = Column(String(50))
     description = Column(Text)
     status = Column(String(20), nullable=False, default="ACTIVE")
+    cancelled_at = Column(DateTime(timezone=True))
+    cancellation_reason = Column(Text)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -519,6 +544,8 @@ class JournalEntry(Base):
     __table_args__ = (
         Index("ix_journal_entries_tenant_date", "tenant_id", "entry_date"),
         Index("ix_journal_entries_source", "tenant_id", "source_type", "source_id"),
+        UniqueConstraint("tenant_id", "reference_number", name="uq_journal_entries_tenant_reference"),
+        UniqueConstraint("tenant_id", "source_type", "source_id", name="uq_journal_entries_tenant_source"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -631,7 +658,18 @@ class NumberingSeries(Base):
     next_number is incremented using SELECT FOR UPDATE to prevent race conditions.
     """
     __tablename__ = "numbering_series"
-    __table_args__ = tuple()
+    __table_args__ = (
+        Index(
+            "uq_numbering_series_active_document",
+            "tenant_id",
+            "document_type",
+            unique=True,
+            postgresql_where=text("is_active"),
+            sqlite_where=text("is_active = 1"),
+        ),
+        CheckConstraint("next_number > 0", name="ck_numbering_series_next_number"),
+        CheckConstraint("padding_digits BETWEEN 1 AND 12", name="ck_numbering_series_padding"),
+    )
 
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -657,6 +695,10 @@ class Account(Base):
     __table_args__ = (
         Index("ix_accounts_tenant_type", "tenant_id", "account_type"),
         UniqueConstraint("tenant_id", "code", name="uq_account_tenant_code"),
+        CheckConstraint(
+            "account_type IN ('ASSET', 'LIABILITY', 'EQUITY', 'REVENUE', 'EXPENSE')",
+            name="ck_accounts_type",
+        ),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -732,6 +774,7 @@ class Expense(Base):
     description = Column(Text)
     amount = Column(Numeric(15, 4), nullable=False, default=0)
     gst_rate = Column(Numeric(5, 2), nullable=False, default=0)
+    place_of_supply_state_code = Column(String(2), nullable=True)
     cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
     sgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
     igst_amount = Column(Numeric(15, 4), nullable=False, default=0)
@@ -875,6 +918,8 @@ class SalesOrder(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    source_proforma_id = Column(UUID(as_uuid=True), ForeignKey("proforma_invoices.id"))
+    converted_to_invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"))
     so_number = Column(String(50), nullable=False)
     order_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=False)
@@ -950,6 +995,8 @@ class DeliveryChallan(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    source_sales_order_id = Column(UUID(as_uuid=True), ForeignKey("sales_orders.id"))
+    converted_to_invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"))
     challan_number = Column(String(50), nullable=False)
     challan_date = Column(Date, nullable=False)
     due_date = Column(Date, nullable=False)
@@ -1209,6 +1256,9 @@ class ProformaInvoice(Base):
     total = Column(Numeric(15, 4), nullable=False, default=0)
     pos_state_code = Column(String(2), nullable=False)
     converted_to_invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"))
+    # Deliberately not a second FK: SalesOrder.source_proforma_id is the
+    # authoritative relationship and avoids a circular DDL dependency.
+    converted_to_sales_order_id = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -1258,6 +1308,7 @@ class InventoryAdjustment(Base):
     __tablename__ = "inventory_adjustments"
     __table_args__ = (
         Index("ix_inventory_adjustments_tenant_date", "tenant_id", "adjustment_date"),
+        UniqueConstraint("tenant_id", "adjustment_number", name="uq_inventory_adjustments_tenant_number"),
         CheckConstraint(
             "status IN ('DRAFT', 'CONFIRMED', 'CANCELLED')",
             name="ck_inventory_adjustments_status",
@@ -1281,15 +1332,23 @@ class InventoryAdjustmentLine(Base):
     __tablename__ = "inventory_adjustment_lines"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    inventory_adjustment_id = Column(UUID(as_uuid=True), ForeignKey("inventory_adjustments.id"), nullable=False)
+    adjustment_id = Column("inventory_adjustment_id", UUID(as_uuid=True), ForeignKey("inventory_adjustments.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
     quantity_change = Column(Numeric(15, 4), nullable=False)  # Positive for increase, negative for decrease
     unit_cost = Column(Numeric(15, 4), nullable=False)
-    total_change = Column(Numeric(15, 4), nullable=False)
+    total_cost = Column("total_change", Numeric(15, 4), nullable=False)
     reason = Column(String(255))
 
     adjustment = relationship("InventoryAdjustment", back_populates="lines")
     product = relationship("Product")
+
+    @property
+    def created_at(self):
+        return self.adjustment.created_at
+
+    @property
+    def product_name(self):
+        return self.product.name if self.product else None
 
 
 # ---------------------------------------------------------------------------
@@ -1319,6 +1378,7 @@ class CreditNote(Base):
     credit_note_number = Column(String(50), nullable=False)
     issue_date = Column(Date, nullable=False)
     reason = Column(String(255), nullable=False)
+    restock_items = Column(Boolean, nullable=False, default=True)
     status = Column(String(20), nullable=False, default="DRAFT")  # DRAFT, ISSUED, CANCELLED
     subtotal = Column(Numeric(15, 4), nullable=False, default=0)
     cgst_amount = Column(Numeric(15, 4), nullable=False, default=0)
@@ -1557,6 +1617,7 @@ class AccountingPeriod(Base):
             "is_closed IN (true, false)",
             name="ck_accounting_periods_is_closed",
         ),
+        CheckConstraint("start_date <= end_date", name="ck_accounting_periods_date_range"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -1581,6 +1642,14 @@ class FinancialYear(Base):
         CheckConstraint(
             "status IN ('CURRENT', 'READY_TO_CLOSE', 'LOCKED', 'ARCHIVED')",
             name="ck_financial_years_status",
+        ),
+        CheckConstraint("start_date <= end_date", name="ck_financial_years_date_range"),
+        Index(
+            "uq_financial_years_one_current",
+            "tenant_id",
+            unique=True,
+            postgresql_where=text("is_current"),
+            sqlite_where=text("is_current = 1"),
         ),
     )
 
@@ -1634,6 +1703,7 @@ class SalesReturn(Base):
     __table_args__ = (
         Index("ix_sales_returns_tenant_date_status", "tenant_id", "issue_date", "status"),
         Index("ix_sales_returns_tenant_contact", "tenant_id", "contact_id"),
+        Index("ix_sales_returns_invoice", "tenant_id", "invoice_id"),
         Index("ix_sales_returns_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "return_number", name="uq_sales_returns_tenant_number"),
         CheckConstraint(
@@ -1649,6 +1719,7 @@ class SalesReturn(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=False)
     return_number = Column(String(50), nullable=False)
     issue_date = Column(Date, nullable=False)
     status = Column(String(20), nullable=False, default="DRAFT")
@@ -1677,6 +1748,7 @@ class SalesReturnLine(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     sales_return_id = Column(UUID(as_uuid=True), ForeignKey("sales_returns.id"), nullable=False)
+    invoice_line_id = Column(UUID(as_uuid=True), ForeignKey("invoice_lines.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
     quantity = Column(Numeric(12, 4), nullable=False)
@@ -1709,6 +1781,7 @@ class PurchaseReturn(Base):
     __table_args__ = (
         Index("ix_purchase_returns_tenant_date_status", "tenant_id", "issue_date", "status"),
         Index("ix_purchase_returns_tenant_contact", "tenant_id", "contact_id"),
+        Index("ix_purchase_returns_bill", "tenant_id", "bill_id"),
         Index("ix_purchase_returns_tenant_deleted", "tenant_id", "deleted_at"),
         UniqueConstraint("tenant_id", "return_number", name="uq_purchase_returns_tenant_number"),
         CheckConstraint(
@@ -1724,6 +1797,7 @@ class PurchaseReturn(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    bill_id = Column(UUID(as_uuid=True), ForeignKey("bills.id"), nullable=False)
     return_number = Column(String(50), nullable=False)
     issue_date = Column(Date, nullable=False)
     status = Column(String(20), nullable=False, default="DRAFT")
@@ -1752,6 +1826,7 @@ class PurchaseReturnLine(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     purchase_return_id = Column(UUID(as_uuid=True), ForeignKey("purchase_returns.id"), nullable=False)
+    bill_line_id = Column(UUID(as_uuid=True), ForeignKey("bill_lines.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
     quantity = Column(Numeric(12, 4), nullable=False)

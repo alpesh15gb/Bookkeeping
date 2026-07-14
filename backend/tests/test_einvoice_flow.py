@@ -15,9 +15,11 @@ from src.core.database import engine, Base, SessionLocal
 from src.infrastructure.database.models import (
     User, Tenant, TenantMembership, Contact, Product, Invoice, TenantSetting, BankingProfile
 )
+from src.core.config import settings
 
 class TestEInvoiceFlow(unittest.TestCase):
     def setUp(self):
+        settings.COMPLIANCE_MOCK_ENABLED = True
         # Reset test database tables
         Base.metadata.drop_all(bind=engine)
         Base.metadata.create_all(bind=engine)
@@ -142,6 +144,9 @@ class TestEInvoiceFlow(unittest.TestCase):
             "X-Tenant-ID": str(self.tenant_b_id),
             "Authorization": f"Bearer {self.token_b}"
         }
+
+    def tearDown(self):
+        settings.COMPLIANCE_MOCK_ENABLED = False
 
     def test_e_invoice_lifecycle_and_rules(self):
         # 1. Create a B2B sales invoice (auto-posted immediately in this system)

@@ -26,23 +26,26 @@ void main() {
   group('PurchaseReturnLine', () {
     test('toCreatePayload', () {
       const line = PurchaseReturnLine(
+        billLineId: 'bl1',
         productId: 'p1',
         quantityReturned: 5,
         rate: 100,
+        hsnSac: '84713010',
         gstRate: 18,
         reason: 'Damaged',
       );
       final p = line.toCreatePayload();
       expect(p['product_id'], 'p1');
-      expect(p['quantity_returned'], 5);
-      expect(p['reason'], 'Damaged');
+      expect(p['quantity'], 5);
+      expect(p['bill_line_id'], 'bl1');
+      expect(p['description'], 'Damaged');
     });
     test('fromJson', () {
       final line = PurchaseReturnLine.fromJson({
         'id': 'l1',
         'product_id': 'p1',
         'product_name': 'Widget',
-        'quantity_returned': '10',
+        'quantity': '10',
         'rate': '50',
         'gst_rate': '18',
         'subtotal': '500',
@@ -61,18 +64,14 @@ void main() {
         'bill_id': 'b1',
         'bill_number': 'BILL-001',
         'contact': {'name': 'Acme'},
-        'return_date': '2025-07-20',
+        'issue_date': '2025-07-20',
         'status': 'POSTED',
         'subtotal': '500',
-        'total_tax': '90',
+        'cgst_amount': '45',
+        'sgst_amount': '45',
         'total': '590',
         'lines': [
-          {
-            'id': 'l1',
-            'product_id': 'p1',
-            'quantity_returned': '5',
-            'rate': '100',
-          },
+          {'id': 'l1', 'product_id': 'p1', 'quantity': '5', 'rate': '100'},
         ],
       });
       expect(ret.returnNumber, 'RET-001');
@@ -86,20 +85,25 @@ void main() {
       const ret = PurchaseReturn(
         id: 'r1',
         billId: 'b1',
+        contactId: 'v1',
+        posStateCode: '27',
         returnDate: '2025-07-20',
         lines: [
           PurchaseReturnLine(
+            billLineId: 'bl1',
             productId: 'p1',
             quantityReturned: 5,
             rate: 100,
+            hsnSac: '84713010',
             gstRate: 18,
           ),
         ],
       );
       final p = ret.toCreatePayload();
       expect(p['bill_id'], 'b1');
-      expect(p['return_date'], '2025-07-20');
-      expect((p['lines'] as List).length, 1);
+      expect(p['issue_date'], '2025-07-20');
+      expect(p['contact_id'], 'v1');
+      expect((p['line_items'] as List).length, 1);
     });
   });
 
@@ -108,7 +112,7 @@ void main() {
       final item = PurchaseReturnListItem.fromJson({
         'id': 'r1',
         'return_number': 'RET-001',
-        'return_date': '2025-07-20',
+        'issue_date': '2025-07-20',
         'status': 'DRAFT',
         'total': '590',
         'contact_name': 'Acme',

@@ -133,19 +133,7 @@ class _PurchaseReturnDetailScreenState
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    if (_operating)
-                      const LoadingSpinner(size: 18),
-                    if (ret.status == PurchaseReturnStatus.draft)
-                      FilledButton.icon(
-                        onPressed: _operating
-                            ? null
-                            : () => _act(() => service.post(ret.id)),
-                        icon: const Icon(
-                          Icons.check_circle_outline_rounded,
-                          size: 18,
-                        ),
-                        label: const Text('Post Return'),
-                      ),
+                    if (_operating) const LoadingSpinner(size: 18),
                     if (ret.status.isCancellable)
                       OutlinedButton.icon(
                         onPressed: _operating
@@ -198,17 +186,6 @@ class _PurchaseReturnDetailScreenState
                   const Padding(
                     padding: EdgeInsets.only(right: 12),
                     child: LoadingSpinner(size: 18),
-                  ),
-                if (ret.status == PurchaseReturnStatus.draft)
-                  FilledButton.icon(
-                    onPressed: _operating
-                        ? null
-                        : () => _act(() => service.post(ret.id)),
-                    icon: const Icon(
-                      Icons.check_circle_outline_rounded,
-                      size: 18,
-                    ),
-                    label: const Text('Post Return'),
                   ),
                 if (ret.status.isCancellable) ...[
                   const SizedBox(width: 8),
@@ -365,8 +342,7 @@ class _PurchaseReturnDetailScreenState
           ),
         ),
         ...ret.lines.asMap().entries.map(
-          (e) =>
-              _lineRow(e.value, e.key == ret.lines.length - 1, colors, fmt),
+          (e) => _lineRow(e.value, e.key == ret.lines.length - 1, colors, fmt),
         ),
       ],
     );
@@ -460,7 +436,11 @@ class _PurchaseReturnDetailScreenState
       children: [
         const Spacer(),
         ConstrainedBox(
-          constraints: BoxConstraints(maxWidth: ResponsiveLayout.isMobile(context) ? double.infinity : 320),
+          constraints: BoxConstraints(
+            maxWidth: ResponsiveLayout.isMobile(context)
+                ? double.infinity
+                : 320,
+          ),
           child: _Panel(
             colors: colors,
             child: Column(
@@ -537,11 +517,7 @@ class _PurchaseReturnDetailScreenState
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Panel({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;

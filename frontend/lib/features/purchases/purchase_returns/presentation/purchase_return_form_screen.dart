@@ -65,8 +65,9 @@ class _PurchaseReturnFormScreenState
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -75,125 +76,125 @@ class _PurchaseReturnFormScreenState
             }
           },
           child: Scaffold(
-          backgroundColor: colors.surfaceMuted,
-          appBar: AppBar(
-            backgroundColor: colors.surfaceRaised,
-            elevation: 0,
-            titleSpacing: 20,
-            title: Text(
-              'New Purchase Return',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.border),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 16,
-                ),
-                child: FilledButton.icon(
-                  onPressed: (state.saving || !state.hasBill) ? null : _save,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: LoadingSpinner(size: 16),
-                        )
-                      : const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save return'),
+            backgroundColor: colors.surfaceMuted,
+            appBar: AppBar(
+              backgroundColor: colors.surfaceRaised,
+              elevation: 0,
+              titleSpacing: 20,
+              title: Text(
+                'New Purchase Return',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
                 ),
               ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (state.error != null)
-                Container(
-                  width: double.infinity,
-                  color: colors.danger.withValues(alpha: 0.1),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: colors.border),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
                     vertical: 10,
+                    horizontal: 16,
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 18,
-                        color: colors.danger,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          state.error!,
-                          style: TextStyle(
-                            color: colors.danger,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: FilledButton.icon(
+                    onPressed: (state.saving || !state.hasBill) ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save return'),
                   ),
                 ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
+              ],
+            ),
+            body: Column(
+              children: [
+                if (state.error != null)
+                  Container(
+                    width: double.infinity,
+                    color: colors.danger.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    child: Row(
                       children: [
-                        _headerCard(state, notifier, colors),
-                        const SizedBox(height: 16),
-                        if (state.loadingBill)
-                          const Padding(
-                            padding: EdgeInsets.all(40),
-                            child: Center(child: LoadingSpinner(size: 30)),
-                          )
-                        else if (state.hasBill)
-                          _linesCard(state, notifier, colors, fmt)
-                        else
-                          _Card(
-                            colors: colors,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline_rounded,
-                                  size: 18,
-                                  color: colors.textMuted,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Select a posted bill to return items against.',
-                                    style: TextStyle(
-                                      color: colors.textSecondary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: colors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              color: colors.danger,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1000),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          _headerCard(state, notifier, colors),
+                          const SizedBox(height: 16),
+                          if (state.loadingBill)
+                            const Padding(
+                              padding: EdgeInsets.all(40),
+                              child: Center(child: LoadingSpinner(size: 30)),
+                            )
+                          else if (state.hasBill)
+                            _linesCard(state, notifier, colors, fmt)
+                          else
+                            _Card(
+                              colors: colors,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 18,
+                                    color: colors.textMuted,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Select a posted bill to return items against.',
+                                      style: TextStyle(
+                                        color: colors.textSecondary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              if (state.hasBill) _summaryBar(state, colors, fmt),
-            ],
-          ),
+                if (state.hasBill) _summaryBar(state, colors, fmt),
+              ],
+            ),
           ),
         ),
       ),
@@ -423,11 +424,7 @@ class _PurchaseReturnFormScreenState
 }
 
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;
@@ -650,76 +647,218 @@ class _ReturnLineRowState extends State<_ReturnLineRow> {
 
   Widget _buildDesktopLine(ApexColors c) {
     return Container(
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.border))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(children: [
-        Expanded(flex: 34, child: Text(widget.line.productName ?? 'Item',
-          maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: c.textPrimary))),
-        Expanded(flex: 16, child: Text(widget.fmt.currency(widget.line.rate),
-          textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: c.textSecondary))),
-        Expanded(flex: 16, child: TextField(controller: _qty, textAlign: TextAlign.right,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-          style: const TextStyle(fontSize: 13),
-          decoration: InputDecoration(isDense: true, hintText: '0',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm))),
-          onChanged: (v) => widget.onQty(double.tryParse(v) ?? 0))),
-        const SizedBox(width: 8),
-        Expanded(flex: 34, child: TextField(controller: _reason,
-          style: const TextStyle(fontSize: 13),
-          decoration: InputDecoration(isDense: true, hintText: 'e.g. Damaged',
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm))),
-          onChanged: widget.onReason)),
-      ]),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 34,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.line.productName ?? 'Item',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary,
+                  ),
+                ),
+                Text(
+                  'Billed: ${widget.fmt.quantity(widget.line.maximumQuantity)}',
+                  style: TextStyle(fontSize: 10.5, color: c.textMuted),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 16,
+            child: Text(
+              widget.fmt.currency(widget.line.rate),
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
+          ),
+          Expanded(
+            flex: 16,
+            child: TextField(
+              controller: _qty,
+              textAlign: TextAlign.right,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              ],
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: '0',
+                suffixText:
+                    '/ ${widget.fmt.quantity(widget.line.maximumQuantity)}',
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                ),
+              ),
+              onChanged: (v) => widget.onQty(double.tryParse(v) ?? 0),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 34,
+            child: TextField(
+              controller: _reason,
+              style: const TextStyle(fontSize: 13),
+              decoration: InputDecoration(
+                isDense: true,
+                hintText: 'e.g. Damaged',
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                ),
+              ),
+              onChanged: widget.onReason,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildMobileLine(ApexColors c) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: c.surfaceRaised, borderRadius: BorderRadius.circular(ApexRadius.lg),
-        border: Border.all(color: c.border)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(color: c.surfaceMuted,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(ApexRadius.lg))),
-          child: Text(widget.line.productName ?? 'Item', maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary)),
-        ),
-        Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 14), child: Column(children: [
-          Text('Rate: ${widget.fmt.currency(widget.line.rate)}',
-            style: TextStyle(fontSize: 12, color: c.textSecondary)),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(child: _rMobileField(c, 'RETURN QTY', _qty,
-              onChanged: (v) => widget.onQty(double.tryParse(v) ?? 0))),
-          ]),
-          const SizedBox(height: 12),
-          _rMobileField(c, 'REASON', _reason, onChanged: widget.onReason),
-        ])),
-      ]),
+      decoration: BoxDecoration(
+        color: c.surfaceRaised,
+        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        border: Border.all(color: c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: c.surfaceMuted,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(ApexRadius.lg),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  widget.line.productName ?? 'Item',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: c.textPrimary,
+                  ),
+                ),
+                Text(
+                  'Billed: ${widget.fmt.quantity(widget.line.maximumQuantity)}',
+                  style: TextStyle(fontSize: 11, color: c.textMuted),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Column(
+              children: [
+                Text(
+                  'Rate: ${widget.fmt.currency(widget.line.rate)}',
+                  style: TextStyle(fontSize: 12, color: c.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _rMobileField(
+                        c,
+                        'RETURN QTY (MAX ${widget.fmt.quantity(widget.line.maximumQuantity)})',
+                        _qty,
+                        onChanged: (v) => widget.onQty(double.tryParse(v) ?? 0),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                _rMobileField(c, 'REASON', _reason, onChanged: widget.onReason),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _rMobileField(ApexColors c, String label, TextEditingController ctrl, {required ValueChanged<String> onChanged}) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.textMuted, letterSpacing: 0.5)),
-      const SizedBox(height: 6),
-      TextField(controller: ctrl,
-        keyboardType: label == 'REASON' ? TextInputType.text : const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: label == 'REASON' ? [] : [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary),
-        decoration: InputDecoration(isDense: true,
-          hintText: label == 'REASON' ? 'e.g. Damaged' : '0',
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.border)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.primary, width: 1.5)),
-          filled: true, fillColor: c.surfaceMuted),
-        onChanged: onChanged),
-    ]);
+  Widget _rMobileField(
+    ApexColors c,
+    String label,
+    TextEditingController ctrl, {
+    required ValueChanged<String> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: c.textMuted,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: ctrl,
+          keyboardType: label == 'REASON'
+              ? TextInputType.text
+              : const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: label == 'REASON'
+              ? []
+              : [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: c.textPrimary,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: label == 'REASON' ? 'e.g. Damaged' : '0',
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.primary, width: 1.5),
+            ),
+            filled: true,
+            fillColor: c.surfaceMuted,
+          ),
+          onChanged: onChanged,
+        ),
+      ],
+    );
   }
 }

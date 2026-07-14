@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import case, func, and_
+from sqlalchemy import case, func, and_, or_
 from sqlalchemy.orm import selectinload
 from typing import List, Optional
 import uuid
@@ -9,7 +9,7 @@ from decimal import Decimal
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    Account, JournalEntry, JournalLine, NumberingSeries, AccountingPeriod, PeriodLockAudit, FinancialYear
+    Account, JournalEntry, JournalLine, NumberingSeries, AccountingPeriod, PeriodLockAudit, FinancialYear, User
 )
 from src.schemas.accounting_schemas import (
     JournalEntryCreate, JournalEntryResponse, JournalLineResponse,
@@ -18,11 +18,12 @@ from src.schemas.accounting_schemas import (
     ProfitLossResponse, ProfitLossItem,
     BalanceSheetResponse, BalanceSheetSection,
     UnpostedDocument, YearEndPrepareResponse, YearEndCloseRequest,
-    PeriodLockUnlockRequest, AccountingPeriodResponse, ContraEntryCreate, BulkOpeningBalancesRequest
+    PeriodLockUnlockRequest, AccountingPeriodResponse, ContraEntryCreate, BulkOpeningBalancesRequest,
+    JournalReversalCreate
 )
 from src.domains.company.services import NumberingSeriesService
 from src.domains.accounting.services import update_account_balances
-from src.api.deps import enforce_permission
+from src.api.deps import enforce_permission, get_current_user
 
 router = APIRouter(prefix="/accounting", tags=["Accounting & Ledger"])
 
@@ -268,7 +269,7 @@ def create_contra_entry(
         entry_date=payload.entry_date,
         reference_number=ref_num,
         description=payload.description or "Contra Entry",
-        source_type="MANUAL",
+        source_type="CONTRA",
         source_id=entry_id,
         lines=db_lines
     )
@@ -377,6 +378,81 @@ def list_journal_entries(
             )
         )
     return response
+
+@router.post("/journals/{id}/reverse", response_model=JournalEntryResponse, status_code=status.HTTP_201_CREATED)
+def reverse_manual_journal_entry(
+    id: uuid.UUID,
+    payload: JournalReversalCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("ledger:manual_post")),
+):
+    """Reverse, rather than edit or delete, a manual journal/contra entry."""
+    from src.domains.accounting.period_lock import validate_period_open
+    validate_period_open(db, tenant_id, payload.reversal_date)
+
+    original = db.query(JournalEntry).options(
+        selectinload(JournalEntry.lines)
+    ).filter(
+        JournalEntry.id == id,
+        JournalEntry.tenant_id == tenant_id,
+    ).with_for_update().first()
+    if not original:
+        raise HTTPException(status_code=404, detail="Journal entry not found.")
+    if original.source_type not in ("MANUAL", "CONTRA"):
+        raise HTTPException(status_code=400, detail="Only manual journal and contra entries can be reversed here.")
+
+    existing = db.query(JournalEntry).filter(
+        JournalEntry.tenant_id == tenant_id,
+        JournalEntry.source_type == "JOURNAL_REVERSAL",
+        JournalEntry.source_id == original.id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail=f"Journal entry was already reversed by {existing.reference_number}.")
+
+    reference = f"REV-{original.reference_number}"[:50]
+    duplicate_reference = db.query(JournalEntry.id).filter(
+        JournalEntry.tenant_id == tenant_id,
+        JournalEntry.reference_number == reference,
+    ).first()
+    if duplicate_reference:
+        reference = NumberingSeriesService.generate_next_number(db, tenant_id, "JOURNAL")
+
+    reversal = JournalEntry(
+        id=uuid.uuid4(),
+        tenant_id=tenant_id,
+        entry_date=payload.reversal_date,
+        reference_number=reference,
+        description=f"Reversal of {original.reference_number}: {payload.reason.strip()}",
+        source_type="JOURNAL_REVERSAL",
+        source_id=original.id,
+        lines=[JournalLine(
+            account_id=line.account_id,
+            amount=line.amount,
+            direction="CREDIT" if line.direction == "DEBIT" else "DEBIT",
+            narration=f"Reversal: {line.narration or original.description}",
+        ) for line in original.lines],
+    )
+    db.add(reversal)
+    db.flush()
+    update_account_balances(db, tenant_id, {line.account_id for line in original.lines})
+    db.commit()
+
+    reversal = db.query(JournalEntry).options(
+        selectinload(JournalEntry.lines).selectinload(JournalLine.account)
+    ).filter(JournalEntry.id == reversal.id).one()
+    return JournalEntryResponse(
+        id=reversal.id, tenant_id=reversal.tenant_id,
+        entry_date=reversal.entry_date, reference_number=reversal.reference_number,
+        description=reversal.description, source_type=reversal.source_type,
+        source_id=reversal.source_id, created_at=reversal.created_at,
+        updated_at=reversal.updated_at,
+        lines=[JournalLineResponse(
+            id=line.id, account_id=line.account_id,
+            account_name=line.account.name if line.account else "",
+            account_code=line.account.code if line.account else "",
+            amount=line.amount, direction=line.direction, narration=line.narration,
+        ) for line in reversal.lines],
+    )
 
 @router.get("/journals/{id}", response_model=JournalEntryResponse)
 def get_journal_entry(
@@ -604,10 +680,17 @@ def get_trial_balance(
 def get_profit_loss_report(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
     """Generates the Profit & Loss statement for a given date range."""
+    # Keep both parameter conventions supported. Older report consumers use
+    # start_date/end_date while the Flutter client uses date_from/date_to.
+    # Silently ignoring either convention can leak movements from another FY.
+    date_from = date_from or start_date
+    date_to = date_to or end_date
     # Query journal movements restricted to REVENUE and EXPENSE accounts
     q = db.query(
         Account.id,
@@ -618,7 +701,12 @@ def get_profit_loss_report(
         func.coalesce(func.sum(case((JournalLine.direction == "CREDIT", JournalLine.amount), else_=0)), 0).label("credits")
     ).outerjoin(JournalLine, Account.id == JournalLine.account_id)\
      .outerjoin(JournalEntry, JournalLine.entry_id == JournalEntry.id)\
-     .filter(Account.tenant_id == tenant_id, Account.account_type.in_(["REVENUE", "EXPENSE"]), Account.deleted_at == None)
+     .filter(
+         Account.tenant_id == tenant_id,
+         Account.account_type.in_(["REVENUE", "EXPENSE"]),
+         Account.deleted_at == None,
+         or_(JournalEntry.source_type == None, JournalEntry.source_type != "YEAR_END"),
+     )
 
     if date_from:
         q = q.filter(JournalEntry.entry_date >= date_from)
@@ -684,13 +772,14 @@ def recalculate_account_balances(
 @router.get("/balance-sheet", response_model=BalanceSheetResponse)
 def get_balance_sheet(
     as_on_date: Optional[date] = None,
+    as_of_date: Optional[date] = None,
     date_to: Optional[date] = None,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("ledger:view"))
 ):
     """Generates a Balance Sheet as on a given date (defaults to today)."""
 
-    cutoff = date_to or as_on_date or date.today()
+    cutoff = date_to or as_on_date or as_of_date or date.today()
 
     from sqlalchemy import func, case
 
@@ -906,6 +995,7 @@ def prepare_year_end(
 def close_year_end(
     payload: YearEndCloseRequest,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage"))
 ):
     """DEPRECATED: Use POST /api/v1/financial-years/{fy_id}/close instead.
@@ -944,12 +1034,14 @@ def close_year_end(
             status="CURRENT",
             is_current=True,
             transaction_count=0,
-            created_by=tenant_id,
+            created_by=current_user.id,
         )
         db.add(fy)
         db.flush()
 
-    return close_financial_year(fy_id=fy.id, db=db, tenant_id=tenant_id)
+    return close_financial_year(
+        fy_id=fy.id, db=db, current_user=current_user, tenant_id=tenant_id
+    )
 
 
 
@@ -959,8 +1051,10 @@ def close_year_end(
 def lock_accounting_period(
     payload: PeriodLockUnlockRequest,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
 ):
+    actor_id = current_user.id
     import calendar
     period_date = payload.period_date
     today = date.today()
@@ -997,7 +1091,7 @@ def lock_accounting_period(
         tenant_id=tenant_id,
         period_date=start_date,
         action="LOCK",
-        locked_by=tenant_id,
+        locked_by=actor_id,
         note=payload.note
     )
     db.add(audit)
@@ -1010,8 +1104,10 @@ def lock_accounting_period(
 def unlock_accounting_period(
     payload: PeriodLockUnlockRequest,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
 ):
+    actor_id = current_user.id
     period_date = payload.period_date
     period_name = f"{period_date.year:04d}-{period_date.month:02d}"
 
@@ -1044,7 +1140,7 @@ def unlock_accounting_period(
         tenant_id=tenant_id,
         period_date=period.start_date,
         action="UNLOCK",
-        locked_by=tenant_id,
+        locked_by=actor_id,
         note=payload.note
     )
     db.add(audit)
@@ -1069,6 +1165,7 @@ def get_accounting_periods(
 def update_opening_balances(
     payload: BulkOpeningBalancesRequest,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage"))
 ):
     """Bulk update of account opening balances. Supports validation, rollback, and audit log."""
@@ -1125,6 +1222,7 @@ def update_opening_balances(
 
         audit = AuditLog(
             tenant_id=tenant_id,
+            actor_id=current_user.id,
             action="accounts.opening_balance.bulk_update",
             entity_type="account",
             entity_id=tenant_id,

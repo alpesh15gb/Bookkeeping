@@ -35,8 +35,11 @@ class PurchaseReturnFormNotifier
                 productId: l.productId,
                 productName: l.productName ?? l.description,
                 quantityReturned: 0,
+                maximumQuantity: l.quantity,
                 rate: l.rate,
+                hsnSac: l.hsnSac,
                 gstRate: l.gstRate,
+                reason: l.description,
               ),
             )
             .toList();
@@ -44,6 +47,8 @@ class PurchaseReturnFormNotifier
           billId: value.id,
           billNumber: value.billNumber,
           contactName: value.contactName ?? '',
+          contactId: value.contactId,
+          posStateCode: value.posStateCode,
           lines: lines,
           loadingBill: false,
         );
@@ -73,7 +78,9 @@ class PurchaseReturnFormNotifier
     final returned = state.lines.where((l) => l.quantityReturned > 0).toList();
     if (returned.isEmpty) return 'Enter a return quantity on at least one line';
     for (final l in returned) {
-      if (l.quantityReturned < 0) return 'Return quantity cannot be negative';
+      if (l.quantityReturned > l.maximumQuantity) {
+        return 'Return quantity cannot exceed the billed quantity';
+      }
     }
     return null;
   }
@@ -89,6 +96,8 @@ class PurchaseReturnFormNotifier
       id: '',
       billId: state.billId,
       billNumber: state.billNumber,
+      contactId: state.contactId,
+      posStateCode: state.posStateCode,
       returnDate: state.returnDate,
       notes: state.notes,
       lines: state.lines.where((l) => l.quantityReturned > 0).toList(),

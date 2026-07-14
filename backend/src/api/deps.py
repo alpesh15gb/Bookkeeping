@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from src.core.database import get_db_session, tenant_context
 from src.infrastructure.database.models import User, TenantMembership
 from src.core.security import decode_token, ROLE_PERMISSIONS
-from src.common.audit_log import set_audit_context
+from src.common.audit_log import clear_audit_context, set_audit_context, set_session_audit_context
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
@@ -38,7 +38,11 @@ def get_current_user(
             detail="Could not validate credentials."
         )
 
-    user = db.query(User).filter(User.id == user_id, User.deleted_at == None).first()
+    user = db.query(User).filter(
+        User.id == user_id,
+        User.is_active == True,
+        User.deleted_at == None,
+    ).first()
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -72,25 +76,40 @@ def get_tenant_context(
         )
 
     tenant_context.set(tenant_uuid)
-    membership = db.query(TenantMembership).filter(
-        TenantMembership.tenant_id == tenant_uuid,
-        TenantMembership.user_id == current_user.id,
-        TenantMembership.is_active == True
-    ).first()
+    audit_token = None
+    try:
+        membership = db.query(TenantMembership).filter(
+            TenantMembership.tenant_id == tenant_uuid,
+            TenantMembership.user_id == current_user.id,
+            TenantMembership.is_active == True
+        ).first()
 
-    if not membership:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="User does not have access to this tenant context."
+        if not membership:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User does not have access to this tenant context."
+            )
+        audit_token = set_audit_context(
+            tenant_id=tenant_uuid,
+            actor_id=current_user.id,
+            actor_email=current_user.email,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
         )
-    set_audit_context(
-        tenant_id=tenant_uuid,
-        actor_id=current_user.id,
-        actor_email=current_user.email,
-        ip_address=request.client.host if request.client else None,
-        user_agent=request.headers.get("user-agent"),
-    )
-    return tenant_uuid
+        set_session_audit_context(
+            db,
+            tenant_id=tenant_uuid,
+            actor_id=current_user.id,
+            actor_email=current_user.email,
+            ip_address=request.client.host if request.client else None,
+            user_agent=request.headers.get("user-agent"),
+        )
+        yield tenant_uuid
+    finally:
+        db.info.pop("audit_context", None)
+        if audit_token is not None:
+            clear_audit_context()
+        tenant_context.set(None)
 
 def enforce_permission(required_permission: str):
     """
@@ -118,30 +137,45 @@ def enforce_permission(required_permission: str):
             )
 
         tenant_context.set(tenant_uuid)
-        membership = db.query(TenantMembership).filter(
-            TenantMembership.tenant_id == tenant_uuid,
-            TenantMembership.user_id == current_user.id,
-            TenantMembership.is_active == True
-        ).first()
+        audit_token = None
+        try:
+            membership = db.query(TenantMembership).filter(
+                TenantMembership.tenant_id == tenant_uuid,
+                TenantMembership.user_id == current_user.id,
+                TenantMembership.is_active == True
+            ).first()
 
-        if not membership:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="User does not have access to this tenant context."
-            )
+            if not membership:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="User does not have access to this tenant context."
+                )
 
-        user_permissions = ROLE_PERMISSIONS.get(membership.role.lower(), [])
-        if required_permission not in user_permissions:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Operation requires permission scope: {required_permission}"
+            user_permissions = ROLE_PERMISSIONS.get(membership.role.lower(), [])
+            if required_permission not in user_permissions:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Operation requires permission scope: {required_permission}"
+                )
+            audit_token = set_audit_context(
+                tenant_id=tenant_uuid,
+                actor_id=current_user.id,
+                actor_email=current_user.email,
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
             )
-        set_audit_context(
-            tenant_id=tenant_uuid,
-            actor_id=current_user.id,
-            actor_email=current_user.email,
-            ip_address=request.client.host if request.client else None,
-            user_agent=request.headers.get("user-agent"),
-        )
-        return tenant_uuid
+            set_session_audit_context(
+                db,
+                tenant_id=tenant_uuid,
+                actor_id=current_user.id,
+                actor_email=current_user.email,
+                ip_address=request.client.host if request.client else None,
+                user_agent=request.headers.get("user-agent"),
+            )
+            yield tenant_uuid
+        finally:
+            db.info.pop("audit_context", None)
+            if audit_token is not None:
+                clear_audit_context()
+            tenant_context.set(None)
     return check_scopes

@@ -7,14 +7,16 @@ import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
-import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/core/download/download_service.dart';
 import 'package:apexbooks/core/widgets/transaction_detail_layout.dart';
+import 'package:apexbooks/core/permissions/permission_gate.dart';
+import 'package:apexbooks/core/permissions/permissions.dart';
 import '../models/invoice.dart';
 import '../models/invoice_line.dart';
 import '../models/invoice_status.dart';
 import '../services/invoice_service.dart';
 import 'invoice_form_notifier.dart';
+import '../payments/presentation/payment_form_screen.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   const InvoiceDetailScreen({super.key, required this.invoiceId});
@@ -61,8 +63,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
       ),
       error: (err, _) => ErrorView(
         message: err.toString(),
-        onRetry: () =>
-            ref.invalidate(invoiceDetailProvider(widget.invoiceId)),
+        onRetry: () => ref.invalidate(invoiceDetailProvider(widget.invoiceId)),
       ),
       data: (inv) => TransactionDetailLayout(
         title: inv.invoiceNumber,
@@ -70,7 +71,8 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         lines: _linesCard(inv, colors, fmt),
         totals: _totalsCard(inv, colors, fmt),
         actions: _buildActions(inv, service, colors),
-        notes: (inv.notes ?? '').isNotEmpty ||
+        notes:
+            (inv.notes ?? '').isNotEmpty ||
                 (inv.termsAndConditions ?? '').isNotEmpty
             ? _notesCard(inv, colors)
             : null,
@@ -106,6 +108,32 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
     }
   }
 
+  Future<void> _emailInvoice(Invoice inv, InvoiceService service) async {
+    setState(() => _operating = true);
+    final result = await service.email(inv.id);
+    if (!mounted) return;
+    setState(() => _operating = false);
+    final message = result is Success<void>
+        ? 'Invoice queued for email delivery.'
+        : 'Unable to email invoice: ${(result as Failure<void>).error.message}';
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Future<void> _receivePayment(Invoice inv) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PaymentFormScreen(
+          contactId: inv.contactId,
+          contactName: inv.contactName,
+          amount: inv.outstanding.toDouble(),
+        ),
+      ),
+    );
+    ref.invalidate(invoiceDetailProvider(widget.invoiceId));
+  }
+
   // ── Action buttons for the AppBar ──────────────────────────────────────────
   List<Widget> _buildActions(
     Invoice inv,
@@ -118,6 +146,25 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         icon: const Icon(Icons.print_rounded, size: 18),
         label: const Text('Print'),
       ),
+      if (inv.status != InvoiceStatus.draft &&
+          inv.status != InvoiceStatus.cancelled)
+        PermissionGate(
+          permission: Permissions.invoiceEmail,
+          child: OutlinedButton.icon(
+            onPressed: _operating ? null : () => _emailInvoice(inv, service),
+            icon: const Icon(Icons.email_outlined, size: 18),
+            label: const Text('Email'),
+          ),
+        ),
+      if (inv.outstanding > 0 &&
+          (inv.status == InvoiceStatus.posted ||
+              inv.status == InvoiceStatus.sent ||
+              inv.status == InvoiceStatus.partiallyPaid))
+        FilledButton.icon(
+          onPressed: _operating ? null : () => _receivePayment(inv),
+          icon: const Icon(Icons.payments_outlined, size: 18),
+          label: const Text('Receive payment'),
+        ),
       StatusBadge(
         label: inv.status.value.replaceAll('_', ' '),
         tone: toneForStatus(inv.status.value),
@@ -125,21 +172,25 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
       if (_operating) const LoadingSpinner(size: 18),
       if (inv.status == InvoiceStatus.draft)
         FilledButton.icon(
-          onPressed:
-              _operating ? null : () => _act(() => service.finalize(inv.id)),
+          onPressed: _operating
+              ? null
+              : () => _act(() => service.finalize(inv.id)),
           icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
           label: const Text('Finalize'),
         ),
       if (inv.status == InvoiceStatus.posted ||
           inv.status == InvoiceStatus.paid)
-        OutlinedButton.icon(
-          onPressed:
-              _operating ? null : () => _act(() => service.cancel(inv.id)),
-          icon:
-              Icon(Icons.cancel_outlined, size: 18, color: colors.danger),
-          label: Text('Cancel', style: TextStyle(color: colors.danger)),
-          style: OutlinedButton.styleFrom(
-            side: BorderSide(color: colors.danger.withValues(alpha: 0.4)),
+        PermissionGate(
+          permission: Permissions.invoiceCancel,
+          child: OutlinedButton.icon(
+            onPressed: _operating
+                ? null
+                : () => _act(() => service.cancel(inv.id)),
+            icon: Icon(Icons.cancel_outlined, size: 18, color: colors.danger),
+            label: Text('Cancel', style: TextStyle(color: colors.danger)),
+            style: OutlinedButton.styleFrom(
+              side: BorderSide(color: colors.danger.withValues(alpha: 0.4)),
+            ),
           ),
         ),
     ];
@@ -270,8 +321,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
           ),
         ),
         ...inv.lines.asMap().entries.map(
-          (e) =>
-              _lineRow(e.value, e.key == inv.lines.length - 1, colors, fmt),
+          (e) => _lineRow(e.value, e.key == inv.lines.length - 1, colors, fmt),
         ),
       ],
     );

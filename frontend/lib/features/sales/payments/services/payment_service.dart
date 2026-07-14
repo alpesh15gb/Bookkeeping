@@ -7,6 +7,7 @@ import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../models/payment_models.dart';
+import '../models/outstanding_invoice.dart';
 
 class PaymentService {
   PaymentService(this._dio);
@@ -47,10 +48,25 @@ class PaymentService {
     });
   }
 
-  Future<Result<Payment>> cancel(String id) {
+  Future<Result<List<OutstandingInvoice>>> outstanding(String contactId) {
+    return guardDio(() async {
+      final res = await _dio.get('/payments/receipts/outstanding/$contactId');
+      return (res.data as List)
+          .map(
+            (e) =>
+                OutstandingInvoice.fromInvoiceJson(e as Map<String, dynamic>),
+          )
+          .toList();
+    });
+  }
+
+  Future<Result<Payment>> cancel(String id, {required String reason}) {
     return guardDio(() async {
       return Payment.fromJson(
-        (await _dio.post('/payments/receipts/$id/cancel')).data
+        (await _dio.post(
+              '/payments/receipts/$id/cancel',
+              data: {'reason': reason},
+            )).data
             as Map<String, dynamic>,
       );
     });

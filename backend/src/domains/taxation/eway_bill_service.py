@@ -86,7 +86,9 @@ class EWayBillService:
         from src.core.config import settings
 
         ewb_number = None
-        if settings.IRP_USERNAME and settings.IRP_PASSWORD:
+        if settings.COMPLIANCE_MOCK_ENABLED:
+            ewb_number = f"201{uuid.uuid4().int % 1000000000:09d}"
+        elif settings.IRP_USERNAME and settings.IRP_PASSWORD:
             try:
                 from src.infrastructure.database.models import Tenant
                 tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
@@ -120,18 +122,25 @@ class EWayBillService:
                 resp.raise_for_status()
                 ewb_data = resp.json()
                 ewb_number = str(ewb_data.get("ewayBillNo", ""))
-            except Exception:
-                import logging
-                logging.getLogger("ewaybill").warning("NIC e-way bill API unreachable, falling back to local generation")
+            except Exception as exc:
+                if not settings.COMPLIANCE_MOCK_ENABLED:
+                    raise HTTPException(
+                        status_code=status.HTTP_502_BAD_GATEWAY,
+                        detail=f"NIC e-way bill generation failed: {exc}",
+                    )
 
         if not ewb_number:
-            # Mock 12-digit number starting with 201
+            if not settings.COMPLIANCE_MOCK_ENABLED:
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="NIC e-way bill credentials are not configured.",
+                )
             ewb_number = f"201{uuid.uuid4().int % 1000000000:09d}"
 
         # Check duplicate (unlikely, but safe)
         dup = db.query(EWayBill).filter(EWayBill.eway_bill_number == ewb_number).first()
         if dup:
-            ewb_number = f"201{uuid.uuid4().int % 1000000000:09d}"
+            raise HTTPException(status_code=409, detail="NIC returned an e-way bill number that already exists.")
 
         # 4. Calculate validity: 1 day per 200 km, minimum 1 day
         validity_days = max(1, (payload.trans_distance + 199) // 200)
@@ -183,6 +192,28 @@ class EWayBillService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot update vehicle details. e-Way Bill status is not GENERATED."
             )
+
+        from src.core.config import settings
+        if not settings.COMPLIANCE_MOCK_ENABLED:
+            if not settings.IRP_USERNAME or not settings.IRP_PASSWORD:
+                raise HTTPException(status_code=503, detail="NIC e-way bill credentials are not configured.")
+            import requests
+            try:
+                response = requests.post(
+                    f"{settings.IRP_BASE_URL}/ic/irp/api/v1/ewb/update-vehicle",
+                    json={
+                        "ewbNo": ewb.eway_bill_number, "vehicleNo": payload.vehicle_number,
+                        "vehicleType": payload.vehicle_type, "fromPlace": payload.from_place,
+                        "fromState": payload.from_state_code, "reasonCode": payload.reason_code,
+                        "reasonRem": payload.reason_remarks,
+                    },
+                    headers={"Content-Type": "application/json", "user_name": settings.IRP_USERNAME,
+                             "password": settings.IRP_PASSWORD},
+                    timeout=30,
+                )
+                response.raise_for_status()
+            except requests.exceptions.RequestException as exc:
+                raise HTTPException(status_code=502, detail=f"NIC vehicle update failed: {exc}")
 
         # 3. Log old details to history
         history_entry = {
@@ -238,7 +269,25 @@ class EWayBillService:
                 detail="IRP Error [912]: Cancellation not allowed after 24 hours of generation."
             )
 
-        # 4. Update cancellation details
+        from src.core.config import settings
+        if not settings.COMPLIANCE_MOCK_ENABLED:
+            if not settings.IRP_USERNAME or not settings.IRP_PASSWORD:
+                raise HTTPException(status_code=503, detail="NIC e-way bill credentials are not configured.")
+            import requests
+            try:
+                response = requests.post(
+                    f"{settings.IRP_BASE_URL}/ic/irp/api/v1/ewb/cancel",
+                    json={"ewbNo": ewb.eway_bill_number, "cancelRsnCode": payload.cancel_reason,
+                          "cancelRmrk": payload.cancel_remarks},
+                    headers={"Content-Type": "application/json", "user_name": settings.IRP_USERNAME,
+                             "password": settings.IRP_PASSWORD},
+                    timeout=30,
+                )
+                response.raise_for_status()
+            except requests.exceptions.RequestException as exc:
+                raise HTTPException(status_code=502, detail=f"NIC e-way bill cancellation failed: {exc}")
+
+        # 4. Update cancellation details only after portal acknowledgement.
         ewb.status = "CANCELLED"
         ewb.cancel_reason = payload.cancel_reason
         ewb.cancel_remarks = payload.cancel_remarks
@@ -268,7 +317,13 @@ class EWayBillService:
                     detail=f"e-Way Bill with number {num} is cancelled and cannot be consolidated."
                 )
 
-        # 2. Compile consolidated e-way bill (mock 12-digit number starting with 301)
+        from src.core.config import settings
+        if not settings.COMPLIANCE_MOCK_ENABLED:
+            raise HTTPException(
+                status_code=503,
+                detail="Consolidated e-way bill portal integration is not configured; no local number was generated.",
+            )
+        # Explicit test/demo mode only.
         con_ewb_number = f"301{uuid.uuid4().int % 1000000000:09d}"
 
         return {

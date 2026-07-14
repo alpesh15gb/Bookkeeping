@@ -1,7 +1,9 @@
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config
+from sqlalchemy import engine_from_config, inspect
 from sqlalchemy import pool
+from alembic.runtime.migration import MigrationContext
+from alembic.script import ScriptDirectory
 
 from alembic import context
 
@@ -20,6 +22,9 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from src.core.database import Base
+# Register every table with Base.metadata for the guarded fresh-database bootstrap.
+from src.infrastructure.database import models as _models  # noqa: F401
+from src.infrastructure.database.idempotency import IdempotencyRecord as _IdempotencyRecord  # noqa: F401
 target_metadata = Base.metadata
 
 # Override sqlalchemy.url with DATABASE_URL env var when running in Docker
@@ -66,6 +71,17 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
+        # The historical chain begins with ALTER statements and predates an
+        # Alembic baseline.  A genuinely empty database therefore needs the
+        # current declarative schema once; existing databases always follow
+        # the normal revision-by-revision migration path below.
+        if not inspect(connection).get_table_names():
+            target_metadata.create_all(connection)
+            MigrationContext.configure(connection).stamp(
+                ScriptDirectory.from_config(config), "head"
+            )
+            connection.commit()
+            return
         context.configure(
             connection=connection, target_metadata=target_metadata
         )

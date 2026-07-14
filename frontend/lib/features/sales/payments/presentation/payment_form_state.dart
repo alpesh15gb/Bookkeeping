@@ -13,10 +13,12 @@ class PaymentFormState {
     this.amount = 0,
     this.referenceNumber,
     this.description,
+    this.advanceSupplyType = 'GOODS',
     this.allocations = const [],
     this.availableInvoices = const [],
     this.unallocated = 0,
     this.saving = false,
+    this.loadingInvoices = false,
     this.error,
   });
 
@@ -27,15 +29,17 @@ class PaymentFormState {
   final double amount;
   final String? referenceNumber;
   final String? description;
+  final String advanceSupplyType;
   final List<PaymentAllocation> allocations;
   final List<OutstandingInvoice> availableInvoices;
   final double unallocated;
   final bool saving;
+  final bool loadingInvoices;
   final String? error;
 
   double get allocatedTotal =>
       allocations.fold<double>(0, (s, a) => s + a.amount);
-  bool get isValid => contactId != null && amount > 0 && allocations.isNotEmpty;
+  bool get isValid => contactId != null && paymentDate.isNotEmpty && amount > 0;
 
   PaymentFormState copyWith({
     String? contactId,
@@ -45,10 +49,12 @@ class PaymentFormState {
     double? amount,
     String? referenceNumber,
     String? description,
+    String? advanceSupplyType,
     List<PaymentAllocation>? allocations,
     List<OutstandingInvoice>? availableInvoices,
     double? unallocated,
     bool? saving,
+    bool? loadingInvoices,
     String? error,
     bool clearError = false,
   }) => PaymentFormState(
@@ -59,10 +65,12 @@ class PaymentFormState {
     amount: amount ?? this.amount,
     referenceNumber: referenceNumber ?? this.referenceNumber,
     description: description ?? this.description,
+    advanceSupplyType: advanceSupplyType ?? this.advanceSupplyType,
     allocations: allocations ?? this.allocations,
     availableInvoices: availableInvoices ?? this.availableInvoices,
     unallocated: unallocated ?? this.unallocated,
     saving: saving ?? this.saving,
+    loadingInvoices: loadingInvoices ?? this.loadingInvoices,
     error: clearError ? null : (error ?? this.error),
   );
 }

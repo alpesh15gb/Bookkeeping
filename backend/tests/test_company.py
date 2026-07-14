@@ -14,6 +14,7 @@ from src.main import app
 from src.core.database import engine, Base, SessionLocal
 from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries
 from src.domains.company.services import NumberingSeriesService, decrypt_credential
+from src.core.security import create_access_token, get_password_hash
 
 class TestCompanyAndSettings(unittest.TestCase):
     def setUp(self):
@@ -195,6 +196,53 @@ class TestCompanyAndSettings(unittest.TestCase):
             self.assertEqual(decrypted, "einvoice_password123!")
         finally:
             db.close()
+
+        export = self.client.get(
+            f"/api/v1/companies/{self.tenant_id}/export",
+            headers=self.headers,
+        )
+        self.assertEqual(export.status_code, 200)
+        exported_setting = export.json()["settings"][0]
+        self.assertIsNone(exported_setting["e_invoice_password_hash"])
+        self.assertIsNone(exported_setting["e_way_bill_password_hash"])
+
+    def test_auditor_cannot_export_or_import_company_backup(self):
+        db = SessionLocal()
+        try:
+            auditor = User(
+                email="backup-auditor@company.com",
+                password_hash=get_password_hash("AuditorPassword123!"),
+                full_name="Backup Auditor",
+                is_active=True,
+            )
+            db.add(auditor)
+            db.flush()
+            db.add(TenantMembership(
+                tenant_id=self.tenant_id,
+                user_id=auditor.id,
+                role="auditor",
+                is_active=True,
+            ))
+            db.commit()
+            token = create_access_token(str(auditor.id))
+        finally:
+            db.close()
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "X-Tenant-ID": str(self.tenant_id),
+        }
+        export = self.client.get(
+            f"/api/v1/companies/{self.tenant_id}/export",
+            headers=headers,
+        )
+        restore = self.client.post(
+            f"/api/v1/companies/{self.tenant_id}/import",
+            headers=headers,
+            json={"tenant_id": str(self.tenant_id)},
+        )
+        self.assertEqual(export.status_code, 403)
+        self.assertEqual(restore.status_code, 403)
 
     def test_numbering_series_crud(self):
         # Get defaults

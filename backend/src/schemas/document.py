@@ -97,8 +97,14 @@ class InvoiceBase(SchemaBase):
     currency: Optional[str] = Field(default="INR", max_length=10)
     exchange_rate: Optional[Decimal] = Field(default=Decimal("1.000000"), ge=0)
 
+    @model_validator(mode="after")
+    def validate_dates(self):
+        if self.due_date < self.issue_date:
+            raise ValueError("Due date cannot be before invoice date")
+        return self
+
 class InvoiceCreate(InvoiceBase):
-    line_items: List[InvoiceLineCreate]
+    line_items: List[InvoiceLineCreate] = Field(..., min_length=1)
     discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
     notes: Optional[str] = None
@@ -237,7 +243,8 @@ class CreditNoteCreate(SchemaBase):
     credit_note_number: Optional[str] = Field(None, max_length=50)
     issue_date: date
     reason: str = Field(..., min_length=1, max_length=255)
-    line_items: List[CreditNoteLineCreate]
+    restock_items: bool = True
+    line_items: List[CreditNoteLineCreate] = Field(..., min_length=1)
 
 class CreditNoteResponse(SchemaBase):
     id: uuid.UUID
@@ -246,6 +253,7 @@ class CreditNoteResponse(SchemaBase):
     credit_note_number: str
     issue_date: date
     reason: Optional[str]
+    restock_items: bool
     status: str
     subtotal: Decimal
     cgst_amount: Decimal
@@ -353,6 +361,7 @@ class PaymentCreate(SchemaBase):
 
 # ── SALES RETURN SCHEMAS ──
 class SalesReturnLineCreate(SchemaBase):
+    invoice_line_id: uuid.UUID
     product_id: uuid.UUID
     description: Optional[str] = None
     quantity: Decimal = Field(..., gt=0)
@@ -363,6 +372,7 @@ class SalesReturnLineCreate(SchemaBase):
 class SalesReturnLineResponse(SchemaBase):
     id: uuid.UUID
     product_id: uuid.UUID
+    invoice_line_id: uuid.UUID
     product_name: Optional[str] = None
     description: Optional[str] = None
     quantity: Decimal
@@ -383,6 +393,7 @@ class SalesReturnLineResponse(SchemaBase):
     total: Decimal
 
 class SalesReturnCreate(SchemaBase):
+    invoice_id: uuid.UUID
     contact_id: uuid.UUID
     issue_date: date
     pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
@@ -393,6 +404,7 @@ class SalesReturnResponse(SchemaBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
     contact_id: uuid.UUID
+    invoice_id: uuid.UUID
     return_number: str
     issue_date: date
     status: str
@@ -421,6 +433,7 @@ class SalesReturnListResponse(SchemaBase):
 
 # ── PURCHASE RETURN SCHEMAS ──
 class PurchaseReturnLineCreate(SchemaBase):
+    bill_line_id: uuid.UUID
     product_id: uuid.UUID
     description: Optional[str] = None
     quantity: Decimal = Field(..., gt=0)
@@ -431,6 +444,7 @@ class PurchaseReturnLineCreate(SchemaBase):
 class PurchaseReturnLineResponse(SchemaBase):
     id: uuid.UUID
     product_id: uuid.UUID
+    bill_line_id: uuid.UUID
     product_name: Optional[str] = None
     description: Optional[str] = None
     quantity: Decimal
@@ -451,6 +465,7 @@ class PurchaseReturnLineResponse(SchemaBase):
     total: Decimal
 
 class PurchaseReturnCreate(SchemaBase):
+    bill_id: uuid.UUID
     contact_id: uuid.UUID
     issue_date: date
     pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
@@ -461,6 +476,7 @@ class PurchaseReturnResponse(SchemaBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
     contact_id: uuid.UUID
+    bill_id: uuid.UUID
     return_number: str
     issue_date: date
     status: str

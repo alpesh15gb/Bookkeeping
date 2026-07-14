@@ -18,13 +18,37 @@ class PaymentFormNotifier extends StateNotifier<PaymentFormState> {
   final AllocationService _allocation;
   final PaymentValidationService _validation;
 
-  void setContact(String id, String name) =>
-      state = state.copyWith(contactId: id, contactName: name);
+  Future<void> selectCustomer(String id, String name) async {
+    state = state.copyWith(
+      contactId: id,
+      contactName: name,
+      availableInvoices: const [],
+      allocations: const [],
+      loadingInvoices: true,
+      clearError: true,
+    );
+    final result = await _service.outstanding(id);
+    if (result is Success<List<OutstandingInvoice>>) {
+      state = state.copyWith(
+        availableInvoices: result.value,
+        loadingInvoices: false,
+      );
+      _resuggest();
+    } else if (result is Failure<List<OutstandingInvoice>>) {
+      state = state.copyWith(
+        loadingInvoices: false,
+        error: result.error.message,
+      );
+    }
+  }
+
   void setPaymentDate(String d) => state = state.copyWith(paymentDate: d);
   void setPaymentMode(String m) => state = state.copyWith(paymentMode: m);
   void setReferenceNumber(String r) =>
       state = state.copyWith(referenceNumber: r);
   void setDescription(String d) => state = state.copyWith(description: d);
+  void setAdvanceSupplyType(String value) =>
+      state = state.copyWith(advanceSupplyType: value);
 
   void setAmount(double a) {
     state = state.copyWith(amount: a);
@@ -34,6 +58,29 @@ class PaymentFormNotifier extends StateNotifier<PaymentFormState> {
   void setAvailableInvoices(List<OutstandingInvoice> invoices) {
     state = state.copyWith(availableInvoices: invoices);
     _resuggest();
+  }
+
+  void autoAllocate() => _resuggest();
+
+  void setInvoiceAllocation(OutstandingInvoice invoice, double amount) {
+    final allocations = [...state.allocations];
+    final index = allocations.indexWhere((a) => a.invoiceId == invoice.id);
+    if (amount <= 0) {
+      if (index >= 0) allocations.removeAt(index);
+    } else {
+      final value = PaymentAllocation(
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        amount: amount,
+      );
+      if (index >= 0) {
+        allocations[index] = value;
+      } else {
+        allocations.add(value);
+      }
+    }
+    state = state.copyWith(allocations: allocations);
+    _recalcUnallocated();
   }
 
   void _resuggest() {
@@ -64,6 +111,7 @@ class PaymentFormNotifier extends StateNotifier<PaymentFormState> {
   }
 
   Future<Payment?> create() async {
+    if (state.saving) return null;
     state = state.copyWith(saving: true, error: null, clearError: true);
     final check = _validation.validateForCreate(
       contactId: state.contactId,
@@ -82,6 +130,7 @@ class PaymentFormNotifier extends StateNotifier<PaymentFormState> {
       'payment_date': state.paymentDate,
       'payment_mode': state.paymentMode,
       'amount': state.amount,
+      if (state.unallocated > 0) 'advance_supply_type': state.advanceSupplyType,
       if (state.referenceNumber != null)
         'reference_number': state.referenceNumber,
       if (state.description != null) 'description': state.description,

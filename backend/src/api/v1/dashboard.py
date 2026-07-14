@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import text
+from sqlalchemy import text, func
 from sqlalchemy.orm import Session
 import uuid
 from decimal import Decimal
@@ -66,32 +66,30 @@ def get_revenue_trend(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
 ):
-    params = {"tenant_id": str(tenant_id).replace("-", "")}
+    from src.infrastructure.database.models import Invoice
+    query = db.query(
+        func.extract("month", Invoice.issue_date).label("month"),
+        func.extract("year", Invoice.issue_date).label("year"),
+        func.coalesce(func.sum(Invoice.total), 0).label("total"),
+    ).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.status.in_(("POSTED", "PARTIALLY_PAID", "PAID")),
+        Invoice.deleted_at == None,
+    )
     if date_from and date_to:
-        params["date_from"] = date.fromisoformat(date_from)
-        params["date_to"] = date.fromisoformat(date_to)
-        date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"
+        query = query.filter(
+            Invoice.issue_date >= date.fromisoformat(date_from),
+            Invoice.issue_date <= date.fromisoformat(date_to),
+        )
     else:
-        from datetime import timezone as _tz
-        date_filter = "AND issue_date >= :cutoff"
-        params["cutoff"] = datetime.now(_tz.utc).replace(year=datetime.now(_tz.utc).year - 1)
+        today = date.today()
+        try:
+            cutoff = today.replace(year=today.year - 1)
+        except ValueError:
+            cutoff = today.replace(year=today.year - 1, day=28)
+        query = query.filter(Invoice.issue_date >= cutoff)
 
-    results = db.execute(
-        text(f"""
-            SELECT
-                EXTRACT(MONTH FROM issue_date) AS month,
-                EXTRACT(YEAR FROM issue_date) AS year,
-                COALESCE(SUM(total), 0) AS total
-            FROM invoices
-            WHERE status IN ('POSTED', 'PARTIALLY_PAID', 'PAID')
-              AND deleted_at IS NULL
-              AND tenant_id = :tenant_id
-              {date_filter}
-            GROUP BY year, month
-            ORDER BY year, month
-        """),
-        params,
-    ).fetchall()
+    results = query.group_by("year", "month").order_by("year", "month").all()
 
     return [
         {"month": int(row.month), "year": int(row.year), "total": float(row.total)}
@@ -212,32 +210,30 @@ def get_expense_trend(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:view")),
 ):
-    params = {"tenant_id": str(tenant_id).replace("-", "")}
+    from src.infrastructure.database.models import Expense
+    query = db.query(
+        func.extract("month", Expense.expense_date).label("month"),
+        func.extract("year", Expense.expense_date).label("year"),
+        func.coalesce(func.sum(Expense.amount), 0).label("total"),
+    ).filter(
+        Expense.tenant_id == tenant_id,
+        Expense.status == "POSTED",
+        Expense.deleted_at == None,
+    )
     if date_from and date_to:
-        params["date_from"] = date.fromisoformat(date_from)
-        params["date_to"] = date.fromisoformat(date_to)
-        date_filter = "AND expense_date >= :date_from AND expense_date <= :date_to"
+        query = query.filter(
+            Expense.expense_date >= date.fromisoformat(date_from),
+            Expense.expense_date <= date.fromisoformat(date_to),
+        )
     else:
-        from datetime import timezone as _tz
-        date_filter = "AND expense_date >= :cutoff"
-        params["cutoff"] = datetime.now(_tz.utc).replace(year=datetime.now(_tz.utc).year - 1)
+        today = date.today()
+        try:
+            cutoff = today.replace(year=today.year - 1)
+        except ValueError:
+            cutoff = today.replace(year=today.year - 1, day=28)
+        query = query.filter(Expense.expense_date >= cutoff)
 
-    results = db.execute(
-        text(f"""
-            SELECT
-                EXTRACT(MONTH FROM expense_date) AS month,
-                EXTRACT(YEAR FROM expense_date) AS year,
-                COALESCE(SUM(amount), 0) AS total
-            FROM expenses
-            WHERE status = 'POSTED'
-              AND deleted_at IS NULL
-              AND tenant_id = :tenant_id
-              {date_filter}
-            GROUP BY year, month
-            ORDER BY year, month
-        """),
-        params,
-    ).fetchall()
+    results = query.group_by("year", "month").order_by("year", "month").all()
 
     return [
         {"month": int(row.month), "year": int(row.year), "total": float(row.total)}

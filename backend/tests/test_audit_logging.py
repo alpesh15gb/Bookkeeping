@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.common.audit_log import set_audit_context
 from src.core.database import Base, SessionLocal, engine
-from src.infrastructure.database.models import AuditLog, Invoice
+from src.infrastructure.database.models import AuditLog, Invoice, TenantSetting
 
 
 class TestAuditLogging(unittest.TestCase):
@@ -61,6 +61,8 @@ class TestAuditLogging(unittest.TestCase):
         self.assertEqual(audit.actor_id, self.actor_id)
         self.assertEqual(audit.actor_email, "auditor@example.com")
         self.assertEqual(audit.ip_address, "127.0.0.1")
+        self.assertEqual(audit.user_agent, "pytest")
+        self.assertIsNotNone(audit.timestamp)
         self.assertIsNone(audit.before_state)
         self.assertEqual(audit.after_state["invoice_number"], "INV-AUDIT-001")
 
@@ -92,6 +94,52 @@ class TestAuditLogging(unittest.TestCase):
         audit = self._wait_for_action("invoice.finalized")
         self.assertEqual(audit.before_state["status"], "DRAFT")
         self.assertEqual(audit.after_state["status"], "SENT")
+
+    def test_sensitive_credentials_are_redacted_from_snapshots(self):
+        db = SessionLocal()
+        try:
+            setting = TenantSetting(
+                tenant_id=self.tenant_id,
+                currency="INR",
+                e_invoice_password_hash="encrypted-provider-password",
+                e_way_bill_password_hash="another-provider-password",
+            )
+            db.add(setting)
+            db.commit()
+        finally:
+            db.close()
+
+        audit = self._wait_for_action("tenant_setting.created")
+        self.assertEqual(audit.after_state["e_invoice_password_hash"], "[REDACTED]")
+        self.assertEqual(audit.after_state["e_way_bill_password_hash"], "[REDACTED]")
+        self.assertNotIn("encrypted-provider-password", str(audit.after_state))
+
+    def test_rolled_back_change_does_not_leave_audit_evidence(self):
+        db = SessionLocal()
+        try:
+            invoice = Invoice(
+                tenant_id=self.tenant_id,
+                invoice_number="INV-ROLLBACK",
+                issue_date=date.today(),
+                due_date=date.today(),
+                status="DRAFT",
+                pos_state_code="27",
+            )
+            db.add(invoice)
+            db.flush()
+            db.rollback()
+        finally:
+            db.close()
+
+        db = SessionLocal()
+        try:
+            self.assertIsNone(
+                db.query(AuditLog)
+                .filter(AuditLog.after_state["invoice_number"] == "INV-ROLLBACK")
+                .first()
+            )
+        finally:
+            db.close()
 
 
 if __name__ == "__main__":

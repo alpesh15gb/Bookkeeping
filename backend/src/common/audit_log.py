@@ -3,8 +3,7 @@ src/common/audit_log.py
 Audit log service for recording significant write operations.
 """
 import contextvars
-import logging
-import threading
+import json
 import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
@@ -13,10 +12,7 @@ from sqlalchemy import event, inspect
 from sqlalchemy.orm import Session as OrmSession
 from sqlalchemy.orm import Session
 
-from src.core.database import SessionLocal
 from src.infrastructure.database.models import AuditLog
-
-logger = logging.getLogger(__name__)
 
 _audit_context: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
     "audit_context",
@@ -31,14 +27,61 @@ def set_audit_context(
     actor_email: Optional[str],
     ip_address: Optional[str],
     user_agent: Optional[str],
-) -> None:
-    _audit_context.set({
+) -> contextvars.Token:
+    """Set request-local audit identity and return a token for safe cleanup."""
+    return _audit_context.set({
         "tenant_id": tenant_id,
         "actor_id": actor_id,
         "actor_email": actor_email,
         "ip_address": ip_address,
         "user_agent": user_agent,
     })
+
+
+def reset_audit_context(token: contextvars.Token) -> None:
+    """Restore the previous request-local audit identity."""
+    _audit_context.reset(token)
+
+
+def clear_audit_context() -> None:
+    """Clear audit identity at the end of a request dependency."""
+    _audit_context.set({})
+
+
+def get_audit_actor_id() -> uuid.UUID:
+    """Return the authenticated actor established by the tenant dependency."""
+    actor_id = _audit_context.get().get("actor_id")
+    if actor_id is None:
+        raise RuntimeError("Authenticated audit actor is not available in this request context.")
+    return actor_id
+
+
+def set_session_audit_context(
+    session: OrmSession,
+    *,
+    tenant_id: uuid.UUID,
+    actor_id: Optional[uuid.UUID],
+    actor_email: Optional[str],
+    ip_address: Optional[str],
+    user_agent: Optional[str],
+) -> None:
+    """Attach audit identity to the request's Session across worker threads."""
+    session.info["audit_context"] = {
+        "tenant_id": tenant_id,
+        "actor_id": actor_id,
+        "actor_email": actor_email,
+        "ip_address": ip_address,
+        "user_agent": user_agent,
+    }
+
+
+_REDACTED = "[REDACTED]"
+_SENSITIVE_FIELD_PARTS = ("password", "secret", "token", "credential")
+
+
+def _is_sensitive_field(field_name: str) -> bool:
+    normalized = field_name.lower()
+    return any(part in normalized for part in _SENSITIVE_FIELD_PARTS)
 
 
 def _json_value(value: Any) -> Any:
@@ -52,13 +95,28 @@ def _json_value(value: Any) -> Any:
         return {key: _json_value(val) for key, val in value.items()}
     if isinstance(value, list):
         return [_json_value(item) for item in value]
-    return value
+    if isinstance(value, (tuple, set)):
+        return [_json_value(item) for item in value]
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    try:
+        json.dumps(value)
+        return value
+    except (TypeError, ValueError):
+        # SQL expressions such as func.now() may be assigned during soft-delete
+        # flows. Preserve a stable textual representation without allowing an
+        # audit serialization edge case to abort the business transaction.
+        return str(value)
 
 
 def serialize_model(obj: Any) -> Dict[str, Any]:
     mapper = inspect(obj).mapper
     return {
-        column.key: _json_value(getattr(obj, column.key))
+        column.key: (
+            _REDACTED
+            if _is_sensitive_field(column.key) and getattr(obj, column.key) is not None
+            else _json_value(getattr(obj, column.key))
+        )
         for column in mapper.column_attrs
     }
 
@@ -92,33 +150,9 @@ def _action_name(obj: Any, operation: str, before_state: Optional[Dict[str, Any]
     return f"{entity_key}.{operation}"
 
 
-def _insert_audit_events(events: list[Dict[str, Any]]) -> None:
-    if not events:
-        return
-    db = SessionLocal()
-    try:
-        db.add_all([AuditLog(**event) for event in events])
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.warning("Audit log insert failed: %s", exc)
-    finally:
-        db.close()
-
-
-def _queue_audit_events(events: list[Dict[str, Any]]) -> None:
-    # Run synchronously in dev/test to avoid thread/session conflicts with SQLite
-    from src.core.config import settings
-    if settings.APP_ENV in ("development",):
-        _insert_audit_events(events)
-    else:
-        thread = threading.Thread(target=_insert_audit_events, args=(events,), daemon=True)
-        thread.start()
-
-
 @event.listens_for(OrmSession, "before_flush")
 def collect_audit_events(session: OrmSession, flush_context, instances):
-    context = _audit_context.get()
+    context = session.info.get("audit_context") or _audit_context.get()
     tenant_id = context.get("tenant_id")
     if not tenant_id:
         return
@@ -181,10 +215,17 @@ def collect_audit_events(session: OrmSession, flush_context, instances):
         })
 
 
-@event.listens_for(OrmSession, "after_commit")
-def emit_audit_events(session: OrmSession):
+@event.listens_for(OrmSession, "after_flush_postexec")
+def emit_audit_events(session: OrmSession, flush_context):
+    """Persist audit rows atomically in the same transaction as the change.
+
+    A separate daemon thread can lose events during shutdown and does not inherit
+    PostgreSQL's transaction-local RLS tenant setting. A Core insert here keeps
+    the business mutation and its audit evidence all-or-nothing.
+    """
     events = session.info.pop("audit_events", [])
-    _queue_audit_events(events)
+    if events:
+        session.connection().execute(AuditLog.__table__.insert(), events)
 
 
 @event.listens_for(OrmSession, "after_rollback")

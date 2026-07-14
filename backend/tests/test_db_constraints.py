@@ -76,7 +76,7 @@ class TestDatabaseConstraints(unittest.TestCase):
             tenant_id=uuid.uuid4(),
             payment_number="REC-INVALID",
             payment_date=date.today(),
-            payment_mode="CHEQUE",
+            payment_mode="CRYPTO",
             amount=100,
         )
         self.db.add(payment)

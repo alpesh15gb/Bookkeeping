@@ -10,13 +10,13 @@ from src.core.database import get_db_session
 from src.infrastructure.database.models import (
     FinancialYear, FinancialYearAudit, Tenant, JournalEntry, JournalLine, Account,
     Invoice, Bill, Expense, SalesReturn, PurchaseReturn, OpeningBalanceSnapshot,
-    InventoryCarryForward, AccountingPeriod
+    InventoryCarryForward, AccountingPeriod, User
 )
 from src.schemas.accounting_schemas import (
     FinancialYearCreate, FinancialYearResponse, FinancialYearSwitchRequest,
     YearEndDashboardResponse, UnpostedDocument
 )
-from src.api.deps import enforce_permission
+from src.api.deps import enforce_permission, get_current_user
 from src.domains.accounting.reports import FinancialReportingService
 from src.domains.accounting.services import AccountResolver, update_account_balances
 from src.domains.accounting.roll_forward import carry_forward_balances, carry_forward_inventory
@@ -48,6 +48,13 @@ def _sync_tenant_fy_start(db: Session, tenant_id: uuid.UUID, fy_start: date):
     tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     if tenant:
         tenant.financial_year_start = fy_start
+
+
+def _lock_tenant_for_fy_change(db: Session, tenant_id: uuid.UUID) -> None:
+    """Serialize FY create/switch/close operations for a tenant."""
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).with_for_update().first()
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Company not found.")
 
 
 def _log_audit(db: Session, tenant_id: uuid.UUID, fy_id: uuid.UUID,
@@ -149,8 +156,11 @@ def list_financial_years(
 def create_financial_year(
     payload: FinancialYearCreate,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage")),
 ):
+    actor_id = current_user.id
+    _lock_tenant_for_fy_change(db, tenant_id)
     existing = db.query(FinancialYear).filter(
         FinancialYear.tenant_id == tenant_id,
         FinancialYear.name == payload.name,
@@ -175,16 +185,18 @@ def create_financial_year(
         status="CURRENT",
         is_current=False,
         transaction_count=0,
-        created_by=tenant_id,
+        created_by=actor_id,
     )
     db.add(fy)
     db.flush()
+    db.query(FinancialYear).filter(
+        FinancialYear.tenant_id == tenant_id,
+        FinancialYear.id != fy.id,
+        FinancialYear.is_current == True,
+    ).update({"is_current": False}, synchronize_session=False)
+    db.flush()
     fy.is_current = True
-    all_fys = db.query(FinancialYear).filter(FinancialYear.tenant_id == tenant_id).all()
-    for other_fy in all_fys:
-        if other_fy.id != fy.id:
-            other_fy.is_current = False
-    _log_audit(db, tenant_id, fy.id, "CREATED", tenant_id, f"FY {fy.name} created")
+    _log_audit(db, tenant_id, fy.id, "CREATED", actor_id, f"FY {fy.name} created")
     db.commit()
     db.refresh(fy)
     today = date.today()
@@ -203,8 +215,11 @@ def create_financial_year(
 def switch_financial_year(
     payload: FinancialYearSwitchRequest,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage")),
 ):
+    actor_id = current_user.id
+    _lock_tenant_for_fy_change(db, tenant_id)
     target = db.query(FinancialYear).filter(
         FinancialYear.id == payload.financial_year_id,
         FinancialYear.tenant_id == tenant_id,
@@ -215,16 +230,17 @@ def switch_financial_year(
         raise HTTPException(status_code=400, detail=f"Cannot switch to a {target.status.lower()} financial year.")
 
     today = date.today()
-    all_fys = db.query(FinancialYear).filter(FinancialYear.tenant_id == tenant_id).all()
-    _normalize_current_flags(all_fys, today, force_fy_id=target.id)
+    db.query(FinancialYear).filter(
+        FinancialYear.tenant_id == tenant_id,
+        FinancialYear.id != target.id,
+        FinancialYear.is_current == True,
+    ).update({"is_current": False}, synchronize_session=False)
+    db.flush()
     target.is_current = True
-    for fy in all_fys:
-        if fy.id != target.id:
-            fy.is_current = False
-    target.switched_by = tenant_id
+    target.switched_by = actor_id
     target.last_accessed_at = datetime.now(timezone.utc)
     db.flush()
-    _log_audit(db, tenant_id, target.id, "SWITCHED", tenant_id, f"Switched to FY {target.name}")
+    _log_audit(db, tenant_id, target.id, "SWITCHED", actor_id, f"Switched to FY {target.name}")
     _sync_tenant_fy_start(db, tenant_id, target.start_date)
     db.commit()
     db.refresh(target)
@@ -370,8 +386,11 @@ def year_end_dashboard(
 def close_financial_year(
     fy_id: uuid.UUID,
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage")),
 ):
+    actor_id = current_user.id
+    _lock_tenant_for_fy_change(db, tenant_id)
     # CRITICAL #5: Concurrency protection - lock the FY row
     fy = db.query(FinancialYear).filter(
         FinancialYear.id == fy_id,
@@ -491,7 +510,7 @@ def close_financial_year(
     # Update FY status → LOCKED (immediately, no CLOSED intermediate)
     fy.status = "LOCKED"
     fy.closed_at = datetime.now(timezone.utc)
-    fy.closed_by = None
+    fy.closed_by = actor_id
     fy.journal_entry_id = entry_id if journal_entry else None
 
     # Sync AccountingPeriod: close the period covering this FY
@@ -511,7 +530,7 @@ def close_financial_year(
             is_closed=True,
         )
         db.add(period)
-    _log_audit(db, tenant_id, fy.id, "CLOSED", tenant_id,
+    _log_audit(db, tenant_id, fy.id, "CLOSED", actor_id,
                f"FY closed. Journal: {ref_num}. Net profit: {net_profit}")
 
     # Advance current FY
@@ -543,22 +562,22 @@ def close_financial_year(
         name=f"{next_fy_start.year}-{((next_fy_start.year + 1) % 100):02d}",
         start_date=next_fy_start, end_date=next_fy_end,
         status="CURRENT", is_current=True, transaction_count=0,
-        created_by=tenant_id,
+        created_by=actor_id,
     )
     db.add(next_fy)
     db.flush()
-    _log_audit(db, tenant_id, next_fy.id, "CREATED", tenant_id,
+    _log_audit(db, tenant_id, next_fy.id, "CREATED", actor_id,
                f"Auto-created from year-end close of {fy.name}")
 
     # Roll-forward: carry opening balances to new FY
     balance_result = carry_forward_balances(db, tenant_id, fy, next_fy)
-    _log_audit(db, tenant_id, next_fy.id, "OPENING_BALANCE_CARRY_FORWARD", tenant_id,
+    _log_audit(db, tenant_id, next_fy.id, "OPENING_BALANCE_CARRY_FORWARD", actor_id,
                f"Carried forward {balance_result['accounts_carried']} accounts. "
                f"JE: {balance_result.get('journal_entry_id', 'none')}")
 
     # Roll-forward: carry inventory to new FY
     inventory_result = carry_forward_inventory(db, tenant_id, fy, next_fy)
-    _log_audit(db, tenant_id, next_fy.id, "INVENTORY_CARRY_FORWARD", tenant_id,
+    _log_audit(db, tenant_id, next_fy.id, "INVENTORY_CARRY_FORWARD", actor_id,
                f"Carried forward {inventory_result['products_carried']} products. "
                f"Total value: {inventory_result['total_value']}")
 
@@ -585,8 +604,11 @@ def reopen_financial_year(
     fy_id: uuid.UUID,
     reason: str = "",
     db: Session = Depends(get_db_session),
+    current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("accounts:manage")),
 ):
+    actor_id = current_user.id
+    _lock_tenant_for_fy_change(db, tenant_id)
     """Reopen a locked/archived FY. Requires a reason. Logs audit trail.
     
     CRITICAL: Reverses roll-forward:
@@ -664,7 +686,7 @@ def reopen_financial_year(
     fy.closed_by = None
     fy.journal_entry_id = None
     fy.reopened_at = datetime.now(timezone.utc)
-    fy.reopened_by = tenant_id
+    fy.reopened_by = actor_id
     fy.reopen_reason = reason.strip()
 
     # Sync AccountingPeriod: reopen the period covering this FY
@@ -676,7 +698,7 @@ def reopen_financial_year(
     if period:
         period.is_closed = False
 
-    _log_audit(db, tenant_id, fy.id, "REOPENED", tenant_id, f"Reason: {reason.strip()}")
+    _log_audit(db, tenant_id, fy.id, "REOPENED", actor_id, f"Reason: {reason.strip()}")
     db.commit()
     db.refresh(fy)
     computed = _compute_status(fy, date.today())

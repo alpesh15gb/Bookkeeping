@@ -24,7 +24,11 @@ def create_eway_bill(
     """Generates an outward or inward e-Way Bill for transport of physical Goods."""
     # E-Way Bill is required for goods movement exceeding ₹50,000
     if payload.invoice_id:
-        invoice = db.query(Invoice).filter(Invoice.id == payload.invoice_id).first()
+        invoice = db.query(Invoice).filter(
+            Invoice.id == payload.invoice_id,
+            Invoice.tenant_id == tenant_id,
+            Invoice.deleted_at == None,
+        ).first()
         if invoice:
             if invoice.status not in ("POSTED", "PARTIALLY_PAID", "SENT"):
                 raise HTTPException(
@@ -42,18 +46,6 @@ def create_eway_bill(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="E-Way Bill is not required for invoices below ₹50,000 threshold."
                 )
-            # Validate sufficient stock exists for all product lines
-            for line in invoice.lines:
-                if line.product_id and line.quantity:
-                    product = db.query(Product).filter(
-                        Product.id == line.product_id,
-                        Product.tenant_id == tenant_id,
-                    ).first()
-                    if product and (product.current_stock or Decimal("0")) < line.quantity:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Insufficient stock for {product.name}. Available: {product.current_stock}, Required: {line.quantity}."
-                        )
     return EWayBillService.generate_eway_bill(db=db, tenant_id=tenant_id, payload=payload)
 
 @router.get("", response_model=List[EWayBillResponse])

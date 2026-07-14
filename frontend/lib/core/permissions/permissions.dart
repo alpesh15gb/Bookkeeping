@@ -23,6 +23,9 @@ class Permissions {
   static const invoiceUpdate = 'invoice:update';
   static const invoiceFinalize = 'invoice:finalize';
   static const invoiceDelete = 'invoice:delete';
+  static const invoiceCancel = 'invoice:cancel';
+  static const invoiceEmail = 'invoice:email';
+  static const salesConvert = 'sales:convert';
   static const paymentCreate = 'payment:create';
   static const paymentView = 'payment:view';
   static const paymentDelete = 'payment:delete';
@@ -47,6 +50,7 @@ class Permissions {
   static const billView = 'bill:view';
   static const billUpdate = 'bill:update';
   static const billDelete = 'bill:delete';
+  static const dataImport = 'data:import';
 }
 
 /// Role → permission list, matching the backend matrix.
@@ -65,6 +69,9 @@ const Map<MemberRole, Set<String>> rolePermissions = {
     Permissions.invoiceUpdate,
     Permissions.invoiceFinalize,
     Permissions.invoiceDelete,
+    Permissions.invoiceCancel,
+    Permissions.invoiceEmail,
+    Permissions.salesConvert,
     Permissions.paymentCreate,
     Permissions.paymentView,
     Permissions.paymentDelete,
@@ -89,6 +96,7 @@ const Map<MemberRole, Set<String>> rolePermissions = {
     Permissions.billView,
     Permissions.billUpdate,
     Permissions.billDelete,
+    Permissions.dataImport,
   },
   MemberRole.accountant: {
     Permissions.tenantView,
@@ -99,6 +107,9 @@ const Map<MemberRole, Set<String>> rolePermissions = {
     Permissions.contactUpdate,
     Permissions.invoiceView,
     Permissions.invoiceFinalize,
+    Permissions.invoiceCancel,
+    Permissions.invoiceEmail,
+    Permissions.salesConvert,
     Permissions.paymentCreate,
     Permissions.paymentView,
     Permissions.paymentCancel,
@@ -115,12 +126,12 @@ const Map<MemberRole, Set<String>> rolePermissions = {
     Permissions.reportsView,
     Permissions.expenseCreate,
     Permissions.expenseView,
-    Permissions.expenseEdit,
     Permissions.expenseFinalize,
     Permissions.billCreate,
     Permissions.billView,
     Permissions.billUpdate,
     Permissions.billDelete,
+    Permissions.dataImport,
   },
   MemberRole.salesperson: {
     Permissions.contactCreate,
@@ -129,7 +140,10 @@ const Map<MemberRole, Set<String>> rolePermissions = {
     Permissions.invoiceCreate,
     Permissions.invoiceView,
     Permissions.invoiceUpdate,
+    Permissions.invoiceEmail,
+    Permissions.salesConvert,
     Permissions.paymentCreate,
+    Permissions.paymentView,
   },
   MemberRole.auditor: {
     Permissions.tenantView,

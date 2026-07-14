@@ -267,6 +267,8 @@ class SalesOrderResponse(SalesOrderBase):
     cess_amount: Decimal
     total: Decimal
     amount_advanced: Decimal
+    source_proforma_id: Optional[uuid.UUID] = None
+    converted_to_invoice_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     lines: List[SalesOrderLineResponse]
@@ -343,6 +345,8 @@ class DeliveryChallanResponse(DeliveryChallanBase):
     utgst_amount: Decimal
     cess_amount: Decimal
     total: Decimal
+    source_sales_order_id: Optional[uuid.UUID] = None
+    converted_to_invoice_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     lines: List[DeliveryChallanLineResponse]
@@ -420,6 +424,7 @@ class ProformaInvoiceResponse(ProformaInvoiceBase):
     cess_amount: Decimal
     total: Decimal
     converted_to_invoice_id: Optional[uuid.UUID] = None
+    converted_to_sales_order_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     lines: List[ProformaInvoiceLineResponse]
