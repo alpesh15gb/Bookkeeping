@@ -113,6 +113,11 @@ class Company {
   });
 
   factory Company.fromJson(Map<String, dynamic> json) {
+    final today = DateTime.now();
+    final defaultFinancialYearStart = DateTime(
+      today.month >= DateTime.april ? today.year : today.year - 1,
+      DateTime.april,
+    );
     return Company(
       id: json['id'] as String,
       legalName: json['legal_name'] as String,
@@ -120,9 +125,9 @@ class Company {
       gstin: json['gstin'] as String?,
       pan: json['pan'] as String?,
       taxMode: (json['tax_mode'] as String?) ?? 'NON_GST',
-      financialYearStart: DateTime.parse(
-        (json['financial_year_start'] as String?) ?? '2026-04-01',
-      ),
+      financialYearStart: json['financial_year_start'] is String
+          ? DateTime.parse(json['financial_year_start'] as String)
+          : defaultFinancialYearStart,
       createdAt: DateTime.parse(json['created_at'] as String),
       updatedAt: DateTime.parse(json['updated_at'] as String),
     );

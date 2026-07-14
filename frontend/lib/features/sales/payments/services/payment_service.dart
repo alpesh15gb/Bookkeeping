@@ -39,7 +39,7 @@ class PaymentService {
         throw const FormatException('Invalid receipt list response.');
       }
       return rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map((e) => PaymentListItem.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
@@ -61,7 +61,7 @@ class PaymentService {
         throw const FormatException('Invalid outstanding invoice response.');
       }
       return rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map(
             (e) =>
                 OutstandingInvoice.fromInvoiceJson(e.cast<String, dynamic>()),

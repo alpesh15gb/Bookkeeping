@@ -38,7 +38,7 @@ class VendorBillService {
         throw const FormatException('Invalid bill list response.');
       }
       return rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map((e) => VendorBillListItem.fromJson(e.cast<String, dynamic>()))
           .toList();
     });

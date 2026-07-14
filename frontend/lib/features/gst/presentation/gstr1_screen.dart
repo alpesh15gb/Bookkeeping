@@ -10,6 +10,8 @@ import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/download/download_service.dart';
+import 'package:apexbooks/core/services/notification_service.dart';
 import '../services/gst_service.dart';
 import '../models/gst_models.dart';
 
@@ -24,17 +26,17 @@ final _gstr1PeriodProvider = StateProvider<String>((ref) {
 
 final _gstr1TabsProvider = StateProvider<int>((ref) => 0);
 
-final _gstr1ReportProvider =
-    FutureProvider.autoDispose<Gstr1Summary>((ref) async {
+final _gstr1ReportProvider = FutureProvider.autoDispose<Gstr1Summary>((
+  ref,
+) async {
   final period = ref.watch(_gstr1PeriodProvider);
   final parts = period.split('-');
   final y = int.parse(parts[0]);
   final m = int.parse(parts[1]);
   final lastDay = _daysInMonth(y, m);
-  final res = await ref.read(gstServiceProvider).getGstr1(
-        startDate: '$period-01',
-        endDate: '$period-$lastDay',
-      );
+  final res = await ref
+      .read(gstServiceProvider)
+      .getGstr1(startDate: '$period-01', endDate: '$period-$lastDay');
   return switch (res) {
     Success(:final value) => value,
     Failure(:final error) => throw error,
@@ -62,6 +64,52 @@ class Gstr1Screen extends ConsumerStatefulWidget {
 }
 
 class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
+  bool _downloading = false;
+
+  ({String start, String end}) _periodDates() {
+    final period = ref.read(_gstr1PeriodProvider);
+    final parts = period.split('-');
+    final days = _daysInMonth(int.parse(parts[0]), int.parse(parts[1]));
+    return (
+      start: '$period-01',
+      end: '$period-${days.toString().padLeft(2, '0')}',
+    );
+  }
+
+  Future<void> _download(ExportKind kind) async {
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    final dates = _periodDates();
+    final url = switch (kind) {
+      ExportKind.json => '/gst/gstr1/offline-json',
+      ExportKind.pdf => '/gst/gstr1/pdf',
+      _ => '/gst/gstr1/export',
+    };
+    final result = await ref
+        .read(downloadServiceProvider)
+        .download(
+          relativeUrl: url,
+          filename: 'GSTR1_${ref.read(_gstr1PeriodProvider)}',
+          kind: kind,
+          queryParameters: {'start_date': dates.start, 'end_date': dates.end},
+        );
+    if (!mounted) return;
+    setState(() => _downloading = false);
+    final notifications = ref.read(notificationServiceProvider);
+    switch (result) {
+      case Success(:final value):
+        notifications.success(
+          context,
+          'Saved to ${value.path}',
+          title: 'GSTR-1 downloaded',
+        );
+      case Failure(:final error):
+        notifications.error(context, error.message, title: 'Download failed');
+      default:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = apexColors(context);
@@ -75,7 +123,59 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
           PageHeader(
             title: 'GSTR-1',
             subtitle: 'Outward supply sales tax return detail.',
-            actions: [_periodSelector(colors)],
+            actions: [
+              OutlinedButton.icon(
+                onPressed: _downloading
+                    ? null
+                    : () => _download(ExportKind.json),
+                icon: const Icon(Icons.upload_file_outlined, size: 18),
+                label: const Text('GST Offline JSON'),
+              ),
+              PopupMenuButton<ExportKind>(
+                tooltip: 'Other exports',
+                onSelected: _download,
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: ExportKind.excel,
+                    child: Text('Download Excel workbook'),
+                  ),
+                  PopupMenuItem(
+                    value: ExportKind.pdf,
+                    child: Text('Download PDF summary'),
+                  ),
+                ],
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      Icon(Icons.download_outlined, size: 18),
+                      SizedBox(width: 6),
+                      Text('Export'),
+                    ],
+                  ),
+                ),
+              ),
+              _periodSelector(colors),
+            ],
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.verified_user_outlined,
+                  size: 16,
+                  color: colors.info,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Import the JSON into the latest GST Returns Offline Tool, resolve its validation results, then upload to the GST portal. ApexBooks blocks export when HSN/SAC or place of supply is missing.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
           ),
           _tabBar(colors, tab),
           Expanded(
@@ -103,8 +203,18 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
     final year = int.parse(parts[0]);
     final month = int.parse(parts[1]);
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return InkWell(
       onTap: _pickPeriod,
@@ -119,11 +229,19 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.calendar_month_rounded, size: 16, color: colors.textSecondary),
+            Icon(
+              Icons.calendar_month_rounded,
+              size: 16,
+              color: colors.textSecondary,
+            ),
             const SizedBox(width: 8),
             Text(
               '${months[month - 1]} $year',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.textPrimary),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
+              ),
             ),
             const SizedBox(width: 4),
             Icon(Icons.unfold_more_rounded, size: 14, color: colors.textMuted),
@@ -158,7 +276,12 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
     final tabs = ['B2B', 'B2CL', 'B2CS', 'Notes', 'HSN'];
     return Container(
       color: colors.surfaceMuted,
-      padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.sm),
+      padding: const EdgeInsets.fromLTRB(
+        ApexSpacing.xl,
+        0,
+        ApexSpacing.xl,
+        ApexSpacing.sm,
+      ),
       child: Row(
         children: List.generate(tabs.length, (i) {
           final selected = i == currentTab;
@@ -168,7 +291,10 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
               onTap: () => ref.read(_gstr1TabsProvider.notifier).state = i,
               borderRadius: BorderRadius.circular(ApexRadius.md),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: selected ? colors.surfaceRaised : Colors.transparent,
                   borderRadius: BorderRadius.circular(ApexRadius.md),
@@ -218,8 +344,13 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // ---------------------------------------------------------------------------
 
   Widget _b2bTable(List<Gstr1B2BLine> lines, ApexColors colors) {
-    if (lines.isEmpty) return _emptyTable('No B2B invoices for this period.', colors);
-    double totalTaxable = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0, totalValue = 0;
+    if (lines.isEmpty)
+      return _emptyTable('No B2B invoices for this period.', colors);
+    double totalTaxable = 0,
+        totalCgst = 0,
+        totalSgst = 0,
+        totalIgst = 0,
+        totalValue = 0;
     for (final l in lines) {
       totalTaxable += l.taxableValue;
       totalCgst += l.cgstAmount;
@@ -228,7 +359,17 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
       totalValue += l.totalValue;
     }
     return _detailTable(
-      columns: ['GSTIN', 'Customer', 'Invoice#', 'Date', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total'],
+      columns: [
+        'GSTIN',
+        'Customer',
+        'Invoice#',
+        'Date',
+        'Taxable',
+        'CGST',
+        'SGST',
+        'IGST',
+        'Total',
+      ],
       rows: lines,
       rowBuilder: (l, fmt) => [
         l.customerGstin,
@@ -261,7 +402,8 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // ---------------------------------------------------------------------------
 
   Widget _b2clTable(List<Gstr1B2CLLine> lines, ApexColors colors) {
-    if (lines.isEmpty) return _emptyTable('No B2C large invoices for this period.', colors);
+    if (lines.isEmpty)
+      return _emptyTable('No B2C large invoices for this period.', colors);
     double totalTaxable = 0, totalIgst = 0, totalValue = 0;
     for (final l in lines) {
       totalTaxable += l.taxableValue;
@@ -280,7 +422,9 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
         fmt.currency(l.totalValue),
       ],
       footerBuilder: (fmt) => [
-        '', '', 'Total',
+        '',
+        '',
+        'Total',
         fmt.currency(totalTaxable),
         fmt.currency(totalIgst),
         fmt.currency(totalValue),
@@ -294,7 +438,8 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // ---------------------------------------------------------------------------
 
   Widget _b2csTable(List<Gstr1B2CSLine> lines, ApexColors colors) {
-    if (lines.isEmpty) return _emptyTable('No B2C supplies for this period.', colors);
+    if (lines.isEmpty)
+      return _emptyTable('No B2C supplies for this period.', colors);
     double totalTaxable = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
     for (final l in lines) {
       totalTaxable += l.taxableValue;
@@ -314,7 +459,8 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
         fmt.currency(l.igstAmount),
       ],
       footerBuilder: (fmt) => [
-        '', '',
+        '',
+        '',
         fmt.currency(totalTaxable),
         fmt.currency(totalCgst),
         fmt.currency(totalSgst),
@@ -328,10 +474,19 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // Notes table
   // ---------------------------------------------------------------------------
 
-  Widget _notesTable(List<Gstr1NoteLine> cdnr, List<Gstr1NoteLine> cdnur, ApexColors colors) {
+  Widget _notesTable(
+    List<Gstr1NoteLine> cdnr,
+    List<Gstr1NoteLine> cdnur,
+    ApexColors colors,
+  ) {
     final all = [...cdnr, ...cdnur];
-    if (all.isEmpty) return _emptyTable('No credit/debit notes for this period.', colors);
-    double totalTaxable = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0, totalValue = 0;
+    if (all.isEmpty)
+      return _emptyTable('No credit/debit notes for this period.', colors);
+    double totalTaxable = 0,
+        totalCgst = 0,
+        totalSgst = 0,
+        totalIgst = 0,
+        totalValue = 0;
     for (final l in all) {
       totalTaxable += l.taxableValue;
       totalCgst += l.cgstAmount;
@@ -340,7 +495,17 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
       totalValue += l.totalValue;
     }
     return _detailTable(
-      columns: ['Note#', 'Type', 'Date', 'GSTIN', 'Taxable', 'CGST', 'SGST', 'IGST', 'Total'],
+      columns: [
+        'Note#',
+        'Type',
+        'Date',
+        'GSTIN',
+        'Taxable',
+        'CGST',
+        'SGST',
+        'IGST',
+        'Total',
+      ],
       rows: all,
       rowBuilder: (l, fmt) => [
         l.noteNumber,
@@ -354,7 +519,10 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
         fmt.currency(l.totalValue),
       ],
       footerBuilder: (fmt) => [
-        '', '', '', 'Total',
+        '',
+        '',
+        '',
+        'Total',
         fmt.currency(totalTaxable),
         fmt.currency(totalCgst),
         fmt.currency(totalSgst),
@@ -370,7 +538,8 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // ---------------------------------------------------------------------------
 
   Widget _hsnTable(List<Gstr1HSNLine> lines, ApexColors colors) {
-    if (lines.isEmpty) return _emptyTable('No HSN data for this period.', colors);
+    if (lines.isEmpty)
+      return _emptyTable('No HSN data for this period.', colors);
     double totalQty = 0, totalValue = 0, totalTaxable = 0;
     double totalCgst = 0, totalSgst = 0, totalIgst = 0;
     for (final l in lines) {
@@ -382,7 +551,17 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
       totalIgst += l.igstAmount;
     }
     return _detailTable(
-      columns: ['HSN/SAC', 'Description', 'UOM', 'Qty', 'Value', 'Taxable', 'CGST', 'SGST', 'IGST'],
+      columns: [
+        'HSN/SAC',
+        'Description',
+        'UOM',
+        'Qty',
+        'Value',
+        'Taxable',
+        'CGST',
+        'SGST',
+        'IGST',
+      ],
       rows: lines,
       rowBuilder: (l, fmt) => [
         l.hsnSac,
@@ -396,7 +575,9 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
         fmt.currency(l.igstAmount),
       ],
       footerBuilder: (fmt) => [
-        '', '', '',
+        '',
+        '',
+        '',
         fmt.quantity(totalQty),
         fmt.currency(totalValue),
         fmt.currency(totalTaxable),
@@ -421,7 +602,12 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   }) {
     final fmt = ref.watch(numberFormatterProvider);
     return Container(
-      margin: const EdgeInsets.fromLTRB(ApexSpacing.xl, ApexSpacing.sm, ApexSpacing.xl, ApexSpacing.lg),
+      margin: const EdgeInsets.fromLTRB(
+        ApexSpacing.xl,
+        ApexSpacing.sm,
+        ApexSpacing.xl,
+        ApexSpacing.lg,
+      ),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
         borderRadius: BorderRadius.circular(ApexRadius.lg),
@@ -433,7 +619,10 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
           // Header
           Container(
             color: colors.surfaceMuted,
-            padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ApexSpacing.lg,
+              vertical: ApexSpacing.md,
+            ),
             child: Row(
               children: List.generate(columns.length, (i) {
                 return Expanded(
@@ -455,7 +644,12 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
           if (rows.isEmpty)
             SizedBox(
               height: 100,
-              child: Center(child: Text('No data', style: TextStyle(color: colors.textMuted))),
+              child: Center(
+                child: Text(
+                  'No data',
+                  style: TextStyle(color: colors.textMuted),
+                ),
+              ),
             )
           else
             SizedBox(
@@ -466,7 +660,10 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
                 itemBuilder: (context, i) {
                   final row = rowBuilder(rows[i], fmt);
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.sm),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: ApexSpacing.lg,
+                      vertical: ApexSpacing.sm,
+                    ),
                     decoration: BoxDecoration(
                       border: Border(bottom: BorderSide(color: colors.border)),
                     ),
@@ -480,7 +677,9 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
                               fontWeight: FontWeight.w500,
                               color: colors.textPrimary,
                             ),
-                            textAlign: j == 0 ? TextAlign.start : TextAlign.right,
+                            textAlign: j == 0
+                                ? TextAlign.start
+                                : TextAlign.right,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -497,7 +696,10 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
               color: colors.surfaceMuted,
               border: Border(top: BorderSide(color: colors.border, width: 1.5)),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: ApexSpacing.md),
+            padding: const EdgeInsets.symmetric(
+              horizontal: ApexSpacing.lg,
+              vertical: ApexSpacing.md,
+            ),
             child: Row(
               children: List.generate(footerBuilder(fmt).length, (i) {
                 final cell = footerBuilder(fmt)[i];
@@ -552,24 +754,35 @@ class _ReportLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     return ShimmerSkeleton(
       child: Container(
-        margin: const EdgeInsets.fromLTRB(ApexSpacing.xl, ApexSpacing.sm, ApexSpacing.xl, ApexSpacing.lg),
+        margin: const EdgeInsets.fromLTRB(
+          ApexSpacing.xl,
+          ApexSpacing.sm,
+          ApexSpacing.xl,
+          ApexSpacing.lg,
+        ),
         padding: const EdgeInsets.all(ApexSpacing.lg),
         decoration: BoxDecoration(
           color: apexColors(context).skeletonBase,
           borderRadius: BorderRadius.circular(ApexRadius.lg),
         ),
         child: Column(
-          children: List.generate(6, (_) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Row(
-              children: List.generate(5, (i) => Expanded(
-                child: Padding(
-                  padding: EdgeInsets.only(left: i == 0 ? 0 : 8),
-                  child: SkeletonBox(height: 14),
+          children: List.generate(
+            6,
+            (_) => Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: List.generate(
+                  5,
+                  (i) => Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(left: i == 0 ? 0 : 8),
+                      child: SkeletonBox(height: 14),
+                    ),
+                  ),
                 ),
-              )),
+              ),
             ),
-          )),
+          ),
         ),
       ),
     );

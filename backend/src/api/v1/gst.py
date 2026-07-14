@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -9,6 +9,7 @@ from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
 import re
+import json
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import Invoice, Bill, CreditNote, DebitNote, Contact, Tenant, TenantSetting, PurchaseReturn, GSTReturn
@@ -17,11 +18,16 @@ from src.schemas.gst_schemas import (
     GSTR2Response, GSTR2B2BLine, GSTR2B2BURLine, GSTR2NoteLine, GSTR2HSNLine,
     GSTReturnCreate, GSTReturnUpdate, GSTReturnResponse
 )
-from src.domains.company.services import resolve_origin_state_code
+from src.domains.company.services import is_valid_gstin, resolve_origin_state_code
 from src.domains.accounting.report_services import GSTR3BService
 from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/gst", tags=["GST Compliance"])
+
+
+def _b2cl_threshold(issue_date: date) -> Decimal:
+    """GSTN B2CL invoice-value threshold applicable to the return period."""
+    return Decimal("100000.00") if issue_date >= date(2024, 8, 1) else Decimal("250000.00")
 
 @router.get("/validate-gstin/{gstin}")
 def validate_gstin_format(gstin: str):
@@ -61,7 +67,7 @@ def get_gstr1_report(
 
     for inv in invoices:
         contact = inv.contact
-        is_registered = bool(contact and contact.gstin)
+        is_registered = bool(contact and is_valid_gstin(contact.gstin))
 
         if is_registered:
             # Section 4: B2B registered sales
@@ -84,8 +90,11 @@ def get_gstr1_report(
         else:
             # Section 5 & 7: Unregistered Sales (B2C)
             is_inter_state = (inv.pos_state_code != origin_state_code)
-            if is_inter_state and inv.total > Decimal("250000.00"):
-                # B2C Large (Inter-state, > 2.5L total)
+            # GSTN reduced the B2CL threshold from INR 2.5 lakh to INR 1 lakh
+            # for return periods from August 2024 onwards.
+            b2cl_threshold = _b2cl_threshold(inv.issue_date)
+            if is_inter_state and inv.total > b2cl_threshold:
+                # B2C Large (inter-state, above the date-applicable threshold)
                 b2cl_lines.append(
                     GSTR1B2CLine(
                         invoice_number=inv.invoice_number,
@@ -118,7 +127,7 @@ def get_gstr1_report(
 
         # Section 12: HSN Summary aggregation
         for line in inv.lines:
-            hsn = line.hsn_sac
+            hsn = line.hsn_sac or (line.product.hsn_sac if line.product else None) or ""
             product = line.product
             desc = product.name if product else "N/A"
             uom = product.uom if product else "PCS"
@@ -206,7 +215,7 @@ def get_gstr1_report(
     for cn in credit_notes:
         invoice = cn.invoice
         contact = invoice.contact if invoice else None
-        is_registered = bool(contact and contact.gstin)
+        is_registered = bool(contact and is_valid_gstin(contact.gstin))
 
         note_line = GSTR1NoteLine(
             note_number=cn.credit_note_number,
@@ -214,6 +223,7 @@ def get_gstr1_report(
             note_type="CREDIT",
             invoice_number=invoice.invoice_number if invoice else None,
             customer_gstin=contact.gstin if is_registered else None,
+            pos_state_code=cn.pos_state_code,
             reason=cn.reason,
             taxable_value=cn.subtotal,
             cgst_amount=cn.cgst_amount,
@@ -232,7 +242,7 @@ def get_gstr1_report(
     for dn in debit_notes:
         invoice = dn.invoice
         contact = invoice.contact if invoice else None
-        is_registered = bool(contact and contact.gstin)
+        is_registered = bool(contact and is_valid_gstin(contact.gstin))
 
         note_line = GSTR1NoteLine(
             note_number=dn.debit_note_number,
@@ -240,6 +250,7 @@ def get_gstr1_report(
             note_type="DEBIT",
             invoice_number=invoice.invoice_number if invoice else None,
             customer_gstin=contact.gstin if is_registered else None,
+            pos_state_code=dn.pos_state_code,
             reason=dn.reason,
             taxable_value=dn.subtotal,
             cgst_amount=dn.cgst_amount,
@@ -261,6 +272,192 @@ def get_gstr1_report(
         cdnr=cdnr_lines,
         cdnur=cdnur_lines,
         hsn_summary=hsn_lines
+    )
+
+
+def _gst_amount(value: Decimal | int | float | None) -> float:
+    return float(Decimal(str(value or 0)).quantize(Decimal("0.01")))
+
+
+def _gst_date(value: date) -> str:
+    return value.strftime("%d-%m-%Y")
+
+
+def _gst_rate_from_amounts(taxable: Decimal, *taxes: Decimal) -> float:
+    if not taxable:
+        return 0.0
+    return _gst_amount(sum((Decimal(str(v or 0)) for v in taxes), Decimal("0")) * 100 / taxable)
+
+
+@router.get("/gstr1/offline-json")
+def export_gstr1_offline_json(
+    start_date: date = Query(...),
+    end_date: date = Query(...),
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+):
+    """Generate GST Returns Offline Tool JSON for GSTR-1/IFF review and upload."""
+    if start_date > end_date:
+        raise HTTPException(status_code=422, detail="Start date cannot be after end date.")
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+    if tenant is None or not is_valid_gstin(tenant.gstin):
+        raise HTTPException(status_code=422, detail="A valid company GSTIN is required for GST offline export.")
+
+    invoices = db.query(Invoice).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.issue_date >= start_date,
+        Invoice.issue_date <= end_date,
+        Invoice.status.in_(["POSTED", "PARTIALLY_PAID", "PAID"]),
+        Invoice.deleted_at == None,
+    ).all()
+    origin_state = resolve_origin_state_code(db, tenant_id)
+    incomplete_invoices = sorted({
+        inv.invoice_number
+        for inv in invoices
+        if not re.fullmatch(r"[0-9]{2}", inv.pos_state_code or "")
+        or any(not (line.hsn_sac or (line.product.hsn_sac if line.product else None)) for line in inv.lines)
+    })
+    if incomplete_invoices:
+        sample = ", ".join(incomplete_invoices[:10])
+        suffix = "…" if len(incomplete_invoices) > 10 else ""
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "GST Offline export needs a valid place of supply and HSN/SAC on every line. "
+                f"Correct these invoices first: {sample}{suffix}"
+            ),
+        )
+    unsupported_invoices = sorted({
+        inv.invoice_number
+        for inv in invoices
+        if (inv.supply_type or "DOMESTIC") != "DOMESTIC"
+        or any(Decimal(str(line.gst_rate or 0)) == 0 for line in inv.lines)
+    })
+    if unsupported_invoices:
+        sample = ", ".join(unsupported_invoices[:10])
+        suffix = "…" if len(unsupported_invoices) > 10 else ""
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "GST Offline JSON currently supports taxable domestic supplies only. "
+                "Export/SEZ and nil/exempt/non-GST supplies need statutory section classification "
+                f"before export. Review: {sample}{suffix}"
+            ),
+        )
+    payload: dict = {
+        "gstin": tenant.gstin,
+        "fp": end_date.strftime("%m%Y"),
+        "version": "GST3.2.1",
+        "hash": "hash",
+        "b2b": [],
+        "b2cl": [],
+        "b2cs": [],
+        "cdnr": [],
+        "cdnur": [],
+        "hsn": {"data": []},
+    }
+    b2b_by_gstin: dict[str, list] = {}
+    b2cs: dict[tuple[str, Decimal], dict] = {}
+
+    def invoice_items(inv: Invoice) -> list[dict]:
+        return [
+            {
+                "num": index,
+                "itm_det": {
+                    "txval": _gst_amount(line.subtotal),
+                    "rt": _gst_amount(line.gst_rate),
+                    "iamt": _gst_amount(line.igst_amount),
+                    "camt": _gst_amount(line.cgst_amount),
+                    "samt": _gst_amount((line.sgst_amount or 0) + (line.utgst_amount or 0)),
+                    "csamt": _gst_amount(line.cess_amount),
+                },
+            }
+            for index, line in enumerate(inv.lines, 1)
+        ]
+
+    for inv in invoices:
+        contact = inv.contact
+        inv_json = {
+            "inum": inv.invoice_number,
+            "idt": _gst_date(inv.issue_date),
+            "val": _gst_amount(inv.total),
+            "pos": inv.pos_state_code,
+            "rchrg": "N",
+            "inv_typ": "R",
+            "itms": invoice_items(inv),
+        }
+        if contact and is_valid_gstin(contact.gstin):
+            b2b_by_gstin.setdefault(contact.gstin, []).append(inv_json)
+            continue
+        is_interstate = inv.pos_state_code != origin_state
+        threshold = _b2cl_threshold(inv.issue_date)
+        if is_interstate and inv.total > threshold:
+            payload["b2cl"].append({"pos": inv.pos_state_code, "inv": [inv_json]})
+            continue
+        for line in inv.lines:
+            key = (inv.pos_state_code, Decimal(str(line.gst_rate)))
+            row = b2cs.setdefault(key, {
+                "sply_ty": "INTER" if is_interstate else "INTRA",
+                "typ": "OE", "pos": inv.pos_state_code,
+                "rt": _gst_amount(line.gst_rate), "txval": 0.0,
+                "iamt": 0.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0,
+            })
+            row["txval"] += _gst_amount(line.subtotal)
+            row["iamt"] += _gst_amount(line.igst_amount)
+            row["camt"] += _gst_amount(line.cgst_amount)
+            row["samt"] += _gst_amount((line.sgst_amount or 0) + (line.utgst_amount or 0))
+            row["csamt"] += _gst_amount(line.cess_amount)
+
+    payload["b2b"] = [{"ctin": gstin, "inv": rows} for gstin, rows in sorted(b2b_by_gstin.items())]
+    payload["b2cs"] = []
+    for row in b2cs.values():
+        for amount_key in ("txval", "iamt", "camt", "samt", "csamt"):
+            row[amount_key] = _gst_amount(row[amount_key])
+        payload["b2cs"].append(row)
+
+    report = get_gstr1_report(start_date=start_date, end_date=end_date, db=db, tenant_id=tenant_id)
+    for index, hsn in enumerate(report.hsn_summary, 1):
+        uqc = hsn.uom.upper() if hsn.uom and len(hsn.uom) == 3 else "OTH"
+        payload["hsn"]["data"].append({
+            "num": index, "hsn_sc": hsn.hsn_sac, "desc": hsn.description,
+            "uqc": uqc, "qty": _gst_amount(hsn.total_quantity),
+            "val": _gst_amount(hsn.total_value), "txval": _gst_amount(hsn.taxable_value),
+            "iamt": _gst_amount(hsn.igst_amount), "camt": _gst_amount(hsn.cgst_amount),
+            "samt": _gst_amount((hsn.sgst_amount or 0) + (hsn.utgst_amount or 0)),
+            "csamt": _gst_amount(hsn.cess_amount),
+        })
+
+    def note_json(note: GSTR1NoteLine) -> dict:
+        rate = _gst_rate_from_amounts(
+            note.taxable_value, note.cgst_amount, note.sgst_amount,
+            note.igst_amount, note.utgst_amount, note.cess_amount,
+        )
+        return {
+            "ntty": "C" if note.note_type == "CREDIT" else "D",
+            "nt_num": note.note_number, "nt_dt": _gst_date(note.note_date),
+            "val": _gst_amount(note.total_value), "pos": note.pos_state_code,
+            "rchrg": "N", "inv_typ": "R",
+            "itms": [{"num": 1, "itm_det": {
+                "txval": _gst_amount(note.taxable_value), "rt": rate,
+                "iamt": _gst_amount(note.igst_amount), "camt": _gst_amount(note.cgst_amount),
+                "samt": _gst_amount((note.sgst_amount or 0) + (note.utgst_amount or 0)),
+                "csamt": _gst_amount(note.cess_amount),
+            }}],
+        }
+
+    notes_by_gstin: dict[str, list] = {}
+    for note in report.cdnr:
+        if note.customer_gstin:
+            notes_by_gstin.setdefault(note.customer_gstin, []).append(note_json(note))
+    payload["cdnr"] = [{"ctin": gstin, "nt": rows} for gstin, rows in sorted(notes_by_gstin.items())]
+    payload["cdnur"] = [note_json(note) for note in report.cdnur]
+
+    body = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    filename = f"GSTR1_{tenant.gstin}_{payload['fp']}.json"
+    return Response(
+        content=body,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 @router.get("/gstr2", response_model=GSTR2Response)
@@ -289,7 +486,7 @@ def get_gstr2_report(
 
     for b in bills:
         contact = b.contact
-        is_registered = bool(contact and contact.gstin)
+        is_registered = bool(contact and is_valid_gstin(contact.gstin))
 
         # HSN Summary aggregation for inward supplies
         for line in b.lines:
@@ -371,7 +568,7 @@ def get_gstr2_report(
 
     for pr in purchase_returns:
         contact = pr.contact
-        is_registered = bool(contact and contact.gstin)
+        is_registered = bool(contact and is_valid_gstin(contact.gstin))
 
         # Purchase Return maps to DEBIT note on purchase side
         note_line = GSTR2NoteLine(
@@ -469,6 +666,26 @@ def export_gstr1(
         q_inv = q_inv.filter(Invoice.issue_date <= end_date)
     invoices = q_inv.all()
 
+    blocked = sorted({
+        inv.invoice_number
+        for inv in invoices
+        if (inv.supply_type or "DOMESTIC") != "DOMESTIC"
+        or not re.fullmatch(r"[0-9]{2}", inv.pos_state_code or "")
+        or any(
+            not (line.hsn_sac or (line.product.hsn_sac if line.product else None))
+            or Decimal(str(line.gst_rate or 0)) == 0
+            for line in inv.lines
+        )
+    })
+    if blocked:
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                "GST Offline workbook supports taxable domestic supplies only and requires "
+                "HSN/SAC plus place of supply. Review: " + ", ".join(blocked[:10])
+            ),
+        )
+
     wb = openpyxl.Workbook()
     wb.remove(wb.active)  # remove default sheet
 
@@ -482,7 +699,7 @@ def export_gstr1(
     
     for inv in invoices:
         contact = inv.contact
-        is_registered = bool(contact and contact.gstin)
+        is_registered = bool(contact and is_valid_gstin(contact.gstin))
         if is_registered:
             # Group lines by rate
             rate_groups = {}
@@ -546,7 +763,7 @@ def export_gstr1(
     for cn in credit_notes:
         inv = cn.invoice
         contact = inv.contact if inv else None
-        if contact and contact.gstin:
+        if contact and is_valid_gstin(contact.gstin):
             rate_groups = {}
             for line in cn.lines:
                 rate = line.gst_rate
@@ -582,7 +799,7 @@ def export_gstr1(
     for dn in debit_notes:
         inv = dn.invoice
         contact = inv.contact if inv else None
-        if contact and contact.gstin:
+        if contact and is_valid_gstin(contact.gstin):
             rate_groups = {}
             for line in dn.lines:
                 rate = line.gst_rate
@@ -615,7 +832,7 @@ def export_gstr1(
     for cn in credit_notes:
         inv = cn.invoice
         contact = inv.contact if inv else None
-        if not contact or not contact.gstin:
+        if not contact or not is_valid_gstin(contact.gstin):
             rate_groups = {}
             for line in cn.lines:
                 rate = line.gst_rate
@@ -626,7 +843,11 @@ def export_gstr1(
                     cn.credit_note_number,
                     cn.issue_date.strftime("%d-%b-%Y") if cn.issue_date else "",
                     "C",
-                    "B2CL" if (inv and inv.total > 250000 and inv.pos_state_code != origin_state_code) else "B2CS",
+                    "B2CL" if (
+                        inv
+                        and inv.total > _b2cl_threshold(inv.issue_date)
+                        and inv.pos_state_code != origin_state_code
+                    ) else "B2CS",
                     cn.total,
                     format_pos(inv.pos_state_code if inv else origin_state_code),
                     "",
@@ -639,7 +860,7 @@ def export_gstr1(
     for dn in debit_notes:
         inv = dn.invoice
         contact = inv.contact if inv else None
-        if not contact or not contact.gstin:
+        if not contact or not is_valid_gstin(contact.gstin):
             rate_groups = {}
             for line in dn.lines:
                 rate = line.gst_rate
@@ -650,7 +871,11 @@ def export_gstr1(
                     dn.debit_note_number,
                     dn.issue_date.strftime("%d-%b-%Y") if dn.issue_date else "",
                     "D",
-                    "B2CL" if (inv and inv.total > 250000 and inv.pos_state_code != origin_state_code) else "B2CS",
+                    "B2CL" if (
+                        inv
+                        and inv.total > _b2cl_threshold(inv.issue_date)
+                        and inv.pos_state_code != origin_state_code
+                    ) else "B2CS",
                     dn.total,
                     format_pos(inv.pos_state_code if inv else origin_state_code),
                     "",
@@ -767,7 +992,7 @@ def export_gstr2(
 
     for b in bills:
         contact = b.contact
-        is_registered = bool(contact and contact.gstin)
+        is_registered = bool(contact and is_valid_gstin(contact.gstin))
 
         # HSN Summary aggregation
         for line in b.lines:
@@ -878,7 +1103,7 @@ def export_gstr2(
 
     for pr in purchase_returns:
         contact = pr.contact
-        is_registered = bool(contact and contact.gstin)
+        is_registered = bool(contact and is_valid_gstin(contact.gstin))
 
         rate_groups = {}
         for line in pr.lines:

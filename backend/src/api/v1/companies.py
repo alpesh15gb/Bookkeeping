@@ -45,7 +45,7 @@ def create_company(
     from src.domains.company.services import detect_tax_mode
     tenant = Tenant(
         legal_name=payload.legal_name,
-        trade_name=payload.legal_name,
+        trade_name=payload.trade_name or payload.legal_name,
         gstin=payload.gstin,
         pan=payload.pan,
         tax_mode=detect_tax_mode(payload.gstin, payload.tax_mode),
@@ -61,52 +61,13 @@ def create_company(
     )
     db.add(membership)
 
-    # Seed default configurations
-    NumberingSeriesService.seed_all_defaults(db, tenant.id)
-
-    # Seed default expense categories with linked accounts
-    from src.domains.accounting.services import AccountResolver
-    resolver = AccountResolver(db, tenant.id)
-    default_expense_cats = [
-        ("Tea & Refreshments", "expense.tea"),
-        ("Transport & Travel", "expense.transport"),
-        ("Rent", "expense.rent"),
-        ("Salary & Wages", "expense.salary"),
-        ("Office Supplies & Stationery", "expense.office"),
-        ("Telephone & Internet", "expense.telephone"),
-        ("Electricity & Utilities", "expense.electricity"),
-        ("Advertising & Marketing", "expense.advertising"),
-        ("Insurance", "expense.insurance"),
-        ("Professional Fees", "expense.professional"),
-        ("Repairs & Maintenance", "expense.repairs"),
-        ("Bank Charges", "expense.bank_charges"),
-        ("Depreciation", "expense.depreciation"),
-        ("Miscellaneous Expense", "expense.misc"),
-    ]
-    for cat_name, account_key in default_expense_cats:
-        existing = db.query(ExpenseCategory).filter(
-            ExpenseCategory.tenant_id == tenant.id,
-            ExpenseCategory.name == cat_name,
-        ).first()
-        if not existing:
-            linked_account_id = resolver.resolve(account_key)
-            cat = ExpenseCategory(
-                tenant_id=tenant.id,
-                name=cat_name,
-                linked_account_id=linked_account_id,
-                is_active=True,
-            )
-            db.add(cat)
-
-    from src.domains.company.services import is_valid_gstin, derive_origin_state_code
-    setting = TenantSetting(
-        tenant_id=tenant.id,
-        currency="INR",
-        gst_enabled=is_valid_gstin(payload.gstin),
-        e_invoicing_enabled=False,
-        origin_state_code=derive_origin_state_code(payload.gstin),
+    from src.domains.company.provisioning import provision_company_defaults
+    provision_company_defaults(
+        db,
+        tenant,
+        current_user.id,
+        financial_year_start=payload.financial_year_start,
     )
-    db.add(setting)
 
     db.commit()
     db.refresh(tenant)

@@ -40,7 +40,9 @@ class _SettingsPreferencesScreenState
         : 'INR';
     _dateFormat = prefs.dateFormat;
     _numberFormat = prefs.numberFormat;
-    _themeMode = prefs.themeMode;
+    // Appearance is device-local and must not be overwritten by a stale
+    // company-settings response. The controller is the runtime source of truth.
+    _themeMode = ref.read(themeControllerProvider).name;
     _populated = true;
   }
 
@@ -85,10 +87,27 @@ class _SettingsPreferencesScreenState
       appBar: null,
       body: async.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
-        error: (err, _) => ErrorView(
-          message: err.toString(),
-          onRetry: () => ref.invalidate(userPreferencesProvider),
-        ),
+        error: (err, _) {
+          // Theme is a device preference. Keep appearance controls usable even
+          // if company preferences are temporarily unavailable from the API.
+          _initFields(const UserPreferences());
+          return Column(
+            children: [
+              MaterialBanner(
+                content: const Text(
+                  'Company preferences could not be loaded. Appearance changes still apply on this device.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => ref.invalidate(userPreferencesProvider),
+                    child: const Text('Retry'),
+                  ),
+                ],
+              ),
+              Expanded(child: _buildContent(colors)),
+            ],
+          );
+        },
         data: (prefs) {
           _initFields(prefs);
           return _buildContent(colors);
@@ -298,7 +317,17 @@ class _SettingsPreferencesScreenState
     final selected = _themeMode == value;
     return InkWell(
       borderRadius: BorderRadius.circular(ApexRadius.md),
-      onTap: () => setState(() => _themeMode = value),
+      onTap: () async {
+        setState(() => _themeMode = value);
+        final mode = switch (value) {
+          'light' => ApexThemeMode.light,
+          'dark' => ApexThemeMode.dark,
+          _ => ApexThemeMode.system,
+        };
+        // Apply immediately. Saving below also syncs the company preference,
+        // but a network failure must never prevent local appearance switching.
+        await ref.read(themeControllerProvider.notifier).set(mode);
+      },
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(

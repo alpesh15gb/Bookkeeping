@@ -44,7 +44,8 @@ def test_list_normalizes_single_current_and_marks_future_upcoming(client: TestCl
     prev_year = current_start_year - 1
     next_year = current_start_year + 1
 
-    for start_year in (prev_year, current_start_year, next_year):
+    # Signup provisions the current FY; only create the surrounding years.
+    for start_year in (prev_year, next_year):
         res = _create_fy(client, headers, start_year)
         assert res.status_code == 201, res.json()
 

@@ -13,16 +13,24 @@ class GstService {
   final Dio _dio;
 
   /// Fetches GSTR-1 outward supply detail from /gst/gstr1.
-  Future<Result<Gstr1Summary>> getGstr1({
-    String? startDate,
-    String? endDate,
-  }) {
+  Future<Result<Gstr1Summary>> getGstr1({String? startDate, String? endDate}) {
     return guardDio(() async {
       final q = <String, dynamic>{};
       if (startDate != null) q['start_date'] = startDate;
       if (endDate != null) q['end_date'] = endDate;
       final res = await _dio.get('/gst/gstr1', queryParameters: q);
       return Gstr1Summary.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  /// Book-side inward supplies used to reconcile against portal GSTR-2B.
+  Future<Result<Gstr2Summary>> getGstr2({String? startDate, String? endDate}) {
+    return guardDio(() async {
+      final q = <String, dynamic>{};
+      if (startDate != null) q['start_date'] = startDate;
+      if (endDate != null) q['end_date'] = endDate;
+      final res = await _dio.get('/gst/gstr2', queryParameters: q);
+      return Gstr2Summary.fromJson(res.data as Map<String, dynamic>);
     });
   }
 
@@ -35,10 +43,7 @@ class GstService {
     return guardDio(() async {
       final res = await _dio.get(
         '/reports/gst/gstr3b',
-        queryParameters: {
-          'start_date': startDate,
-          'end_date': endDate,
-        },
+        queryParameters: {'start_date': startDate, 'end_date': endDate},
       );
       return Gstr3BSummary.fromJson(res.data as Map<String, dynamic>);
     });

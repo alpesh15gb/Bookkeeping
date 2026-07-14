@@ -40,7 +40,7 @@ class PurchaseReturnService {
         throw const FormatException('Invalid purchase return response.');
       }
       return rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map(
             (e) => PurchaseReturnListItem.fromJson(e.cast<String, dynamic>()),
           )

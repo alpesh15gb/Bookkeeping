@@ -25,6 +25,11 @@ from src.core.database import Base
 _now = lambda: datetime.now(timezone.utc)  # noqa: E731
 
 
+def _current_indian_financial_year_start() -> date:
+    today = date.today()
+    return date(today.year if today.month >= 4 else today.year - 1, 4, 1)
+
+
 # ---------------------------------------------------------------------------
 # AUTH & TENANT FOUNDATION
 # ---------------------------------------------------------------------------
@@ -41,7 +46,7 @@ class Tenant(Base):
     gstin = Column(String(15))
     pan = Column(String(10))
     tax_mode = Column(String(20), nullable=False, default="NON_GST", server_default="NON_GST")
-    financial_year_start = Column(Date, nullable=False, default=date(2026, 4, 1))
+    financial_year_start = Column(Date, nullable=False, default=_current_indian_financial_year_start)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))

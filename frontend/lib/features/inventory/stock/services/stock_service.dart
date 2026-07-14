@@ -45,7 +45,7 @@ class StockService {
         throw const FormatException('Invalid product stock response.');
       }
       var items = rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map((e) => StockBalance.fromProductJson(e.cast<String, dynamic>()))
           .toList();
       if (lowStock == true) {

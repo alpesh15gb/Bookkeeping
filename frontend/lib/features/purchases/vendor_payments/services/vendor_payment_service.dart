@@ -33,7 +33,7 @@ class VendorPaymentService {
         queryParameters: {'page': page, 'limit': limit},
       );
       return (res.data as List)
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map((e) => VendorPayment.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
@@ -59,7 +59,7 @@ class VendorPaymentService {
         throw const FormatException('Invalid outstanding bill response.');
       }
       return rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map((e) => OutstandingBill.fromJson(e.cast<String, dynamic>()))
           .toList();
     });

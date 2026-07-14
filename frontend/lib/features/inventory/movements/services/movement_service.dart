@@ -34,7 +34,7 @@ class MovementService {
         throw const FormatException('Invalid stock movement response.');
       }
       return rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map((e) => StockMovement.fromJson(e.cast<String, dynamic>()))
           .toList();
     });
@@ -61,7 +61,7 @@ class MovementService {
         throw const FormatException('Invalid stock movement response.');
       }
       return rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map((e) => StockMovement.fromJson(e.cast<String, dynamic>()))
           .toList();
     });

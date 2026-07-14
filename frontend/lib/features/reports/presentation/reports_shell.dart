@@ -12,6 +12,9 @@ import 'sales_register_screen.dart';
 import 'purchase_register_screen.dart';
 import 'customer_ledger_screen.dart';
 import 'vendor_ledger_screen.dart';
+import '../../gst/presentation/gstr1_screen.dart';
+import '../../gst/presentation/gstr2_screen.dart';
+import '../../gst/presentation/gstr3b_screen.dart';
 
 class ReportsShell extends StatelessWidget {
   const ReportsShell({super.key});
@@ -24,12 +27,18 @@ class ReportsShell extends StatelessWidget {
         'Purchase Register',
         'Customer Ledger',
         'Vendor Ledger',
+        'GSTR-1',
+        'Purchase ITC / 2B',
+        'GSTR-3B',
       ],
       views: [
         SalesRegisterScreen(),
         PurchaseRegisterScreen(),
         CustomerLedgerScreen(),
         VendorLedgerScreen(),
+        Gstr1Screen(),
+        Gstr2Screen(),
+        Gstr3bScreen(),
       ],
     );
   }

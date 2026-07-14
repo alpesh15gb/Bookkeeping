@@ -93,7 +93,7 @@ class VendorPayment {
     final rawAllocations = json['allocations'];
     final allocations = rawAllocations is List
         ? rawAllocations
-              .whereType<Map>()
+              .whereType<Map<Object?, Object?>>()
               .map((e) => PaymentAllocation.fromJson(e.cast<String, dynamic>()))
               .toList()
         : <PaymentAllocation>[];

@@ -2,6 +2,7 @@ import sys
 import os
 import uuid
 import unittest
+from datetime import date
 from concurrent.futures import ThreadPoolExecutor
 from fastapi.testclient import TestClient
 from sqlalchemy import text
@@ -12,8 +13,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
-from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries
-from src.domains.company.services import NumberingSeriesService, decrypt_credential
+from src.infrastructure.database.models import (
+    Account, Branch, FinancialYear, NumberingSeries, Tenant, TenantMembership,
+    TenantSetting, User,
+)
+from src.domains.accounting.services import _STANDARD_ACCOUNTS
+from src.domains.company.services import NumberingSeriesService, decrypt_credential, indian_financial_year
 from src.core.security import create_access_token, get_password_hash
 
 class TestCompanyAndSettings(unittest.TestCase):
@@ -89,6 +94,8 @@ class TestCompanyAndSettings(unittest.TestCase):
         self.assertEqual(res.status_code, 201)
         data = res.json()
         self.assertEqual(data["legal_name"], "Second Company Ltd")
+        self.assertEqual(data["trade_name"], "Second Company")
+        self.assertEqual(data["tax_mode"], "GST_REGULAR")
         self.assertIn("id", data)
         new_tenant_id = data["id"]
 
@@ -99,8 +106,25 @@ class TestCompanyAndSettings(unittest.TestCase):
             self.assertIsNotNone(settings)
             self.assertEqual(settings.currency, "INR")
 
-            series_count = db.query(NumberingSeries).filter(NumberingSeries.tenant_id == uuid.UUID(new_tenant_id)).count()
-            self.assertEqual(series_count, 14) # Expanded document types
+            tenant_uuid = uuid.UUID(new_tenant_id)
+            series = db.query(NumberingSeries).filter(NumberingSeries.tenant_id == tenant_uuid).all()
+            self.assertEqual(len(series), 15)
+
+            fy_start, fy_end, fy_name = indian_financial_year(date.today())
+            financial_year = db.query(FinancialYear).filter(FinancialYear.tenant_id == tenant_uuid).one()
+            self.assertEqual((financial_year.start_date, financial_year.end_date, financial_year.name), (fy_start, fy_end, fy_name))
+            self.assertTrue(financial_year.is_current)
+
+            warehouse = db.query(Branch).filter(Branch.tenant_id == tenant_uuid).one()
+            self.assertEqual(warehouse.name, "Main Warehouse")
+            self.assertEqual(settings.extra_settings["default_warehouse_id"], str(warehouse.id))
+            self.assertEqual(settings.extra_settings["books_beginning_from"], fy_start.isoformat())
+            self.assertFalse(settings.extra_settings["allow_negative_stock"])
+
+            account_count = db.query(Account).filter(Account.tenant_id == tenant_uuid).count()
+            self.assertEqual(account_count, len(_STANDARD_ACCOUNTS))
+            expected_fy_label = f"{fy_start.year % 100:02d}-{fy_end.year % 100:02d}"
+            self.assertTrue(all(f"/{expected_fy_label}/" in row.prefix for row in series))
         finally:
             db.close()
 
@@ -144,7 +168,8 @@ class TestCompanyAndSettings(unittest.TestCase):
         # 2. List branches
         res_list = self.client.get(f"/api/v1/companies/{self.tenant_id}/branches", headers=self.headers)
         self.assertEqual(res_list.status_code, 200)
-        self.assertEqual(len(res_list.json()), 1)
+        self.assertEqual(len(res_list.json()), 2)
+        self.assertIn("Main Warehouse", {branch["name"] for branch in res_list.json()})
 
         # 3. Update branch
         update_payload = {
@@ -160,10 +185,11 @@ class TestCompanyAndSettings(unittest.TestCase):
         res_del = self.client.delete(f"/api/v1/companies/{self.tenant_id}/branches/{branch_id}", headers=self.headers)
         self.assertEqual(res_del.status_code, 204)
 
-        # Re-list should be empty (soft deleted)
+        # Re-list retains the default warehouse created during onboarding.
         res_list2 = self.client.get(f"/api/v1/companies/{self.tenant_id}/branches", headers=self.headers)
         self.assertEqual(res_list2.status_code, 200)
-        self.assertEqual(len(res_list2.json()), 0)
+        self.assertEqual(len(res_list2.json()), 1)
+        self.assertEqual(res_list2.json()[0]["name"], "Main Warehouse")
 
     def test_settings_credentials_encryption(self):
         # Update settings with API credentials
@@ -249,10 +275,12 @@ class TestCompanyAndSettings(unittest.TestCase):
         res = self.client.get("/api/v1/settings/series", headers=self.headers)
         self.assertEqual(res.status_code, 200)
         series_list = res.json()
-        self.assertEqual(len(series_list), 14)
+        self.assertEqual(len(series_list), 15)
 
         invoice_series = next(s for s in series_list if s["document_type"] == "INVOICE")
-        self.assertEqual(invoice_series["prefix"], "INV/2026/")
+        fy_start, fy_end, _ = indian_financial_year(date.today())
+        default_invoice_prefix = f"INV/{fy_start.year % 100:02d}-{fy_end.year % 100:02d}/"
+        self.assertEqual(invoice_series["prefix"], default_invoice_prefix)
 
         # Create custom numbering series
         new_series_payload = {
@@ -276,7 +304,7 @@ class TestCompanyAndSettings(unittest.TestCase):
         inactive_series = next(s for s in invoice_series_items if not s["is_active"])
 
         self.assertEqual(active_series["prefix"], "VARMA-INV-")
-        self.assertEqual(inactive_series["prefix"], "INV/2026/")
+        self.assertEqual(inactive_series["prefix"], default_invoice_prefix)
 
     def test_numbering_series_concurrency_safety(self):
         # Run multithreaded requests calling sequence locks to verify no duplicates are generated
@@ -306,9 +334,11 @@ class TestCompanyAndSettings(unittest.TestCase):
         self.assertEqual(len(results), total_workers)
         self.assertEqual(len(set(results)), total_workers)
 
-        # Verify the numbers match the format: INV/2026/0001, INV/2026/0002, etc.
+        # Verify the numbers use the current financial-year prefix.
         # Since defaults start at 1 and increment by 1
-        expected_nums = [f"INV/2026/{str(i).zfill(4)}" for i in range(1, total_workers + 1)]
+        fy_start, fy_end, _ = indian_financial_year(date.today())
+        prefix = f"INV/{fy_start.year % 100:02d}-{fy_end.year % 100:02d}/"
+        expected_nums = [f"{prefix}{str(i).zfill(4)}" for i in range(1, total_workers + 1)]
         self.assertEqual(sorted(results), expected_nums)
 
 if __name__ == "__main__":

@@ -20,7 +20,7 @@ class GSTR1B2BLine(SchemaBase):
     cess_amount: Decimal
     total_value: Decimal
 
-# GSTR-1 B2C Large (Unregistered Inter-state Sales > 2.5L)
+# GSTR-1 B2C Large (unregistered inter-state sales over the applicable limit)
 class GSTR1B2CLine(SchemaBase):
     invoice_number: str
     invoice_date: date
@@ -47,6 +47,7 @@ class GSTR1NoteLine(SchemaBase):
     note_type: str  # 'CREDIT' or 'DEBIT'
     invoice_number: Optional[str] = None
     customer_gstin: Optional[str] = None
+    pos_state_code: str
     reason: Optional[str] = None
     taxable_value: Decimal
     cgst_amount: Decimal

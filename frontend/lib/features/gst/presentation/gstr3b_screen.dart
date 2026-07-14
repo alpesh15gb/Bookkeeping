@@ -10,6 +10,8 @@ import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/download/download_service.dart';
+import 'package:apexbooks/core/services/notification_service.dart';
 import '../services/gst_service.dart';
 import '../models/gst_models.dart';
 
@@ -22,17 +24,17 @@ final _gstr3bPeriodProvider = StateProvider<String>((ref) {
   return '${now.year}-${now.month.toString().padLeft(2, '0')}';
 });
 
-final _gstr3bReportProvider =
-    FutureProvider.autoDispose<Gstr3BSummary>((ref) async {
+final _gstr3bReportProvider = FutureProvider.autoDispose<Gstr3BSummary>((
+  ref,
+) async {
   final period = ref.watch(_gstr3bPeriodProvider);
   final parts = period.split('-');
   final y = int.parse(parts[0]);
   final m = int.parse(parts[1]);
   final lastDay = _daysInMonth(y, m);
-  final res = await ref.read(gstServiceProvider).getGstr3b(
-        startDate: '$period-01',
-        endDate: '$period-$lastDay',
-      );
+  final res = await ref
+      .read(gstServiceProvider)
+      .getGstr3b(startDate: '$period-01', endDate: '$period-$lastDay');
   return switch (res) {
     Success(:final value) => value,
     Failure(:final error) => throw error,
@@ -60,6 +62,44 @@ class Gstr3bScreen extends ConsumerStatefulWidget {
 }
 
 class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
+  bool _downloading = false;
+
+  Future<void> _download(ExportKind kind) async {
+    if (_downloading) return;
+    setState(() => _downloading = true);
+    final period = ref.read(_gstr3bPeriodProvider);
+    final parts = period.split('-');
+    final days = _daysInMonth(int.parse(parts[0]), int.parse(parts[1]));
+    final result = await ref
+        .read(downloadServiceProvider)
+        .download(
+          relativeUrl: kind == ExportKind.pdf
+              ? '/gst/gstr3b/pdf'
+              : '/gst/gstr3b/export',
+          filename: 'GSTR3B_Working_${period}',
+          kind: kind,
+          queryParameters: {
+            'start_date': '$period-01',
+            'end_date': '$period-${days.toString().padLeft(2, '0')}',
+          },
+        );
+    if (!mounted) return;
+    setState(() => _downloading = false);
+    final notifications = ref.read(notificationServiceProvider);
+    switch (result) {
+      case Success(:final value):
+        notifications.success(
+          context,
+          'Saved to ${value.path}',
+          title: 'GSTR-3B downloaded',
+        );
+      case Failure(:final error):
+        notifications.error(context, error.message, title: 'Download failed');
+      default:
+        break;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final colors = apexColors(context);
@@ -72,7 +112,23 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
           PageHeader(
             title: 'GSTR-3B',
             subtitle: 'Monthly consolidated GST summary return.',
-            actions: [_periodSelector(colors)],
+            actions: [
+              OutlinedButton.icon(
+                onPressed: _downloading
+                    ? null
+                    : () => _download(ExportKind.excel),
+                icon: const Icon(Icons.download_outlined, size: 18),
+                label: const Text('Working Excel'),
+              ),
+              OutlinedButton.icon(
+                onPressed: _downloading
+                    ? null
+                    : () => _download(ExportKind.pdf),
+                icon: const Icon(Icons.picture_as_pdf_outlined, size: 18),
+                label: const Text('PDF'),
+              ),
+              _periodSelector(colors),
+            ],
           ),
           Expanded(
             child: asyncVal.when(
@@ -83,7 +139,10 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
               ),
               data: (report) => SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(
-                  ApexSpacing.xl, ApexSpacing.sm, ApexSpacing.xl, ApexSpacing.xxl,
+                  ApexSpacing.xl,
+                  ApexSpacing.sm,
+                  ApexSpacing.xl,
+                  ApexSpacing.xxl,
                 ),
                 child: Column(
                   children: [
@@ -114,8 +173,18 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
     final year = int.parse(parts[0]);
     final month = int.parse(parts[1]);
     const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
     ];
     return InkWell(
       onTap: _pickPeriod,
@@ -130,11 +199,19 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.calendar_month_rounded, size: 16, color: colors.textSecondary),
+            Icon(
+              Icons.calendar_month_rounded,
+              size: 16,
+              color: colors.textSecondary,
+            ),
             const SizedBox(width: 8),
             Text(
               '${months[month - 1]} $year',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.textPrimary),
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: colors.textPrimary,
+              ),
             ),
             const SizedBox(width: 4),
             Icon(Icons.unfold_more_rounded, size: 14, color: colors.textMuted),
@@ -174,7 +251,11 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
         children: [
           Text(
             'Table 3.1: Outward Supplies',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: colors.textPrimary),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
           ),
           const SizedBox(height: ApexSpacing.sm),
           Text(
@@ -183,11 +264,36 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
           ),
           const SizedBox(height: ApexSpacing.md),
           Divider(height: 1, color: colors.border),
-          _sectionHeader(['Nature of Supplies', 'Taxable Value', 'IGST', 'CGST', 'SGST', 'Cess'], colors),
+          _sectionHeader([
+            'Nature of Supplies',
+            'Taxable Value',
+            'IGST',
+            'CGST',
+            'SGST',
+            'Cess',
+          ], colors),
           Divider(height: 1, color: colors.border),
-          _dataRow(['(a) Outward taxable supplies', fmt.currency(out.taxableValue), fmt.currency(out.integratedTax), fmt.currency(out.centralTax), fmt.currency(out.stateUtTax), fmt.currency(out.cess)], colors),
+          _dataRow([
+            '(a) Outward taxable supplies',
+            fmt.currency(out.taxableValue),
+            fmt.currency(out.integratedTax),
+            fmt.currency(out.centralTax),
+            fmt.currency(out.stateUtTax),
+            fmt.currency(out.cess),
+          ], colors),
           _dataRow(['(b) Zero rated', '—', '—', '—', '—', '—'], colors),
-          _dataRow(['(c) Nil rated / exempted', fmt.currency(nil.taxableValue), '—', '—', '—', '—'], colors, muted: true),
+          _dataRow(
+            [
+              '(c) Nil rated / exempted',
+              fmt.currency(nil.taxableValue),
+              '—',
+              '—',
+              '—',
+              '—',
+            ],
+            colors,
+            muted: true,
+          ),
           _dataRow(['(d) Reverse charge', '—', '—', '—', '—', '—'], colors),
           _dataRow(['(e) Non-GST', '—', '—', '—', '—', '—'], colors),
           Divider(height: 1, color: colors.border),
@@ -218,7 +324,11 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
         children: [
           Text(
             'Table 4: Input Tax Credit',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: colors.textPrimary),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
           ),
           const SizedBox(height: ApexSpacing.sm),
           Text(
@@ -227,16 +337,44 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
           ),
           const SizedBox(height: ApexSpacing.md),
           Divider(height: 1, color: colors.border),
-          _sectionHeader(['ITC Details', 'IGST', 'CGST', 'SGST', 'Cess'], colors),
+          _sectionHeader([
+            'ITC Details',
+            'IGST',
+            'CGST',
+            'SGST',
+            'Cess',
+          ], colors),
           Divider(height: 1, color: colors.border),
           _groupHeader('(A) ITC Available', colors),
-          _dataRow(['  (1) Import of goods', '—', '—', '—', '—'], colors, muted: true),
-          _dataRow(['  (2) Import of services', '—', '—', '—', '—'], colors, muted: true),
-          _dataRow(['  (3) Reverse charge', '—', '—', '—', '—'], colors, muted: true),
+          _dataRow(
+            ['  (1) Import of goods', '—', '—', '—', '—'],
+            colors,
+            muted: true,
+          ),
+          _dataRow(
+            ['  (2) Import of services', '—', '—', '—', '—'],
+            colors,
+            muted: true,
+          ),
+          _dataRow(
+            ['  (3) Reverse charge', '—', '—', '—', '—'],
+            colors,
+            muted: true,
+          ),
           _dataRow(['  (4) ISD', '—', '—', '—', '—'], colors, muted: true),
-          _dataRow(['  (5) All other ITC', fmt.currency(itc.integratedTax), fmt.currency(itc.centralTax), fmt.currency(itc.stateUtTax), fmt.currency(itc.cess)], colors),
+          _dataRow([
+            '  (5) All other ITC',
+            fmt.currency(itc.integratedTax),
+            fmt.currency(itc.centralTax),
+            fmt.currency(itc.stateUtTax),
+            fmt.currency(itc.cess),
+          ], colors),
           _groupHeader('(B) ITC Reversed', colors),
-          _dataRow(['  (1) As per rules', '—', '—', '—', '—'], colors, muted: true),
+          _dataRow(
+            ['  (1) As per rules', '—', '—', '—', '—'],
+            colors,
+            muted: true,
+          ),
           _dataRow(['  (2) Others', '—', '—', '—', '—'], colors, muted: true),
           Divider(height: 1, color: colors.border),
           _totalRow([
@@ -266,17 +404,30 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.account_balance_rounded, size: 18, color: colors.primary),
+              Icon(
+                Icons.account_balance_rounded,
+                size: 18,
+                color: colors.primary,
+              ),
               const SizedBox(width: 8),
               Text(
                 'Net Tax Payable',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: colors.textPrimary),
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                ),
               ),
             ],
           ),
           const SizedBox(height: ApexSpacing.md),
           Divider(height: 1, color: colors.border),
-          _sectionHeader(['Tax Head', 'Output Tax', 'ITC Claimed', 'Net Payable'], colors),
+          _sectionHeader([
+            'Tax Head',
+            'Output Tax',
+            'ITC Claimed',
+            'Net Payable',
+          ], colors),
           Divider(height: 1, color: colors.border),
           _dataRow([
             'IGST',
@@ -305,8 +456,12 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
           Divider(height: 1, color: colors.border),
           _totalRow([
             'Total',
-            fmt.currency(out.integratedTax + out.centralTax + out.stateUtTax + out.cess),
-            fmt.currency(itc.integratedTax + itc.centralTax + itc.stateUtTax + itc.cess),
+            fmt.currency(
+              out.integratedTax + out.centralTax + out.stateUtTax + out.cess,
+            ),
+            fmt.currency(
+              itc.integratedTax + itc.centralTax + itc.stateUtTax + itc.cess,
+            ),
             fmt.currency(report.netTaxPayable),
           ], colors),
         ],
@@ -334,11 +489,15 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
               children: [
                 Text(
                   'Filing Due Date',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: colors.textPrimary),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  'GSTR-3B is due on the 20th of the following month.',
+                  'Review the GST portal for the applicable monthly/QRMP due date. Verify this working against portal-generated GSTR-2B before filing.',
                   style: TextStyle(fontSize: 12, color: colors.textMuted),
                 ),
               ],
@@ -353,7 +512,11 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
             ),
             child: Text(
               report.gstin ?? 'No GSTIN',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: colors.textSecondary),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: colors.textSecondary,
+              ),
             ),
           ),
         ],
@@ -369,13 +532,22 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
       child: Row(
-        children: cells.map((c) => Expanded(
-          child: Text(
-            c.toUpperCase(),
-            style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 0.3, color: colors.textMuted),
-            textAlign: _align(cells.indexOf(c), cells.length),
-          ),
-        )).toList(),
+        children: cells
+            .map(
+              (c) => Expanded(
+                child: Text(
+                  c.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.3,
+                    color: colors.textMuted,
+                  ),
+                  textAlign: _align(cells.indexOf(c), cells.length),
+                ),
+              ),
+            )
+            .toList(),
       ),
     );
   }
@@ -383,13 +555,19 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
   Widget _groupHeader(String label, ApexColors colors) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: colors.border))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.border)),
+      ),
       child: Row(
         children: [
           Expanded(
             child: Text(
               label,
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: colors.textPrimary),
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: colors.textPrimary,
+              ),
             ),
           ),
         ],
@@ -461,7 +639,12 @@ class _Gstr3bLoading extends StatelessWidget {
     final colors = apexColors(context);
     return ShimmerSkeleton(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, ApexSpacing.sm, ApexSpacing.xl, ApexSpacing.xxl),
+        padding: const EdgeInsets.fromLTRB(
+          ApexSpacing.xl,
+          ApexSpacing.sm,
+          ApexSpacing.xl,
+          ApexSpacing.xxl,
+        ),
         child: Column(
           children: [
             for (int c = 0; c < 3; c++) ...[
@@ -472,17 +655,23 @@ class _Gstr3bLoading extends StatelessWidget {
                   borderRadius: BorderRadius.circular(ApexRadius.lg),
                 ),
                 child: Column(
-                  children: List.generate(5, (_) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      children: List.generate(3, (i) => Expanded(
-                        child: Padding(
-                          padding: EdgeInsets.only(left: i == 0 ? 0 : 12),
-                          child: SkeletonBox(height: 14),
+                  children: List.generate(
+                    5,
+                    (_) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: List.generate(
+                          3,
+                          (i) => Expanded(
+                            child: Padding(
+                              padding: EdgeInsets.only(left: i == 0 ? 0 : 12),
+                              child: SkeletonBox(height: 14),
+                            ),
+                          ),
                         ),
-                      )),
+                      ),
                     ),
-                  )),
+                  ),
                 ),
               ),
               const SizedBox(height: ApexSpacing.lg),

@@ -18,7 +18,7 @@ class CompanyCreate(BaseModel):
     trade_name: Optional[str] = Field(None, max_length=150)
     gstin: Optional[str] = Field(None, pattern="^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
     pan: Optional[str] = Field(None, pattern="^[A-Z]{5}[0-9]{4}[A-Z]{1}$")
-    tax_mode: Optional[str] = Field("NON_GST", pattern="^(NON_GST|GST_REGULAR|GST_COMPOSITION)$")
+    tax_mode: Optional[str] = Field(None, pattern="^(NON_GST|GST_REGULAR|GST_COMPOSITION)$")
     financial_year_start: Optional[date] = None
 
 class CompanyUpdate(BaseModel):

@@ -4,6 +4,75 @@ library;
 
 import 'package:flutter/foundation.dart';
 
+double _gstDouble(Object? value) => switch (value) {
+  num n => n.toDouble(),
+  String s => double.tryParse(s) ?? 0,
+  _ => 0,
+};
+
+@immutable
+class Gstr2PurchaseLine {
+  const Gstr2PurchaseLine({
+    required this.vendorName,
+    required this.vendorGstin,
+    required this.billNumber,
+    required this.billDate,
+    required this.taxableValue,
+    required this.cgstAmount,
+    required this.sgstAmount,
+    required this.igstAmount,
+    required this.totalValue,
+  });
+
+  factory Gstr2PurchaseLine.fromJson(Map<String, dynamic> json) =>
+      Gstr2PurchaseLine(
+        vendorName: (json['vendor_name'] ?? '').toString(),
+        vendorGstin: (json['vendor_gstin'] ?? 'Unregistered').toString(),
+        billNumber: (json['bill_number'] ?? '').toString(),
+        billDate: (json['bill_date'] ?? '').toString(),
+        taxableValue: _gstDouble(json['taxable_value']),
+        cgstAmount: _gstDouble(json['cgst_amount']),
+        sgstAmount:
+            _gstDouble(json['sgst_amount']) + _gstDouble(json['utgst_amount']),
+        igstAmount: _gstDouble(json['igst_amount']),
+        totalValue: _gstDouble(json['total_value']),
+      );
+
+  final String vendorName;
+  final String vendorGstin;
+  final String billNumber;
+  final String billDate;
+  final double taxableValue;
+  final double cgstAmount;
+  final double sgstAmount;
+  final double igstAmount;
+  final double totalValue;
+}
+
+@immutable
+class Gstr2Summary {
+  const Gstr2Summary({required this.registered, required this.unregistered});
+
+  factory Gstr2Summary.fromJson(Map<String, dynamic> json) => Gstr2Summary(
+    registered: ((json['b2b_purchases'] as List?) ?? const [])
+        .map(
+          (e) =>
+              Gstr2PurchaseLine.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
+        .toList(),
+    unregistered: ((json['b2bur_purchases'] as List?) ?? const [])
+        .map(
+          (e) =>
+              Gstr2PurchaseLine.fromJson(Map<String, dynamic>.from(e as Map)),
+        )
+        .toList(),
+  );
+
+  final List<Gstr2PurchaseLine> registered;
+  final List<Gstr2PurchaseLine> unregistered;
+  List<Gstr2PurchaseLine> get all => [...registered, ...unregistered];
+}
+
 // ---------------------------------------------------------------------------
 // GSTR-1 Detail Models (from /gst/gstr1 — gst_schemas)
 // ---------------------------------------------------------------------------
@@ -441,8 +510,18 @@ class GstReturn {
         final month = int.parse(parts[1]);
         final year = int.parse(parts[0]);
         const months = [
-          'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-          'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+          'Jan',
+          'Feb',
+          'Mar',
+          'Apr',
+          'May',
+          'Jun',
+          'Jul',
+          'Aug',
+          'Sep',
+          'Oct',
+          'Nov',
+          'Dec',
         ];
         return '${months[month - 1]} $year';
       }
@@ -482,8 +561,5 @@ String _dateStr(dynamic v) {
 
 List<T> _list<T>(dynamic jsonList, T Function(Map<String, dynamic>) fromJson) {
   if (jsonList is! List) return [];
-  return jsonList
-      .whereType<Map<String, dynamic>>()
-      .map(fromJson)
-      .toList();
+  return jsonList.whereType<Map<String, dynamic>>().map(fromJson).toList();
 }

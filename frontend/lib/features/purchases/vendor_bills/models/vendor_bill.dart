@@ -124,7 +124,7 @@ class VendorBill {
       isGstInclusive: json['is_gst_inclusive'] as bool? ?? false,
       lines:
           (json['lines'] as List?)
-              ?.whereType<Map>()
+              ?.whereType<Map<Object?, Object?>>()
               .map((e) => BillLine.fromJson(e.cast<String, dynamic>()))
               .toList() ??
           [],

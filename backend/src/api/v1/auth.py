@@ -125,8 +125,7 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
     db.flush() # Flushes to allocate user ID
 
     # 3. Create Tenant company record
-    from src.domains.company.services import is_valid_gstin, detect_tax_mode, derive_origin_state_code
-    has_valid_gstin = is_valid_gstin(payload.company_gstin)
+    from src.domains.company.services import detect_tax_mode
     tenant = Tenant(
         legal_name=payload.company_legal_name,
         trade_name=payload.company_legal_name,
@@ -146,47 +145,8 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
     )
     db.add(membership)
 
-    # Seed numbering series + default expense categories
-    from src.domains.company.services import NumberingSeriesService
-    from src.infrastructure.database.models import ExpenseCategory
-    from src.domains.accounting.services import AccountResolver
-    NumberingSeriesService.seed_all_defaults(db, tenant.id)
-
-    resolver = AccountResolver(db, tenant.id)
-    for cat_name, account_key in [
-        ("Tea & Refreshments", "expense.tea"),
-        ("Transport & Travel", "expense.transport"),
-        ("Rent", "expense.rent"),
-        ("Salary & Wages", "expense.salary"),
-        ("Office Supplies & Stationery", "expense.office"),
-        ("Telephone & Internet", "expense.telephone"),
-        ("Electricity & Utilities", "expense.electricity"),
-        ("Advertising & Marketing", "expense.advertising"),
-        ("Insurance", "expense.insurance"),
-        ("Professional Fees", "expense.professional"),
-        ("Repairs & Maintenance", "expense.repairs"),
-        ("Bank Charges", "expense.bank_charges"),
-        ("Depreciation", "expense.depreciation"),
-        ("Miscellaneous Expense", "expense.misc"),
-    ]:
-        linked_account_id = resolver.resolve(account_key)
-        db.add(ExpenseCategory(
-            tenant_id=tenant.id,
-            name=cat_name,
-            linked_account_id=linked_account_id,
-            is_active=True,
-        ))
-
-    # Create TenantSetting with origin_state_code derived from GSTIN prefix
-    from src.infrastructure.database.models import TenantSetting
-    setting = TenantSetting(
-        tenant_id=tenant.id,
-        currency="INR",
-        gst_enabled=has_valid_gstin,
-        e_invoicing_enabled=False,
-        origin_state_code=derive_origin_state_code(payload.company_gstin),
-    )
-    db.add(setting)
+    from src.domains.company.provisioning import provision_company_defaults
+    provision_company_defaults(db, tenant, user.id)
 
     _log_audit(db, "user.register", user_id=str(user.id), tenant_id=str(tenant.id), request=request)
     db.commit()

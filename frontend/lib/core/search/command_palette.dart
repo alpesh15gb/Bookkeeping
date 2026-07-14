@@ -9,6 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/masters/contacts/presentation/contact_form_screen.dart';
 import '../../features/masters/products/presentation/product_form_screen.dart';
 import '../../features/sales/presentation/invoice_form_screen.dart';
+import '../../features/sales/payments/presentation/payment_form_screen.dart';
+import '../../features/purchases/vendor_bills/presentation/bill_form_screen.dart';
+import '../../features/purchases/vendor_bills/presentation/bill_scan_screen.dart';
+import '../../features/expenses/expense_screen.dart';
 import '../config/feature_flags.dart';
 import '../theme/app_colors.dart';
 
@@ -42,6 +46,16 @@ class _CommandPaletteState extends State<CommandPalette> {
     _Command('New Invoice', 'sales/invoices/create', Icons.add_circle_outline),
     _Command('New Bill', 'purchases/bills/create', Icons.add_circle_outline),
     _Command(
+      'Scan Purchase Bill',
+      'purchases/bills/scan',
+      Icons.document_scanner_outlined,
+    ),
+    _Command(
+      'New Expense',
+      'expenses/create',
+      Icons.account_balance_wallet_outlined,
+    ),
+    _Command(
       'New Customer',
       'masters/customers/create',
       Icons.person_add_outlined,
@@ -56,8 +70,6 @@ class _CommandPaletteState extends State<CommandPalette> {
       'banking/payments/create',
       Icons.account_balance_outlined,
     ),
-    _Command('Reports', 'reports', Icons.analytics_outlined),
-    _Command('Settings', 'company/settings', Icons.settings_outlined),
   ];
 
   @override
@@ -113,8 +125,9 @@ class _CommandPaletteState extends State<CommandPalette> {
                       contentPadding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                     onSubmitted: (v) {
-                      if (filtered.isNotEmpty)
+                      if (filtered.isNotEmpty) {
                         _navigateTo(filtered.first.route);
+                      }
                     },
                   ),
                 ),
@@ -175,6 +188,26 @@ class _CommandPaletteState extends State<CommandPalette> {
         Navigator.of(
           context,
         ).push(MaterialPageRoute(builder: (_) => const ProductFormScreen()));
+        break;
+      case 'purchases/bills/create':
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const BillFormScreen()));
+        break;
+      case 'purchases/bills/scan':
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const BillScanScreen()));
+        break;
+      case 'expenses/create':
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const ExpenseFormScreen()));
+        break;
+      case 'banking/payments/create':
+        Navigator.of(
+          context,
+        ).push(MaterialPageRoute(builder: (_) => const PaymentFormScreen()));
         break;
       // 'purchases/bills/create', 'banking/payments/create',
       // 'reports', and 'company/settings' don't have dedicated

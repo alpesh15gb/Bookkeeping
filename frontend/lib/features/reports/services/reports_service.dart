@@ -31,7 +31,7 @@ class ReportsService {
         throw const FormatException('Invalid sales register response.');
       }
       return rows
-          .whereType<Map>()
+          .whereType<Map<Object?, Object?>>()
           .map((e) => SalesTransaction.fromJson(e.cast<String, dynamic>()))
           .toList();
     });

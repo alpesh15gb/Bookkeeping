@@ -2,6 +2,7 @@ import uuid
 import re
 import base64
 from typing import Optional
+from datetime import date, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from fastapi import HTTPException
@@ -33,7 +34,42 @@ def decrypt_credential(val: str) -> str:
         logging.getLogger(__name__).warning("Failed to decrypt credential — possible key mismatch or corrupted data")
         return None
 
+
+def indian_financial_year(on_date: date) -> tuple[date, date, str]:
+    """Return the statutory April-March financial year containing ``on_date``."""
+    start_year = on_date.year if on_date.month >= 4 else on_date.year - 1
+    start = date(start_year, 4, 1)
+    end = date(start_year + 1, 3, 31)
+    return start, end, f"{start_year}-{(start_year + 1) % 100:02d}"
+
+
 class NumberingSeriesService:
+    _PREFIXES = {
+        "INVOICE": "INV",
+        "BILL": "BILL",
+        "PAYMENT": "PAY",
+        "JOURNAL": "JV",
+        "RECEIPT": "REC",
+        "DISBURSEMENT": "PAY",
+        "CREDIT_NOTE": "CN",
+        "DEBIT_NOTE": "DN",
+        "PURCHASE_ORDER": "PO",
+        "SALES_ORDER": "SO",
+        "DELIVERY_CHALLAN": "DC",
+        "PROFORMA_INVOICE": "PI",
+        "SALES_RETURN": "SR",
+        "PURCHASE_RETURN": "PR",
+        "TRANSFER": "ST",
+    }
+
+    @staticmethod
+    def _financial_year_label(db: Session, tenant_id: uuid.UUID) -> str:
+        """Return the Indian FY label used in human-readable document numbers."""
+        tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+        start = tenant.financial_year_start if tenant and tenant.financial_year_start else indian_financial_year(date.today())[0]
+        end = date(start.year + 1, start.month, start.day) - timedelta(days=1)
+        return f"{start.year % 100:02d}-{end.year % 100:02d}"
+
     @staticmethod
     def generate_next_number(db: Session, tenant_id: uuid.UUID, document_type: str) -> str:
         """
@@ -73,21 +109,9 @@ class NumberingSeriesService:
 
     @staticmethod
     def seed_default_series(db: Session, tenant_id: uuid.UUID, document_type: str) -> NumberingSeries:
-        defaults = {
-            "INVOICE": ("INV/2026/", 1, 4),
-            "BILL": ("BILL/2026/", 1, 4),
-            "PAYMENT": ("PAY/2026/", 1, 4),
-            "JOURNAL": ("JV/2026/", 1, 4),
-            "RECEIPT": ("REC/2026/", 1, 4),
-            "DISBURSEMENT": ("PAY/2026/", 1, 4),
-            "CREDIT_NOTE": ("CN/2026/", 1, 4),
-            "DEBIT_NOTE": ("DN/2026/", 1, 4),
-            "PURCHASE_ORDER": ("PO/2026/", 1, 4),
-            "SALES_ORDER": ("SO/2026/", 1, 4),
-            "DELIVERY_CHALLAN": ("DC/2026/", 1, 4),
-            "PROFORMA_INVOICE": ("PI/2026/", 1, 4),
-        }
-        prefix, start_num, padding = defaults.get(document_type, (f"{document_type}-", 1, 4))
+        code = NumberingSeriesService._PREFIXES.get(document_type, document_type)
+        prefix = f"{code}/{NumberingSeriesService._financial_year_label(db, tenant_id)}/"
+        start_num, padding = 1, 4
 
         series = NumberingSeries(
             tenant_id=tenant_id,
@@ -110,6 +134,7 @@ class NumberingSeriesService:
             "PURCHASE_ORDER", "SALES_ORDER",
             "DELIVERY_CHALLAN", "PROFORMA_INVOICE",
             "SALES_RETURN", "PURCHASE_RETURN",
+            "TRANSFER",
         ]:
             exists = db.query(NumberingSeries).filter(
                 NumberingSeries.tenant_id == tenant_id,

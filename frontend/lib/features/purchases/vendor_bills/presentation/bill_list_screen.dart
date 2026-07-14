@@ -13,6 +13,7 @@ import '../services/vendor_bill_service.dart';
 import 'bill_detail_screen.dart';
 import 'bill_form_screen.dart';
 import 'bill_table_body.dart';
+import 'bill_scan_screen.dart';
 
 final billsListProvider = FutureProvider.autoDispose<List<VendorBillListItem>>((
   ref,
@@ -99,12 +100,20 @@ class _BillListScreenState extends ConsumerState<BillListScreen> {
             subtitle:
                 'Track vendor bills, purchase receipts, and accounts payable.',
             actions: [
+              OutlinedButton.icon(
+                onPressed: () async {
+                  final created = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(builder: (_) => const BillScanScreen()),
+                  );
+                  if (created == true) ref.invalidate(billsListProvider);
+                },
+                icon: const Icon(Icons.document_scanner_outlined, size: 18),
+                label: const Text('Scan Bill'),
+              ),
               FilledButton.icon(
                 onPressed: () async {
                   await Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const BillFormScreen(),
-                    ),
+                    MaterialPageRoute(builder: (_) => const BillFormScreen()),
                   );
                   ref.invalidate(billsListProvider);
                 },

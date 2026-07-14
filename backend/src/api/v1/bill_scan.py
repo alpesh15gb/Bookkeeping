@@ -161,7 +161,7 @@ async def scan_preview(
     file: UploadFile = File(..., description="JPEG / PNG / PDF of the vendor invoice"),
     confidence: float = Form(default=0.3, ge=0.0, le=1.0),
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("bill:create")),
 ):
     """
     Submit a vendor invoice for async OCR processing.
@@ -208,7 +208,7 @@ async def scan_preview(
 async def scan_status(
     job_id: str,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("bill:create")),
 ):
     """Poll for OCR scan results. Returns status + preview data when done."""
     import redis as redis_lib
@@ -262,6 +262,11 @@ def _build_preview_response(ocr: dict, db: Session, tenant_id: uuid.UUID) -> dic
         preview_lines.append({
             "product_id": str(existing_product.id) if existing_product else None,
             "product_name": desc,
+            "product_type": (
+                existing_product.product_type
+                if existing_product
+                else ("SERVICE" if hsn.startswith("99") else "GOODS")
+            ),
             "hsn_sac": hsn,
             "quantity": line.get("quantity", 1),
             "rate": line.get("rate", 0.0),
@@ -279,7 +284,11 @@ def _build_preview_response(ocr: dict, db: Session, tenant_id: uuid.UUID) -> dic
             "id": str(existing_vendor.id) if existing_vendor else None,
             "name": existing_vendor.name if existing_vendor else vendor_name,
             "gstin": existing_vendor.gstin if existing_vendor else vendor_gstin,
-            "address": existing_vendor.address_line1 if existing_vendor else vendor_address,
+            "address": (
+                (existing_vendor.billing_address or {}).get("street", "")
+                if existing_vendor else vendor_address
+            ),
+            "state_code": existing_vendor.state_code if existing_vendor else None,
             "exists": existing_vendor is not None,
         },
         "bill_number": ocr.get("bill_number"),
@@ -308,7 +317,7 @@ def scan_save(
     payload: dict,
     request: Request,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("bill:create")),
 ):
     """
     Takes the user-edited payload from `scan-preview` and:
@@ -330,11 +339,15 @@ def scan_save(
         raise HTTPException(status_code=400, detail="Vendor name is required.")
 
     # ── Resolve / create vendor ────────────────────────────────────────────
-    contact_id = vendor_data.get("contact_id")
+    contact_id = vendor_data.get("contact_id") or vendor_data.get("id")
     if contact_id:
         # Validate it exists
+        try:
+            parsed_contact_id = uuid.UUID(str(contact_id))
+        except (TypeError, ValueError, AttributeError):
+            raise HTTPException(status_code=422, detail="Selected vendor ID is invalid.")
         existing = db.query(Contact).filter(
-            Contact.id == uuid.UUID(str(contact_id)),
+            Contact.id == parsed_contact_id,
             Contact.tenant_id == tenant_id,
             Contact.deleted_at == None,
         ).first()
@@ -343,8 +356,7 @@ def scan_save(
         else:
             if existing.contact_type == "CUSTOMER":
                 existing.contact_type = "BOTH"
-                db.commit()
-                db.refresh(existing)
+                db.flush()
 
     if not contact_id:
         # Build address dict
@@ -369,8 +381,7 @@ def scan_save(
             is_active=True,
         )
         db.add(new_vendor)
-        db.commit()
-        db.refresh(new_vendor)
+        db.flush()
         contact_id = str(new_vendor.id)
 
         # Auto-create AP account
@@ -389,14 +400,24 @@ def scan_save(
         qty = Decimal(str(line.get("quantity", 1)))
         rate = Decimal(str(line.get("rate", 0)))
         gst_rate = Decimal(str(line.get("gst_rate", 0)))
+        product_type = str(line.get("product_type") or "GOODS").upper()
+        if product_type not in {"GOODS", "SERVICE"}:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Item type for '{desc or 'line item'}' must be GOODS or SERVICE.",
+            )
 
         if not desc:
             continue
 
         if product_id:
             # Validate it exists
+            try:
+                parsed_product_id = uuid.UUID(str(product_id))
+            except (TypeError, ValueError, AttributeError):
+                raise HTTPException(status_code=422, detail=f"Invalid product ID for '{desc}'.")
             existing = db.query(Product).filter(
-                Product.id == uuid.UUID(str(product_id)),
+                Product.id == parsed_product_id,
                 Product.tenant_id == tenant_id,
                 Product.deleted_at == None,
             ).first()
@@ -416,7 +437,7 @@ def scan_save(
             tenant_id=tenant_id,
             name=desc,
             hsn_sac=hsn,
-            product_type="GOODS",
+            product_type=product_type,
             uom="PCS",
             sales_price=Decimal("0.00"),
             purchase_price=rate,
@@ -427,8 +448,7 @@ def scan_save(
             is_active=True,
         )
         db.add(new_product)
-        db.commit()
-        db.refresh(new_product)
+        db.flush()
 
         db_lines.append({
             "product_id": str(new_product.id),
@@ -504,7 +524,7 @@ async def scan_bill_image(
     file: UploadFile = File(..., description="JPEG / PNG / PDF of the vendor invoice"),
     confidence: float = Form(default=0.3, ge=0.0, le=1.0,
                              description="Minimum confidence threshold (0–1)"),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("bill:create")),
 ):
     """
     Legacy endpoint — returns raw OCR fields without any DB interaction.

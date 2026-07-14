@@ -268,6 +268,7 @@ Widget buildToolbar(
   ApexColors colors,
   String display,
   VoidCallback onSearch,
+  VoidCallback onQuickCreate,
 ) {
   return Container(
     height: 56,
@@ -326,6 +327,12 @@ Widget buildToolbar(
               ),
             ),
           ),
+        ),
+        const SizedBox(width: 12),
+        FilledButton.icon(
+          onPressed: onQuickCreate,
+          icon: const Icon(Icons.add_rounded, size: 18),
+          label: const Text('Quick Create'),
         ),
         const SizedBox(width: ApexSpacing.lg),
         IconButton(
