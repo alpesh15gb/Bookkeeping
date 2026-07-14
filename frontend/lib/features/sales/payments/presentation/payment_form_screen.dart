@@ -6,6 +6,7 @@ import 'package:apexbooks/core/crud/base_crud.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
+import 'package:apexbooks/features/masters/shared/presentation/quick_create_dialogs.dart';
 import '../models/payment_enums.dart';
 import '../models/outstanding_invoice.dart';
 import 'payment_providers.dart';
@@ -73,6 +74,18 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
     if (payment != null && mounted) Navigator.pop(context, payment);
   }
 
+  Future<void> _createCustomer() async {
+    final created = await showQuickCreateParty(
+      context,
+      contactType: ContactType.customer,
+    );
+    if (created != null && mounted) {
+      await ref
+          .read(paymentFormProvider.notifier)
+          .selectCustomer(created.id, created.name);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(paymentFormProvider);
@@ -94,6 +107,8 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
         const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
         const SingleActivator(LogicalKeyboardKey.keyA, alt: true):
             notifier.autoAllocate,
+        const SingleActivator(LogicalKeyboardKey.keyC, alt: true):
+            _createCustomer,
       },
       child: Focus(
         autofocus: true,
@@ -136,15 +151,29 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                         labelText: 'Customer *',
                         prefixIcon: Icon(Icons.person_outline),
                       ),
-                      items: contacts
-                          .map(
-                            (c) => DropdownMenuItem(
-                              value: c.id,
-                              child: Text(c.name),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (id) {
+                      items: [
+                        ...contacts.map(
+                          (c) => DropdownMenuItem(
+                            value: c.id,
+                            child: Text(c.name),
+                          ),
+                        ),
+                        const DropdownMenuItem(
+                          value: '__create_customer__',
+                          child: Row(
+                            children: [
+                              Icon(Icons.person_add_alt_1_rounded, size: 18),
+                              SizedBox(width: 8),
+                              Text('New customer  Alt+C'),
+                            ],
+                          ),
+                        ),
+                      ],
+                      onChanged: (id) async {
+                        if (id == '__create_customer__') {
+                          await _createCustomer();
+                          return;
+                        }
                         final c = contacts.where((e) => e.id == id).firstOrNull;
                         if (c != null) notifier.selectCustomer(c.id, c.name);
                       },

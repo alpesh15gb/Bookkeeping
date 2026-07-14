@@ -11,6 +11,9 @@ import 'package:apexbooks/features/masters/contacts/presentation/contact_control
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
+import 'package:apexbooks/features/masters/shared/presentation/quick_create_dialogs.dart';
+import 'package:apexbooks/core/permissions/permission_gate.dart';
+import 'package:apexbooks/core/permissions/permissions_constants.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/crud/base_crud.dart';
 import '../models/bill_line.dart';
@@ -801,14 +804,49 @@ class _VendorField extends ConsumerWidget {
         if (selectedName.isNotEmpty && ctrl.text.isEmpty) {
           ctrl.text = selectedName;
         }
-        return TextField(
-          controller: ctrl,
-          focusNode: focusNode,
-          decoration: _dec(
-            colors,
-            hint: 'Search vendor or GSTIN…',
-            icon: Icons.storefront_outlined,
-          ),
+        Future<void> createParty() async {
+          final created = await showQuickCreateParty(
+            context,
+            contactType: ContactType.vendor,
+            initialName: ctrl.text,
+          );
+          if (created != null) {
+            ctrl.text = created.name;
+            onSelected(created);
+            focusNode.requestFocus();
+          }
+        }
+
+        final canCreate = ref.watch(
+          permissionProvider(Permissions.contactCreate),
+        );
+        return Row(
+          children: [
+            Expanded(
+              child: CallbackShortcuts(
+                bindings: {
+                  if (canCreate)
+                    const SingleActivator(LogicalKeyboardKey.keyC, alt: true):
+                        createParty,
+                },
+                child: TextField(
+                  controller: ctrl,
+                  focusNode: focusNode,
+                  decoration: _dec(
+                    colors,
+                    hint: 'Search vendor or GSTIN…',
+                    icon: Icons.storefront_outlined,
+                  ),
+                ),
+              ),
+            ),
+            if (canCreate)
+              IconButton(
+                tooltip: 'New vendor (Alt+C)',
+                onPressed: createParty,
+                icon: const Icon(Icons.person_add_alt_1_rounded),
+              ),
+          ],
         );
       },
       optionsViewBuilder: (context, onSel, options) => _optionsPanel<Contact>(
@@ -1258,27 +1296,62 @@ class _ProductField extends ConsumerWidget {
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
         if (current.isNotEmpty && ctrl.text.isEmpty) ctrl.text = current;
-        return TextField(
-          controller: ctrl,
-          focusNode: fn,
-          style: const TextStyle(fontSize: 13),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: 'Search item…',
-            prefixIcon: Icon(
-              Icons.inventory_2_outlined,
-              size: 16,
-              color: colors.textMuted,
+        Future<void> createItem() async {
+          final created = await showQuickCreateItem(
+            context,
+            initialName: ctrl.text,
+            purchaseContext: true,
+          );
+          if (created != null) {
+            ctrl.text = created.name;
+            onSelected(created);
+            fn.requestFocus();
+          }
+        }
+
+        final canCreate = ref.watch(
+          permissionProvider(Permissions.invoiceCreate),
+        );
+        return Row(
+          children: [
+            Expanded(
+              child: CallbackShortcuts(
+                bindings: {
+                  if (canCreate)
+                    const SingleActivator(LogicalKeyboardKey.keyC, alt: true):
+                        createItem,
+                },
+                child: TextField(
+                  controller: ctrl,
+                  focusNode: fn,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Search item…',
+                    prefixIcon: Icon(
+                      Icons.inventory_2_outlined,
+                      size: 16,
+                      color: colors.textMuted,
+                    ),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            prefixIconConstraints: const BoxConstraints(minWidth: 32),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 8,
-            ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
-            ),
-          ),
+            if (canCreate)
+              IconButton(
+                tooltip: 'New item (Alt+C)',
+                onPressed: createItem,
+                icon: const Icon(Icons.add_box_outlined),
+              ),
+          ],
         );
       },
       optionsViewBuilder: (context, onSel, options) => _optionsPanel<Product>(

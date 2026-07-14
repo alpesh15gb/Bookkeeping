@@ -9,6 +9,7 @@ import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
+import 'package:apexbooks/features/masters/shared/presentation/quick_create_dialogs.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/crud/base_crud.dart';
 import '../models/outstanding_bill.dart';
@@ -53,9 +54,7 @@ class _VendorPaymentFormScreenState
 
   bool get _hasUnsavedChanges {
     final s = ref.read(vendorPaymentFormProvider);
-    return s.contactId != null ||
-        s.amount > 0 ||
-        s.paymentNumber.isNotEmpty;
+    return s.contactId != null || s.amount > 0 || s.paymentNumber.isNotEmpty;
   }
 
   Future<void> _save() async {
@@ -87,8 +86,9 @@ class _VendorPaymentFormScreenState
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -97,125 +97,125 @@ class _VendorPaymentFormScreenState
             }
           },
           child: Scaffold(
-          backgroundColor: colors.surfaceMuted,
-          appBar: AppBar(
-            backgroundColor: colors.surfaceRaised,
-            elevation: 0,
-            titleSpacing: 20,
-            title: Text(
-              'New Vendor Payment',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.border),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 16,
-                ),
-                child: FilledButton.icon(
-                  onPressed: state.saving ? null : _save,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: LoadingSpinner(size: 16),
-                        )
-                      : const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save payment'),
+            backgroundColor: colors.surfaceMuted,
+            appBar: AppBar(
+              backgroundColor: colors.surfaceRaised,
+              elevation: 0,
+              titleSpacing: 20,
+              title: Text(
+                'New Vendor Payment',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
                 ),
               ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (state.error != null)
-                Container(
-                  width: double.infinity,
-                  color: colors.danger.withValues(alpha: 0.1),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: colors.border),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
                     vertical: 10,
+                    horizontal: 16,
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 18,
-                        color: colors.danger,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          state.error!,
-                          style: TextStyle(
-                            color: colors.danger,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: FilledButton.icon(
+                    onPressed: state.saving ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save payment'),
                   ),
                 ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
+              ],
+            ),
+            body: Column(
+              children: [
+                if (state.error != null)
+                  Container(
+                    width: double.infinity,
+                    color: colors.danger.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    child: Row(
                       children: [
-                        _headerCard(state, notifier, colors, contacts),
-                        const SizedBox(height: 16),
-                        if (state.loadingBills)
-                          const Padding(
-                            padding: EdgeInsets.all(40),
-                            child: Center(child: LoadingSpinner(size: 30)),
-                          )
-                        else if (state.hasVendor)
-                          _allocationsCard(state, notifier, colors, fmt)
-                        else
-                          _Card(
-                            colors: colors,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline_rounded,
-                                  size: 18,
-                                  color: colors.textMuted,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Select a vendor to load their outstanding bills.',
-                                    style: TextStyle(
-                                      color: colors.textSecondary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: colors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              color: colors.danger,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1000),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          _headerCard(state, notifier, colors, contacts),
+                          const SizedBox(height: 16),
+                          if (state.loadingBills)
+                            const Padding(
+                              padding: EdgeInsets.all(40),
+                              child: Center(child: LoadingSpinner(size: 30)),
+                            )
+                          else if (state.hasVendor)
+                            _allocationsCard(state, notifier, colors, fmt)
+                          else
+                            _Card(
+                              colors: colors,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 18,
+                                    color: colors.textMuted,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Select a vendor to load their outstanding bills.',
+                                      style: TextStyle(
+                                        color: colors.textSecondary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              _summaryBar(state, colors, fmt),
-            ],
-          ),
+                _summaryBar(state, colors, fmt),
+              ],
+            ),
           ),
         ),
       ),
@@ -532,7 +532,10 @@ class _VendorPaymentFormScreenState
                           : const Icon(Icons.check_rounded, size: 18),
                       label: const Text('Save'),
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -569,7 +572,10 @@ class _VendorPaymentFormScreenState
                       : const Icon(Icons.check_rounded, size: 18),
                   label: const Text('Save  (Ctrl+S)'),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                   ),
                 ),
               ],
@@ -656,11 +662,7 @@ class _VendorPaymentFormScreenState
 }
 
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;
@@ -702,14 +704,44 @@ class _VendorField extends StatelessWidget {
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
         if (selectedName.isNotEmpty && ctrl.text.isEmpty)
           ctrl.text = selectedName;
-        return TextField(
-          controller: ctrl,
-          focusNode: focusNode,
-          decoration: _dec(
-            colors,
-            hint: 'Search vendor or GSTIN…',
-            icon: Icons.storefront_outlined,
-          ),
+        Future<void> createParty() async {
+          final created = await showQuickCreateParty(
+            context,
+            contactType: ContactType.vendor,
+            initialName: ctrl.text,
+          );
+          if (created != null) {
+            ctrl.text = created.name;
+            onSelected(created);
+            focusNode.requestFocus();
+          }
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.keyC, alt: true):
+                      createParty,
+                },
+                child: TextField(
+                  controller: ctrl,
+                  focusNode: focusNode,
+                  decoration: _dec(
+                    colors,
+                    hint: 'Search vendor or GSTIN…',
+                    icon: Icons.storefront_outlined,
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'New vendor (Alt+C)',
+              onPressed: createParty,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+            ),
+          ],
         );
       },
       optionsViewBuilder: (context, onSel, options) {

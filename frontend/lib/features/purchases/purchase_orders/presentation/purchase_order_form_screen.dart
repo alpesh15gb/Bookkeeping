@@ -11,6 +11,7 @@ import 'package:apexbooks/features/masters/contacts/presentation/contact_control
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
+import 'package:apexbooks/features/masters/shared/presentation/quick_create_dialogs.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/crud/base_crud.dart';
 import '../models/purchase_order_line.dart';
@@ -99,8 +100,9 @@ class _PurchaseOrderFormScreenState
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -109,96 +111,96 @@ class _PurchaseOrderFormScreenState
             }
           },
           child: Scaffold(
-          backgroundColor: colors.surfaceMuted,
-          appBar: AppBar(
-            backgroundColor: colors.surfaceRaised,
-            elevation: 0,
-            titleSpacing: 20,
-            title: Text(
-              'New Purchase Order',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.border),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 16,
-                ),
-                child: FilledButton.icon(
-                  onPressed: state.saving ? null : _save,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: LoadingSpinner(size: 16),
-                        )
-                      : const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save PO'),
+            backgroundColor: colors.surfaceMuted,
+            appBar: AppBar(
+              backgroundColor: colors.surfaceRaised,
+              elevation: 0,
+              titleSpacing: 20,
+              title: Text(
+                'New Purchase Order',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
                 ),
               ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (state.error != null)
-                Container(
-                  width: double.infinity,
-                  color: colors.danger.withValues(alpha: 0.1),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: colors.border),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
                     vertical: 10,
+                    horizontal: 16,
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 18,
-                        color: colors.danger,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          state.error!,
-                          style: TextStyle(
-                            color: colors.danger,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                  child: FilledButton.icon(
+                    onPressed: state.saving ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save PO'),
+                  ),
+                ),
+              ],
+            ),
+            body: Column(
+              children: [
+                if (state.error != null)
+                  Container(
+                    width: double.infinity,
+                    color: colors.danger.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: colors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              color: colors.danger,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1200),
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        _headerCard(state, notifier, colors, contacts),
-                        const SizedBox(height: 16),
-                        _linesCard(state, notifier, colors, fmt, products),
                       ],
                     ),
                   ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1200),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          _headerCard(state, notifier, colors, contacts),
+                          const SizedBox(height: 16),
+                          _linesCard(state, notifier, colors, fmt, products),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              _totalsBar(state, colors, fmt),
-            ],
-          ),
+                _totalsBar(state, colors, fmt),
+              ],
+            ),
           ),
         ),
       ),
@@ -416,7 +418,12 @@ class _PurchaseOrderFormScreenState
                       style: TextStyle(color: colors.textMuted, fontSize: 12),
                     ),
                     const Spacer(),
-                    _tot('Total', fmt.currency(state.total), colors, emphasize: true),
+                    _tot(
+                      'Total',
+                      fmt.currency(state.total),
+                      colors,
+                      emphasize: true,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -438,7 +445,10 @@ class _PurchaseOrderFormScreenState
                           : const Icon(Icons.check_rounded, size: 18),
                       label: const Text('Save'),
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -456,7 +466,12 @@ class _PurchaseOrderFormScreenState
                 _sep(colors),
                 _tot('Tax', fmt.currency(state.totalTax), colors),
                 _sep(colors),
-                _tot('Total', fmt.currency(state.total), colors, emphasize: true),
+                _tot(
+                  'Total',
+                  fmt.currency(state.total),
+                  colors,
+                  emphasize: true,
+                ),
                 const SizedBox(width: 24),
                 FilledButton.icon(
                   onPressed: state.saving ? null : _save,
@@ -469,7 +484,10 @@ class _PurchaseOrderFormScreenState
                       : const Icon(Icons.check_rounded, size: 18),
                   label: const Text('Save PO  (Ctrl+S)'),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                   ),
                 ),
               ],
@@ -548,11 +566,7 @@ class _PurchaseOrderFormScreenState
 }
 
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;
@@ -618,14 +632,44 @@ class _VendorField extends StatelessWidget {
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
         if (selectedName.isNotEmpty && ctrl.text.isEmpty)
           ctrl.text = selectedName;
-        return TextField(
-          controller: ctrl,
-          focusNode: focusNode,
-          decoration: _dec(
-            colors,
-            hint: 'Search vendor or GSTIN…',
-            icon: Icons.storefront_outlined,
-          ),
+        Future<void> createParty() async {
+          final created = await showQuickCreateParty(
+            context,
+            contactType: ContactType.vendor,
+            initialName: ctrl.text,
+          );
+          if (created != null) {
+            ctrl.text = created.name;
+            onSelected(created);
+            focusNode.requestFocus();
+          }
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.keyC, alt: true):
+                      createParty,
+                },
+                child: TextField(
+                  controller: ctrl,
+                  focusNode: focusNode,
+                  decoration: _dec(
+                    colors,
+                    hint: 'Search vendor or GSTIN…',
+                    icon: Icons.storefront_outlined,
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'New vendor (Alt+C)',
+              onPressed: createParty,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+            ),
+          ],
         );
       },
       optionsViewBuilder: (context, onSel, options) => _optionsPanel<Contact>(
@@ -750,33 +794,96 @@ class _LineRowState extends State<_LineRow> {
 
   Widget _buildDesktopLine(ApexColors c) {
     return Container(
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.border))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(children: [
-        Expanded(flex: 34, child: _ProductField(products: widget.products,
-          current: widget.line.productName ?? widget.line.description ?? '', colors: c, onSelected: widget.onProduct)),
-        const SizedBox(width: 8),
-        Expanded(flex: 12, child: Text(widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
-          style: TextStyle(fontSize: 13, color: c.textSecondary))),
-        const SizedBox(width: 8),
-        Expanded(flex: 10, child: _numField(_qty,
-          onChanged: (v) => widget.onChanged(widget.line.copyWith(quantity: double.tryParse(v) ?? 0)))),
-        const SizedBox(width: 8),
-        Expanded(flex: 14, child: _numField(_rate,
-          onChanged: (v) => widget.onChanged(widget.line.copyWith(rate: double.tryParse(v) ?? 0)))),
-        const SizedBox(width: 8),
-        Expanded(flex: 10, child: _numField(_disc,
-          onChanged: (v) => widget.onChanged(widget.line.copyWith(discount: double.tryParse(v) ?? 0)))),
-        const SizedBox(width: 8),
-        Expanded(flex: 10, child: Text('${_num(widget.line.gstRate)}%',
-          textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: c.textSecondary))),
-        const SizedBox(width: 8),
-        Expanded(flex: 14, child: Text(widget.fmt.currency(widget.line.total),
-          textAlign: TextAlign.right, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.textPrimary))),
-        SizedBox(width: 36, child: IconButton(visualDensity: VisualDensity.compact,
-          icon: Icon(Icons.close_rounded, size: 16, color: widget.canRemove ? c.textMuted : c.border),
-          onPressed: widget.canRemove ? widget.onRemove : null, tooltip: 'Remove line')),
-      ]),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 34,
+            child: _ProductField(
+              products: widget.products,
+              current: widget.line.productName ?? widget.line.description ?? '',
+              colors: c,
+              onSelected: widget.onProduct,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 12,
+            child: Text(
+              widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 10,
+            child: _numField(
+              _qty,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 14,
+            child: _numField(
+              _rate,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 10,
+            child: _numField(
+              _disc,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 10,
+            child: Text(
+              '${_num(widget.line.gstRate)}%',
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 14,
+            child: Text(
+              widget.fmt.currency(widget.line.total),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: c.textPrimary,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 36,
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: widget.canRemove ? c.textMuted : c.border,
+              ),
+              onPressed: widget.canRemove ? widget.onRemove : null,
+              tooltip: 'Remove line',
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -788,63 +895,174 @@ class _LineRowState extends State<_LineRow> {
         borderRadius: BorderRadius.circular(ApexRadius.lg),
         border: Border.all(color: c.border),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(color: c.surfaceMuted,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(ApexRadius.lg))),
-          child: Row(children: [
-            Expanded(child: Text(widget.line.productName ?? widget.line.description ?? 'Item',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                color: widget.line.productId.isNotEmpty ? c.textPrimary : c.textMuted),
-              maxLines: 1, overflow: TextOverflow.ellipsis)),
-            if (widget.canRemove)
-              IconButton(icon: Icon(Icons.close_rounded, size: 20, color: c.danger),
-                onPressed: widget.onRemove, padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36)),
-          ]),
-        ),
-        Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-          child: _ProductField(products: widget.products,
-            current: widget.line.productName ?? widget.line.description ?? '', colors: c, onSelected: widget.onProduct)),
-        Padding(padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-          child: Row(children: [
-            Expanded(child: _pMobileField(c, 'QTY', _qty,
-              onChanged: (v) => widget.onChanged(widget.line.copyWith(quantity: double.tryParse(v) ?? 0)))),
-            const SizedBox(width: 10),
-            Expanded(flex: 2, child: _pMobileField(c, 'RATE', _rate,
-              onChanged: (v) => widget.onChanged(widget.line.copyWith(rate: double.tryParse(v) ?? 0)))),
-            const SizedBox(width: 10),
-            Expanded(child: _pMobileField(c, 'DISC%', _disc,
-              onChanged: (v) => widget.onChanged(widget.line.copyWith(discount: double.tryParse(v) ?? 0)))),
-          ])),
-        Padding(padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-          child: Row(children: [
-            Text('GST ${widget.line.gstRate.toInt()}%',
-              style: TextStyle(fontSize: 12, color: c.textSecondary)),
-            const Spacer(),
-            Text(widget.fmt.currency(widget.line.total),
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.textPrimary)),
-          ])),
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: c.surfaceMuted,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(ApexRadius.lg),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.line.productName ??
+                        widget.line.description ??
+                        'Item',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: widget.line.productId.isNotEmpty
+                          ? c.textPrimary
+                          : c.textMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (widget.canRemove)
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, size: 20, color: c.danger),
+                    onPressed: widget.onRemove,
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+            child: _ProductField(
+              products: widget.products,
+              current: widget.line.productName ?? widget.line.description ?? '',
+              colors: c,
+              onSelected: widget.onProduct,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _pMobileField(
+                    c,
+                    'QTY',
+                    _qty,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: _pMobileField(
+                    c,
+                    'RATE',
+                    _rate,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _pMobileField(
+                    c,
+                    'DISC%',
+                    _disc,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            child: Row(
+              children: [
+                Text(
+                  'GST ${widget.line.gstRate.toInt()}%',
+                  style: TextStyle(fontSize: 12, color: c.textSecondary),
+                ),
+                const Spacer(),
+                Text(
+                  widget.fmt.currency(widget.line.total),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: c.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _pMobileField(ApexColors c, String label, TextEditingController ctrl, {required ValueChanged<String> onChanged}) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.textMuted, letterSpacing: 0.5)),
-      const SizedBox(height: 6),
-      TextField(controller: ctrl, textAlign: TextAlign.right,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary),
-        decoration: InputDecoration(isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.border)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.primary, width: 1.5)),
-          filled: true, fillColor: c.surfaceMuted),
-        onChanged: onChanged),
-    ]);
+  Widget _pMobileField(
+    ApexColors c,
+    String label,
+    TextEditingController ctrl, {
+    required ValueChanged<String> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: c.textMuted,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: ctrl,
+          textAlign: TextAlign.right,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: c.textPrimary,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.primary, width: 1.5),
+            ),
+            filled: true,
+            fillColor: c.surfaceMuted,
+          ),
+          onChanged: onChanged,
+        ),
+      ],
+    );
   }
 
   Widget _numField(
@@ -899,27 +1117,57 @@ class _ProductField extends StatelessWidget {
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
         if (current.isNotEmpty && ctrl.text.isEmpty) ctrl.text = current;
-        return TextField(
-          controller: ctrl,
-          focusNode: fn,
-          style: const TextStyle(fontSize: 13),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: 'Search item…',
-            prefixIcon: Icon(
-              Icons.inventory_2_outlined,
-              size: 16,
-              color: colors.textMuted,
+        Future<void> createItem() async {
+          final created = await showQuickCreateItem(
+            context,
+            initialName: ctrl.text,
+            purchaseContext: true,
+          );
+          if (created != null) {
+            ctrl.text = created.name;
+            onSelected(created);
+            fn.requestFocus();
+          }
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.keyC, alt: true):
+                      createItem,
+                },
+                child: TextField(
+                  controller: ctrl,
+                  focusNode: fn,
+                  style: const TextStyle(fontSize: 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Search item…',
+                    prefixIcon: Icon(
+                      Icons.inventory_2_outlined,
+                      size: 16,
+                      color: colors.textMuted,
+                    ),
+                    prefixIconConstraints: const BoxConstraints(minWidth: 32),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            prefixIconConstraints: const BoxConstraints(minWidth: 32),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 8,
+            IconButton(
+              tooltip: 'New item (Alt+C)',
+              onPressed: createItem,
+              icon: const Icon(Icons.add_box_outlined),
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
-            ),
-          ),
+          ],
         );
       },
       optionsViewBuilder: (context, onSel, options) => _optionsPanel<Product>(

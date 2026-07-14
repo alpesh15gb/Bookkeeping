@@ -66,7 +66,11 @@ def create_contact(
         gstin=normalized_gstin,
         pan=payload.pan,
         registration_type=payload.registration_type,
-        billing_address=payload.billing_address.model_dump(),
+        billing_address=(
+            payload.billing_address.model_dump()
+            if payload.billing_address
+            else None
+        ),
         shipping_address=payload.shipping_address.model_dump() if payload.shipping_address else None,
         state_code=payload.state_code,
         is_active=True
@@ -201,6 +205,27 @@ def create_product(
 ):
     if payload.product_type == "SERVICE" and payload.opening_stock != 0:
         raise HTTPException(status_code=422, detail="Services cannot have opening stock.")
+    normalized_name = payload.name.strip().lower()
+    existing = db.query(Product).filter(
+        Product.tenant_id == tenant_id,
+        func.lower(func.trim(Product.name)) == normalized_name,
+        Product.product_type == payload.product_type,
+        Product.hsn_sac == payload.hsn_sac,
+        Product.deleted_at == None,
+    ).first()
+    if existing:
+        return existing
+    if payload.sku:
+        existing_sku = db.query(Product.id).filter(
+            Product.tenant_id == tenant_id,
+            func.lower(Product.sku) == payload.sku.strip().lower(),
+            Product.deleted_at == None,
+        ).first()
+        if existing_sku:
+            raise HTTPException(
+                status_code=409,
+                detail="SKU is already assigned to another product.",
+            )
     if payload.barcode:
         duplicate = db.query(Product.id).filter(
             Product.tenant_id == tenant_id,

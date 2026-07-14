@@ -19,6 +19,7 @@ import 'package:apexbooks/features/masters/contacts/presentation/contact_control
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
+import 'package:apexbooks/features/masters/shared/presentation/quick_create_dialogs.dart';
 import 'package:apexbooks/features/sales/models/invoice_line.dart';
 
 // ---------------------------------------------------------------------------
@@ -925,16 +926,46 @@ class _CustomerField extends StatelessWidget {
         if (selectedName.isNotEmpty && ctrl.text.isEmpty) {
           ctrl.text = selectedName;
         }
-        return TextField(
-          controller: ctrl,
-          focusNode: focusNode,
-          style: TextStyle(fontSize: isMobile ? 15 : 14),
-          decoration: _dec(
-            colors,
-            hint: 'Search customer or GSTIN…',
-            icon: Icons.person_search_rounded,
-            isMobile: isMobile,
-          ),
+        Future<void> createParty() async {
+          final created = await showQuickCreateParty(
+            context,
+            contactType: ContactType.customer,
+            initialName: ctrl.text,
+          );
+          if (created != null) {
+            ctrl.text = created.name;
+            onSelected(created);
+            focusNode.requestFocus();
+          }
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.keyC, alt: true):
+                      createParty,
+                },
+                child: TextField(
+                  controller: ctrl,
+                  focusNode: focusNode,
+                  style: TextStyle(fontSize: isMobile ? 15 : 14),
+                  decoration: _dec(
+                    colors,
+                    hint: 'Search customer or GSTIN…',
+                    icon: Icons.person_search_rounded,
+                    isMobile: isMobile,
+                  ),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'New customer (Alt+C)',
+              onPressed: createParty,
+              icon: const Icon(Icons.person_add_alt_1_rounded),
+            ),
+          ],
         );
       },
       optionsViewBuilder: (context, onSelected, options) =>
@@ -1459,27 +1490,58 @@ class _ProductField extends StatelessWidget {
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
         if (current.isNotEmpty && ctrl.text.isEmpty) ctrl.text = current;
-        return TextField(
-          controller: ctrl,
-          focusNode: fn,
-          style: TextStyle(fontSize: isMobile ? 15 : 13),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: 'Search item…',
-            prefixIcon: Icon(
-              Icons.inventory_2_outlined,
-              size: isMobile ? 20 : 16,
-              color: colors.textMuted,
+        Future<void> createItem() async {
+          final created = await showQuickCreateItem(
+            context,
+            initialName: ctrl.text,
+          );
+          if (created != null) {
+            ctrl.text = created.name;
+            onSelected(created);
+            fn.requestFocus();
+          }
+        }
+
+        return Row(
+          children: [
+            Expanded(
+              child: CallbackShortcuts(
+                bindings: {
+                  const SingleActivator(LogicalKeyboardKey.keyC, alt: true):
+                      createItem,
+                },
+                child: TextField(
+                  controller: ctrl,
+                  focusNode: fn,
+                  style: TextStyle(fontSize: isMobile ? 15 : 13),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    hintText: 'Search item…',
+                    prefixIcon: Icon(
+                      Icons.inventory_2_outlined,
+                      size: isMobile ? 20 : 16,
+                      color: colors.textMuted,
+                    ),
+                    prefixIconConstraints: BoxConstraints(
+                      minWidth: isMobile ? 40 : 32,
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 8,
+                      vertical: isMobile ? 14 : 8,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    ),
+                  ),
+                ),
+              ),
             ),
-            prefixIconConstraints: BoxConstraints(minWidth: isMobile ? 40 : 32),
-            contentPadding: EdgeInsets.symmetric(
-              horizontal: isMobile ? 12 : 8,
-              vertical: isMobile ? 14 : 8,
+            IconButton(
+              tooltip: 'New item (Alt+C)',
+              onPressed: createItem,
+              icon: const Icon(Icons.add_box_outlined),
             ),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
-            ),
-          ),
+          ],
         );
       },
       optionsViewBuilder: (context, onSel, options) => _optionsPanel<Product>(
