@@ -14,7 +14,6 @@ import '../../../core/widgets/status_badge.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/result/result.dart';
 import '../data/models/series.dart';
-import '../data/settings_repository.dart';
 import 'settings_providers.dart';
 
 class SettingsInvoiceSeriesScreen extends ConsumerStatefulWidget {
@@ -39,7 +38,6 @@ class _SettingsInvoiceSeriesScreenState
     final paddingCtrl = TextEditingController(
       text: existing?.paddingDigits.toString() ?? '3',
     );
-    final descCtrl = TextEditingController(text: existing?.description ?? '');
     var selectedDocType = docTypeCtrl;
     var isActive = existing?.isActive ?? true;
 
@@ -51,7 +49,6 @@ class _SettingsInvoiceSeriesScreenState
         suffixController: suffixCtrl,
         nextNumberController: nextNumberCtrl,
         paddingController: paddingCtrl,
-        descriptionController: descCtrl,
         selectedDocType: selectedDocType,
         isActive: isActive,
         onDocTypeChanged: (v) => selectedDocType = v,
@@ -64,21 +61,18 @@ class _SettingsInvoiceSeriesScreenState
       suffixCtrl.dispose();
       nextNumberCtrl.dispose();
       paddingCtrl.dispose();
-      descCtrl.dispose();
       return;
     }
 
     setState(() => _isProcessing = true);
     final repo = ref.read(settingsRepositoryProvider);
     final data = <String, dynamic>{
-      'document_type': selectedDocType,
+      if (existing == null) 'document_type': selectedDocType,
       'prefix': prefixCtrl.text.trim(),
       'suffix': suffixCtrl.text.trim(),
       'next_number': int.tryParse(nextNumberCtrl.text.trim()) ?? 1,
       'padding_digits': int.tryParse(paddingCtrl.text.trim()) ?? 3,
-      'is_active': isActive,
-      if (descCtrl.text.trim().isNotEmpty)
-        'description': descCtrl.text.trim(),
+      if (existing != null) 'is_active': isActive,
     };
 
     final result = existing != null
@@ -90,25 +84,24 @@ class _SettingsInvoiceSeriesScreenState
     suffixCtrl.dispose();
     nextNumberCtrl.dispose();
     paddingCtrl.dispose();
-    descCtrl.dispose();
 
     if (!mounted) return;
     if (result is Success) {
       ref.invalidate(invoiceSeriesListProvider);
-      ref.read(notificationServiceProvider).success(
-        context,
-        existing != null
-            ? 'Series updated successfully.'
-            : 'New series created.',
-        title: existing != null ? 'Updated' : 'Created',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            existing != null
+                ? 'Series updated successfully.'
+                : 'New series created.',
+            title: existing != null ? 'Updated' : 'Created',
+          );
     } else {
       final err = (result as Failure).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Failed');
     }
   }
 
@@ -168,10 +161,12 @@ class _SettingsInvoiceSeriesScreenState
                   children: [
                     for (final key in sortedKeys) ...[
                       _buildGroupHeader(colors, key),
-                      ...grouped[key]!.map((s) => Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: _buildSeriesCard(colors, s),
-                      )),
+                      ...grouped[key]!.map(
+                        (s) => Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: _buildSeriesCard(colors, s),
+                        ),
+                      ),
                     ],
                   ],
                 ),
@@ -213,8 +208,7 @@ class _SettingsInvoiceSeriesScreenState
               child: Icon(
                 Icons.tag_rounded,
                 size: 22,
-                color:
-                    series.isActive ? colors.primary : colors.textMuted,
+                color: series.isActive ? colors.primary : colors.textMuted,
               ),
             ),
             const SizedBox(width: 14),
@@ -226,13 +220,10 @@ class _SettingsInvoiceSeriesScreenState
                     children: [
                       Text(
                         series.preview,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'monospace',
-                            ),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontFamily: 'monospace',
+                        ),
                       ),
                       const SizedBox(width: 8),
                       if (!series.isActive)
@@ -282,7 +273,6 @@ class _SeriesFormDialog extends StatefulWidget {
     required this.suffixController,
     required this.nextNumberController,
     required this.paddingController,
-    required this.descriptionController,
     required this.selectedDocType,
     required this.isActive,
     required this.onDocTypeChanged,
@@ -294,7 +284,6 @@ class _SeriesFormDialog extends StatefulWidget {
   final TextEditingController suffixController;
   final TextEditingController nextNumberController;
   final TextEditingController paddingController;
-  final TextEditingController descriptionController;
   final String selectedDocType;
   final bool isActive;
   final ValueChanged<String> onDocTypeChanged;
@@ -321,11 +310,7 @@ class _SeriesFormDialogState extends State<_SeriesFormDialog> {
     final isEdit = widget.existing != null;
 
     return AlertDialog(
-      icon: Icon(
-        Icons.tag_rounded,
-        size: 36,
-        color: colors.primary,
-      ),
+      icon: Icon(Icons.tag_rounded, size: 36, color: colors.primary),
       title: Text(isEdit ? 'Edit Series' : 'New Series'),
       content: SizedBox(
         width: double.maxFinite,
@@ -342,10 +327,8 @@ class _SeriesFormDialogState extends State<_SeriesFormDialog> {
                 ),
                 items: DocumentType.labels.entries
                     .map(
-                      (e) => DropdownMenuItem(
-                        value: e.key,
-                        child: Text(e.value),
-                      ),
+                      (e) =>
+                          DropdownMenuItem(value: e.key, child: Text(e.value)),
                     )
                     .toList(),
                 onChanged: isEdit
@@ -407,36 +390,24 @@ class _SeriesFormDialogState extends State<_SeriesFormDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              // Description
-              TextFormField(
-                controller: widget.descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  prefixIcon: Icon(Icons.notes_outlined),
-                ),
-                maxLines: 2,
-              ),
-              const SizedBox(height: 16),
-              // Active toggle
-              SwitchListTile(
-                title: const Text('Active'),
-                subtitle: Text(
-                  _isActive
-                      ? 'Series will be used for new documents'
-                      : 'Series is disabled',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: colors.textSecondary,
+              if (isEdit) ...[
+                const SizedBox(height: 16),
+                SwitchListTile(
+                  title: const Text('Active'),
+                  subtitle: Text(
+                    _isActive
+                        ? 'Series will be used for new documents'
+                        : 'Series is disabled',
+                    style: TextStyle(fontSize: 12, color: colors.textSecondary),
                   ),
+                  value: _isActive,
+                  contentPadding: EdgeInsets.zero,
+                  onChanged: (v) {
+                    setState(() => _isActive = v);
+                    widget.onActiveChanged(v);
+                  },
                 ),
-                value: _isActive,
-                contentPadding: EdgeInsets.zero,
-                onChanged: (v) {
-                  setState(() => _isActive = v);
-                  widget.onActiveChanged(v);
-                },
-              ),
+              ],
             ],
           ),
         ),

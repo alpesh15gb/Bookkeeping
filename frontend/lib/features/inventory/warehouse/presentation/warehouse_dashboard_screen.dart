@@ -109,29 +109,17 @@ class _WarehouseDashboardScreenState
                         : null,
                   ),
                   const SizedBox(height: 8),
-                  _warehouseGrid(
-                    warehouses,
-                    stockAsync,
-                    colors,
-                    fmt,
-                    isMobile,
-                  ),
+                  _warehouseGrid(warehouses, stockAsync, colors, fmt, isMobile),
                   const SizedBox(height: 24),
 
                   // ── Recent Transfers ──
-                  _SectionHeader(
-                    label: 'Recent Transfers',
-                    colors: colors,
-                  ),
+                  _SectionHeader(label: 'Recent Transfers', colors: colors),
                   const SizedBox(height: 8),
                   _recentTransfers(transfers, colors, fmt),
                   const SizedBox(height: 24),
 
                   // ── Recent Adjustments ──
-                  _SectionHeader(
-                    label: 'Recent Adjustments',
-                    colors: colors,
-                  ),
+                  _SectionHeader(label: 'Recent Adjustments', colors: colors),
                   const SizedBox(height: 8),
                   _recentAdjustments(adjustments, colors),
                   const SizedBox(height: 24),
@@ -202,10 +190,12 @@ class _WarehouseDashboardScreenState
         else
           Row(
             children: kpis
-                .map((k) => Padding(
-                      padding: const EdgeInsets.only(right: 12),
-                      child: Expanded(child: _kpiCard(k, c)),
-                    ))
+                .map(
+                  (k) => Padding(
+                    padding: const EdgeInsets.only(right: 12),
+                    child: Expanded(child: _kpiCard(k, c)),
+                  ),
+                )
                 .toList(),
           ),
       ],
@@ -242,10 +232,7 @@ class _WarehouseDashboardScreenState
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            kpi.label,
-            style: TextStyle(fontSize: 12, color: c.textMuted),
-          ),
+          Text(kpi.label, style: TextStyle(fontSize: 12, color: c.textMuted)),
         ],
       ),
     );
@@ -313,8 +300,7 @@ class _WarehouseDashboardScreenState
         final w = warehouses[i];
         final whStock = stockByWarehouse[w.id] ?? <StockBalance>[];
         final productCount = whStock.length;
-        final stockValue =
-            whStock.fold<double>(0, (a, b) => a + b.stockValue);
+        final stockValue = whStock.fold<double>(0, (a, b) => a + b.stockValue);
         final lowCount = whStock.where((s) => s.isLowStock).length;
 
         return InkWell(
@@ -322,8 +308,7 @@ class _WarehouseDashboardScreenState
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
-                builder: (_) =>
-                    WarehouseDetailScreen(warehouseId: w.id),
+                builder: (_) => WarehouseDetailScreen(warehouseId: w.id),
               ),
             );
           },
@@ -400,8 +385,7 @@ class _WarehouseDashboardScreenState
     );
   }
 
-  Widget _statChip(IconData icon, String text, ApexColors c,
-      {Color? color}) {
+  Widget _statChip(IconData icon, String text, ApexColors c, {Color? color}) {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -480,10 +464,7 @@ class _WarehouseDashboardScreenState
                       ),
                       Text(
                         '${t.fromWarehouseName} → ${t.toWarehouseName}',
-                        style: TextStyle(
-                          fontSize: 11.5,
-                          color: c.textMuted,
-                        ),
+                        style: TextStyle(fontSize: 11.5, color: c.textMuted),
                       ),
                     ],
                   ),
@@ -493,8 +474,8 @@ class _WarehouseDashboardScreenState
                   tone: t.isDraft
                       ? StatusTone.neutral
                       : t.isCompleted
-                          ? StatusTone.success
-                          : StatusTone.info,
+                      ? StatusTone.success
+                      : StatusTone.info,
                 ),
               ],
             ),
@@ -547,11 +528,7 @@ class _WarehouseDashboardScreenState
             ),
             child: Row(
               children: [
-                Icon(
-                  Icons.tune_rounded,
-                  size: 16,
-                  color: c.textSecondary,
-                ),
+                Icon(Icons.tune_rounded, size: 16, color: c.textSecondary),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(

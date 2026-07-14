@@ -22,89 +22,85 @@ final warehouseListProvider = FutureProvider.autoDispose<List<Warehouse>>((
 });
 
 /// Single warehouse detail.
-final warehouseDetailProvider =
-    FutureProvider.autoDispose.family<Warehouse, String>((ref, id) async {
-  final res = await ref.watch(warehouseServiceProvider).get(id);
-  return switch (res) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
-});
+final warehouseDetailProvider = FutureProvider.autoDispose
+    .family<Warehouse, String>((ref, id) async {
+      final res = await ref.watch(warehouseServiceProvider).get(id);
+      return switch (res) {
+        Success(:final value) => value,
+        Failure(:final error) => throw error,
+        _ => throw Exception(),
+      };
+    });
 
 /// Warehouse dashboard aggregated data.
 final warehouseDashboardProvider =
     FutureProvider.autoDispose<WarehouseDashboardData>((ref) async {
-  final warehousesAsync = ref.watch(warehouseListProvider);
-  final warehouses = warehousesAsync.valueOrNull ?? <Warehouse>[];
-  final stockAsync = ref.watch(stockBalancesProvider);
-  final stock = stockAsync.valueOrNull ?? <StockBalance>[];
+      final warehousesAsync = ref.watch(warehouseListProvider);
+      final warehouses = warehousesAsync.valueOrNull ?? <Warehouse>[];
+      final stockAsync = ref.watch(stockBalancesProvider);
+      final stock = stockAsync.valueOrNull ?? <StockBalance>[];
 
-  final totalStockValue =
-      stock.fold<double>(0, (a, b) => a + b.stockValue);
-  final lowStockCount = stock.where((s) => s.isLowStock).length;
-  final totalProducts = stock.where((s) => s.currentStock > 0).length;
+      final totalStockValue = stock.fold<double>(0, (a, b) => a + b.stockValue);
+      final lowStockCount = stock.where((s) => s.isLowStock).length;
+      final totalProducts = stock.where((s) => s.currentStock > 0).length;
 
-  return WarehouseDashboardData(
-    totalWarehouses: warehouses.length,
-    totalProducts: totalProducts,
-    totalStockValue: totalStockValue,
-    lowStockCount: lowStockCount,
-  );
-});
+      return WarehouseDashboardData(
+        totalWarehouses: warehouses.length,
+        totalProducts: totalProducts,
+        totalStockValue: totalStockValue,
+        lowStockCount: lowStockCount,
+      );
+    });
 
 /// Warehouse stock items derived from stock-ledger movements.
 final warehouseStockProvider = FutureProvider.autoDispose
     .family<List<WarehouseStockItem>, String>((ref, warehouseId) async {
-  final movementRes = await ref
-      .watch(movementServiceProvider)
-      .getAllMovements(warehouseId: warehouseId, limit: 500);
-  final movements = switch (movementRes) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
+      final movementRes = await ref
+          .watch(movementServiceProvider)
+          .getWarehouseMovementHistory(warehouseId);
+      final movements = switch (movementRes) {
+        Success(:final value) => value,
+        Failure(:final error) => throw error,
+        _ => throw Exception(),
+      };
 
-  // Aggregate movements by product to derive current stock.
-  final Map<String, _StockAccum> acc = {};
-  for (final m in movements) {
-    final a = acc.putIfAbsent(
-      m.productId,
-      () => _StockAccum(
-        productName: m.productName,
-        sku: m.sku,
-      ),
-    );
-    a.balance += m.quantity;
-    if (m.rate > 0) a.rate = m.rate;
-  }
+      // Aggregate movements by product to derive current stock.
+      final Map<String, _StockAccum> acc = {};
+      for (final m in movements) {
+        final a = acc.putIfAbsent(
+          m.productId,
+          () => _StockAccum(productName: m.productName, sku: m.sku),
+        );
+        a.balance += m.quantity;
+        if (m.rate > 0) a.rate = m.rate;
+      }
 
-  return acc.entries
-      .map(
-        (e) => WarehouseStockItem(
-          productId: e.key,
-          productName: e.value.productName,
-          sku: e.value.sku,
-          currentStock: e.value.balance,
-          unitCost: e.value.rate,
-        ),
-      )
-      .toList()
-    ..sort((a, b) => a.productName.compareTo(b.productName));
-});
+      return acc.entries
+          .map(
+            (e) => WarehouseStockItem(
+              productId: e.key,
+              productName: e.value.productName,
+              sku: e.value.sku,
+              currentStock: e.value.balance,
+              unitCost: e.value.rate,
+            ),
+          )
+          .toList()
+        ..sort((a, b) => a.productName.compareTo(b.productName));
+    });
 
 /// Recent stock movements for a specific warehouse.
 final warehouseMovementsProvider = FutureProvider.autoDispose
     .family<List<StockMovement>, String>((ref, warehouseId) async {
-  final res = await ref
-      .watch(movementServiceProvider)
-      .getAllMovements(warehouseId: warehouseId, limit: 50);
-  return switch (res) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
-});
+      final res = await ref
+          .watch(movementServiceProvider)
+          .getAllMovements(warehouseId: warehouseId, limit: 50);
+      return switch (res) {
+        Success(:final value) => value,
+        Failure(:final error) => throw error,
+        _ => throw Exception(),
+      };
+    });
 
 /// Internal accumulator for warehouse stock aggregation.
 class _StockAccum {

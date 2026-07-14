@@ -17,6 +17,8 @@ import '../models/bill_line.dart';
 import 'bill_form_notifier.dart';
 import 'bill_form_state.dart';
 import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
+import 'package:apexbooks/features/settings/presentation/settings_providers.dart';
+import 'package:apexbooks/core/result/result.dart';
 
 class BillFormScreen extends ConsumerStatefulWidget {
   const BillFormScreen({super.key});
@@ -33,7 +35,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
     Future.microtask(() {
       ref
           .read(contactControllerProvider.notifier)
-          .load(const ListQuery(limit: 100));
+          .load(const ListQuery(limit: 100, extra: {'contact_type': 'VENDOR'}));
       ref
           .read(productControllerProvider.notifier)
           .load(const ListQuery(limit: 100));
@@ -41,6 +43,16 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
       final n = ref.read(billFormProvider.notifier);
       n.setIssueDate(_fmtDate(now));
       n.setDueDate(_fmtDate(now.add(const Duration(days: 15))));
+      ref.read(settingsRepositoryProvider).getTenantSettings().then((result) {
+        final settings = result.dataOrNull;
+        if (settings != null && mounted) {
+          final terms = settings.extraSettings['terms']?.toString() ?? '';
+          if (terms.isNotEmpty &&
+              ref.read(billFormProvider).termsAndConditions == null) {
+            n.setTerms(terms);
+          }
+        }
+      });
       _vendorFocus.requestFocus();
     });
   }
@@ -106,8 +118,9 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -116,98 +129,105 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
             }
           },
           child: Scaffold(
-          backgroundColor: colors.surfaceMuted,
-          appBar: AppBar(
-            backgroundColor: colors.surfaceRaised,
-            elevation: 0,
-            titleSpacing: 20,
-            title: Text(
-              'New Vendor Bill',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.border),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 16,
-                ),
-                child: FilledButton.icon(
-                  onPressed: state.saving ? null : _save,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: LoadingSpinner(size: 16),
-                        )
-                      : const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save Bill'),
+            backgroundColor: colors.surfaceMuted,
+            appBar: AppBar(
+              backgroundColor: colors.surfaceRaised,
+              elevation: 0,
+              titleSpacing: 20,
+              title: Text(
+                'New Vendor Bill',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
                 ),
               ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (state.error != null)
-                Container(
-                  width: double.infinity,
-                  color: colors.danger.withValues(alpha: 0.1),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: colors.border),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
                     vertical: 10,
+                    horizontal: 16,
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 18,
-                        color: colors.danger,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          state.error!,
-                          style: TextStyle(
-                            color: colors.danger,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                  child: FilledButton.icon(
+                    onPressed: state.saving ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save Bill'),
+                  ),
+                ),
+              ],
+            ),
+            body: Column(
+              children: [
+                if (state.error != null)
+                  Container(
+                    width: double.infinity,
+                    color: colors.danger.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: colors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              color: colors.danger,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1200),
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        _headerCard(state, notifier, colors, contacts),
-                        const SizedBox(height: 16),
-                        _linesCard(state, notifier, colors, fmt, products, gstEnabled),
-                        const SizedBox(height: 16),
-                        _optionsCard(state, notifier, colors, gstEnabled),
                       ],
                     ),
                   ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1200),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          _headerCard(state, notifier, colors, contacts),
+                          const SizedBox(height: 16),
+                          _linesCard(
+                            state,
+                            notifier,
+                            colors,
+                            fmt,
+                            products,
+                            gstEnabled,
+                          ),
+                          const SizedBox(height: 16),
+                          _optionsCard(state, notifier, colors, gstEnabled),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              _totalsBar(state, colors, fmt, gstEnabled),
-            ],
-          ),
+                _totalsBar(state, colors, fmt, gstEnabled),
+              ],
+            ),
           ),
         ),
       ),
@@ -322,10 +342,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              SizedBox(
-                width: 420,
-                child: refNo,
-              ),
+              SizedBox(width: 420, child: refNo),
             ],
           );
         },
@@ -437,8 +454,9 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
                 child: _labeled(
                   'TDS Rate (%)',
                   TextField(
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                      decimal: true,
+                    ),
                     inputFormatters: [
                       FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
                     ],
@@ -526,8 +544,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
                   children: [
                     Text(
                       '${state.lines.where((l) => l.productId.isNotEmpty).length} item(s)',
-                      style:
-                          TextStyle(color: colors.textMuted, fontSize: 12),
+                      style: TextStyle(color: colors.textMuted, fontSize: 12),
                     ),
                     const Spacer(),
                     _tot(
@@ -608,11 +625,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
                   _tot('TDS', fmt.currency(state.tdsAmount), colors),
                   _sep(colors),
                 ],
-                _tot(
-                  'Total',
-                  fmt.currency(state.total),
-                  colors,
-                ),
+                _tot('Total', fmt.currency(state.total), colors),
                 _sep(colors),
                 _tot(
                   'Net Payable',
@@ -718,11 +731,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
 // ---------------------------------------------------------------------------
 
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;
@@ -755,7 +764,7 @@ class _HCell extends StatelessWidget {
   }
 }
 
-class _VendorField extends StatelessWidget {
+class _VendorField extends ConsumerWidget {
   const _VendorField({
     required this.focusNode,
     required this.contacts,
@@ -770,19 +779,22 @@ class _VendorField extends StatelessWidget {
   final void Function(Contact) onSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Autocomplete<Contact>(
       displayStringForOption: (c) => c.name,
-      optionsBuilder: (v) {
+      optionsBuilder: (v) async {
         final q = v.text.trim().toLowerCase();
         if (q.isEmpty) return contacts.take(8);
-        return contacts
-            .where(
-              (c) =>
-                  c.name.toLowerCase().contains(q) ||
-                  (c.gstin ?? '').toLowerCase().contains(q),
-            )
-            .take(12);
+        final result = await ref
+            .read(contactRepositoryProvider)
+            .list(
+              ListQuery(
+                search: q,
+                limit: 12,
+                extra: const {'contact_type': 'VENDOR'},
+              ),
+            );
+        return result.dataOrNull?.items ?? const <Contact>[];
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
@@ -897,11 +909,7 @@ class _BillLineRowState extends State<_BillLineRow> {
     _syncIfChanged(_disc, widget.line.discount, old.line.discount);
   }
 
-  void _syncIfChanged(
-    TextEditingController c,
-    double now,
-    double before,
-  ) {
+  void _syncIfChanged(TextEditingController c, double now, double before) {
     if (now != before && (double.tryParse(c.text) ?? 0) != now) {
       c.text = _num(now);
     }
@@ -932,99 +940,94 @@ class _BillLineRowState extends State<_BillLineRow> {
         border: Border(bottom: BorderSide(color: c.border)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(children: [
-        Expanded(
-          flex: 34,
-          child: _ProductField(
-            products: widget.products,
-            current: widget.line.productName ??
-                widget.line.description ??
-                '',
-            colors: c,
-            onSelected: widget.onProduct,
+      child: Row(
+        children: [
+          Expanded(
+            flex: 34,
+            child: _ProductField(
+              products: widget.products,
+              current: widget.line.productName ?? widget.line.description ?? '',
+              colors: c,
+              onSelected: widget.onProduct,
+            ),
           ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 12,
-          child: Text(
-            widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
-            style: TextStyle(fontSize: 13, color: c.textSecondary),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 10,
-          child: _numField(
-            _qty,
-            onChanged: (v) =>
-                widget.onChanged(
-                  widget.line.copyWith(
-                    quantity: double.tryParse(v) ?? 0,
-                  ),
-                ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 14,
-          child: _numField(
-            _rate,
-            onChanged: (v) =>
-                widget.onChanged(
-                  widget.line.copyWith(rate: double.tryParse(v) ?? 0),
-                ),
-          ),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 10,
-          child: _numField(
-            _disc,
-            onChanged: (v) =>
-                widget.onChanged(
-                  widget.line.copyWith(discount: double.tryParse(v) ?? 0),
-                ),
-          ),
-        ),
-        if (widget.gstEnabled) ...[
           const SizedBox(width: 8),
           Expanded(
-            flex: 10,
+            flex: 12,
             child: Text(
-              '${_num(widget.line.gstRate)}%',
-              textAlign: TextAlign.right,
+              widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
               style: TextStyle(fontSize: 13, color: c.textSecondary),
             ),
           ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 10,
+            child: _numField(
+              _qty,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 14,
+            child: _numField(
+              _rate,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 10,
+            child: _numField(
+              _disc,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
+          if (widget.gstEnabled) ...[
+            const SizedBox(width: 8),
+            Expanded(
+              flex: 10,
+              child: Text(
+                '${_num(widget.line.gstRate)}%',
+                textAlign: TextAlign.right,
+                style: TextStyle(fontSize: 13, color: c.textSecondary),
+              ),
+            ),
+          ],
+          const SizedBox(width: 8),
+          Expanded(
+            flex: 14,
+            child: Text(
+              widget.fmt.currency(widget.line.total),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: c.textPrimary,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 36,
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: widget.canRemove ? c.textMuted : c.border,
+              ),
+              onPressed: widget.canRemove ? widget.onRemove : null,
+              tooltip: 'Remove line',
+            ),
+          ),
         ],
-        const SizedBox(width: 8),
-        Expanded(
-          flex: 14,
-          child: Text(
-            widget.fmt.currency(widget.line.total),
-            textAlign: TextAlign.right,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: c.textPrimary,
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 36,
-          child: IconButton(
-            visualDensity: VisualDensity.compact,
-            icon: Icon(
-              Icons.close_rounded,
-              size: 16,
-              color: widget.canRemove ? c.textMuted : c.border,
-            ),
-            onPressed: widget.canRemove ? widget.onRemove : null,
-            tooltip: 'Remove line',
-          ),
-        ),
-      ]),
+      ),
     );
   }
 
@@ -1047,111 +1050,106 @@ class _BillLineRowState extends State<_BillLineRow> {
                 top: Radius.circular(ApexRadius.lg),
               ),
             ),
-            child: Row(children: [
-              Expanded(
-                child: Text(
-                  widget.line.productName ??
-                      widget.line.description ??
-                      'Item',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: widget.line.productId.isNotEmpty
-                        ? c.textPrimary
-                        : c.textMuted,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (widget.canRemove)
-                IconButton(
-                  icon: Icon(Icons.close_rounded, size: 20, color: c.danger),
-                  onPressed: widget.onRemove,
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(
-                    minWidth: 36,
-                    minHeight: 36,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.line.productName ??
+                        widget.line.description ??
+                        'Item',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: widget.line.productId.isNotEmpty
+                          ? c.textPrimary
+                          : c.textMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-            ]),
+                if (widget.canRemove)
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, size: 20, color: c.danger),
+                    onPressed: widget.onRemove,
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                  ),
+              ],
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: _ProductField(
               products: widget.products,
-              current: widget.line.productName ??
-                  widget.line.description ??
-                  '',
+              current: widget.line.productName ?? widget.line.description ?? '',
               colors: c,
               onSelected: widget.onProduct,
             ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: Row(children: [
-              Expanded(
-                child: _pMobileField(
-                  c,
-                  'QTY',
-                  _qty,
-                  onChanged: (v) =>
-                      widget.onChanged(
-                        widget.line.copyWith(
-                          quantity: double.tryParse(v) ?? 0,
-                        ),
-                      ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _pMobileField(
+                    c,
+                    'QTY',
+                    _qty,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                flex: 2,
-                child: _pMobileField(
-                  c,
-                  'RATE',
-                  _rate,
-                  onChanged: (v) =>
-                      widget.onChanged(
-                        widget.line.copyWith(
-                          rate: double.tryParse(v) ?? 0,
-                        ),
-                      ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: _pMobileField(
+                    c,
+                    'RATE',
+                    _rate,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: _pMobileField(
-                  c,
-                  'DISC%',
-                  _disc,
-                  onChanged: (v) =>
-                      widget.onChanged(
-                        widget.line.copyWith(
-                          discount: double.tryParse(v) ?? 0,
-                        ),
-                      ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _pMobileField(
+                    c,
+                    'DISC%',
+                    _disc,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+                    ),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
           ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-            child: Row(children: [
-              if (widget.gstEnabled)
+            child: Row(
+              children: [
+                if (widget.gstEnabled)
+                  Text(
+                    'GST ${widget.line.gstRate.toInt()}%',
+                    style: TextStyle(fontSize: 12, color: c.textSecondary),
+                  ),
+                const Spacer(),
                 Text(
-                  'GST ${widget.line.gstRate.toInt()}%',
-                  style: TextStyle(fontSize: 12, color: c.textSecondary),
+                  widget.fmt.currency(widget.line.total),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: c.textPrimary,
+                  ),
                 ),
-              const Spacer(),
-              Text(
-                widget.fmt.currency(widget.line.total),
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w800,
-                  color: c.textPrimary,
-                ),
-              ),
-            ]),
+              ],
+            ),
           ),
         ],
       ),
@@ -1220,9 +1218,7 @@ class _BillLineRowState extends State<_BillLineRow> {
       controller: ctrl,
       textAlign: TextAlign.right,
       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-      inputFormatters: [
-        FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
-      ],
+      inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
       style: const TextStyle(fontSize: 13),
       decoration: InputDecoration(
         isDense: true,
@@ -1236,7 +1232,7 @@ class _BillLineRowState extends State<_BillLineRow> {
   }
 }
 
-class _ProductField extends StatelessWidget {
+class _ProductField extends ConsumerWidget {
   const _ProductField({
     required this.products,
     required this.current,
@@ -1248,20 +1244,16 @@ class _ProductField extends StatelessWidget {
   final ApexColors colors;
   final void Function(Product) onSelected;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     return Autocomplete<Product>(
       displayStringForOption: (p) => p.name,
-      optionsBuilder: (v) {
+      optionsBuilder: (v) async {
         final q = v.text.trim().toLowerCase();
         if (q.isEmpty) return products.take(8);
-        return products
-            .where(
-              (p) =>
-                  p.name.toLowerCase().contains(q) ||
-                  (p.sku ?? '').toLowerCase().contains(q) ||
-                  p.hsnSac.toLowerCase().contains(q),
-            )
-            .take(12);
+        final result = await ref
+            .read(productRepositoryProvider)
+            .list(ListQuery(search: q, limit: 12));
+        return result.dataOrNull?.items ?? const <Product>[];
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
@@ -1296,7 +1288,7 @@ class _ProductField extends StatelessWidget {
         onSel,
         (p) => p.name,
         (p) =>
-            '${p.sku ?? ''}  ·  ${p.hsnSac}  ·  GST ${p.gstRate.toInt()}%',
+            '${p.sku ?? ''}${p.barcode == null ? '' : '  ·  ${p.barcode}'}  ·  ${p.hsnSac}  ·  GST ${p.gstRate.toInt()}%',
       ),
     );
   }

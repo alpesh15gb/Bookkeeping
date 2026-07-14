@@ -8,7 +8,17 @@ enum MovementReferenceType {
   transfer('TRANSFER'),
   opening('OPENING'),
   salesReturn('SALES_RETURN'),
-  purchaseReturn('PURCHASE_RETURN');
+  purchaseReturn('PURCHASE_RETURN'),
+  creditNote('CREDIT_NOTE'),
+  deliveryChallan('DELIVERY_CHALLAN'),
+  invoiceReversal('INVOICE_REVERSAL'),
+  billReversal('BILL_REVERSAL'),
+  adjustmentReversal('INVENTORY_ADJUSTMENT_REVERSAL'),
+  salesReturnReversal('SALES_RETURN_REVERSAL'),
+  purchaseReturnReversal('PURCHASE_RETURN_REVERSAL'),
+  creditNoteReversal('CREDIT_NOTE_REVERSAL'),
+  deliveryChallanReversal('DELIVERY_CHALLAN_REVERSAL'),
+  migrationReconcile('MIGRATION_RECONCILE');
 
   const MovementReferenceType(this.value);
   final String value;
@@ -41,6 +51,7 @@ class StockMovement {
     this.referenceId,
     this.rate = 0,
     this.warehouseId,
+    this.warehouseName,
     this.createdAt,
     this.sku = '',
   });
@@ -54,6 +65,7 @@ class StockMovement {
   final String? referenceId;
   final double rate;
   final String? warehouseId;
+  final String? warehouseName;
   final String? createdAt;
   final String sku;
 
@@ -74,6 +86,7 @@ class StockMovement {
     referenceId: json['reference_id']?.toString(),
     rate: _toDouble(json['rate']),
     warehouseId: json['warehouse_id']?.toString(),
+    warehouseName: json['warehouse_name'] as String?,
     createdAt: json['created_at'] as String?,
     sku: json['sku'] as String? ?? '',
   );
@@ -115,9 +128,7 @@ class StockBalance {
         productId: (json['id'] ?? '').toString(),
         productName: json['name'] as String? ?? '',
         currentStock: _stockToDouble(json['current_stock']),
-        unitCost: _stockToDouble(
-          json['unit_cost'] ?? json['purchase_price'],
-        ),
+        unitCost: _stockToDouble(json['unit_cost'] ?? json['purchase_price']),
         reorderLevel: _stockToDouble(json['reorder_level']),
       );
 

@@ -75,19 +75,20 @@ class InvoiceSeries {
 /// Known document types for series configuration.
 class DocumentType {
   DocumentType._();
-  static const String invoice = 'invoice';
-  static const String proforma = 'proforma';
-  static const String salesOrder = 'sales_order';
-  static const String deliveryChallan = 'delivery_challan';
-  static const String purchaseOrder = 'purchase_order';
-  static const String bill = 'bill';
-  static const String vendorPayment = 'vendor_payment';
-  static const String purchaseReturn = 'purchase_return';
-  static const String creditNote = 'credit_note';
-  static const String debitNote = 'debit_note';
-  static const String receipt = 'receipt';
-  static const String payment = 'payment';
-  static const String journal = 'journal';
+  static const String invoice = 'INVOICE';
+  static const String proforma = 'PROFORMA_INVOICE';
+  static const String salesOrder = 'SALES_ORDER';
+  static const String deliveryChallan = 'DELIVERY_CHALLAN';
+  static const String purchaseOrder = 'PURCHASE_ORDER';
+  static const String bill = 'BILL';
+  static const String vendorPayment = 'DISBURSEMENT';
+  static const String salesReturn = 'SALES_RETURN';
+  static const String purchaseReturn = 'PURCHASE_RETURN';
+  static const String creditNote = 'CREDIT_NOTE';
+  static const String debitNote = 'DEBIT_NOTE';
+  static const String receipt = 'RECEIPT';
+  static const String payment = 'PAYMENT';
+  static const String journal = 'JOURNAL';
 
   /// All known document types with their display labels.
   static Map<String, String> get labels => {
@@ -98,6 +99,7 @@ class DocumentType {
     purchaseOrder: 'Purchase Order',
     bill: 'Bill',
     vendorPayment: 'Vendor Payment',
+    salesReturn: 'Sales Return',
     purchaseReturn: 'Purchase Return',
     creditNote: 'Credit Note',
     debitNote: 'Debit Note',

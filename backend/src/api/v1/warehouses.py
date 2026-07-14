@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
@@ -7,7 +8,7 @@ from pydantic import BaseModel
 from typing import Optional as Opt
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import Branch
+from src.infrastructure.database.models import Branch, StockLedger
 from src.schemas import SchemaBase
 from src.api.deps import enforce_permission
 
@@ -121,6 +122,18 @@ def update_warehouse(
     if payload.address is not None:
         branch.address = payload.address
     if payload.is_active is not None:
+        if payload.is_active is False:
+            has_stock = db.query(StockLedger.product_id).filter(
+                StockLedger.tenant_id == tenant_id,
+                StockLedger.warehouse_id == id,
+            ).group_by(StockLedger.product_id).having(
+                func.sum(StockLedger.quantity) != 0,
+            ).first()
+            if has_stock:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Transfer all stock out before marking this warehouse inactive.",
+                )
         branch.is_active = payload.is_active
 
     db.commit()
@@ -141,6 +154,16 @@ def delete_warehouse(
     ).first()
     if not branch:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Warehouse not found.")
+
+    has_movements = db.query(StockLedger.id).filter(
+        StockLedger.tenant_id == tenant_id,
+        StockLedger.warehouse_id == id,
+    ).first()
+    if has_movements:
+        raise HTTPException(
+            status_code=409,
+            detail="Warehouse has stock history and cannot be deleted. Mark it inactive instead.",
+        )
 
     branch.deleted_at = datetime.now(timezone.utc)
     db.commit()

@@ -34,8 +34,7 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
     final fmt = ref.watch(numberFormatterProvider);
     final isMobile = ResponsiveLayout.isMobile(context);
 
-    final warehouseName =
-        whAsync.valueOrNull?.name ?? 'Warehouse Stock';
+    final warehouseName = whAsync.valueOrNull?.name ?? 'Warehouse Stock';
 
     return Scaffold(
       backgroundColor: colors.surfaceMuted,
@@ -80,8 +79,10 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
                       s.sku.toLowerCase().contains(q);
                 }).toList();
 
-                final totalValue =
-                    filtered.fold<double>(0, (a, b) => a + b.stockValue);
+                final totalValue = filtered.fold<double>(
+                  0,
+                  (a, b) => a + b.stockValue,
+                );
                 final lowCount = items.where((s) => s.isLowStock).length;
 
                 return Column(
@@ -120,8 +121,8 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
                               ),
                             )
                           : isMobile
-                              ? _mobileList(filtered, colors, fmt)
-                              : _desktopTable(filtered, colors, fmt),
+                          ? _mobileList(filtered, colors, fmt)
+                          : _desktopTable(filtered, colors, fmt),
                     ),
                   ],
                 );
@@ -140,57 +141,53 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
     ApexColors c,
     NumberFormatter fmt,
     bool isMobile,
-  ) =>
-      Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 12 : 16,
-          vertical: 10,
+  ) => Container(
+    padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 10),
+    decoration: BoxDecoration(
+      color: c.surface,
+      border: Border(bottom: BorderSide(color: c.border)),
+    ),
+    child: Row(
+      children: [
+        Text(
+          '$total products',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: c.textSecondary,
+          ),
         ),
-        decoration: BoxDecoration(
-          color: c.surface,
-          border: Border(bottom: BorderSide(color: c.border)),
-        ),
-        child: Row(
-          children: [
-            Text(
-              '$total products',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: c.textSecondary,
-              ),
+        if (low > 0) ...[
+          const SizedBox(width: 8),
+          Icon(Icons.warning_amber_rounded, size: 14, color: c.warning),
+          const SizedBox(width: 4),
+          Text(
+            '$low low',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: c.warning,
             ),
-            if (low > 0) ...[
-              const SizedBox(width: 8),
-              Icon(Icons.warning_amber_rounded,
-                  size: 14, color: c.warning),
-              const SizedBox(width: 4),
-              Text(
-                '$low low',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: c.warning,
-                ),
-              ),
-            ],
-            const Spacer(),
-            Text(
-              'Total: ${fmt.currency(value)}',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: c.textPrimary,
-              ),
-            ),
-          ],
+          ),
+        ],
+        const Spacer(),
+        Text(
+          'Total: ${fmt.currency(value)}',
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: c.textPrimary,
+          ),
         ),
-      );
+      ],
+    ),
+  );
 
   Widget _toolbar(ApexColors c, bool isMobile) {
     final stock = ref.watch(warehouseStockProvider(widget.warehouseId));
-    final lowCount =
-        (stock.valueOrNull ?? []).where((s) => s.isLowStock).length;
+    final lowCount = (stock.valueOrNull ?? [])
+        .where((s) => s.isLowStock)
+        .length;
 
     return Container(
       padding: EdgeInsets.symmetric(
@@ -234,8 +231,11 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
               ),
               selected: _lowOnly,
               onSelected: (v) => setState(() => _lowOnly = v),
-              avatar: Icon(Icons.warning_amber_rounded,
-                  size: 14, color: _lowOnly ? c.onPrimary : c.warning),
+              avatar: Icon(
+                Icons.warning_amber_rounded,
+                size: 14,
+                color: _lowOnly ? c.onPrimary : c.warning,
+              ),
               selectedColor: c.warning,
               labelStyle: TextStyle(
                 fontSize: 12,
@@ -300,10 +300,7 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
                       if (it.sku.isNotEmpty)
                         Text(
                           it.sku,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: c.textMuted,
-                          ),
+                          style: TextStyle(fontSize: 11, color: c.textMuted),
                         ),
                       const SizedBox(height: 6),
                       Row(
@@ -449,8 +446,7 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color:
-                                it.isLowStock ? c.warning : c.textPrimary,
+                            color: it.isLowStock ? c.warning : c.textPrimary,
                           ),
                         ),
                       ),
@@ -459,10 +455,7 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
                         child: Text(
                           fmt.quantity(it.reorderLevel),
                           textAlign: TextAlign.right,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: c.textMuted,
-                          ),
+                          style: TextStyle(fontSize: 12.5, color: c.textMuted),
                         ),
                       ),
                       Expanded(

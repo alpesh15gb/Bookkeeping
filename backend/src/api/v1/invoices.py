@@ -30,6 +30,11 @@ from src.domains.taxation.filing_lock import ensure_outward_period_mutable, GSTP
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
 from src.domains.accounting.auto_post import auto_post_invoice, cancel_invoice, get_display_status
 from src.domains.company.services import NumberingSeriesService, resolve_origin_state_code
+from src.domains.inventory.services import (
+    resolve_default_warehouse_id,
+    resolve_reversal_warehouse_id,
+    get_warehouse_stock,
+)
 from src.api.deps import enforce_permission, get_current_user
 from src.core.rate_limiter import limiter
 from src.core.config import settings
@@ -917,6 +922,7 @@ def finalize_credit_note(
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=resolve_default_warehouse_id(db, tenant_id),
                     reference_type="CREDIT_NOTE",
                     reference_id=cn.id,
                     quantity=line.quantity,
@@ -1015,7 +1021,11 @@ def cancel_credit_note(
         ).with_for_update().first()
         if product:
             available = product.current_stock or Decimal("0")
-            if available < move.quantity:
+            location_available = get_warehouse_stock(
+                db, tenant_id, move.warehouse_id, move.product_id
+            )
+            effective_available = location_available if location_available is not None else available
+            if effective_available < move.quantity:
                 raise HTTPException(
                     status_code=409,
                     detail="Returned stock has already been consumed; reverse downstream stock movements first.",
@@ -1024,6 +1034,7 @@ def cancel_credit_note(
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=move.product_id,
+                warehouse_id=move.warehouse_id,
                 reference_type="CREDIT_NOTE_REVERSAL",
                 reference_id=cn.id,
                 quantity=-move.quantity,
@@ -1932,6 +1943,9 @@ def cancel_invoice(
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=move.product_id,
+                warehouse_id=move.warehouse_id or resolve_reversal_warehouse_id(
+                    db, tenant_id, "INVOICE", invoice.id, move.product_id
+                ),
                 reference_type="INVOICE_REVERSAL",
                 reference_id=invoice.id,
                 quantity=restore_quantity,
@@ -2116,6 +2130,7 @@ def print_invoice(
         db=db,
         amount_paid=invoice.amount_paid or Decimal("0.00"),
         customer_address=invoice.contact.billing_address if invoice.contact else None,
+        terms_and_conditions=invoice.terms_and_conditions,
     )
 
     return StreamingResponse(

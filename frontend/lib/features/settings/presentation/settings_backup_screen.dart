@@ -4,21 +4,23 @@
 /// history, and purging all data in a danger zone.
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_header.dart';
-import '../../../core/widgets/states.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/dialogs/dialog_service.dart';
 import '../../../core/result/result.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/theme/responsive.dart';
+import '../../../core/download/download_service.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/export_record.dart';
-import '../data/settings_repository.dart';
 import 'settings_providers.dart';
 
 class SettingsBackupScreen extends ConsumerStatefulWidget {
@@ -43,38 +45,68 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
     if (companyId == null) return;
 
     setState(() => _isExporting = true);
-    final repo = ref.read(settingsRepositoryProvider);
-    final result = await repo.triggerExport(companyId);
+    final result = await ref
+        .read(downloadServiceProvider)
+        .download(
+          relativeUrl: '/companies/$companyId/export',
+          filename:
+              'apexbooks-backup-${DateTime.now().toIso8601String().split('T').first}',
+          kind: ExportKind.json,
+        );
     setState(() => _isExporting = false);
 
     if (!mounted) return;
-    if (result is Success) {
-      ref.invalidate(exportHistoryProvider(companyId));
-      ref.read(notificationServiceProvider).success(
-        context,
-        'Export has been queued. You will be notified when ready.',
-        title: 'Export Started',
-      );
+    if (result is Success<DownloadResult>) {
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            'Backup saved to ${result.value.path}.',
+            title: 'Export complete',
+          );
     } else {
       final err = (result as Failure).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Export failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Export failed');
     }
   }
 
   Future<void> _importData() async {
-    // In a real app this would use file_picker. Here we show a dialog
-    // to simulate the import workflow.
-    final confirmed = await ref.read(dialogServiceProvider).confirm(
-      context,
-      title: 'Import Data',
-      message:
-          'This will replace existing data with the imported file. '
-          'Ensure you have a backup of your current data. Continue?',
+    final selected = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['json'],
+      withData: true,
     );
+    final file = selected?.files.single;
+    if (file == null || file.bytes == null || !mounted) return;
+
+    Map<String, dynamic> backup;
+    try {
+      final decoded = jsonDecode(utf8.decode(file.bytes!));
+      if (decoded is! Map) throw const FormatException('Expected JSON object');
+      backup = Map<String, dynamic>.from(decoded);
+    } catch (_) {
+      ref
+          .read(notificationServiceProvider)
+          .error(
+            context,
+            'The selected file is not a valid ApexBooks JSON backup.',
+            title: 'Invalid backup',
+          );
+      return;
+    }
+
+    final confirmed = await ref
+        .read(dialogServiceProvider)
+        .confirm(
+          context,
+          title: 'Import Data',
+          message:
+              'This adds records that are missing from the current company. '
+              'Existing records with the same IDs are kept unchanged. '
+              'Create a current backup before continuing.',
+        );
 
     if (!confirmed) return;
 
@@ -82,28 +114,24 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
 
     // Simulated import — in production the file bytes come from a picker.
     final repo = ref.read(settingsRepositoryProvider);
-    final result = await repo.importData(
-      _companyId!,
-      fileBytes: [],
-      fileName: 'import.json',
-    );
+    final result = await repo.importData(_companyId!, backup: backup);
 
     setState(() => _isImporting = false);
 
     if (!mounted) return;
     if (result is Success) {
-      ref.read(notificationServiceProvider).success(
-        context,
-        'Data imported successfully.',
-        title: 'Import Complete',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            'Data imported successfully.',
+            title: 'Import Complete',
+          );
     } else {
       final err = (result as Failure).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Import failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Import failed');
     }
   }
 
@@ -118,18 +146,18 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
 
     if (!mounted) return;
     if (result is Success) {
-      ref.read(notificationServiceProvider).info(
-        context,
-        'An OTP has been sent to your registered email.',
-        title: 'Purge Requested',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .info(
+            context,
+            'An OTP has been sent to your registered email.',
+            title: 'Purge Requested',
+          );
     } else {
       final err = (result as Failure).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Request failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Request failed');
     }
   }
 
@@ -180,18 +208,18 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
 
     if (!mounted) return;
     if (result is Success) {
-      ref.read(notificationServiceProvider).success(
-        context,
-        'All company data has been purged.',
-        title: 'Data Purged',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            'All company data has been purged.',
+            title: 'Data Purged',
+          );
     } else {
       final err = (result as Failure).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Purge failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Purge failed');
     }
   }
 
@@ -204,19 +232,7 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
       return const Center(child: Text('No company selected.'));
     }
 
-    final async = ref.watch(exportHistoryProvider(companyId));
-
-    return Scaffold(
-      appBar: null,
-      body: async.when(
-        loading: () => const Center(child: LoadingSpinner(size: 36)),
-        error: (err, _) => ErrorView(
-          message: err.toString(),
-          onRetry: () => ref.invalidate(exportHistoryProvider(companyId)),
-        ),
-        data: (exports) => _buildContent(colors, exports),
-      ),
-    );
+    return Scaffold(appBar: null, body: _buildContent(colors, const []));
   }
 
   Widget _buildContent(ApexColors colors, List<ExportRecord> exports) {
@@ -249,27 +265,23 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
                         ? const SizedBox(
                             width: 16,
                             height: 16,
-                            child:
-                                CircularProgressIndicator(strokeWidth: 2),
+                            child: CircularProgressIndicator(strokeWidth: 2),
                           )
                         : const Icon(Icons.download_rounded, size: 18),
-                    label: Text(_isExporting
-                        ? 'Exporting...'
-                        : 'Request Export'),
+                    label: Text(
+                      _isExporting ? 'Exporting...' : 'Request Export',
+                    ),
                   ),
                   if (exports.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(
                       'Recent Exports',
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    ...exports.take(5).map(
-                      (e) => _buildExportRow(colors, e),
-                    ),
+                    ...exports.take(5).map((e) => _buildExportRow(colors, e)),
                   ],
                 ],
               ),
@@ -280,8 +292,7 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
               colors: colors,
               icon: Icons.file_upload_outlined,
               title: 'Import Data',
-              subtitle:
-                  'Restore data from a previously exported backup file.',
+              subtitle: 'Restore data from a previously exported backup file.',
               child: FilledButton.icon(
                 onPressed: _isImporting ? null : _importData,
                 icon: _isImporting
@@ -316,9 +327,7 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
                         const SizedBox(width: 8),
                         Text(
                           'Danger Zone',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleSmall
+                          style: Theme.of(context).textTheme.titleSmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w700,
                                 color: colors.danger,
@@ -342,11 +351,14 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
-                            : const Icon(Icons.delete_forever_outlined,
-                                size: 18),
+                            : const Icon(
+                                Icons.delete_forever_outlined,
+                                size: 18,
+                              ),
                         label: const Text('Request Data Purge'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: colors.danger,
@@ -360,11 +372,11 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
                               )
-                            : const Icon(Icons.check_circle_outlined,
-                                size: 18),
+                            : const Icon(Icons.check_circle_outlined, size: 18),
                         label: const Text('Verify OTP & Purge'),
                         style: FilledButton.styleFrom(
                           backgroundColor: colors.danger,
@@ -407,19 +419,18 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
               const SizedBox(width: 8),
               Text(
                 title,
-                style: Theme.of(context)
-                    .textTheme
-                    .titleSmall
-                    ?.copyWith(fontWeight: FontWeight.w600),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
               ),
             ],
           ),
           const SizedBox(height: 6),
           Text(
             subtitle,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: colors.textSecondary,
-            ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(height: 16),
           child,
@@ -445,9 +456,9 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
               children: [
                 Text(
                   formatDateTime(record.requestedAt),
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    fontWeight: FontWeight.w500,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w500),
                 ),
                 if (record.fileSize != null)
                   Text(
@@ -460,10 +471,7 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
               ],
             ),
           ),
-          StatusBadge(
-            label: record.status.toUpperCase(),
-            tone: statusTone,
-          ),
+          StatusBadge(label: record.status.toUpperCase(), tone: statusTone),
         ],
       ),
     );

@@ -78,8 +78,9 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -88,96 +89,96 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
             }
           },
           child: Scaffold(
-          backgroundColor: colors.surfaceMuted,
-          appBar: AppBar(
-            backgroundColor: colors.surfaceRaised,
-            elevation: 0,
-            titleSpacing: 20,
-            title: Text(
-              'New Stock Adjustment',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.border),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 16,
-                ),
-                child: FilledButton.icon(
-                  onPressed: state.saving ? null : _save,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: LoadingSpinner(size: 16),
-                        )
-                      : const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save adjustment'),
+            backgroundColor: colors.surfaceMuted,
+            appBar: AppBar(
+              backgroundColor: colors.surfaceRaised,
+              elevation: 0,
+              titleSpacing: 20,
+              title: Text(
+                'New Stock Adjustment',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
                 ),
               ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (state.error != null)
-                Container(
-                  width: double.infinity,
-                  color: colors.danger.withValues(alpha: 0.1),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: colors.border),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
                     vertical: 10,
+                    horizontal: 16,
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 18,
-                        color: colors.danger,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          state.error!,
-                          style: TextStyle(
-                            color: colors.danger,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
+                  child: FilledButton.icon(
+                    onPressed: state.saving ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save adjustment'),
+                  ),
+                ),
+              ],
+            ),
+            body: Column(
+              children: [
+                if (state.error != null)
+                  Container(
+                    width: double.infinity,
+                    color: colors.danger.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: colors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              color: colors.danger,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1000),
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
-                      children: [
-                        _headerCard(state, notifier, colors),
-                        const SizedBox(height: 16),
-                        _linesCard(state, notifier, colors, fmt, products),
                       ],
                     ),
                   ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1000),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          _headerCard(state, notifier, colors),
+                          const SizedBox(height: 16),
+                          _linesCard(state, notifier, colors, fmt, products),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-              _summaryBar(state, colors),
-            ],
-          ),
+                _summaryBar(state, colors),
+              ],
+            ),
           ),
         ),
       ),
@@ -263,70 +264,70 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
   ) {
     final table = Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: colors.surfaceMuted,
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(ApexRadius.lg),
-              ),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              children: [
-                Expanded(flex: 44, child: Text('PRODUCT', style: _th(colors))),
-                Expanded(
-                  flex: 22,
-                  child: Text(
-                    'QTY CHANGE (+/-)',
-                    textAlign: TextAlign.right,
-                    style: _th(colors),
-                  ),
-                ),
-                Expanded(
-                  flex: 22,
-                  child: Text(
-                    'UNIT COST',
-                    textAlign: TextAlign.right,
-                    style: _th(colors),
-                  ),
-                ),
-                const SizedBox(width: 36),
-              ],
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: colors.surfaceMuted,
+            borderRadius: const BorderRadius.vertical(
+              top: Radius.circular(ApexRadius.lg),
             ),
           ),
-          ...state.lines.asMap().entries.map(
-            (e) => _AdjLineRow(
-              key: ValueKey('adj_line_${e.key}'),
-              line: e.value,
-              products: products,
-              colors: colors,
-              canRemove: state.lines.length > 1,
-              onChanged: (l) => notifier.updateLine(e.key, l),
-              onRemove: () => notifier.removeLine(e.key),
-              onProduct: (p) => notifier.updateLine(
-                e.key,
-                e.value.copyWith(
-                  productId: p.id,
-                  productName: p.name,
-                  unitCost: p.purchasePrice,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Row(
+            children: [
+              Expanded(flex: 44, child: Text('PRODUCT', style: _th(colors))),
+              Expanded(
+                flex: 22,
+                child: Text(
+                  'QTY CHANGE (+/-)',
+                  textAlign: TextAlign.right,
+                  style: _th(colors),
                 ),
               ),
-            ),
+              Expanded(
+                flex: 22,
+                child: Text(
+                  'UNIT COST',
+                  textAlign: TextAlign.right,
+                  style: _th(colors),
+                ),
+              ),
+              const SizedBox(width: 36),
+            ],
           ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: TextButton.icon(
-                onPressed: notifier.addLine,
-                icon: const Icon(Icons.add_rounded, size: 18),
-                label: const Text('Add line  (Alt+N)'),
+        ),
+        ...state.lines.asMap().entries.map(
+          (e) => _AdjLineRow(
+            key: ValueKey('adj_line_${e.key}'),
+            line: e.value,
+            products: products,
+            colors: colors,
+            canRemove: state.lines.length > 1,
+            onChanged: (l) => notifier.updateLine(e.key, l),
+            onRemove: () => notifier.removeLine(e.key),
+            onProduct: (p) => notifier.updateLine(
+              e.key,
+              e.value.copyWith(
+                productId: p.id,
+                productName: p.name,
+                unitCost: p.purchasePrice,
               ),
             ),
           ),
-        ],
-      );
+        ),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: TextButton.icon(
+              onPressed: notifier.addLine,
+              icon: const Icon(Icons.add_rounded, size: 18),
+              label: const Text('Add line  (Alt+N)'),
+            ),
+          ),
+        ),
+      ],
+    );
 
     return _Card(
       colors: colors,
@@ -511,11 +512,7 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
 }
 
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;

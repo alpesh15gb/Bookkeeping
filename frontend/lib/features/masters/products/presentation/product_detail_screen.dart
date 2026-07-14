@@ -94,6 +94,7 @@ class ProductDetailScreen extends ConsumerWidget {
           title: 'Product Details',
           rows: [
             DetailRow('SKU', product.sku),
+            DetailRow('Barcode', product.barcode),
             DetailRow('HSN/SAC', product.hsnSac),
             DetailRow('Unit of Measure', product.uom),
             DetailRow(

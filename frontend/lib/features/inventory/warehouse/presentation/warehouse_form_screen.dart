@@ -120,8 +120,7 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
         if (_streetCtrl.text.trim().isNotEmpty)
           'street': _streetCtrl.text.trim(),
         if (_cityCtrl.text.trim().isNotEmpty) 'city': _cityCtrl.text.trim(),
-        if (_stateCtrl.text.trim().isNotEmpty)
-          'state': _stateCtrl.text.trim(),
+        if (_stateCtrl.text.trim().isNotEmpty) 'state': _stateCtrl.text.trim(),
         if (_pincodeCtrl.text.trim().isNotEmpty)
           'pincode': _pincodeCtrl.text.trim(),
       };
@@ -144,9 +143,9 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
         Navigator.of(context).pop();
       case Failure(:final error):
         setState(() => _error = error.message);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${error.message}')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
       default:
         break;
     }
@@ -169,8 +168,9 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -237,7 +237,11 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Row(
               children: [
-                Icon(Icons.error_outline_rounded, size: 18, color: colors.danger),
+                Icon(
+                  Icons.error_outline_rounded,
+                  size: 18,
+                  color: colors.danger,
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -274,9 +278,11 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                 'Warehouse Name',
                 TextFormField(
                   controller: _nameCtrl,
-                  decoration: _dec(colors,
-                      hint: 'e.g. Main Warehouse, Godown A',
-                      icon: Icons.warehouse_outlined),
+                  decoration: _dec(
+                    colors,
+                    hint: 'e.g. Main Warehouse, Godown A',
+                    icon: Icons.warehouse_outlined,
+                  ),
                   validator: (v) =>
                       v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
@@ -291,9 +297,11 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                       'Code',
                       TextFormField(
                         controller: _codeCtrl,
-                        decoration: _dec(colors,
-                            hint: 'e.g. WH-001',
-                            icon: Icons.tag_rounded),
+                        decoration: _dec(
+                          colors,
+                          hint: 'e.g. WH-001',
+                          icon: Icons.tag_rounded,
+                        ),
                       ),
                       colors,
                     ),
@@ -304,9 +312,11 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                       'GSTIN',
                       TextFormField(
                         controller: _gstinCtrl,
-                        decoration: _dec(colors,
-                            hint: 'e.g. 27ABCDE1234F1Z5',
-                            icon: Icons.badge_outlined),
+                        decoration: _dec(
+                          colors,
+                          hint: 'e.g. 27ABCDE1234F1Z5',
+                          icon: Icons.badge_outlined,
+                        ),
                         textCapitalization: TextCapitalization.characters,
                         maxLength: 15,
                       ),
@@ -320,9 +330,11 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                 'Location Description',
                 TextFormField(
                   controller: _locationCtrl,
-                  decoration: _dec(colors,
-                      hint: 'e.g. Ground floor, B-wing',
-                      icon: Icons.location_on_outlined),
+                  decoration: _dec(
+                    colors,
+                    hint: 'e.g. Ground floor, B-wing',
+                    icon: Icons.location_on_outlined,
+                  ),
                 ),
                 colors,
               ),
@@ -333,9 +345,11 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                 'Street',
                 TextFormField(
                   controller: _streetCtrl,
-                  decoration: _dec(colors,
-                      hint: 'e.g. 42, MG Road',
-                      icon: Icons.map_outlined),
+                  decoration: _dec(
+                    colors,
+                    hint: 'e.g. 42, MG Road',
+                    icon: Icons.map_outlined,
+                  ),
                   maxLines: 2,
                 ),
                 colors,
@@ -348,8 +362,7 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                       'City',
                       TextFormField(
                         controller: _cityCtrl,
-                        decoration:
-                            _dec(colors, hint: 'e.g. Mumbai'),
+                        decoration: _dec(colors, hint: 'e.g. Mumbai'),
                       ),
                       colors,
                     ),
@@ -360,8 +373,7 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                       'State',
                       TextFormField(
                         controller: _stateCtrl,
-                        decoration:
-                            _dec(colors, hint: 'e.g. Maharashtra'),
+                        decoration: _dec(colors, hint: 'e.g. Maharashtra'),
                       ),
                       colors,
                     ),
@@ -376,9 +388,11 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                       'Pincode',
                       TextFormField(
                         controller: _pincodeCtrl,
-                        decoration: _dec(colors,
-                            hint: 'e.g. 400001',
-                            icon: Icons.numbers_outlined),
+                        decoration: _dec(
+                          colors,
+                          hint: 'e.g. 400001',
+                          icon: Icons.numbers_outlined,
+                        ),
                         keyboardType: TextInputType.number,
                         maxLength: 6,
                       ),
@@ -431,8 +445,8 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                   _saving
                       ? 'Saving…'
                       : _isEditing
-                          ? 'Update Warehouse'
-                          : 'Create Warehouse',
+                      ? 'Update Warehouse'
+                      : 'Create Warehouse',
                 ),
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
@@ -464,34 +478,33 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
     Widget field,
     ApexColors colors, {
     bool required = false,
-  }) =>
-      Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  }) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
         children: [
-          Row(
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  color: colors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (required)
-                Text(
-                  ' *',
-                  style: TextStyle(
-                    color: colors.danger,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-            ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              color: colors.textSecondary,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          const SizedBox(height: 6),
-          field,
+          if (required)
+            Text(
+              ' *',
+              style: TextStyle(
+                color: colors.danger,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
         ],
-      );
+      ),
+      const SizedBox(height: 6),
+      field,
+    ],
+  );
 }
 
 InputDecoration _dec(ApexColors colors, {String? hint, IconData? icon}) =>

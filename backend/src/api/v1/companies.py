@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from typing import List
 import json, os, uuid
 from datetime import datetime, date, timezone, timedelta
@@ -8,11 +9,11 @@ from datetime import datetime, date, timezone, timedelta
 from src.core.config import settings
 from src.core.database import get_db_session
 from src.core.rate_limiter import limiter
-from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, TenantSetting, NumberingSeries, ExpenseCategory, TenantInvitation
+from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, StockLedger, TenantSetting, NumberingSeries, ExpenseCategory, TenantInvitation
 from src.schemas.company_schemas import (
     CompanyCreate, CompanyResponse,
     BranchCreate, BranchUpdate, BranchResponse,
-    TenantSettingUpdate, TenantSettingResponse,
+    TenantSettingUpdate, TenantSettingResponse, CompanyUpdate,
     NumberingSeriesCreate, NumberingSeriesUpdate, NumberingSeriesResponse,
     GstToggleRequest,
     TenantInviteRequest, TenantInviteResponse, TenantMemberResponse, TenantMemberUpdate, InvitationAcceptRejectRequest
@@ -137,7 +138,7 @@ def get_company(
 @router.put("/companies/{id}", response_model=CompanyResponse)
 def update_company(
     id: uuid.UUID,
-    payload: CompanyCreate,
+    payload: CompanyUpdate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
 ):
@@ -153,11 +154,27 @@ def update_company(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Company not found.")
 
     tenant.legal_name = payload.legal_name
-    tenant.trade_name = payload.trade_name or payload.legal_name
-    tenant.gstin = payload.gstin
-    tenant.pan = payload.pan
+    if "trade_name" in payload.model_fields_set:
+        tenant.trade_name = payload.trade_name or payload.legal_name
+    if "gstin" in payload.model_fields_set:
+        tenant.gstin = payload.gstin
+    if "pan" in payload.model_fields_set:
+        tenant.pan = payload.pan
     if payload.tax_mode:
         tenant.tax_mode = payload.tax_mode
+    if payload.financial_year_start is not None:
+        tenant.financial_year_start = payload.financial_year_start
+    if tenant.tax_mode in ("GST_REGULAR", "GST_COMPOSITION") and not tenant.gstin:
+        raise HTTPException(status_code=422, detail="GSTIN is required while GST is enabled.")
+
+    setting = db.query(TenantSetting).filter(
+        TenantSetting.tenant_id == tenant_id,
+    ).first()
+    if setting:
+        setting.gst_enabled = tenant.tax_mode in ("GST_REGULAR", "GST_COMPOSITION")
+        if "gstin" in payload.model_fields_set:
+            from src.domains.company.services import derive_origin_state_code
+            setting.origin_state_code = derive_origin_state_code(payload.gstin)
 
     db.commit()
     db.refresh(tenant)
@@ -184,6 +201,12 @@ def toggle_gst(
     old_mode = tenant.tax_mode
     new_mode = payload.tax_mode
 
+    if new_mode in ("GST_REGULAR", "GST_COMPOSITION") and not tenant.gstin:
+        raise HTTPException(
+            status_code=422,
+            detail="Add a valid GSTIN before enabling GST.",
+        )
+
     # If disabling GST, check for existing GST transactions
     if old_mode in ("GST_REGULAR", "GST_COMPOSITION") and new_mode == "NON_GST":
         from src.infrastructure.database.models import Invoice, Bill
@@ -199,8 +222,34 @@ def toggle_gst(
             Bill.deleted_at == None,
         ).first()
         if has_gst_invoices or has_gst_bills:
-            # Return warning but still allow the change
-            pass
+            raise HTTPException(
+                status_code=409,
+                detail="GST cannot be disabled after GST transactions exist. Keep GST enabled so historical returns and reports remain correct.",
+            )
+
+    if (
+        old_mode in ("GST_REGULAR", "GST_COMPOSITION")
+        and new_mode in ("GST_REGULAR", "GST_COMPOSITION")
+        and old_mode != new_mode
+    ):
+        from src.infrastructure.database.models import Invoice, Bill
+        has_transactions = (
+            db.query(Invoice.id).filter(
+                Invoice.tenant_id == tenant_id,
+                Invoice.deleted_at == None,
+                Invoice.status != "CANCELLED",
+            ).first()
+            or db.query(Bill.id).filter(
+                Bill.tenant_id == tenant_id,
+                Bill.deleted_at == None,
+                Bill.status != "CANCELLED",
+            ).first()
+        )
+        if has_transactions:
+            raise HTTPException(
+                status_code=409,
+                detail="GST registration type cannot be changed after transactions exist.",
+            )
 
     tenant.tax_mode = new_mode
 
@@ -303,6 +352,18 @@ def update_branch(
     if payload.address is not None:
         branch.address = payload.address.dict()
     if payload.is_active is not None:
+        if payload.is_active is False:
+            has_stock = db.query(StockLedger.product_id).filter(
+                StockLedger.tenant_id == tenant_id,
+                StockLedger.warehouse_id == branch_id,
+            ).group_by(StockLedger.product_id).having(
+                func.sum(StockLedger.quantity) != 0,
+            ).first()
+            if has_stock:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Transfer all stock out before marking this branch inactive.",
+                )
         branch.is_active = payload.is_active
 
     db.commit()
@@ -330,6 +391,16 @@ def delete_branch(
     ).first()
     if not branch:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Branch not found.")
+
+    has_movements = db.query(StockLedger.id).filter(
+        StockLedger.tenant_id == tenant_id,
+        StockLedger.warehouse_id == branch_id,
+    ).first()
+    if has_movements:
+        raise HTTPException(
+            status_code=409,
+            detail="Branch has stock history and cannot be deleted. Mark it inactive instead.",
+        )
 
     branch.deleted_at = datetime.now(timezone.utc)
     db.commit()

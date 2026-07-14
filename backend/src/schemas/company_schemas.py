@@ -21,6 +21,14 @@ class CompanyCreate(BaseModel):
     tax_mode: Optional[str] = Field("NON_GST", pattern="^(NON_GST|GST_REGULAR|GST_COMPOSITION)$")
     financial_year_start: Optional[date] = None
 
+class CompanyUpdate(BaseModel):
+    legal_name: str = Field(..., max_length=150)
+    trade_name: Optional[str] = Field(None, max_length=150)
+    gstin: Optional[str] = Field(None, pattern="^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
+    pan: Optional[str] = Field(None, pattern="^[A-Z]{5}[0-9]{4}[A-Z]{1}$")
+    tax_mode: Optional[str] = Field(None, pattern="^(NON_GST|GST_REGULAR|GST_COMPOSITION)$")
+    financial_year_start: Optional[date] = None
+
 class CompanyResponse(SchemaBase):
     id: uuid.UUID
     legal_name: str
@@ -98,7 +106,7 @@ class NumberingSeriesCreate(BaseModel):
     document_type: str = Field(
         ...,
         max_length=50,
-        pattern="^(INVOICE|BILL|PAYMENT|JOURNAL|RECEIPT|DISBURSEMENT|CREDIT_NOTE|DEBIT_NOTE|PURCHASE_ORDER|SALES_ORDER|DELIVERY_CHALLAN|PROFORMA_INVOICE)$"
+        pattern="^(INVOICE|BILL|PAYMENT|JOURNAL|RECEIPT|DISBURSEMENT|CREDIT_NOTE|DEBIT_NOTE|PURCHASE_ORDER|SALES_ORDER|DELIVERY_CHALLAN|PROFORMA_INVOICE|SALES_RETURN|PURCHASE_RETURN)$"
     )
     prefix: str = Field(..., max_length=50)
     next_number: int = Field(1, ge=1)

@@ -569,17 +569,17 @@ class BankReconciliationListResponse(SchemaBase):
 class TransferLineSchema(SchemaBase):
     product_id: uuid.UUID
     product_name: str = ""
-    quantity: Decimal
+    quantity: Decimal = Field(..., gt=0)
     rate: Decimal = Decimal("0")
 
 class TransferCreate(SchemaBase):
-    transfer_number: Optional[str] = Field(None, max_length=50)
-    transfer_date: str
+    transfer_number: str = Field(..., min_length=1, max_length=50)
+    transfer_date: str = Field(..., pattern="^\\d{4}-\\d{2}-\\d{2}$")
     from_warehouse_id: uuid.UUID
     from_warehouse_name: str = ""
     to_warehouse_id: uuid.UUID
     to_warehouse_name: str = ""
-    lines: List[TransferLineSchema] = []
+    lines: List[TransferLineSchema] = Field(..., min_length=1)
     notes: Optional[str] = None
 
 class TransferUpdate(SchemaBase):

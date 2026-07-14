@@ -32,6 +32,16 @@ class _StockMovementListScreenState
     MovementReferenceType.opening => 'Opening',
     MovementReferenceType.salesReturn => 'Sales Return',
     MovementReferenceType.purchaseReturn => 'Purchase Return',
+    MovementReferenceType.creditNote => 'Credit Note Return',
+    MovementReferenceType.deliveryChallan => 'Delivery Challan',
+    MovementReferenceType.invoiceReversal => 'Invoice Reversal',
+    MovementReferenceType.billReversal => 'Purchase Reversal',
+    MovementReferenceType.adjustmentReversal => 'Adjustment Reversal',
+    MovementReferenceType.salesReturnReversal => 'Sales Return Reversal',
+    MovementReferenceType.purchaseReturnReversal => 'Purchase Return Reversal',
+    MovementReferenceType.creditNoteReversal => 'Credit Note Reversal',
+    MovementReferenceType.deliveryChallanReversal => 'Challan Reversal',
+    MovementReferenceType.migrationReconcile => 'Opening Reconciliation',
   };
 
   @override
@@ -53,7 +63,10 @@ class _StockMovementListScreenState
           ),
           Padding(
             padding: EdgeInsets.fromLTRB(
-              isMobile ? 12 : 24, 0, isMobile ? 12 : 24, 10,
+              isMobile ? 12 : 24,
+              0,
+              isMobile ? 12 : 24,
+              10,
             ),
             child: Row(
               children: [
@@ -74,7 +87,8 @@ class _StockMovementListScreenState
               loading: () => ShimmerSkeleton(
                 child: Column(
                   children: [
-                    for (int i = 0; i < 6; i++) const TableRowSkeleton(columns: 4),
+                    for (int i = 0; i < 6; i++)
+                      const TableRowSkeleton(columns: 4),
                   ],
                 ),
               ),
@@ -152,7 +166,10 @@ class _StockMovementListScreenState
     final isMobile = ResponsiveLayout.isMobile(context);
     return Container(
       margin: EdgeInsets.fromLTRB(
-        isMobile ? 12 : 24, 0, isMobile ? 12 : 24, 20,
+        isMobile ? 12 : 24,
+        0,
+        isMobile ? 12 : 24,
+        20,
       ),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
@@ -226,15 +243,30 @@ class _StockMovementListScreenState
                       ),
                       Expanded(
                         flex: 30,
-                        child: Text(
-                          m.productName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w600,
-                            color: colors.textPrimary,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              m.productName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w600,
+                                color: colors.textPrimary,
+                              ),
+                            ),
+                            if (m.warehouseName?.isNotEmpty ?? false)
+                              Text(
+                                m.warehouseName!,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: colors.textMuted,
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       Expanded(

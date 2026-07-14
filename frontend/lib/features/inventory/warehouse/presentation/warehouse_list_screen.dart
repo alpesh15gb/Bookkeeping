@@ -69,8 +69,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
             child: asyncVals.when(
               loading: () => Column(
                 children: [
-                  for (int i = 0; i < 6; i++)
-                    const ListItemSkeleton(),
+                  for (int i = 0; i < 6; i++) const ListItemSkeleton(),
                 ],
               ),
               error: (err, _) => ErrorView(
@@ -106,8 +105,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
 
                 return isMobile
                     ? _mobileList(filtered, stockByWarehouse, colors)
-                    : _desktopTable(
-                        filtered, stockByWarehouse, colors, fmt);
+                    : _desktopTable(filtered, stockByWarehouse, colors, fmt);
               },
             ),
           ),
@@ -144,9 +142,8 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
                     onPressed: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
-                          builder: (_) => WarehouseDetailScreen(
-                            warehouseId: _selected!.id,
-                          ),
+                          builder: (_) =>
+                              WarehouseDetailScreen(warehouseId: _selected!.id),
                         ),
                       );
                     },
@@ -160,11 +157,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
                     _kv('Name', _selected!.name, colors),
                     _kv('Code', _selected!.code, colors),
                     _kv('Location', _selected!.location ?? '—', colors),
-                    _kv(
-                      'GSTIN',
-                      _selected!.gstin ?? '—',
-                      colors,
-                    ),
+                    _kv('GSTIN', _selected!.gstin ?? '—', colors),
                     _kv(
                       'Address',
                       _selected!.address?.formatted ?? '—',
@@ -311,9 +304,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
             ),
             trailing: StatusBadge(
               label: w.isActive ? 'ACTIVE' : 'INACTIVE',
-              tone: w.isActive
-                  ? StatusTone.success
-                  : StatusTone.neutral,
+              tone: w.isActive ? StatusTone.success : StatusTone.neutral,
             ),
             onTap: () {
               Navigator.of(context).push(
@@ -344,8 +335,10 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
         itemBuilder: (ctx, i) {
           final w = items[i];
           final whStock = stockByWarehouse[w.id] ?? <StockBalance>[];
-          final stockValue =
-              whStock.fold<double>(0, (a, b) => a + b.stockValue);
+          final stockValue = whStock.fold<double>(
+            0,
+            (a, b) => a + b.stockValue,
+          );
           final productCount = whStock.length;
           final selected = _selected?.id == w.id;
 
@@ -361,8 +354,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
                 if (ResponsiveLayout.isMobile(context)) {
                   Navigator.of(context).push(
                     MaterialPageRoute(
-                      builder: (_) =>
-                          WarehouseDetailScreen(warehouseId: w.id),
+                      builder: (_) => WarehouseDetailScreen(warehouseId: w.id),
                     ),
                   );
                 }

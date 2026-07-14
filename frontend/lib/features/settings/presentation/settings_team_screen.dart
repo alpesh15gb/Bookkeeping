@@ -23,8 +23,7 @@ class SettingsTeamScreen extends ConsumerStatefulWidget {
   const SettingsTeamScreen({super.key});
 
   @override
-  ConsumerState<SettingsTeamScreen> createState() =>
-      _SettingsTeamScreenState();
+  ConsumerState<SettingsTeamScreen> createState() => _SettingsTeamScreenState();
 }
 
 class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
@@ -70,10 +69,7 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
                 ),
                 items: MemberRole.values
                     .map(
-                      (r) => DropdownMenuItem(
-                        value: r,
-                        child: Text(r.label),
-                      ),
+                      (r) => DropdownMenuItem(value: r, child: Text(r.label)),
                     )
                     .toList(),
                 onChanged: (v) {
@@ -121,18 +117,18 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
     if (!mounted) return;
     if (result is Success<void>) {
       ref.invalidate(teamMemberListProvider(companyId));
-      ref.read(notificationServiceProvider).success(
-        context,
-        'Invitation sent to ${emailCtrl.text}.',
-        title: 'Invited',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            'Invitation sent to ${emailCtrl.text}.',
+            title: 'Invited',
+          );
     } else {
       final err = (result as Failure<void>).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Invitation failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Invitation failed');
     }
   }
 
@@ -147,12 +143,7 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
           value: newRole,
           decoration: const InputDecoration(labelText: 'Role'),
           items: MemberRole.values
-              .map(
-                (r) => DropdownMenuItem(
-                  value: r,
-                  child: Text(r.label),
-                ),
-              )
+              .map((r) => DropdownMenuItem(value: r, child: Text(r.label)))
               .toList(),
           onChanged: (v) {
             if (v != null) newRole = v;
@@ -189,18 +180,18 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
     if (!mounted) return;
     if (result is Success<void>) {
       ref.invalidate(teamMemberListProvider(companyId));
-      ref.read(notificationServiceProvider).success(
-        context,
-        '${member.displayName} role changed to ${newRole.label}.',
-        title: 'Role Updated',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            '${member.displayName} role changed to ${newRole.label}.',
+            title: 'Role Updated',
+          );
     } else {
       final err = (result as Failure<void>).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Update failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Update failed');
     }
   }
 
@@ -208,12 +199,14 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
     final companyId = _companyId;
     if (companyId == null) return;
 
-    final confirmed = await ref.read(dialogServiceProvider).confirmDelete(
-      context,
-      title: 'Remove member',
-      message:
-          'Are you sure you want to remove ${member.displayName} from the company?',
-    );
+    final confirmed = await ref
+        .read(dialogServiceProvider)
+        .confirmDelete(
+          context,
+          title: 'Remove member',
+          message:
+              'Are you sure you want to remove ${member.displayName} from the company?',
+        );
 
     if (!confirmed) return;
 
@@ -225,18 +218,18 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
     if (!mounted) return;
     if (result is Success<void>) {
       ref.invalidate(teamMemberListProvider(companyId));
-      ref.read(notificationServiceProvider).success(
-        context,
-        '${member.displayName} has been removed.',
-        title: 'Removed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            '${member.displayName} has been removed.',
+            title: 'Removed',
+          );
     } else {
       final err = (result as Failure<void>).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Removal failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Removal failed');
     }
   }
 
@@ -289,8 +282,7 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
                   padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
                   itemCount: members.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 8),
-                  itemBuilder: (_, i) =>
-                      _buildMemberCard(colors, members[i]),
+                  itemBuilder: (_, i) => _buildMemberCard(colors, members[i]),
                 ),
         ),
       ],
@@ -329,10 +321,9 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
                     Flexible(
                       child: Text(
                         member.displayName,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -346,9 +337,9 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
                 const SizedBox(height: 2),
                 Text(
                   member.email,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.textSecondary,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
                 ),
                 const SizedBox(height: 6),
                 StatusBadge(

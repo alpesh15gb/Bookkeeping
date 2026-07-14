@@ -26,6 +26,11 @@ from src.domains.accounting.services import (
     LedgerPostingEngine, JournalEntryDraft, commit_ledger_draft, AccountResolver,
 )
 from src.common.audit_log import set_audit_context
+from src.domains.inventory.services import (
+    resolve_default_warehouse_id,
+    resolve_reversal_warehouse_id,
+    get_warehouse_stock,
+)
 
 
 def _check_no_existing_posting(db: Session, tenant_id: uuid.UUID, source_type: str, source_id: uuid.UUID) -> None:
@@ -174,12 +179,18 @@ def auto_post_invoice(
             product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
             if product and product.product_type == "GOODS":
                 available = product.current_stock or Decimal("0")
-                if not allow_negative_stock and available < line.quantity:
-                    raise ValueError(f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
+                warehouse_id = resolve_default_warehouse_id(db, tenant_id)
+                location_available = get_warehouse_stock(
+                    db, tenant_id, warehouse_id, line.product_id
+                )
+                effective_available = location_available if location_available is not None else available
+                if not allow_negative_stock and effective_available < line.quantity:
+                    raise ValueError(f"Insufficient stock for {product.name} in the default warehouse. Available: {effective_available}, Required: {line.quantity}")
                 product.current_stock = available - line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=warehouse_id,
                     reference_type="INVOICE",
                     reference_id=invoice.id,
                     quantity=-line.quantity,
@@ -250,6 +261,7 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=resolve_default_warehouse_id(db, tenant_id),
                     reference_type="BILL",
                     reference_id=bill.id,
                     quantity=line.quantity,
@@ -483,6 +495,9 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=resolve_reversal_warehouse_id(
+                        db, tenant_id, "INVOICE", invoice.id, line.product_id
+                    ),
                     reference_type="INVOICE_REVERSAL",
                     reference_id=invoice.id,
                     quantity=line.quantity,
@@ -551,12 +566,20 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
             product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
             if product and product.product_type == "GOODS":
                 available = product.current_stock or Decimal("0")
-                if available < line.quantity:
-                    raise ValueError(f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
+                warehouse_id = resolve_reversal_warehouse_id(
+                    db, tenant_id, "BILL", bill.id, line.product_id
+                )
+                location_available = get_warehouse_stock(
+                    db, tenant_id, warehouse_id, line.product_id
+                )
+                effective_available = location_available if location_available is not None else available
+                if effective_available < line.quantity:
+                    raise ValueError(f"Insufficient stock for {product.name} in the receiving warehouse. Available: {effective_available}, Required: {line.quantity}")
                 product.current_stock = available - line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=warehouse_id,
                     reference_type="BILL_REVERSAL",
                     reference_id=bill.id,
                     quantity=-line.quantity,
@@ -801,6 +824,7 @@ def auto_post_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn) -
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=resolve_default_warehouse_id(db, tenant_id),
                     reference_type="SALES_RETURN",
                     reference_id=sr.id,
                     quantity=line.quantity,
@@ -852,12 +876,18 @@ def auto_post_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseRet
             product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
             if product and product.product_type == "GOODS":
                 available = product.current_stock or Decimal("0")
-                if available < line.quantity:
-                    raise ValueError(f"Insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
+                warehouse_id = resolve_default_warehouse_id(db, tenant_id)
+                location_available = get_warehouse_stock(
+                    db, tenant_id, warehouse_id, line.product_id
+                )
+                effective_available = location_available if location_available is not None else available
+                if effective_available < line.quantity:
+                    raise ValueError(f"Insufficient stock for {product.name} in the default warehouse. Available: {effective_available}, Required: {line.quantity}")
                 product.current_stock = available - line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=warehouse_id,
                     reference_type="PURCHASE_RETURN",
                     reference_id=pr.id,
                     quantity=-line.quantity,
@@ -911,12 +941,20 @@ def cancel_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn, user
             product = db.query(Product).filter(Product.id == line.product_id, Product.tenant_id == tenant_id).with_for_update().first()
             if product and product.product_type == "GOODS":
                 available = product.current_stock or Decimal("0")
-                if available < line.quantity:
-                    raise ValueError(f"Cannot cancel sales return: insufficient stock for {product.name}. Available: {available}, Required: {line.quantity}")
+                warehouse_id = resolve_reversal_warehouse_id(
+                    db, tenant_id, "SALES_RETURN", sr.id, line.product_id
+                )
+                location_available = get_warehouse_stock(
+                    db, tenant_id, warehouse_id, line.product_id
+                )
+                effective_available = location_available if location_available is not None else available
+                if effective_available < line.quantity:
+                    raise ValueError(f"Cannot cancel sales return: insufficient stock for {product.name} in its warehouse. Available: {effective_available}, Required: {line.quantity}")
                 product.current_stock = available - line.quantity
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=warehouse_id,
                     reference_type="SALES_RETURN_REVERSAL",
                     reference_id=sr.id,
                     quantity=-line.quantity,
@@ -974,6 +1012,9 @@ def cancel_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseReturn
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=resolve_reversal_warehouse_id(
+                        db, tenant_id, "PURCHASE_RETURN", pr.id, line.product_id
+                    ),
                     reference_type="PURCHASE_RETURN_REVERSAL",
                     reference_id=pr.id,
                     quantity=line.quantity,

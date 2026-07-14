@@ -59,6 +59,36 @@ class MovementService {
     });
   }
 
+  /// Loads the complete movement history needed to derive a warehouse's
+  /// balance. The API caps pages at 100 rows, so aggregation must page rather
+  /// than silently calculating from only the newest movements.
+  Future<Result<List<StockMovement>>> getWarehouseMovementHistory(
+    String warehouseId,
+  ) {
+    return guardDio(() async {
+      const pageSize = 100;
+      var page = 1;
+      final movements = <StockMovement>[];
+      while (true) {
+        final res = await _dio.get(
+          '/stock-ledger',
+          queryParameters: {
+            'page': page,
+            'limit': pageSize,
+            'warehouse_id': warehouseId,
+          },
+        );
+        final rows = res.data as List;
+        movements.addAll(
+          rows.map((e) => StockMovement.fromJson(e as Map<String, dynamic>)),
+        );
+        if (rows.length < pageSize) break;
+        page += 1;
+      }
+      return movements;
+    });
+  }
+
   /// Reconcile current stock by replaying movements.
   /// Returns the calculated balance from movement history.
   double calculateBalanceFromMovements(List<StockMovement> movements) {

@@ -51,6 +51,7 @@ class ContactResponse(SchemaBase):
 class ProductCreate(BaseModel):
     name: str = Field(..., max_length=150)
     sku: Optional[str] = Field(None, max_length=50)
+    barcode: Optional[str] = Field(None, min_length=4, max_length=64, pattern="^[A-Za-z0-9._/-]+$")
     hsn_sac: str = Field(..., min_length=6, max_length=8, pattern="^[0-9]{6,8}$")
     product_type: str = Field(..., pattern="^(GOODS|SERVICE)$")
     uom: str = Field(..., max_length=10)
@@ -63,6 +64,7 @@ class ProductCreate(BaseModel):
 class ProductUpdate(BaseModel):
     name: Optional[str] = Field(None, max_length=150)
     sku: Optional[str] = Field(None, max_length=50)
+    barcode: Optional[str] = Field(None, min_length=4, max_length=64, pattern="^[A-Za-z0-9._/-]+$")
     hsn_sac: Optional[str] = Field(None, min_length=6, max_length=8, pattern="^[0-9]{6,8}$")
     product_type: Optional[str] = Field(None, pattern="^(GOODS|SERVICE)$")
     uom: Optional[str] = Field(None, max_length=10)
@@ -78,6 +80,7 @@ class ProductResponse(SchemaBase):
     tenant_id: uuid.UUID
     name: str
     sku: Optional[str]
+    barcode: Optional[str]
     hsn_sac: str
     product_type: str
     uom: str

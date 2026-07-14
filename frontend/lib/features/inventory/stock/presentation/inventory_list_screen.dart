@@ -81,12 +81,19 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
                   return i.productName.toLowerCase().contains(q);
                 }).toList();
                 final lowCount = items.where((i) => i.isLowStock).length;
-                final totalValue =
-                    items.fold<double>(0, (a, b) => a + b.stockValue);
+                final totalValue = items.fold<double>(
+                  0,
+                  (a, b) => a + b.stockValue,
+                );
                 return Column(
                   children: [
                     _summaryBar(
-                      items.length, lowCount, totalValue, colors, fmt, isMobile,
+                      items.length,
+                      lowCount,
+                      totalValue,
+                      colors,
+                      fmt,
+                      isMobile,
                     ),
                     _toolbar(colors, lowCount, isMobile),
                     Expanded(
@@ -112,98 +119,107 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
     ApexColors c,
     NumberFormatter fmt,
     bool isMobile,
-  ) =>
-      Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 12 : 16,
-          vertical: 10,
+  ) => Container(
+    padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 10),
+    decoration: BoxDecoration(
+      color: c.surface,
+      border: Border(bottom: BorderSide(color: c.border)),
+    ),
+    child: Row(
+      children: [
+        _summaryChip(Icons.inventory_2_outlined, '$total products', c),
+        const SizedBox(width: 12),
+        if (low > 0)
+          _summaryChip(
+            Icons.warning_amber_rounded,
+            '$low low',
+            c,
+            color: c.warning,
+          ),
+        const Spacer(),
+        Text(
+          fmt.currency(value),
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: c.textPrimary,
+          ),
         ),
-        decoration: BoxDecoration(
-          color: c.surface,
-          border: Border(bottom: BorderSide(color: c.border)),
-        ),
-        child: Row(
-          children: [
-            _summaryChip(Icons.inventory_2_outlined, '$total products', c),
-            const SizedBox(width: 12),
-            if (low > 0)
-              _summaryChip(Icons.warning_amber_rounded, '$low low', c,
-                  color: c.warning),
-            const Spacer(),
-            Text(
-              fmt.currency(value),
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-                color: c.textPrimary,
-              ),
-            ),
-          ],
-        ),
-      );
+      ],
+    ),
+  );
 
-  Widget _summaryChip(IconData icon, String text, ApexColors c,
-          {Color? color}) =>
-      Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color ?? c.textSecondary),
-          const SizedBox(width: 4),
-          Text(text,
-              style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: color ?? c.textSecondary)),
-        ],
-      );
+  Widget _summaryChip(
+    IconData icon,
+    String text,
+    ApexColors c, {
+    Color? color,
+  }) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 14, color: color ?? c.textSecondary),
+      const SizedBox(width: 4),
+      Text(
+        text,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: color ?? c.textSecondary,
+        ),
+      ),
+    ],
+  );
 
   // ─── Toolbar ───────────────────────────────────────────────────
   Widget _toolbar(ApexColors c, int lowCount, bool isMobile) => Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: isMobile ? 12 : 16,
-          vertical: 8,
+    padding: EdgeInsets.symmetric(horizontal: isMobile ? 12 : 16, vertical: 8),
+    decoration: BoxDecoration(
+      color: c.surface,
+      border: Border(bottom: BorderSide(color: c.border)),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: ApexSearchBar(
+            controller: _searchCtrl,
+            hintText: 'Search products…',
+            onChanged: (v) => setState(() => _search = v),
+          ),
         ),
-        decoration: BoxDecoration(
-          color: c.surface,
-          border: Border(bottom: BorderSide(color: c.border)),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: ApexSearchBar(
-                controller: _searchCtrl,
-                hintText: 'Search products…',
-                onChanged: (v) => setState(() => _search = v),
-              ),
+        if (lowCount > 0) ...[
+          const SizedBox(width: 8),
+          FilterChip(
+            label: Text(isMobile ? 'Low ($lowCount)' : 'Low stock ($lowCount)'),
+            selected: _lowOnly,
+            onSelected: (v) => setState(() => _lowOnly = v),
+            avatar: Icon(
+              Icons.warning_amber_rounded,
+              size: 14,
+              color: _lowOnly ? c.onPrimary : c.warning,
             ),
-            if (lowCount > 0) ...[
-              const SizedBox(width: 8),
-              FilterChip(
-                label: Text(
-                  isMobile ? 'Low ($lowCount)' : 'Low stock ($lowCount)',
-                ),
-                selected: _lowOnly,
-                onSelected: (v) => setState(() => _lowOnly = v),
-                avatar: Icon(Icons.warning_amber_rounded,
-                    size: 14, color: _lowOnly ? c.onPrimary : c.warning),
-                selectedColor: c.warning,
-                labelStyle: TextStyle(
-                    fontSize: 12,
-                    color: _lowOnly ? c.onPrimary : c.textSecondary),
-              ),
-            ],
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Refresh',
-              icon: Icon(Icons.refresh_rounded, color: c.textSecondary),
-              onPressed: () => ref.invalidate(stockBalancesProvider),
+            selectedColor: c.warning,
+            labelStyle: TextStyle(
+              fontSize: 12,
+              color: _lowOnly ? c.onPrimary : c.textSecondary,
             ),
-          ],
+          ),
+        ],
+        const SizedBox(width: 8),
+        IconButton(
+          tooltip: 'Refresh',
+          icon: Icon(Icons.refresh_rounded, color: c.textSecondary),
+          onPressed: () => ref.invalidate(stockBalancesProvider),
         ),
-      );
+      ],
+    ),
+  );
 
   // ─── Mobile card list ──────────────────────────────────────────
-  Widget _mobileList(List<StockBalance> items, ApexColors c, NumberFormatter fmt) {
+  Widget _mobileList(
+    List<StockBalance> items,
+    ApexColors c,
+    NumberFormatter fmt,
+  ) {
     if (items.isEmpty) {
       return Center(
         child: Padding(
@@ -317,34 +333,37 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
     required Color color,
     required ApexColors c,
     bool bold = false,
-  }) =>
-      Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w500,
-                color: c.textMuted,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
-                color: color,
-              ),
-            ),
-          ],
+  }) => Expanded(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: FontWeight.w500,
+            color: c.textMuted,
+          ),
         ),
-      );
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: bold ? FontWeight.w700 : FontWeight.w600,
+            color: color,
+          ),
+        ),
+      ],
+    ),
+  );
 
   // ─── Desktop table ─────────────────────────────────────────────
-  Widget _desktopTable(List<StockBalance> items, ApexColors c, NumberFormatter fmt) {
+  Widget _desktopTable(
+    List<StockBalance> items,
+    ApexColors c,
+    NumberFormatter fmt,
+  ) {
     if (items.isEmpty) {
       return Center(
         child: Padding(
@@ -371,16 +390,21 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
               Expanded(flex: 34, child: Text('Product', style: _th(c))),
               Expanded(flex: 18, child: Text('Location', style: _th(c))),
               Expanded(
-                  flex: 14,
-                  child: Text('Qty', style: _th(c), textAlign: TextAlign.right)),
+                flex: 14,
+                child: Text('Qty', style: _th(c), textAlign: TextAlign.right),
+              ),
               Expanded(
-                  flex: 12,
-                  child: Text('Reorder',
-                      style: _th(c), textAlign: TextAlign.right)),
+                flex: 12,
+                child: Text(
+                  'Reorder',
+                  style: _th(c),
+                  textAlign: TextAlign.right,
+                ),
+              ),
               Expanded(
-                  flex: 14,
-                  child:
-                      Text('Value', style: _th(c), textAlign: TextAlign.right)),
+                flex: 14,
+                child: Text('Value', style: _th(c), textAlign: TextAlign.right),
+              ),
               Expanded(flex: 12, child: Text('Status', style: _th(c))),
             ],
           ),
@@ -407,8 +431,10 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
                 decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(color: c.border)),
                 ),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 10,
+                ),
                 child: Row(
                   children: [
                     Expanded(
@@ -453,10 +479,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
                       child: Text(
                         fmt.quantity(it.reorderLevel),
                         textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: c.textMuted,
-                        ),
+                        style: TextStyle(fontSize: 12.5, color: c.textMuted),
                       ),
                     ),
                     Expanded(
@@ -464,10 +487,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
                       child: Text(
                         fmt.currency(it.stockValue),
                         textAlign: TextAlign.right,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: c.textSecondary,
-                        ),
+                        style: TextStyle(fontSize: 13, color: c.textSecondary),
                       ),
                     ),
                     Expanded(
@@ -488,9 +508,9 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
   }
 
   TextStyle _th(ApexColors colors) => TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: colors.textMuted,
-      );
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+  );
 }

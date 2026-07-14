@@ -8,19 +8,18 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/services/notification_service.dart';
 import '../services/transfer_service.dart';
+import 'transfer_list_provider.dart';
 
 final transferDetailProvider = FutureProvider.autoDispose
     .family<Transfer, String>((ref, id) async {
-      // TransferService does not expose a get(id) method, so we list and filter.
-      // TODO: Add backend /transfers/:id endpoint when available.
-      final res = await ref.watch(transferServiceProvider).list(limit: 200);
-      final items = switch (res) {
+      final res = await ref.watch(transferServiceProvider).get(id);
+      return switch (res) {
         Success(:final value) => value,
         Failure(:final error) => throw error,
         _ => throw Exception(),
       };
-      return items.firstWhere((t) => t.id == id);
     });
 
 class TransferDetailScreen extends ConsumerWidget {
@@ -42,6 +41,25 @@ class TransferDetailScreen extends ConsumerWidget {
       data: (t) => ListView(
         padding: const EdgeInsets.all(20),
         children: [
+          if (t.isDraft) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _complete(context, ref, t),
+                    icon: const Icon(Icons.check_circle_outline),
+                    label: const Text('Complete Transfer'),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  onPressed: () => _cancel(context, ref, t),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
           _kv('Transfer No.', t.transferNumber, colors),
           const SizedBox(height: 12),
           _kv('Date', t.transferDate, colors),
@@ -104,6 +122,95 @@ class TransferDetailScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  Future<void> _complete(
+    BuildContext context,
+    WidgetRef ref,
+    Transfer transfer,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Complete stock transfer?'),
+        content: Text(
+          'This will move stock from ${transfer.fromWarehouseName} to '
+          '${transfer.toWarehouseName}. The completed transfer cannot be edited.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Complete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final result = await ref
+        .read(transferServiceProvider)
+        .complete(transfer.id);
+    if (!context.mounted) return;
+    if (result is Success<Transfer>) {
+      ref.invalidate(transferDetailProvider(transfer.id));
+      ref.invalidate(transferListProvider);
+      ref
+          .read(notificationServiceProvider)
+          .success(context, 'Stock transfer completed.', title: 'Completed');
+    } else {
+      ref
+          .read(notificationServiceProvider)
+          .error(
+            context,
+            (result as Failure<Transfer>).error.message,
+            title: 'Could not complete transfer',
+          );
+    }
+  }
+
+  Future<void> _cancel(
+    BuildContext context,
+    WidgetRef ref,
+    Transfer transfer,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Cancel draft transfer?'),
+        content: const Text('No stock movement will be posted.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Back'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Cancel Transfer'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    final result = await ref.read(transferServiceProvider).cancel(transfer.id);
+    if (!context.mounted) return;
+    if (result is Success<Transfer>) {
+      ref.invalidate(transferDetailProvider(transfer.id));
+      ref.invalidate(transferListProvider);
+      ref
+          .read(notificationServiceProvider)
+          .info(context, 'Draft transfer cancelled.', title: 'Cancelled');
+    } else {
+      ref
+          .read(notificationServiceProvider)
+          .error(
+            context,
+            (result as Failure<Transfer>).error.message,
+            title: 'Could not cancel transfer',
+          );
+    }
   }
 
   Widget _kv(String k, String v, ApexColors colors) => Row(

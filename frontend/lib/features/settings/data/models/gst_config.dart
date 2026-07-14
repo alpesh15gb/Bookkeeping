@@ -15,11 +15,19 @@ class GstConfig {
   });
 
   factory GstConfig.fromJson(Map<String, dynamic> json) {
+    final extra = json['extra_settings'] is Map
+        ? Map<String, dynamic>.from(json['extra_settings'] as Map)
+        : const <String, dynamic>{};
     return GstConfig(
-      taxMode: (json['tax_mode'] as String?) ?? 'NON_GST',
-      stateCode: json['state_code'] as String?,
-      registrationType: json['registration_type'] as String?,
-      filingFrequency: json['filing_frequency'] as String?,
+      taxMode: (json['tax_mode'] as String?) ?? TaxMode.nonGst,
+      stateCode:
+          json['origin_state_code'] as String? ?? json['state_code'] as String?,
+      registrationType:
+          extra['gst_registration_type'] as String? ??
+          json['registration_type'] as String?,
+      filingFrequency:
+          extra['gst_filing_frequency'] as String? ??
+          json['filing_frequency'] as String?,
       gstin: json['gstin'] as String?,
     );
   }
@@ -49,8 +57,8 @@ class GstConfig {
 /// Known GST tax modes.
 class TaxMode {
   TaxMode._();
-  static const String regular = 'REGULAR';
-  static const String composition = 'COMPOSITION';
+  static const String regular = 'GST_REGULAR';
+  static const String composition = 'GST_COMPOSITION';
   static const String nonGst = 'NON_GST';
 
   static Map<String, String> get labels => {
@@ -89,22 +97,22 @@ class IndianStates {
     '22': 'Chhattisgarh',
     '23': 'Madhya Pradesh',
     '24': 'Gujarat',
-    '25': 'Daman & Diu and Dadra & Nagar Haveli',
-    '26': 'Maharashtra',
-    '27': 'Karnataka',
-    '28': 'Andhra Pradesh',
-    '29': 'Kerala',
-    '30': 'Tamil Nadu',
-    '31': 'Puducherry',
-    '32': 'Lakshadweep',
-    '33': 'Andaman & Nicobar Islands',
-    '34': 'Telangana',
-    '35': 'Andhra Pradesh (New)',
-    '36': 'Ladakh',
-    '37': 'Goa',
-    '38': 'Goa',
+    '25': 'Daman & Diu',
+    '26': 'Dadra & Nagar Haveli and Daman & Diu',
+    '27': 'Maharashtra',
+    '28': 'Andhra Pradesh (Old)',
+    '29': 'Karnataka',
+    '30': 'Goa',
+    '31': 'Lakshadweep',
+    '32': 'Kerala',
+    '33': 'Tamil Nadu',
+    '34': 'Puducherry',
+    '35': 'Andaman & Nicobar Islands',
+    '36': 'Telangana',
+    '37': 'Andhra Pradesh',
+    '38': 'Ladakh',
     '97': 'Other Territory',
-    '99': 'E-Commerce Operator',
+    '99': 'Centre Jurisdiction',
   };
 }
 

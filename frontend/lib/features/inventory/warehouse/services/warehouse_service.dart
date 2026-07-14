@@ -14,12 +14,7 @@ import 'package:apexbooks/core/result/result.dart';
 /// Physical address for a warehouse.
 @immutable
 class WarehouseAddress {
-  const WarehouseAddress({
-    this.street,
-    this.city,
-    this.state,
-    this.pincode,
-  });
+  const WarehouseAddress({this.street, this.city, this.state, this.pincode});
 
   final String? street;
   final String? city;
@@ -35,16 +30,19 @@ class WarehouseAddress {
       );
 
   Map<String, dynamic> toJson() => {
-        if (street != null) 'street': street,
-        if (city != null) 'city': city,
-        if (state != null) 'state': state,
-        if (pincode != null) 'pincode': pincode,
-      };
+    if (street != null) 'street': street,
+    if (city != null) 'city': city,
+    if (state != null) 'state': state,
+    if (pincode != null) 'pincode': pincode,
+  };
 
   String get formatted {
-    final parts = [street, city, state, pincode].where(
-      (p) => p != null && p.isNotEmpty,
-    );
+    final parts = [
+      street,
+      city,
+      state,
+      pincode,
+    ].where((p) => p != null && p.isNotEmpty);
     return parts.isEmpty ? '' : parts.join(', ');
   }
 }
@@ -73,28 +71,26 @@ class Warehouse {
   final String? createdAt;
 
   factory Warehouse.fromJson(Map<String, dynamic> json) => Warehouse(
-        id: (json['id'] ?? '').toString(),
-        name: json['name'] as String? ?? '',
-        code: json['code'] as String? ?? '',
-        location: json['location'] as String?,
-        isActive: json['is_active'] as bool? ?? true,
-        gstin: json['gstin'] as String?,
-        address: json['address'] != null
-            ? WarehouseAddress.fromJson(
-                json['address'] as Map<String, dynamic>,
-              )
-            : null,
-        createdAt: json['created_at'] as String?,
-      );
+    id: (json['id'] ?? '').toString(),
+    name: json['name'] as String? ?? '',
+    code: json['code'] as String? ?? '',
+    location: json['location'] as String?,
+    isActive: json['is_active'] as bool? ?? true,
+    gstin: json['gstin'] as String?,
+    address: json['address'] != null
+        ? WarehouseAddress.fromJson(json['address'] as Map<String, dynamic>)
+        : null,
+    createdAt: json['created_at'] as String?,
+  );
 
   Map<String, dynamic> toJson() => {
-        'name': name,
-        'code': code,
-        if (location != null) 'location': location,
-        'is_active': isActive,
-        if (gstin != null) 'gstin': gstin,
-        if (address != null) 'address': address!.toJson(),
-      };
+    'name': name,
+    'code': code,
+    if (location != null) 'location': location,
+    'is_active': isActive,
+    if (gstin != null) 'gstin': gstin,
+    if (address != null) 'address': address!.toJson(),
+  };
 }
 
 /// A warehouse-stock view: product-level balance for a single warehouse.

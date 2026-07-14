@@ -14,7 +14,6 @@ import '../../../core/services/notification_service.dart';
 import '../../../core/result/result.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/gst_config.dart';
-import '../data/settings_repository.dart';
 import 'settings_providers.dart';
 
 class SettingsGstConfigScreen extends ConsumerStatefulWidget {
@@ -37,6 +36,7 @@ class _SettingsGstConfigScreenState
   String? _stateCode;
   String? _registrationType;
   String? _filingFrequency;
+  String? _gstin;
 
   void _initFields(GstConfig config) {
     if (_populated) return;
@@ -44,48 +44,63 @@ class _SettingsGstConfigScreenState
     _stateCode = config.stateCode;
     _registrationType = config.registrationType;
     _filingFrequency = config.filingFrequency;
+    _gstin = config.gstin;
     _populated = true;
   }
 
   Future<void> _save() async {
     final companyId = _companyId;
     if (companyId == null) return;
+    if (_taxMode != TaxMode.nonGst && _stateCode == null) {
+      ref
+          .read(notificationServiceProvider)
+          .error(
+            context,
+            'Select the GST registration state before saving.',
+            title: 'State required',
+          );
+      return;
+    }
+    if (_taxMode != TaxMode.nonGst && (_gstin?.trim().isEmpty ?? true)) {
+      ref
+          .read(notificationServiceProvider)
+          .error(
+            context,
+            'Add a valid GSTIN in Company Profile before enabling GST.',
+            title: 'GSTIN required',
+          );
+      return;
+    }
 
     setState(() => _isSaving = true);
     final repo = ref.read(settingsRepositoryProvider);
 
-    // Update GST fields via /settings.
-    final gstResult = await repo.updateGstConfig({
-      'tax_mode': _taxMode,
-      if (_stateCode != null) 'state_code': _stateCode,
-      if (_registrationType != null) 'registration_type': _registrationType,
-      if (_filingFrequency != null) 'filing_frequency': _filingFrequency,
-    });
-
-    // Also toggle on the company endpoint if tax mode changed.
-    if (gstResult is Success) {
-      await repo.toggleGstMode(companyId, _taxMode);
-    }
+    final gstResult = await repo.updateGstConfig(
+      companyId,
+      GstConfig(
+        taxMode: _taxMode,
+        stateCode: _stateCode,
+        registrationType: _registrationType,
+        filingFrequency: _filingFrequency,
+      ),
+    );
 
     setState(() => _isSaving = false);
 
     if (!mounted) return;
     if (gstResult is Success) {
       ref.invalidate(gstConfigProvider);
+      ref.invalidate(tenantSettingsProvider);
       ref.invalidate(companyProfileProvider(companyId));
       await ref.read(authControllerProvider.notifier).refreshMemberships();
-      ref.read(notificationServiceProvider).success(
-        context,
-        'GST configuration updated.',
-        title: 'Saved',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(context, 'GST configuration updated.', title: 'Saved');
     } else {
       final err = (gstResult as Failure).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Save failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Save failed');
     }
   }
 
@@ -144,17 +159,16 @@ class _SettingsGstConfigScreenState
               children: [
                 Text(
                   'Tax Mode',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Choose how your business is registered for GST.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.textSecondary,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -188,10 +202,9 @@ class _SettingsGstConfigScreenState
                 children: [
                   Text(
                     'GST Details',
-                    style: Theme.of(context)
-                        .textTheme
-                        .titleSmall
-                        ?.copyWith(fontWeight: FontWeight.w600),
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -285,8 +298,11 @@ class _SettingsGstConfigScreenState
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  Icon(Icons.info_outline_rounded,
-                      size: 20, color: colors.info),
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 20,
+                    color: colors.info,
+                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(

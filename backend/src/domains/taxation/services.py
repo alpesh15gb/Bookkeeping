@@ -19,7 +19,7 @@ class TaxSplit(NamedTuple):
 
 # Union Territory State Codes in India
 UNION_TERRITORIES: Set[str] = {
-    "19",  # Lakshadweep
+    "31",  # Lakshadweep
     "25",  # Daman and Diu (part of DNHDD)
     "26",  # Dadra and Nagar Haveli and Daman and Diu (DNHDD)
     "04",  # Chandigarh

@@ -36,6 +36,7 @@ class Product extends BaseModel {
     required this.id,
     required this.name,
     this.sku,
+    this.barcode,
     this.hsnSac = '',
     this.productType = ProductType.goods,
     this.uom = 'PCS',
@@ -54,6 +55,7 @@ class Product extends BaseModel {
   final String id;
   final String name;
   final String? sku;
+  final String? barcode;
   final String hsnSac;
   final ProductType productType;
   final String uom;
@@ -81,6 +83,7 @@ class Product extends BaseModel {
     id: (json['id'] ?? '').toString(),
     name: json['name'] as String? ?? '',
     sku: json['sku'] as String?,
+    barcode: json['barcode'] as String?,
     hsnSac: json['hsn_sac'] as String? ?? '',
     productType: json['product_type'] != null
         ? ProductType.fromApi(json['product_type'] as String)
@@ -104,6 +107,7 @@ class Product extends BaseModel {
     if (id.isNotEmpty) 'id': id,
     'name': name,
     if (sku != null && sku!.isNotEmpty) 'sku': sku,
+    'barcode': barcode,
     'hsn_sac': hsnSac,
     'product_type': productType.apiValue,
     'uom': uom,
@@ -119,6 +123,7 @@ class Product extends BaseModel {
     String? id,
     String? name,
     String? sku,
+    String? barcode,
     String? hsnSac,
     ProductType? productType,
     String? uom,
@@ -133,6 +138,7 @@ class Product extends BaseModel {
     id: id ?? this.id,
     name: name ?? this.name,
     sku: sku ?? this.sku,
+    barcode: barcode ?? this.barcode,
     hsnSac: hsnSac ?? this.hsnSac,
     productType: productType ?? this.productType,
     uom: uom ?? this.uom,

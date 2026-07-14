@@ -114,15 +114,30 @@ class TransferService {
         '/transfers',
         queryParameters: {'page': page, 'limit': limit},
       );
-      return (res.data as List)
+      final body = res.data as Map<String, dynamic>;
+      return (body['items'] as List? ?? const [])
           .map((e) => Transfer.fromJson(e as Map<String, dynamic>))
           .toList();
+    });
+  }
+
+  Future<Result<Transfer>> get(String id) {
+    return guardDio(() async {
+      final res = await _dio.get('/transfers/$id');
+      return Transfer.fromJson(res.data as Map<String, dynamic>);
     });
   }
 
   Future<Result<Transfer>> complete(String id) {
     return guardDio(() async {
       final res = await _dio.post('/transfers/$id/complete');
+      return Transfer.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  Future<Result<Transfer>> cancel(String id) {
+    return guardDio(() async {
+      final res = await _dio.post('/transfers/$id/cancel');
       return Transfer.fromJson(res.data as Map<String, dynamic>);
     });
   }

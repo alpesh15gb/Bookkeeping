@@ -51,8 +51,7 @@ class _TransferListScreenState extends ConsumerState<TransferListScreen> {
             child: async.when(
               loading: () => Column(
                 children: [
-                  for (int i = 0; i < 6; i++)
-                    const ListItemSkeleton(),
+                  for (int i = 0; i < 6; i++) const ListItemSkeleton(),
                 ],
               ),
               error: (err, _) => ErrorView(
@@ -61,12 +60,18 @@ class _TransferListScreenState extends ConsumerState<TransferListScreen> {
               ),
               data: (items) {
                 if (items.isEmpty) {
-                  return const EmptyState(
+                  return EmptyState(
                     icon: Icons.swap_horiz_rounded,
                     title: 'No transfers yet',
                     subtitle: 'Create a stock transfer between warehouses.',
                     actionLabel: 'New Transfer',
-                    onAction: null,
+                    onAction: () => Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) => const TransferFormScreen(),
+                          ),
+                        )
+                        .then((_) => ref.invalidate(transferListProvider)),
                   );
                 }
                 return ListView.builder(

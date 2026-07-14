@@ -13,6 +13,7 @@ import '../../../core/widgets/states.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/result/result.dart';
+import '../../../core/dialogs/dialog_service.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/financial_year.dart';
 import 'settings_providers.dart';
@@ -44,18 +45,18 @@ class _SettingsFinancialYearScreenState
     if (!mounted) return;
     if (result is Success<void>) {
       ref.invalidate(financialYearListProvider(companyId));
-      ref.read(notificationServiceProvider).success(
-        context,
-        '${fy.name} is now the current financial year.',
-        title: 'FY Changed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            '${fy.name} is now the current financial year.',
+            title: 'FY Changed',
+          );
     } else {
       final err = (result as Failure<void>).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Switch failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Switch failed');
     }
   }
 
@@ -99,18 +100,111 @@ class _SettingsFinancialYearScreenState
 
     if (result is Success<FinancialYear>) {
       ref.invalidate(financialYearListProvider(companyId));
-      ref.read(notificationServiceProvider).success(
-        context,
-        '${result.value.name} has been created.',
-        title: 'FY Created',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            '${result.value.name} has been created.',
+            title: 'FY Created',
+          );
     } else {
       final err = (result as Failure<FinancialYear>).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Creation failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Creation failed');
+    }
+  }
+
+  Future<void> _close(FinancialYear fy) async {
+    final confirmed = await ref
+        .read(dialogServiceProvider)
+        .confirm(
+          context,
+          title: 'Close ${fy.name}?',
+          message:
+              'This posts the year-end transfer, locks the year and carries '
+              'balances into the next financial year. Resolve all unposted '
+              'documents before continuing.',
+          confirmLabel: 'Close Year',
+        );
+    if (!confirmed) return;
+    final result = await ref
+        .read(settingsRepositoryProvider)
+        .closeFinancialYear(fy.id);
+    if (!mounted) return;
+    if (result is Success<void>) {
+      ref.invalidate(financialYearListProvider(_companyId!));
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            '${fy.name} has been closed and locked.',
+            title: 'Year closed',
+          );
+    } else {
+      ref
+          .read(notificationServiceProvider)
+          .error(
+            context,
+            (result as Failure<void>).error.message,
+            title: 'Close blocked',
+          );
+    }
+  }
+
+  Future<void> _reopen(FinancialYear fy) async {
+    final controller = TextEditingController();
+    final reason = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Reopen ${fy.name}'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 3,
+          decoration: const InputDecoration(
+            labelText: 'Reason *',
+            hintText: 'Explain why this financial year must be reopened',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.isNotEmpty) Navigator.pop(dialogContext, value);
+            },
+            child: const Text('Reopen'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (reason == null) return;
+    final result = await ref
+        .read(settingsRepositoryProvider)
+        .reopenFinancialYear(fy.id, reason);
+    if (!mounted) return;
+    if (result is Success<void>) {
+      ref.invalidate(financialYearListProvider(_companyId!));
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            '${fy.name} has been reopened with an audit record.',
+            title: 'Year reopened',
+          );
+    } else {
+      ref
+          .read(notificationServiceProvider)
+          .error(
+            context,
+            (result as Failure<void>).error.message,
+            title: 'Reopen failed',
+          );
     }
   }
 
@@ -131,8 +225,7 @@ class _SettingsFinancialYearScreenState
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
           message: err.toString(),
-          onRetry: () =>
-              ref.invalidate(financialYearListProvider(companyId)),
+          onRetry: () => ref.invalidate(financialYearListProvider(companyId)),
         ),
         data: (fys) => _buildContent(colors, fys),
       ),
@@ -206,10 +299,9 @@ class _SettingsFinancialYearScreenState
                     children: [
                       Text(
                         fy.name,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w600),
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                       if (isCurrent) ...[
                         const SizedBox(width: 8),
@@ -220,8 +312,9 @@ class _SettingsFinancialYearScreenState
                           ),
                           decoration: BoxDecoration(
                             color: colors.primary.withValues(alpha: 0.1),
-                            borderRadius:
-                                BorderRadius.circular(ApexRadius.pill),
+                            borderRadius: BorderRadius.circular(
+                              ApexRadius.pill,
+                            ),
                           ),
                           child: Text(
                             'CURRENT',
@@ -234,6 +327,25 @@ class _SettingsFinancialYearScreenState
                           ),
                         ),
                       ],
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: colors.surfaceMuted,
+                          borderRadius: BorderRadius.circular(ApexRadius.pill),
+                        ),
+                        child: Text(
+                          fy.status.replaceAll('_', ' '),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: colors.textSecondary,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 2),
@@ -246,7 +358,17 @@ class _SettingsFinancialYearScreenState
                 ],
               ),
             ),
-            if (!isCurrent && !_isSwitching)
+            if (fy.status == 'READY_TO_CLOSE')
+              TextButton(
+                onPressed: () => _close(fy),
+                child: const Text('Close'),
+              )
+            else if (fy.status == 'LOCKED' || fy.status == 'ARCHIVED')
+              TextButton(
+                onPressed: () => _reopen(fy),
+                child: const Text('Reopen'),
+              )
+            else if (!isCurrent && !_isSwitching)
               TextButton(
                 onPressed: () => _setCurrent(fy),
                 child: const Text('Switch'),
@@ -331,9 +453,7 @@ class _CreateFinancialYearDialogState
                         ? formatDate(_startDate!)
                         : 'Select start date',
                     style: TextStyle(
-                      color: _startDate != null
-                          ? null
-                          : colors.textMuted,
+                      color: _startDate != null ? null : colors.textMuted,
                     ),
                   ),
                 ),

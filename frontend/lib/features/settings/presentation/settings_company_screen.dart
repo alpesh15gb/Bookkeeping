@@ -5,16 +5,18 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/services/notification_service.dart';
-import '../../../core/dialogs/dialog_service.dart';
 import '../../../core/result/result.dart';
 import '../../auth/data/models/membership_models.dart';
 import '../../auth/presentation/auth_controller.dart';
+import '../data/models/tenant_settings.dart';
 import 'settings_providers.dart';
 
 class SettingsCompanyScreen extends ConsumerStatefulWidget {
@@ -59,71 +61,113 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
   String? get _companyId =>
       ref.read(authControllerProvider).activeMembership?.tenantId;
 
-  void _populateForm(Company company) {
+  void _populateForm(Company company, TenantSettings settings) {
     if (_populated) return;
     _legalNameCtrl.text = company.legalName;
     _tradeNameCtrl.text = company.tradeName ?? '';
     _gstinCtrl.text = company.gstin ?? '';
     _panCtrl.text = company.pan ?? '';
+    final extra = settings.extraSettings;
+    final address = extra['company_address'];
+    if (address is Map) {
+      _addressCtrl.text = (address['street'] ?? '').toString();
+      _cityCtrl.text = (address['city'] ?? '').toString();
+      _stateCtrl.text = (address['state'] ?? '').toString();
+      _pincodeCtrl.text = (address['pincode'] ?? '').toString();
+    } else if (address != null) {
+      _addressCtrl.text = address.toString();
+    }
+    _phoneCtrl.text = (extra['company_phone'] ?? '').toString();
+    _emailCtrl.text = (extra['company_email'] ?? '').toString();
     _populated = true;
   }
 
-  Future<bool> _confirmDiscard() async {
-    final changed = [
-      _legalNameCtrl,
-      _tradeNameCtrl,
-      _gstinCtrl,
-      _panCtrl,
-      _addressCtrl,
-      _cityCtrl,
-      _stateCtrl,
-      _pincodeCtrl,
-      _phoneCtrl,
-      _emailCtrl,
-    ].any((c) => c.text != c.text); // always false since we haven't tracked initial
-    if (!changed) return true;
-    final result = await ref.read(dialogServiceProvider).unsavedChanges(context);
-    return result != DialogResult.cancel;
-  }
-
-  Future<void> _save() async {
+  Future<void> _save(Company company, TenantSettings settings) async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
     final repo = ref.read(settingsRepositoryProvider);
     final data = <String, dynamic>{
       'legal_name': _legalNameCtrl.text.trim(),
-      if (_tradeNameCtrl.text.trim().isNotEmpty)
-        'trade_name': _tradeNameCtrl.text.trim(),
-      if (_gstinCtrl.text.trim().isNotEmpty) 'gstin': _gstinCtrl.text.trim(),
-      if (_panCtrl.text.trim().isNotEmpty) 'pan': _panCtrl.text.trim(),
-      if (_addressCtrl.text.trim().isNotEmpty)
-        'address': _addressCtrl.text.trim(),
-      if (_cityCtrl.text.trim().isNotEmpty) 'city': _cityCtrl.text.trim(),
-      if (_stateCtrl.text.trim().isNotEmpty) 'state': _stateCtrl.text.trim(),
-      if (_pincodeCtrl.text.trim().isNotEmpty)
-        'pincode': _pincodeCtrl.text.trim(),
-      if (_phoneCtrl.text.trim().isNotEmpty) 'phone': _phoneCtrl.text.trim(),
-      if (_emailCtrl.text.trim().isNotEmpty) 'email': _emailCtrl.text.trim(),
+      'trade_name': _tradeNameCtrl.text.trim().isEmpty
+          ? null
+          : _tradeNameCtrl.text.trim(),
+      'gstin': _gstinCtrl.text.trim().isEmpty
+          ? null
+          : _gstinCtrl.text.trim().toUpperCase(),
+      'pan': _panCtrl.text.trim().isEmpty
+          ? null
+          : _panCtrl.text.trim().toUpperCase(),
+      // The deployed update endpoint uses CompanyCreate. Always preserve these
+      // values so an ordinary profile edit cannot reset tax/FY configuration.
+      'tax_mode': company.taxMode,
+      'financial_year_start': company.financialYearStart
+          .toIso8601String()
+          .split('T')
+          .first,
     };
 
     final result = await repo.updateCompany(_companyId!, data);
+    Result<TenantSettings>? settingsResult;
+    if (result is Success<Company>) {
+      final extra = Map<String, dynamic>.from(settings.extraSettings)
+        ..['company_address'] = {
+          'street': _addressCtrl.text.trim(),
+          'city': _cityCtrl.text.trim(),
+          'state': _stateCtrl.text.trim(),
+          'pincode': _pincodeCtrl.text.trim(),
+          'country': 'India',
+        }
+        ..['company_phone'] = _phoneCtrl.text.trim()
+        ..['company_email'] = _emailCtrl.text.trim();
+      settingsResult = await repo.updateTenantSettings({
+        'extra_settings': extra,
+      });
+    }
     setState(() => _isSaving = false);
 
     if (!mounted) return;
-    if (result is Success<Company>) {
-      ref.read(notificationServiceProvider).success(
-        context,
-        'Company profile updated.',
-        title: 'Saved',
-      );
+    if (result is Success<Company> &&
+        settingsResult is Success<TenantSettings>) {
+      ref.invalidate(companyProfileProvider(_companyId!));
+      ref.invalidate(tenantSettingsProvider);
+      ref
+          .read(notificationServiceProvider)
+          .success(context, 'Company profile updated.', title: 'Saved');
     } else {
-      final err = (result as Failure<Company>).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Update failed',
-      );
+      final err = result is Failure<Company>
+          ? result.error
+          : (settingsResult as Failure<TenantSettings>).error;
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Update failed');
+    }
+  }
+
+  Future<void> _uploadLogo() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      withData: true,
+    );
+    final file = picked?.files.single;
+    if (file == null || file.bytes == null || !mounted) return;
+    final result = await ref
+        .read(settingsRepositoryProvider)
+        .uploadLogo(bytes: file.bytes!, filename: file.name);
+    if (!mounted) return;
+    if (result is Success<String>) {
+      ref.invalidate(tenantSettingsProvider);
+      ref
+          .read(notificationServiceProvider)
+          .success(context, 'Company logo updated.', title: 'Logo saved');
+    } else {
+      ref
+          .read(notificationServiceProvider)
+          .error(
+            context,
+            (result as Failure<String>).error.message,
+            title: 'Upload failed',
+          );
     }
   }
 
@@ -133,9 +177,7 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
     final companyId = _companyId;
 
     if (companyId == null) {
-      return const Center(
-        child: Text('No company selected.'),
-      );
+      return const Center(child: Text('No company selected.'));
     }
 
     final async = ref.watch(companyProfileProvider(companyId));
@@ -148,15 +190,28 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
           message: err.toString(),
           onRetry: () => ref.invalidate(companyProfileProvider(companyId)),
         ),
-        data: (company) {
-          if (!_populated) _populateForm(company);
-          return _buildForm(colors, company);
-        },
+        data: (company) => ref
+            .watch(tenantSettingsProvider)
+            .when(
+              loading: () => const Center(child: LoadingSpinner(size: 36)),
+              error: (err, _) => ErrorView(
+                message: err.toString(),
+                onRetry: () => ref.invalidate(tenantSettingsProvider),
+              ),
+              data: (settings) {
+                if (!_populated) _populateForm(company, settings);
+                return _buildForm(colors, company, settings);
+              },
+            ),
       ),
     );
   }
 
-  Widget _buildForm(ApexColors colors, Company company) {
+  Widget _buildForm(
+    ApexColors colors,
+    Company company,
+    TenantSettings settings,
+  ) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -167,7 +222,7 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
             subtitle: 'Manage your business information',
             actions: [
               FilledButton.icon(
-                onPressed: _isSaving ? null : _save,
+                onPressed: _isSaving ? null : () => _save(company, settings),
                 icon: _isSaving
                     ? const SizedBox(
                         width: 16,
@@ -197,19 +252,25 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
                           borderRadius: BorderRadius.circular(ApexRadius.md),
                           border: Border.all(color: colors.border),
                         ),
-                        child: const Icon(
-                          Icons.business_rounded,
-                          size: 36,
-                        ),
+                        child: settings.logoUrl == null
+                            ? const Icon(Icons.business_rounded, size: 36)
+                            : ClipRRect(
+                                borderRadius: BorderRadius.circular(
+                                  ApexRadius.md,
+                                ),
+                                child: Image.network(
+                                  settings.logoUrl!,
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (_, _, _) => const Icon(
+                                    Icons.broken_image_outlined,
+                                    size: 32,
+                                  ),
+                                ),
+                              ),
                       ),
                       const SizedBox(width: 16),
                       OutlinedButton.icon(
-                        onPressed: () {
-                          ref.read(notificationServiceProvider).info(
-                            context,
-                            'Logo upload will be available soon.',
-                          );
-                        },
+                        onPressed: _uploadLogo,
                         icon: const Icon(Icons.upload_outlined, size: 18),
                         label: const Text('Upload Logo'),
                       ),
@@ -223,10 +284,9 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
                       labelText: 'Legal Business Name *',
                       prefixIcon: Icon(Icons.business_outlined),
                     ),
-                    validator: (v) =>
-                        (v == null || v.trim().isEmpty)
-                            ? 'Business name is required'
-                            : null,
+                    validator: (v) => (v == null || v.trim().isEmpty)
+                        ? 'Business name is required'
+                        : null,
                   ),
                   const SizedBox(height: 16),
                   // Trade Name
@@ -248,6 +308,22 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
                     ),
                     textCapitalization: TextCapitalization.characters,
                     maxLength: 15,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                    ],
+                    validator: (value) {
+                      final gstin = value?.trim().toUpperCase() ?? '';
+                      if (company.taxMode != 'NON_GST' && gstin.isEmpty) {
+                        return 'GSTIN is required while GST is enabled';
+                      }
+                      if (gstin.isNotEmpty &&
+                          !RegExp(
+                            r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$',
+                          ).hasMatch(gstin)) {
+                        return 'Enter a valid 15-character GSTIN';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 16),
                   // PAN
@@ -260,6 +336,17 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
                     ),
                     textCapitalization: TextCapitalization.characters,
                     maxLength: 10,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                    ],
+                    validator: (value) {
+                      final pan = value?.trim().toUpperCase() ?? '';
+                      if (pan.isNotEmpty &&
+                          !RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$').hasMatch(pan)) {
+                        return 'Enter a valid 10-character PAN';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 24),
                   Divider(color: colors.border),
@@ -313,8 +400,7 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
                           controller: _pincodeCtrl,
                           decoration: const InputDecoration(
                             labelText: 'Pincode',
-                            prefixIcon:
-                                Icon(Icons.markunread_mailbox_outlined),
+                            prefixIcon: Icon(Icons.markunread_mailbox_outlined),
                           ),
                           keyboardType: TextInputType.number,
                           maxLength: 6,
@@ -355,9 +441,9 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
               children: [
                 Text(
                   'Tax Information',
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 16),
                 _infoRow(colors, 'Tax Mode', company.taxMode),
@@ -381,17 +467,11 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
       children: [
         Text(
           label,
-          style: TextStyle(
-            color: colors.textSecondary,
-            fontSize: 13,
-          ),
+          style: TextStyle(color: colors.textSecondary, fontSize: 13),
         ),
         Text(
           value,
-          style: const TextStyle(
-            fontWeight: FontWeight.w500,
-            fontSize: 13,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
         ),
       ],
     );

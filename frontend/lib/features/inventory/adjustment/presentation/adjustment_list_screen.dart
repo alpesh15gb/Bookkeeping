@@ -75,8 +75,7 @@ class _AdjustmentListScreenState extends ConsumerState<AdjustmentListScreen> {
             child: async.when(
               loading: () => Column(
                 children: [
-                  for (int i = 0; i < 6; i++)
-                    const ListItemSkeleton(),
+                  for (int i = 0; i < 6; i++) const ListItemSkeleton(),
                 ],
               ),
               error: (err, _) => ErrorView(

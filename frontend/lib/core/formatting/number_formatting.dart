@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+import 'package:apexbooks/features/settings/presentation/settings_providers.dart';
 
 /// A single entry point for all number formatting in ApexBooks.
 /// Adapts to locale and currency settings from the active company.
@@ -85,6 +86,20 @@ class NumberFormatter {
 
 /// Provider for [NumberFormatter] — seeded from the active company's settings.
 final numberFormatterProvider = Provider<NumberFormatter>((ref) {
-  // TODO: read locale + currency from the active company.
-  return NumberFormatter();
+  final preferences = ref.watch(userPreferencesProvider).valueOrNull;
+  final currency = preferences?.currency ?? 'INR';
+  final requestedLocale = preferences?.numberFormat ?? 'en_IN';
+  final locale = requestedLocale == 'en_EU' ? 'de_DE' : requestedLocale;
+  const symbols = <String, String>{
+    'INR': '\u20B9',
+    'USD': r'$',
+    'EUR': '\u20AC',
+    'GBP': '\u00A3',
+    'AED': 'AED ',
+    'SGD': r'S$',
+  };
+  return NumberFormatter(
+    locale: locale,
+    currencySymbol: symbols[currency] ?? '$currency ',
+  );
 });

@@ -14,6 +14,11 @@ from src.schemas.bill_schemas import (
     InventoryAdjustmentCreate, InventoryAdjustmentUpdate, InventoryAdjustmentResponse, InventoryAdjustmentListResponse
 )
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances
+from src.domains.inventory.services import (
+    resolve_default_warehouse_id,
+    resolve_reversal_warehouse_id,
+    get_warehouse_stock,
+)
 from src.api.deps import get_tenant_context, enforce_permission
 
 router = APIRouter(prefix="/inventory-adjustments", tags=["Inventory Adjustments"])
@@ -267,16 +272,22 @@ def confirm_inventory_adjustment(
         ).with_for_update().first()
         if product:
             current_stock = product.current_stock or Decimal("0")
-            if line.quantity_change < 0 and current_stock < abs(line.quantity_change):
+            warehouse_id = resolve_default_warehouse_id(db, tenant_id)
+            location_stock = get_warehouse_stock(
+                db, tenant_id, warehouse_id, line.product_id
+            )
+            effective_stock = location_stock if location_stock is not None else current_stock
+            if line.quantity_change < 0 and effective_stock < abs(line.quantity_change):
                 raise HTTPException(
                     status_code=400,
-                    detail=f"Insufficient stock for {product.name}. Available: {current_stock}, reduction: {abs(line.quantity_change)}",
+                    detail=f"Insufficient stock for {product.name} in the default warehouse. Available: {effective_stock}, reduction: {abs(line.quantity_change)}",
                 )
             product.current_stock = current_stock + line.quantity_change
             # Create stock ledger entry
             stock_ledger_entries.append(StockLedger(
                 tenant_id=tenant_id,
                 product_id=line.product_id,
+                warehouse_id=warehouse_id,
                 quantity=line.quantity_change,
                 balance_quantity=product.current_stock,
                 reference_type="INVENTORY_ADJUSTMENT",
@@ -366,15 +377,27 @@ def cancel_inventory_adjustment(
             ).with_for_update().first()
             if product:
                 current_stock = product.current_stock or Decimal("0")
-                if line.quantity_change > 0 and current_stock < line.quantity_change:
+                warehouse_id = resolve_reversal_warehouse_id(
+                    db,
+                    tenant_id,
+                    "INVENTORY_ADJUSTMENT",
+                    adjustment.id,
+                    line.product_id,
+                )
+                location_stock = get_warehouse_stock(
+                    db, tenant_id, warehouse_id, line.product_id
+                )
+                effective_stock = location_stock if location_stock is not None else current_stock
+                if line.quantity_change > 0 and effective_stock < line.quantity_change:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Cannot cancel: {product.name} stock from this increase has been consumed. Available: {current_stock}, required: {line.quantity_change}",
+                        detail=f"Cannot cancel: {product.name} stock from this increase has been consumed in its warehouse. Available: {effective_stock}, required: {line.quantity_change}",
                     )
                 product.current_stock = current_stock - line.quantity_change
                 db.add(StockLedger(
                     tenant_id=tenant_id,
                     product_id=line.product_id,
+                    warehouse_id=warehouse_id,
                     quantity=-line.quantity_change,
                     balance_quantity=product.current_stock,
                     reference_type="INVENTORY_ADJUSTMENT_REVERSAL",

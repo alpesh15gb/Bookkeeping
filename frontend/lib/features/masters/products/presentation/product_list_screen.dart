@@ -77,6 +77,11 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 11, color: colors.textMuted),
                       ),
+                    if ((p.barcode ?? '').isNotEmpty)
+                      Text(
+                        p.barcode!,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                   ],
                 ),
               ),
@@ -174,17 +179,22 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 icon: const Icon(Icons.edit_rounded, size: 20),
                 tooltip: 'Edit',
                 onPressed: () => Navigator.of(context)
-                    .push(MaterialPageRoute(
-                      builder: (_) => ProductFormScreen(product: _selected),
-                    ))
+                    .push(
+                      MaterialPageRoute(
+                        builder: (_) => ProductFormScreen(product: _selected),
+                      ),
+                    )
                     .then((_) {
                       ref.invalidate(productControllerProvider);
                       setState(() => _selected = null);
                     }),
               ),
               IconButton(
-                icon: Icon(Icons.delete_outline_rounded, size: 20,
-                    color: colors.danger),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 20,
+                  color: colors.danger,
+                ),
                 tooltip: 'Delete',
                 onPressed: () async {
                   if (await ref
@@ -205,6 +215,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
             onClose: () => setState(() => _selected = null),
             rows: [
               DetailRow('SKU', _selected!.sku),
+              DetailRow('Barcode', _selected!.barcode),
               DetailRow('HSN/SAC', _selected!.hsnSac),
               DetailRow('UOM', _selected!.uom),
               DetailRow('Sales Price', fmt.currency(_selected!.salesPrice)),
@@ -216,9 +227,11 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 icon: const Icon(Icons.edit_rounded, size: 16),
                 label: const Text('Edit Product'),
                 onPressed: () => Navigator.of(context)
-                    .push(MaterialPageRoute(
-                      builder: (_) => ProductFormScreen(product: _selected),
-                    ))
+                    .push(
+                      MaterialPageRoute(
+                        builder: (_) => ProductFormScreen(product: _selected),
+                      ),
+                    )
                     .then((_) {
                       ref.invalidate(productControllerProvider);
                       setState(() => _selected = null);
@@ -230,8 +243,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                   size: 16,
                   color: colors.danger,
                 ),
-                label: Text('Delete',
-                    style: TextStyle(color: colors.danger)),
+                label: Text('Delete', style: TextStyle(color: colors.danger)),
                 onPressed: () async {
                   if (await ref
                       .read(productControllerProvider.notifier)
@@ -257,6 +269,7 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
           onClose: () => setState(() => _selected = null),
           rows: [
             DetailRow('SKU', _selected!.sku),
+            DetailRow('Barcode', _selected!.barcode),
             DetailRow('HSN/SAC', _selected!.hsnSac),
             DetailRow('UOM', _selected!.uom),
             DetailRow('Sales Price', fmt.currency(_selected!.salesPrice)),

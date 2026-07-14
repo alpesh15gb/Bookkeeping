@@ -126,15 +126,20 @@ class _DetailAppBar extends StatelessWidget {
               const SizedBox(width: 8),
               IconButton(
                 tooltip: 'Edit',
-                icon: Icon(Icons.edit_outlined, size: 20, color: colors.textSecondary),
+                icon: Icon(
+                  Icons.edit_outlined,
+                  size: 20,
+                  color: colors.textSecondary,
+                ),
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => WarehouseDetailScreen(
-                        warehouseId: warehouseId,
-                      ),
-                    ),
-                  ).then((_) {});
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              WarehouseDetailScreen(warehouseId: warehouseId),
+                        ),
+                      )
+                      .then((_) {});
                 },
               ),
             ],
@@ -167,19 +172,17 @@ class _DetailContent extends StatelessWidget {
     final stockItems = stockAsync.valueOrNull ?? <WarehouseStockItem>[];
 
     final totalProducts = stockItems.length;
-    final totalStockValue =
-        stockItems.fold<double>(0, (a, b) => a + b.stockValue);
+    final totalStockValue = stockItems.fold<double>(
+      0,
+      (a, b) => a + b.stockValue,
+    );
     final lowStockCount = stockItems.where((s) => s.isLowStock).length;
 
     return ListView(
       padding: EdgeInsets.all(isMobile ? 12 : 24),
       children: [
         // ── Header card ──
-        _HeaderCard(
-          warehouse: warehouse,
-          colors: colors,
-          fmt: fmt,
-        ),
+        _HeaderCard(warehouse: warehouse, colors: colors, fmt: fmt),
         const SizedBox(height: 16),
 
         // ── KPI summary cards ──
@@ -228,13 +231,14 @@ class _DetailContent extends StatelessWidget {
             Expanded(
               child: OutlinedButton.icon(
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => WarehouseFormScreen(
-                        warehouse: warehouse,
-                      ),
-                    ),
-                  ).then((_) {});
+                  Navigator.of(context)
+                      .push(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              WarehouseFormScreen(warehouse: warehouse),
+                        ),
+                      )
+                      .then((_) {});
                 },
                 icon: const Icon(Icons.edit_outlined, size: 18),
                 label: const Text('Edit'),
@@ -340,10 +344,7 @@ class _HeaderCard extends StatelessWidget {
                     if (warehouse.code.isNotEmpty)
                       Text(
                         warehouse.code,
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colors.textMuted,
-                        ),
+                        style: TextStyle(fontSize: 13, color: colors.textMuted),
                       ),
                   ],
                 ),
@@ -527,10 +528,7 @@ class _MovementsList extends StatelessWidget {
               children: [
                 Expanded(flex: 14, child: Text('DATE', style: _th(colors))),
                 Expanded(flex: 34, child: Text('PRODUCT', style: _th(colors))),
-                Expanded(
-                  flex: 16,
-                  child: Text('TYPE', style: _th(colors)),
-                ),
+                Expanded(flex: 16, child: Text('TYPE', style: _th(colors))),
                 Expanded(
                   flex: 12,
                   child: Text(

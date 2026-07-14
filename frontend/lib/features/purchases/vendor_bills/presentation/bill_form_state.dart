@@ -16,6 +16,7 @@ class BillFormState {
     this.itcEligible = true,
     this.isGstInclusive = false,
     this.notes,
+    this.termsAndConditions,
     this.lines = const [],
     this.subtotal = 0,
     this.discountTotal = 0,
@@ -40,6 +41,7 @@ class BillFormState {
   final bool itcEligible;
   final bool isGstInclusive;
   final String? notes;
+  final String? termsAndConditions;
   final List<BillLine> lines;
   final double subtotal;
   final double discountTotal;
@@ -64,6 +66,7 @@ class BillFormState {
     bool? itcEligible,
     bool? isGstInclusive,
     String? notes,
+    String? termsAndConditions,
     List<BillLine>? lines,
     double? subtotal,
     double? discountTotal,
@@ -77,6 +80,7 @@ class BillFormState {
     String? error,
     bool clearReferenceNumber = false,
     bool clearNotes = false,
+    bool clearTermsAndConditions = false,
     bool clearError = false,
   }) => BillFormState(
     billNumber: billNumber ?? this.billNumber,
@@ -92,6 +96,9 @@ class BillFormState {
     itcEligible: itcEligible ?? this.itcEligible,
     isGstInclusive: isGstInclusive ?? this.isGstInclusive,
     notes: clearNotes ? null : (notes ?? this.notes),
+    termsAndConditions: clearTermsAndConditions
+        ? null
+        : (termsAndConditions ?? this.termsAndConditions),
     lines: lines ?? this.lines,
     subtotal: subtotal ?? this.subtotal,
     discountTotal: discountTotal ?? this.discountTotal,

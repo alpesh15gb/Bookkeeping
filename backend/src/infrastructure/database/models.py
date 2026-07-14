@@ -173,6 +173,14 @@ class Product(Base):
     __table_args__ = (
         Index("ix_products_tenant_id", "tenant_id"),
         Index("ix_products_tenant_deleted", "tenant_id", "deleted_at"),
+        Index(
+            "uq_products_tenant_barcode",
+            "tenant_id",
+            "barcode",
+            unique=True,
+            postgresql_where=text("barcode IS NOT NULL AND deleted_at IS NULL"),
+            sqlite_where=text("barcode IS NOT NULL AND deleted_at IS NULL"),
+        ),
         CheckConstraint("sales_price >= 0", name="ck_products_sales_price"),
         CheckConstraint("purchase_price >= 0", name="ck_products_purchase_price"),
     )
@@ -181,6 +189,7 @@ class Product(Base):
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     name = Column(String(150), nullable=False)
     sku = Column(String(50))
+    barcode = Column(String(64))
     hsn_sac = Column(String(8), nullable=False)
     product_type = Column(String(10), nullable=False)  # 'GOODS', 'SERVICE'
     uom = Column(String(10), nullable=False)            # 'PCS', 'KGS', 'NOS', 'HRS'
@@ -1177,12 +1186,14 @@ class StockLedger(Base):
     __table_args__ = (
         Index("ix_stock_ledger_tenant_product", "tenant_id", "product_id"),
         Index("ix_stock_ledger_tenant_date", "tenant_id", "created_at"),
+        Index("ix_stock_ledger_tenant_warehouse_product", "tenant_id", "warehouse_id", "product_id"),
         {"extend_existing": True},
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    warehouse_id = Column(UUID(as_uuid=True), ForeignKey("branches.id"))
     quantity = Column(Numeric(12, 4), nullable=False)      # positive for stock-in, negative for stock-out
     balance_quantity = Column(Numeric(12, 4), nullable=False)  # running balance after this entry
     reference_type = Column(String(20), nullable=False)    # 'INVOICE', 'BILL', 'ADJUSTMENT'
@@ -1980,6 +1991,7 @@ class RecurringInvoiceItem(Base):
 class Transfer(Base):
     __tablename__ = "transfers"
     __table_args__ = (
+        UniqueConstraint("tenant_id", "transfer_number", name="uq_transfers_tenant_number"),
         Index("ix_transfers_tenant_date", "tenant_id", "transfer_date"),
         Index("ix_transfers_tenant_status", "tenant_id", "status"),
         Index("ix_transfers_tenant_deleted", "tenant_id", "deleted_at"),

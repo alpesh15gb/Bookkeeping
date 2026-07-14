@@ -4,10 +4,11 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    Contact, Product, Account, BankingProfile, ExpenseCategory, TaxTemplate, PaymentTerm
+    Contact, Product, StockLedger, Account, BankingProfile, ExpenseCategory, TaxTemplate, PaymentTerm
 )
 from src.schemas.master_schemas import (
     ContactCreate, ContactUpdate, ContactResponse,
@@ -19,6 +20,7 @@ from src.schemas.master_schemas import (
 )
 from src.api.deps import enforce_permission
 from src.domains.accounting.services import LedgerValidationError
+from src.domains.inventory.services import resolve_default_warehouse_id, get_warehouse_stock
 
 router = APIRouter(prefix="/masters", tags=["Master Data"])
 
@@ -197,10 +199,21 @@ def create_product(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create"))
 ):
+    if payload.product_type == "SERVICE" and payload.opening_stock != 0:
+        raise HTTPException(status_code=422, detail="Services cannot have opening stock.")
+    if payload.barcode:
+        duplicate = db.query(Product.id).filter(
+            Product.tenant_id == tenant_id,
+            Product.barcode == payload.barcode,
+            Product.deleted_at == None,
+        ).first()
+        if duplicate:
+            raise HTTPException(status_code=409, detail="Barcode is already assigned to another product.")
     product = Product(
         tenant_id=tenant_id,
         name=payload.name,
         sku=payload.sku,
+        barcode=payload.barcode,
         hsn_sac=payload.hsn_sac,
         product_type=payload.product_type,
         uom=payload.uom,
@@ -213,6 +226,18 @@ def create_product(
         is_active=True
     )
     db.add(product)
+    db.flush()
+    if payload.opening_stock > 0 and payload.product_type == "GOODS":
+        db.add(StockLedger(
+            tenant_id=tenant_id,
+            product_id=product.id,
+            warehouse_id=resolve_default_warehouse_id(db, tenant_id),
+            quantity=payload.opening_stock,
+            balance_quantity=payload.opening_stock,
+            reference_type="OPENING",
+            reference_id=product.id,
+            rate=payload.purchase_price,
+        ))
     db.commit()
     db.refresh(product)
     return product
@@ -234,6 +259,7 @@ def list_products(
         q = q.filter(
             Product.name.ilike(f"%{search}%") |
             Product.sku.ilike(f"%{search}%") |
+            Product.barcode.ilike(f"%{search}%") |
             Product.hsn_sac.ilike(f"%{search}%")
         )
     return q.offset(offset).limit(limit).all()
@@ -264,7 +290,7 @@ def update_product(
         Product.id == id,
         Product.tenant_id == tenant_id,
         Product.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not product:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Product not found.")
 
@@ -272,9 +298,32 @@ def update_product(
         product.name = payload.name
     if payload.sku is not None:
         product.sku = payload.sku
+    if "barcode" in payload.model_fields_set:
+        if payload.barcode:
+            duplicate = db.query(Product.id).filter(
+                Product.tenant_id == tenant_id,
+                Product.barcode == payload.barcode,
+                Product.id != product.id,
+                Product.deleted_at == None,
+            ).first()
+            if duplicate:
+                raise HTTPException(status_code=409, detail="Barcode is already assigned to another product.")
+        product.barcode = payload.barcode
     if payload.hsn_sac is not None:
         product.hsn_sac = payload.hsn_sac
     if payload.product_type is not None:
+        if payload.product_type != product.product_type:
+            has_movements = db.query(StockLedger.id).filter(
+                StockLedger.tenant_id == tenant_id,
+                StockLedger.product_id == product.id,
+            ).first()
+            if has_movements:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Product type cannot be changed after stock movements exist.",
+                )
+            if payload.product_type == "SERVICE" and (product.current_stock or 0) != 0:
+                raise HTTPException(status_code=409, detail="Reduce stock to zero before converting this item to a service.")
         product.product_type = payload.product_type
     if payload.uom is not None:
         product.uom = payload.uom
@@ -285,7 +334,31 @@ def update_product(
     if payload.gst_rate is not None:
         product.gst_rate = payload.gst_rate
     if payload.opening_stock is not None:
+        delta = payload.opening_stock - (product.opening_stock or Decimal("0"))
+        new_balance = (product.current_stock or Decimal("0")) + delta
+        warehouse_id = resolve_default_warehouse_id(db, tenant_id)
+        location_stock = get_warehouse_stock(
+            db, tenant_id, warehouse_id, product.id
+        )
+        location_after = (location_stock + delta) if location_stock is not None else new_balance
+        if new_balance < 0 or location_after < 0:
+            raise HTTPException(
+                status_code=409,
+                detail="Opening stock cannot be reduced below stock already issued or transferred from the default warehouse.",
+            )
         product.opening_stock = payload.opening_stock
+        if delta != 0 and product.product_type == "GOODS":
+            product.current_stock = new_balance
+            db.add(StockLedger(
+                tenant_id=tenant_id,
+                product_id=product.id,
+                warehouse_id=warehouse_id,
+                quantity=delta,
+                balance_quantity=new_balance,
+                reference_type="OPENING",
+                reference_id=product.id,
+                rate=product.purchase_price,
+            ))
     if payload.reorder_level is not None:
         product.reorder_level = payload.reorder_level
     if payload.is_active is not None:

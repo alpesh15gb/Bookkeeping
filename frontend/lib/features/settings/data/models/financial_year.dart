@@ -13,6 +13,8 @@ class FinancialYear {
     required this.endDate,
     this.isCurrent = false,
     this.isActive = true,
+    this.status = 'UPCOMING',
+    this.transactionCount = 0,
     this.createdAt,
   });
 
@@ -23,7 +25,9 @@ class FinancialYear {
       startDate: DateTime.parse(json['start_date'] as String),
       endDate: DateTime.parse(json['end_date'] as String),
       isCurrent: (json['is_current'] as bool?) ?? false,
-      isActive: (json['is_active'] as bool?) ?? true,
+      isActive: !const {'LOCKED', 'ARCHIVED'}.contains(json['status']),
+      status: json['status'] as String? ?? 'UPCOMING',
+      transactionCount: (json['transaction_count'] as num?)?.toInt() ?? 0,
       createdAt: json['created_at'] != null
           ? DateTime.parse(json['created_at'] as String)
           : null,
@@ -36,6 +40,8 @@ class FinancialYear {
   final DateTime endDate;
   final bool isCurrent;
   final bool isActive;
+  final String status;
+  final int transactionCount;
   final DateTime? createdAt;
 
   Map<String, dynamic> toJson() => {
@@ -45,6 +51,8 @@ class FinancialYear {
     'end_date': endDate.toIso8601String(),
     'is_current': isCurrent,
     'is_active': isActive,
+    'status': status,
+    'transaction_count': transactionCount,
   };
 
   @override

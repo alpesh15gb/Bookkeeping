@@ -56,8 +56,9 @@ class TeamMember {
       fullName: (json['full_name'] as String?) ?? '',
       role: MemberRoleX.fromWire(json['role'] as String?),
       isActive: (json['is_active'] as bool?) ?? true,
-      invitationStatus:
-          InvitationStatusX.fromWire(json['invitation_status'] as String?),
+      invitationStatus: InvitationStatusX.fromWire(
+        json['invitation_status'] as String?,
+      ),
       joinedAt: json['joined_at'] != null
           ? DateTime.parse(json['joined_at'] as String)
           : null,
@@ -88,9 +89,7 @@ class TeamMember {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is TeamMember &&
-          runtimeType == other.runtimeType &&
-          id == other.id;
+      other is TeamMember && runtimeType == other.runtimeType && id == other.id;
 
   @override
   int get hashCode => id.hashCode;

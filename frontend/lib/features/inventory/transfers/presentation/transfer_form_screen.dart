@@ -76,8 +76,9 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -86,41 +87,41 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
             }
           },
           child: Scaffold(
-          backgroundColor: colors.surfaceMuted,
-          appBar: AppBar(
-            backgroundColor: colors.surfaceRaised,
-            elevation: 0,
-            titleSpacing: 20,
-            title: Text(
-              'New Stock Transfer',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(right: 16),
-                child: FilledButton.icon(
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.save_rounded, size: 18),
-                  label: Text(state.saving ? 'Saving…' : 'Save Transfer'),
-                  onPressed: state.saving ? null : _save,
+            backgroundColor: colors.surfaceMuted,
+            appBar: AppBar(
+              backgroundColor: colors.surfaceRaised,
+              elevation: 0,
+              titleSpacing: 20,
+              title: Text(
+                'New Stock Transfer',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
                 ),
               ),
-            ],
-          ),
-          body: _buildBody(state, notifier, products, colors, fmt),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: FilledButton.icon(
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.save_rounded, size: 18),
+                    label: Text(state.saving ? 'Saving…' : 'Save Transfer'),
+                    onPressed: state.saving ? null : _save,
+                  ),
+                ),
+              ],
+            ),
+            body: _buildBody(state, notifier, products, colors, fmt),
           ),
         ),
       ),
@@ -303,10 +304,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
     );
 
     return ResponsiveLayout.isMobile(context)
-        ? SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: body,
-          )
+        ? SingleChildScrollView(scrollDirection: Axis.horizontal, child: body)
         : body;
   }
 

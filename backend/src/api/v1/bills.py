@@ -1004,6 +1004,7 @@ def print_bill(
         db=db,
         amount_paid=bill.amount_paid or Decimal("0.00"),
         customer_address=bill.contact.billing_address if bill.contact else None,
+        terms_and_conditions=bill.terms_and_conditions,
     )
 
     return StreamingResponse(

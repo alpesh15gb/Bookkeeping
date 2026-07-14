@@ -45,9 +45,9 @@ STATE_CODES = {
     "10": "Bihar", "11": "Sikkim", "12": "Arunachal Pradesh", "13": "Nagaland", "14": "Manipur",
     "15": "Mizoram", "16": "Tripura", "17": "Meghalaya", "18": "Assam", "19": "West Bengal",
     "20": "Jharkhand", "21": "Odisha", "22": "Chhattisgarh", "23": "Madhya Pradesh", "24": "Gujarat",
-    "25": "Daman & Diu", "26": "Dadra & Nagar Haveli", "27": "Maharashtra", "28": "Andhra Pradesh",
+    "25": "Daman & Diu", "26": "Dadra & Nagar Haveli and Daman & Diu", "27": "Maharashtra", "28": "Andhra Pradesh (Old)",
     "29": "Karnataka", "30": "Goa", "31": "Lakshadweep", "32": "Kerala", "33": "Tamil Nadu",
-    "34": "Puducherry", "35": "Andaman & Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh (New)",
+    "34": "Puducherry", "35": "Andaman & Nicobar Islands", "36": "Telangana", "37": "Andhra Pradesh",
     "38": "Ladakh", "97": "Other Territory"
 }
 
@@ -72,6 +72,7 @@ def generate_invoice_pdf(
     amount_paid: Decimal = Decimal("0.00"),
     customer_address: Optional[Any] = None,
     company_address: Optional[Any] = None,
+    terms_and_conditions: Optional[str] = None,
 ) -> bytes:
     buffer = io.BytesIO()
 
@@ -101,12 +102,13 @@ def generate_invoice_pdf(
     bank_account_no = None
     bank_ifsc = None
     bank_branch = None
-    terms = None
+    terms = terms_and_conditions
     origin_state_code = None
     show_bank_details = True
     show_upi_qr = True
     signee_name = None
     signee_designation = None
+    upi_id = None
 
     if db and tenant_id:
         from src.infrastructure.database.models import Tenant, TenantSetting, BankingProfile
@@ -119,12 +121,14 @@ def generate_invoice_pdf(
         setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
         if setting:
             origin_state_code = setting.origin_state_code
+            upi_id = setting.upi_id
             extra = setting.extra_settings or {}
             company_address_db = extra.get("company_address")
             company_phone = extra.get("company_phone")
             company_email = extra.get("company_email")
             company_website = extra.get("company_website")
-            terms = extra.get("terms")
+            if not terms:
+                terms = extra.get("terms")
             show_bank_details = extra.get("show_bank_details", True) is not False
             show_upi_qr = extra.get("show_upi_qr", True) is not False
             signee_name = extra.get("signee_name")
@@ -293,8 +297,14 @@ def generate_invoice_pdf(
         return d
 
     # UPI Payload String
-    upi_payload = f"upi://pay?pa={bank_ifsc or 'ICIC0006525'}@icici&pn={company_name}&am={total}&cu=INR"
-    qr_drawing = build_qr_code(upi_payload, size=65.0) if show_upi_qr else Paragraph("", normal_style)
+    upi_payload = (
+        f"upi://pay?pa={upi_id}&pn={company_name}&am={total}&cu=INR"
+        if upi_id else None
+    )
+    qr_drawing = (
+        build_qr_code(upi_payload, size=65.0)
+        if show_upi_qr and upi_payload else Paragraph("", normal_style)
+    )
 
     # Render Thermal / POS Layout
     if template == "thermal":

@@ -18,6 +18,7 @@ import 'settings_financial_year_screen.dart';
 import 'settings_gst_config_screen.dart';
 import 'settings_invoice_series_screen.dart';
 import 'settings_preferences_screen.dart';
+import 'settings_document_screen.dart';
 import 'settings_team_screen.dart';
 
 class SettingsShell extends ConsumerWidget {
@@ -33,6 +34,7 @@ class SettingsShell extends ConsumerWidget {
         'Invoice Series',
         'GST Config',
         'Preferences',
+        'Documents',
         'Backup',
         'Banking',
         'Categories',
@@ -46,6 +48,7 @@ class SettingsShell extends ConsumerWidget {
         SettingsInvoiceSeriesScreen(),
         SettingsGstConfigScreen(),
         SettingsPreferencesScreen(),
+        SettingsDocumentScreen(),
         SettingsBackupScreen(),
         BankingProfileListScreen(),
         ExpenseCategoryListScreen(),

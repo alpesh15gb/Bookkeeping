@@ -70,7 +70,7 @@ class TransferFormNotifier extends StateNotifier<TransferFormState> {
       'transfer_date': state.transferDate,
       'from_warehouse_id': state.fromWarehouseId,
       'to_warehouse_id': state.toWarehouseId,
-      'line_items': state.lines
+      'lines': state.lines
           .where((l) => l.productId.isNotEmpty && l.quantity > 0)
           .map(
             (l) => {

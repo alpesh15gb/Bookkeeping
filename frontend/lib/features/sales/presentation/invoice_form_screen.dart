@@ -17,6 +17,8 @@ import '../models/invoice_line.dart';
 import 'invoice_form_notifier.dart';
 import 'invoice_form_state.dart';
 import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
+import 'package:apexbooks/features/settings/presentation/settings_providers.dart';
+import 'package:apexbooks/core/result/result.dart';
 
 class InvoiceFormScreen extends ConsumerStatefulWidget {
   const InvoiceFormScreen({super.key});
@@ -33,7 +35,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     Future.microtask(() {
       ref
           .read(contactControllerProvider.notifier)
-          .load(const ListQuery(limit: 100));
+          .load(
+            const ListQuery(limit: 100, extra: {'contact_type': 'CUSTOMER'}),
+          );
       ref
           .read(productControllerProvider.notifier)
           .load(const ListQuery(limit: 100));
@@ -42,6 +46,16 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       final n = ref.read(invoiceFormProvider.notifier);
       n.setIssueDate(_fmtDate(now));
       n.setDueDate(_fmtDate(now.add(const Duration(days: 30))));
+      ref.read(settingsRepositoryProvider).getTenantSettings().then((result) {
+        final settings = result.dataOrNull;
+        if (settings != null && mounted) {
+          final terms = settings.extraSettings['terms']?.toString() ?? '';
+          if (terms.isNotEmpty &&
+              ref.read(invoiceFormProvider).termsAndConditions == null) {
+            n.setTerms(terms);
+          }
+        }
+      });
       _customerFocus.requestFocus();
     });
   }
@@ -59,8 +73,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
   bool get _hasUnsavedChanges {
     final s = ref.read(invoiceFormProvider);
-    return s.contactId != null ||
-        s.lines.any((l) => l.productId.isNotEmpty);
+    return s.contactId != null || s.lines.any((l) => l.productId.isNotEmpty);
   }
 
   Future<void> _save() async {
@@ -100,8 +113,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -110,94 +124,133 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             }
           },
           child: Scaffold(
-          backgroundColor: colors.surfaceMuted,
-          appBar: AppBar(
-            backgroundColor: colors.surfaceRaised,
-            elevation: 0,
-            scrolledUnderElevation: 0.5,
-            leading: IconButton(
-              icon: Icon(Icons.arrow_back_rounded, color: colors.textPrimary),
-              onPressed: () => Navigator.of(context).maybePop(),
-            ),
-            title: Text(
-              'New Invoice',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 18,
-                color: colors.textPrimary,
-              ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.border),
-            ),
-            actions: [
-              TextButton(
+            backgroundColor: colors.surfaceMuted,
+            appBar: AppBar(
+              backgroundColor: colors.surfaceRaised,
+              elevation: 0,
+              scrolledUnderElevation: 0.5,
+              leading: IconButton(
+                icon: Icon(Icons.arrow_back_rounded, color: colors.textPrimary),
                 onPressed: () => Navigator.of(context).maybePop(),
-                child: Text('Cancel', style: TextStyle(color: colors.textSecondary)),
               ),
-              const SizedBox(width: 4),
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
-                child: FilledButton.icon(
-                  onPressed: state.saving ? null : _save,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16, height: 16,
-                          child: LoadingSpinner(size: 16),
-                        )
-                      : const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save draft'),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              title: Text(
+                'New Invoice',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 18,
+                  color: colors.textPrimary,
+                ),
+              ),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: colors.border),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: colors.textSecondary),
                   ),
                 ),
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (state.error != null)
-                Container(
-                  width: double.infinity,
-                  color: colors.danger.withValues(alpha: 0.1),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  child: Row(children: [
-                    Icon(Icons.error_outline_rounded, size: 18, color: colors.danger),
-                    const SizedBox(width: 8),
-                    Expanded(child: Text(state.error!,
-                      style: TextStyle(color: colors.danger, fontWeight: FontWeight.w600, fontSize: 13))),
-                  ]),
-                ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1200),
-                    child: ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: 3,
-                    itemBuilder: (context, idx) {
-                      switch (idx) {
-                        case 0:
-                          return _headerCard(state, notifier, colors, contactsList);
-                        case 1:
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: _linesCard(state, notifier, colors, fmt, productsList, gstEnabled),
-                          );
-                        case 2:
-                          return const SizedBox(height: 80);
-                        default:
-                          return const SizedBox.shrink();
-                      }
-                    },
+                const SizedBox(width: 4),
+                Padding(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 8,
+                  ),
+                  child: FilledButton.icon(
+                    onPressed: state.saving ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save draft'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
                     ),
                   ),
                 ),
-              ),
-              _totalsBar(context, state, colors, fmt, gstEnabled),
-            ],
-          ),
+              ],
+            ),
+            body: Column(
+              children: [
+                if (state.error != null)
+                  Container(
+                    width: double.infinity,
+                    color: colors.danger.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: colors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              color: colors.danger,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1200),
+                      child: ListView.builder(
+                        padding: const EdgeInsets.all(16),
+                        itemCount: 3,
+                        itemBuilder: (context, idx) {
+                          switch (idx) {
+                            case 0:
+                              return _headerCard(
+                                state,
+                                notifier,
+                                colors,
+                                contactsList,
+                              );
+                            case 1:
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: _linesCard(
+                                  state,
+                                  notifier,
+                                  colors,
+                                  fmt,
+                                  productsList,
+                                  gstEnabled,
+                                ),
+                              );
+                            case 2:
+                              return const SizedBox(height: 80);
+                            default:
+                              return const SizedBox.shrink();
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                ),
+                _totalsBar(context, state, colors, fmt, gstEnabled),
+              ],
+            ),
           ),
         ),
       ),
@@ -360,22 +413,22 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           Padding(
             padding: EdgeInsets.all(isMobile ? 8 : 8),
             child: isMobile
-              ? SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: notifier.addLine,
-                    icon: const Icon(Icons.add_rounded, size: 20),
-                    label: const Text('Add Item'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
+                ? SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      onPressed: notifier.addLine,
+                      icon: const Icon(Icons.add_rounded, size: 20),
+                      label: const Text('Add Item'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
                     ),
+                  )
+                : TextButton.icon(
+                    onPressed: notifier.addLine,
+                    icon: const Icon(Icons.add_rounded, size: 18),
+                    label: const Text('Add line  (Alt+N)'),
                   ),
-                )
-              : TextButton.icon(
-                  onPressed: notifier.addLine,
-                  icon: const Icon(Icons.add_rounded, size: 18),
-                  label: const Text('Add line  (Alt+N)'),
-                ),
           ),
         ],
       ),
@@ -418,7 +471,12 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                       style: TextStyle(color: colors.textMuted, fontSize: 12),
                     ),
                     const Spacer(),
-                    _tot('Total', fmt.currency(state.total), colors, emphasize: true),
+                    _tot(
+                      'Total',
+                      fmt.currency(state.total),
+                      colors,
+                      emphasize: true,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -429,7 +487,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   children: [
                     _tot('Subtotal', fmt.currency(state.subtotal), colors),
                     _tot('Discount', fmt.currency(state.discountTotal), colors),
-                    if (gstEnabled) _tot('Tax', fmt.currency(state.totalTax), colors),
+                    if (gstEnabled)
+                      _tot('Tax', fmt.currency(state.totalTax), colors),
                     FilledButton.icon(
                       onPressed: state.saving ? null : _save,
                       icon: state.saving
@@ -441,7 +500,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                           : const Icon(Icons.check_rounded, size: 18),
                       label: const Text('Save'),
                       style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
                       ),
                     ),
                   ],
@@ -459,9 +521,15 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 _sep(colors),
                 _tot('Discount', fmt.currency(state.discountTotal), colors),
                 if (gstEnabled) _sep(colors),
-                if (gstEnabled) _tot('Tax', fmt.currency(state.totalTax), colors),
+                if (gstEnabled)
+                  _tot('Tax', fmt.currency(state.totalTax), colors),
                 _sep(colors),
-                _tot('Total', fmt.currency(state.total), colors, emphasize: true),
+                _tot(
+                  'Total',
+                  fmt.currency(state.total),
+                  colors,
+                  emphasize: true,
+                ),
                 const SizedBox(width: 24),
                 FilledButton.icon(
                   onPressed: state.saving ? null : _save,
@@ -474,7 +542,10 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                       : const Icon(Icons.check_rounded, size: 18),
                   label: const Text('Save draft  (Ctrl+S)'),
                   style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 16,
+                    ),
                   ),
                 ),
               ],
@@ -555,11 +626,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
 // ── Small building blocks ───────────────────────────────────────────────────
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;
@@ -598,7 +665,7 @@ class _HCell extends StatelessWidget {
 }
 
 // ── Customer typeahead ──────────────────────────────────────────────────────
-class _CustomerField extends StatelessWidget {
+class _CustomerField extends ConsumerWidget {
   const _CustomerField({
     required this.focusNode,
     required this.contacts,
@@ -613,20 +680,23 @@ class _CustomerField extends StatelessWidget {
   final void Function(Contact) onSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isMobile = ResponsiveLayout.isMobile(context);
     return Autocomplete<Contact>(
       displayStringForOption: (c) => c.name,
-      optionsBuilder: (v) {
+      optionsBuilder: (v) async {
         final q = v.text.trim().toLowerCase();
         if (q.isEmpty) return contacts.take(8);
-        return contacts
-            .where(
-              (c) =>
-                  c.name.toLowerCase().contains(q) ||
-                  (c.gstin ?? '').toLowerCase().contains(q),
-            )
-            .take(12);
+        final result = await ref
+            .read(contactRepositoryProvider)
+            .list(
+              ListQuery(
+                search: q,
+                limit: 12,
+                extra: const {'contact_type': 'CUSTOMER'},
+              ),
+            );
+        return result.dataOrNull?.items ?? const <Contact>[];
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
@@ -796,33 +866,59 @@ class _LineRowState extends State<_LineRow> {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: c.surfaceMuted,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(ApexRadius.lg)),
-            ),
-            child: Row(children: [
-              Container(
-                width: 24, height: 24,
-                decoration: BoxDecoration(
-                  color: c.primary.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
-                ),
-                alignment: Alignment.center,
-                child: Text('$lineNum', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: c.primary)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(ApexRadius.lg),
               ),
-              const SizedBox(width: 10),
-              Expanded(child: Text(
-                widget.line.productName ?? widget.line.description ?? 'Item #$lineNum',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600,
-                  color: widget.line.productId.isNotEmpty ? c.textPrimary : c.textMuted),
-                maxLines: 1, overflow: TextOverflow.ellipsis,
-              )),
-              if (widget.canRemove)
-                IconButton(
-                  icon: Icon(Icons.close_rounded, size: 20, color: c.danger),
-                  onPressed: widget.onRemove, tooltip: 'Remove',
-                  padding: const EdgeInsets.all(4),
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: c.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    '$lineNum',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: c.primary,
+                    ),
+                  ),
                 ),
-            ]),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.line.productName ??
+                        widget.line.description ??
+                        'Item #$lineNum',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: widget.line.productId.isNotEmpty
+                          ? c.textPrimary
+                          : c.textMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                if (widget.canRemove)
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, size: 20, color: c.danger),
+                    onPressed: widget.onRemove,
+                    tooltip: 'Remove',
+                    padding: const EdgeInsets.all(4),
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                  ),
+              ],
+            ),
           ),
           // Product search
           Padding(
@@ -830,35 +926,75 @@ class _LineRowState extends State<_LineRow> {
             child: _ProductField(
               products: widget.products,
               current: widget.line.productName ?? widget.line.description ?? '',
-              colors: c, onSelected: widget.onProduct,
+              colors: c,
+              onSelected: widget.onProduct,
             ),
           ),
           // QTY + RATE + DISC
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
-            child: Row(children: [
-              Expanded(child: _mobileField(c, 'QTY', _qty,
-                onChanged: (v) => widget.onChanged(widget.line.copyWith(quantity: double.tryParse(v) ?? 0)))),
-              const SizedBox(width: 10),
-              Expanded(flex: 2, child: _mobileField(c, 'RATE', _rate,
-                onChanged: (v) => widget.onChanged(widget.line.copyWith(rate: double.tryParse(v) ?? 0)))),
-              const SizedBox(width: 10),
-              Expanded(child: _mobileField(c, 'DISC%', _disc,
-                onChanged: (v) => widget.onChanged(widget.line.copyWith(discount: double.tryParse(v) ?? 0)))),
-            ]),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _mobileField(
+                    c,
+                    'QTY',
+                    _qty,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  child: _mobileField(
+                    c,
+                    'RATE',
+                    _rate,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _mobileField(
+                    c,
+                    'DISC%',
+                    _disc,
+                    onChanged: (v) => widget.onChanged(
+                      widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
           // HSN + GST + Total
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: Row(children: [
-              _chip(c, 'HSN', widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac),
-              if (widget.gstEnabled) const SizedBox(width: 8),
-              if (widget.gstEnabled)
-                _chip(c, 'GST', '${widget.line.gstRate.toInt()}%'),
-              const Spacer(),
-              Text(widget.fmt.currency(widget.line.total),
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: c.textPrimary)),
-            ]),
+            child: Row(
+              children: [
+                _chip(
+                  c,
+                  'HSN',
+                  widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
+                ),
+                if (widget.gstEnabled) const SizedBox(width: 8),
+                if (widget.gstEnabled)
+                  _chip(c, 'GST', '${widget.line.gstRate.toInt()}%'),
+                const Spacer(),
+                Text(
+                  widget.fmt.currency(widget.line.total),
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                    color: c.textPrimary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -867,26 +1003,99 @@ class _LineRowState extends State<_LineRow> {
 
   Widget _buildDesktopLine(ApexColors c) {
     return Container(
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.border))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Expanded(flex: widget.gstEnabled ? 34 : 44, child: _ProductField(products: widget.products, current: widget.line.productName ?? widget.line.description ?? '', colors: c, onSelected: widget.onProduct)),
+          Expanded(
+            flex: widget.gstEnabled ? 34 : 44,
+            child: _ProductField(
+              products: widget.products,
+              current: widget.line.productName ?? widget.line.description ?? '',
+              colors: c,
+              onSelected: widget.onProduct,
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(flex: 12, child: Text(widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac, style: TextStyle(fontSize: 13, color: c.textSecondary))),
+          Expanded(
+            flex: 12,
+            child: Text(
+              widget.line.hsnSac.isEmpty ? '—' : widget.line.hsnSac,
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(flex: 10, child: _numField(_qty, right: true, onChanged: (v) => widget.onChanged(widget.line.copyWith(quantity: double.tryParse(v) ?? 0)))),
+          Expanded(
+            flex: 10,
+            child: _numField(
+              _qty,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(quantity: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(flex: 14, child: _numField(_rate, right: true, onChanged: (v) => widget.onChanged(widget.line.copyWith(rate: double.tryParse(v) ?? 0)))),
+          Expanded(
+            flex: 14,
+            child: _numField(
+              _rate,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(rate: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
           const SizedBox(width: 8),
-          Expanded(flex: 10, child: _numField(_disc, right: true, onChanged: (v) => widget.onChanged(widget.line.copyWith(discount: double.tryParse(v) ?? 0)))),
+          Expanded(
+            flex: 10,
+            child: _numField(
+              _disc,
+              right: true,
+              onChanged: (v) => widget.onChanged(
+                widget.line.copyWith(discount: double.tryParse(v) ?? 0),
+              ),
+            ),
+          ),
           const SizedBox(width: 8),
           if (widget.gstEnabled)
-            Expanded(flex: 10, child: Text('${_num(widget.line.gstRate)}%', textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: c.textSecondary))),
+            Expanded(
+              flex: 10,
+              child: Text(
+                '${_num(widget.line.gstRate)}%',
+                textAlign: TextAlign.right,
+                style: TextStyle(fontSize: 13, color: c.textSecondary),
+              ),
+            ),
           if (widget.gstEnabled) const SizedBox(width: 8),
-          Expanded(flex: 14, child: Text(widget.fmt.currency(widget.line.total), textAlign: TextAlign.right, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c.textPrimary))),
-          SizedBox(width: 36, child: IconButton(visualDensity: VisualDensity.compact, icon: Icon(Icons.close_rounded, size: 16, color: widget.canRemove ? c.textMuted : c.border), onPressed: widget.canRemove ? widget.onRemove : null, tooltip: 'Remove line')),
+          Expanded(
+            flex: 14,
+            child: Text(
+              widget.fmt.currency(widget.line.total),
+              textAlign: TextAlign.right,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: c.textPrimary,
+              ),
+            ),
+          ),
+          SizedBox(
+            width: 36,
+            child: IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: Icon(
+                Icons.close_rounded,
+                size: 16,
+                color: widget.canRemove ? c.textMuted : c.border,
+              ),
+              onPressed: widget.canRemove ? widget.onRemove : null,
+              tooltip: 'Remove line',
+            ),
+          ),
         ],
       ),
     );
@@ -915,28 +1124,56 @@ class _LineRowState extends State<_LineRow> {
   }
 
   Widget _mobileField(
-    ApexColors c, String label, TextEditingController ctrl, {
+    ApexColors c,
+    String label,
+    TextEditingController ctrl, {
     required ValueChanged<String> onChanged,
   }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.textMuted, letterSpacing: 0.5)),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: c.textMuted,
+            letterSpacing: 0.5,
+          ),
+        ),
         const SizedBox(height: 6),
         TextField(
           controller: ctrl,
           textAlign: TextAlign.right,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: c.textPrimary),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: c.textPrimary,
+          ),
           decoration: InputDecoration(
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.primary, width: 1.5)),
-            filled: true, fillColor: c.surfaceMuted,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.primary, width: 1.5),
+            ),
+            filled: true,
+            fillColor: c.surfaceMuted,
           ),
           onChanged: onChanged,
         ),
@@ -947,17 +1184,37 @@ class _LineRowState extends State<_LineRow> {
   Widget _chip(ApexColors c, String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: BorderRadius.circular(ApexRadius.sm)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text('$label ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.textMuted)),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.textSecondary)),
-      ]),
+      decoration: BoxDecoration(
+        color: c.surfaceMuted,
+        borderRadius: BorderRadius.circular(ApexRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label ',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: c.textMuted,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: c.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
 // ── Product typeahead (per line) ────────────────────────────────────────────
-class _ProductField extends StatelessWidget {
+class _ProductField extends ConsumerWidget {
   const _ProductField({
     required this.products,
     required this.current,
@@ -969,21 +1226,17 @@ class _ProductField extends StatelessWidget {
   final ApexColors colors;
   final void Function(Product) onSelected;
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isMobile = ResponsiveLayout.isMobile(context);
     return Autocomplete<Product>(
       displayStringForOption: (p) => p.name,
-      optionsBuilder: (v) {
+      optionsBuilder: (v) async {
         final q = v.text.trim().toLowerCase();
         if (q.isEmpty) return products.take(8);
-        return products
-            .where(
-              (p) =>
-                  p.name.toLowerCase().contains(q) ||
-                  (p.sku ?? '').toLowerCase().contains(q) ||
-                  p.hsnSac.toLowerCase().contains(q),
-            )
-            .take(12);
+        final result = await ref
+            .read(productRepositoryProvider)
+            .list(ListQuery(search: q, limit: 12));
+        return result.dataOrNull?.items ?? const <Product>[];
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
@@ -1017,25 +1270,33 @@ class _ProductField extends StatelessWidget {
         options,
         onSel,
         (p) => p.name,
-        (p) => '${p.sku ?? ''}  ·  ${p.hsnSac}  ·  GST ${p.gstRate.toInt()}%',
+        (p) =>
+            '${p.sku ?? ''}${p.barcode == null ? '' : '  ·  ${p.barcode}'}  ·  ${p.hsnSac}  ·  GST ${p.gstRate.toInt()}%',
       ),
     );
   }
 }
 
 // ── Shared input decoration + options dropdown ──────────────────────────────
-InputDecoration _dec(ApexColors colors, {String? hint, IconData? icon, bool isMobile = false}) =>
-    InputDecoration(
-      isDense: true,
-      hintText: hint,
-      prefixIcon: icon == null
-          ? null
-          : Icon(icon, size: isMobile ? 22 : 18, color: colors.textMuted),
-      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: isMobile ? 16 : 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
-      ),
-    );
+InputDecoration _dec(
+  ApexColors colors, {
+  String? hint,
+  IconData? icon,
+  bool isMobile = false,
+}) => InputDecoration(
+  isDense: true,
+  hintText: hint,
+  prefixIcon: icon == null
+      ? null
+      : Icon(icon, size: isMobile ? 22 : 18, color: colors.textMuted),
+  contentPadding: EdgeInsets.symmetric(
+    horizontal: 12,
+    vertical: isMobile ? 16 : 14,
+  ),
+  border: OutlineInputBorder(
+    borderRadius: BorderRadius.circular(ApexRadius.sm),
+  ),
+);
 
 Widget _optionsPanel<T extends Object>(
   BuildContext context,

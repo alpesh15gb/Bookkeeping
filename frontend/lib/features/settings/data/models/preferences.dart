@@ -15,12 +15,27 @@ class UserPreferences {
   });
 
   factory UserPreferences.fromJson(Map<String, dynamic> json) {
+    final display = json['display_settings'] is Map
+        ? Map<String, dynamic>.from(json['display_settings'] as Map)
+        : const <String, dynamic>{};
     return UserPreferences(
       currency: (json['currency'] as String?) ?? 'INR',
-      dateFormat: (json['date_format'] as String?) ?? 'dd MMM yyyy',
-      numberFormat: (json['number_format'] as String?) ?? 'en_IN',
-      themeMode: (json['theme_mode'] as String?) ?? 'system',
-      timezone: (json['timezone'] as String?) ?? 'Asia/Kolkata',
+      dateFormat:
+          (display['date_format'] as String?) ??
+          (json['date_format'] as String?) ??
+          'dd MMM yyyy',
+      numberFormat:
+          (display['number_format'] as String?) ??
+          (json['number_format'] as String?) ??
+          'en_IN',
+      themeMode:
+          (display['theme_mode'] as String?) ??
+          (json['theme_mode'] as String?) ??
+          'system',
+      timezone:
+          (display['timezone'] as String?) ??
+          (json['timezone'] as String?) ??
+          'Asia/Kolkata',
     );
   }
 
@@ -32,10 +47,12 @@ class UserPreferences {
 
   Map<String, dynamic> toJson() => {
     'currency': currency,
-    'date_format': dateFormat,
-    'number_format': numberFormat,
-    'theme_mode': themeMode,
-    'timezone': timezone,
+    'display_settings': {
+      'date_format': dateFormat,
+      'number_format': numberFormat,
+      'theme_mode': themeMode,
+      'timezone': timezone,
+    },
   };
 
   @override
@@ -44,20 +61,14 @@ class UserPreferences {
       other is UserPreferences && runtimeType == other.runtimeType;
 
   @override
-  int get hashCode => Object.hash(currency, dateFormat, numberFormat, themeMode);
+  int get hashCode =>
+      Object.hash(currency, dateFormat, numberFormat, themeMode);
 }
 
 /// Supported currencies.
 class CurrencyCodes {
   CurrencyCodes._();
-  static const Map<String, String> labels = {
-    'INR': 'Indian Rupee (₹)',
-    'USD': 'US Dollar (\$)',
-    'EUR': 'Euro (€)',
-    'GBP': 'British Pound (£)',
-    'AED': 'UAE Dirham (AED)',
-    'SGD': 'Singapore Dollar (S\$)',
-  };
+  static const Map<String, String> labels = {'INR': 'Indian Rupee (₹)'};
 }
 
 /// Date format presets.

@@ -7,7 +7,7 @@ from decimal import Decimal
 from pydantic import BaseModel
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import StockLedger, Product
+from src.infrastructure.database.models import StockLedger, Product, Branch
 from src.schemas import SchemaBase
 from src.api.deps import enforce_permission
 
@@ -22,6 +22,9 @@ class StockLedgerEntryResponse(SchemaBase):
     id: uuid.UUID
     product_id: uuid.UUID
     product_name: str = ""
+    sku: str = ""
+    warehouse_id: Optional[uuid.UUID] = None
+    warehouse_name: Optional[str] = None
     quantity: Decimal
     balance_quantity: Decimal
     reference_type: str
@@ -38,6 +41,7 @@ class StockLedgerEntryResponse(SchemaBase):
 def list_stock_ledger(
     product_id: Optional[uuid.UUID] = None,
     reference_type: Optional[str] = None,
+    warehouse_id: Optional[uuid.UUID] = None,
     page: int = Query(1, ge=1),
     limit: int = Query(50, ge=1, le=100),
     db: Session = Depends(get_db_session),
@@ -53,13 +57,27 @@ def list_stock_ledger(
         q = q.filter(StockLedger.product_id == product_id)
     if reference_type:
         q = q.filter(StockLedger.reference_type == reference_type)
+    if warehouse_id:
+        q = q.filter(StockLedger.warehouse_id == warehouse_id)
     entries = q.order_by(StockLedger.created_at.desc()).offset(offset).limit(limit).all()
+
+    warehouse_ids = {e.warehouse_id for e in entries if e.warehouse_id}
+    warehouse_names = {
+        row.id: row.name
+        for row in db.query(Branch.id, Branch.name).filter(
+            Branch.tenant_id == tenant_id,
+            Branch.id.in_(warehouse_ids),
+        ).all()
+    } if warehouse_ids else {}
 
     return [
         StockLedgerEntryResponse(
             id=e.id,
             product_id=e.product_id,
             product_name=e.product.name if e.product else "",
+            sku=e.product.sku if e.product and e.product.sku else "",
+            warehouse_id=e.warehouse_id,
+            warehouse_name=warehouse_names.get(e.warehouse_id),
             quantity=e.quantity,
             balance_quantity=e.balance_quantity,
             reference_type=e.reference_type,
@@ -90,6 +108,12 @@ def get_stock_ledger_entry(
         id=entry.id,
         product_id=entry.product_id,
         product_name=entry.product.name if entry.product else "",
+        sku=entry.product.sku if entry.product and entry.product.sku else "",
+        warehouse_id=entry.warehouse_id,
+        warehouse_name=db.query(Branch.name).filter(
+            Branch.id == entry.warehouse_id,
+            Branch.tenant_id == tenant_id,
+        ).scalar() if entry.warehouse_id else None,
         quantity=entry.quantity,
         balance_quantity=entry.balance_quantity,
         reference_type=entry.reference_type,

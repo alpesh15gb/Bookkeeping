@@ -13,7 +13,6 @@ import '../../../core/services/notification_service.dart';
 import '../../../core/result/result.dart';
 import '../../../core/theme/theme_controller.dart';
 import '../data/models/preferences.dart';
-import '../data/settings_repository.dart';
 import 'settings_providers.dart';
 
 class SettingsPreferencesScreen extends ConsumerStatefulWidget {
@@ -36,7 +35,9 @@ class _SettingsPreferencesScreenState
 
   void _initFields(UserPreferences prefs) {
     if (_populated) return;
-    _currency = prefs.currency;
+    _currency = CurrencyCodes.labels.containsKey(prefs.currency)
+        ? prefs.currency
+        : 'INR';
     _dateFormat = prefs.dateFormat;
     _numberFormat = prefs.numberFormat;
     _themeMode = prefs.themeMode;
@@ -64,18 +65,14 @@ class _SettingsPreferencesScreenState
       };
       await ref.read(themeControllerProvider.notifier).set(themeMode);
       ref.invalidate(userPreferencesProvider);
-      ref.read(notificationServiceProvider).success(
-        context,
-        'Preferences updated.',
-        title: 'Saved',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .success(context, 'Preferences updated.', title: 'Saved');
     } else {
       final err = (result as Failure).error;
-      ref.read(notificationServiceProvider).error(
-        context,
-        err.message,
-        title: 'Save failed',
-      );
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Save failed');
     }
   }
 
@@ -132,17 +129,17 @@ class _SettingsPreferencesScreenState
               children: [
                 Text(
                   'Regional Formatting',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Set your preferred currency and number formats.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.textSecondary,
-                  ),
+                  'Set the company reporting currency and number format. '
+                  'Indian GST books currently use INR.',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -194,17 +191,16 @@ class _SettingsPreferencesScreenState
               children: [
                 Text(
                   'Date Format',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Choose how dates are displayed across the app.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.textSecondary,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
@@ -249,17 +245,16 @@ class _SettingsPreferencesScreenState
               children: [
                 Text(
                   'Appearance',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleSmall
-                      ?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   'Choose between light, dark, or system theme.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: colors.textSecondary,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
                 ),
                 const SizedBox(height: 16),
                 _themeOption(
@@ -311,9 +306,7 @@ class _SettingsPreferencesScreenState
               ? colors.primary.withValues(alpha: 0.06)
               : colors.surfaceMuted,
           borderRadius: BorderRadius.circular(ApexRadius.md),
-          border: Border.all(
-            color: selected ? colors.primary : colors.border,
-          ),
+          border: Border.all(color: selected ? colors.primary : colors.border),
         ),
         child: Row(
           children: [
@@ -345,8 +338,7 @@ class _SettingsPreferencesScreenState
               ),
             ),
             if (selected)
-              Icon(Icons.check_circle_rounded,
-                  size: 20, color: colors.primary),
+              Icon(Icons.check_circle_rounded, size: 20, color: colors.primary),
           ],
         ),
       ),

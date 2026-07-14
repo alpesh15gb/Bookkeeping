@@ -18,6 +18,7 @@ from src.schemas.document import InvoiceResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine
 from src.domains.company.services import resolve_origin_state_code, NumberingSeriesService
+from src.domains.inventory.services import resolve_default_warehouse_id, get_warehouse_stock
 from src.api.deps import get_tenant_context, enforce_permission
 
 router = APIRouter(prefix="/delivery-challans", tags=["Delivery Challans"])
@@ -329,15 +330,21 @@ def issue_delivery_challan(
         ).with_for_update().first()
         if product and product.product_type == "GOODS":
             available = product.current_stock or Decimal("0")
-            if available < quantity:
+            warehouse_id = resolve_default_warehouse_id(db, tenant_id)
+            location_available = get_warehouse_stock(
+                db, tenant_id, warehouse_id, product_id
+            )
+            effective_available = location_available if location_available is not None else available
+            if effective_available < quantity:
                 raise HTTPException(
                     status_code=422,
-                    detail=f"Insufficient stock for {product.name}. Available: {available}, Required: {quantity}",
+                    detail=f"Insufficient stock for {product.name} in the default warehouse. Available: {effective_available}, Required: {quantity}",
                 )
             product.current_stock = available - quantity
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=product_id,
+                warehouse_id=warehouse_id,
                 reference_type="DELIVERY_CHALLAN",
                 reference_id=dc.id,
                 quantity=-quantity,
@@ -455,6 +462,7 @@ def cancel_delivery_challan(
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=move.product_id,
+                warehouse_id=move.warehouse_id,
                 reference_type="DELIVERY_CHALLAN_REVERSAL",
                 reference_id=dc.id,
                 quantity=restore_quantity,

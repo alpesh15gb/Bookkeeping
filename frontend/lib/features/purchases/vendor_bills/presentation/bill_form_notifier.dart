@@ -44,25 +44,17 @@ class _BillCalculationService {
     double igstAmount,
     double totalTax,
     double total,
-  }) calculateAll({required List<BillLine> lines}) {
+  })
+  calculateAll({required List<BillLine> lines}) {
     final updatedLines = lines.map((l) => calculateLine(line: l)).toList();
     final subtotal = updatedLines.fold<double>(0, (s, l) => s + l.subtotal);
     final discountTotal = updatedLines.fold<double>(
       0,
       (s, l) => s + l.discountAmount,
     );
-    final cgstAmount = updatedLines.fold<double>(
-      0,
-      (s, l) => s + l.cgstAmount,
-    );
-    final sgstAmount = updatedLines.fold<double>(
-      0,
-      (s, l) => s + l.sgstAmount,
-    );
-    final igstAmount = updatedLines.fold<double>(
-      0,
-      (s, l) => s + l.igstAmount,
-    );
+    final cgstAmount = updatedLines.fold<double>(0, (s, l) => s + l.cgstAmount);
+    final sgstAmount = updatedLines.fold<double>(0, (s, l) => s + l.sgstAmount);
+    final igstAmount = updatedLines.fold<double>(0, (s, l) => s + l.igstAmount);
     final totalTax = cgstAmount + sgstAmount + igstAmount;
     final total = updatedLines.fold<double>(0, (s, l) => s + l.total);
     return (
@@ -152,6 +144,10 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
     notes: v.isNotEmpty ? v : null,
     clearNotes: v.isEmpty,
   );
+  void setTerms(String v) => state = state.copyWith(
+    termsAndConditions: v.isNotEmpty ? v : null,
+    clearTermsAndConditions: v.isEmpty,
+  );
 
   // Line items -------------------------------------------------------------
   void updateLine(int index, BillLine line) {
@@ -207,6 +203,7 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
       itcEligible: state.itcEligible,
       isGstInclusive: state.isGstInclusive,
       notes: state.notes,
+      termsAndConditions: state.termsAndConditions,
       lines: state.lines.where((l) => l.productId.isNotEmpty).toList(),
     );
     final err = _validation.validateForSubmit(bill);
