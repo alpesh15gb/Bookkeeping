@@ -14,11 +14,12 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
 from src.infrastructure.database.models import (
-    Account, Branch, FinancialYear, NumberingSeries, Tenant, TenantMembership,
+    Account, Branch, Contact, FinancialYear, NumberingSeries, Tenant, TenantMembership,
     TenantSetting, User,
 )
 from src.domains.accounting.services import _STANDARD_ACCOUNTS
 from src.domains.company.services import NumberingSeriesService, decrypt_credential, indian_financial_year
+from src.domains.company.provisioning import reset_company_to_signup_defaults
 from src.core.security import create_access_token, get_password_hash
 
 class TestCompanyAndSettings(unittest.TestCase):
@@ -125,6 +126,43 @@ class TestCompanyAndSettings(unittest.TestCase):
             self.assertEqual(account_count, len(_STANDARD_ACCOUNTS))
             expected_fy_label = f"{fy_start.year % 100:02d}-{fy_end.year % 100:02d}"
             self.assertTrue(all(f"/{expected_fy_label}/" in row.prefix for row in series))
+        finally:
+            db.close()
+
+    def test_company_reset_recreates_signup_defaults(self):
+        db = SessionLocal()
+        try:
+            tenant = db.query(Tenant).filter(Tenant.id == self.tenant_id).one()
+            owner = db.query(User).filter(User.email == "owner@company.com").one()
+            db.add(Contact(
+                tenant_id=tenant.id,
+                name="Temporary Customer",
+                contact_type="CUSTOMER",
+            ))
+            db.commit()
+
+            reset_company_to_signup_defaults(db, tenant, owner.id, as_of=date(2026, 7, 15))
+            db.commit()
+
+            self.assertEqual(db.query(Contact).filter(Contact.tenant_id == tenant.id).count(), 0)
+            self.assertEqual(
+                db.query(Account).filter(Account.tenant_id == tenant.id).count(),
+                len(_STANDARD_ACCOUNTS),
+            )
+            self.assertEqual(db.query(Branch).filter(Branch.tenant_id == tenant.id).count(), 1)
+            current_fy = db.query(FinancialYear).filter(
+                FinancialYear.tenant_id == tenant.id,
+                FinancialYear.is_current == True,
+            ).one()
+            self.assertEqual(current_fy.name, "2026-27")
+            self.assertGreater(
+                db.query(NumberingSeries).filter(NumberingSeries.tenant_id == tenant.id).count(),
+                0,
+            )
+            settings_row = db.query(TenantSetting).filter(
+                TenantSetting.tenant_id == tenant.id,
+            ).one()
+            self.assertFalse(settings_row.extra_settings["onboarding_completed"])
         finally:
             db.close()
 

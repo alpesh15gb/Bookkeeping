@@ -3,8 +3,10 @@
 from datetime import date, timedelta
 import uuid
 
+from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
+from src.core.database import Base
 from src.domains.accounting.services import AccountResolver, _STANDARD_ACCOUNTS
 from src.domains.company.services import (
     NumberingSeriesService,
@@ -155,3 +157,60 @@ def provision_company_defaults(
     }
 
     NumberingSeriesService.seed_all_defaults(db, tenant.id)
+
+
+_PURGE_PRESERVED_TABLES = {
+    "tenants",
+    "tenant_memberships",
+    "audit_logs",
+    "financial_year_audits",
+    "period_lock_audits",
+}
+
+
+def reset_company_to_signup_defaults(
+    db: Session,
+    tenant: Tenant,
+    owner_id: uuid.UUID,
+    *,
+    as_of: date | None = None,
+) -> None:
+    """Remove company data and recreate the same defaults used at signup.
+
+    Membership and append-only compliance audit tables are deliberately
+    retained. All other tenant-owned rows, including newer modules, are
+    discovered from SQLAlchemy metadata so purge cannot silently miss a table.
+    The caller owns the transaction and audit-log entry.
+    """
+    tables = list(reversed(Base.metadata.sorted_tables))
+
+    # Line/detail tables generally inherit tenant scope through their parent
+    # document rather than carrying tenant_id themselves. Delete those first.
+    for table in tables:
+        if "tenant_id" in table.c:
+            continue
+        tenant_parent_predicates = []
+        for foreign_key in table.foreign_keys:
+            parent = foreign_key.column.table
+            if "tenant_id" not in parent.c:
+                continue
+            tenant_parent_predicates.append(
+                foreign_key.parent.in_(
+                    select(foreign_key.column).where(parent.c.tenant_id == tenant.id)
+                )
+            )
+        if tenant_parent_predicates:
+            db.execute(delete(table).where(or_(*tenant_parent_predicates)))
+
+    # Reverse dependency order removes documents before masters. Preserve the
+    # company, its users, and immutable audit evidence.
+    for table in tables:
+        if (
+            "tenant_id" not in table.c
+            or table.name in _PURGE_PRESERVED_TABLES
+        ):
+            continue
+        db.execute(delete(table).where(table.c.tenant_id == tenant.id))
+
+    db.flush()
+    provision_company_defaults(db, tenant, owner_id, as_of=as_of)

@@ -657,26 +657,31 @@ def verify_and_execute_purge(
             detail="Invalid or expired verification OTP."
         )
 
+    from src.domains.company.provisioning import reset_company_to_signup_defaults
     from src.infrastructure.database.models import (
-        Invoice, InvoiceLine,
-        Bill, BillLine,
-        ProformaInvoice, ProformaInvoiceLine,
-        Payment, PaymentAllocation,
-        BillPayment, BillPaymentAllocation,
-        Expense,
-        JournalEntry, JournalLine,
-        InventoryAdjustment, InventoryAdjustmentLine,
-        CreditNote, CreditNoteLine,
-        DebitNote, DebitNoteLine,
-        DeliveryChallan, DeliveryChallanLine,
-        SalesOrder, SalesOrderLine,
-        PurchaseOrder, PurchaseOrderLine,
-        EWayBill, BankReconciliation, BankStatement, BankTransaction,
-        StockLedger, GSTReturn,
-        Contact, Product, AuditLog, Account
+        Invoice, InvoiceLine, Bill, BillLine, ProformaInvoice,
+        ProformaInvoiceLine, Payment, PaymentAllocation, BillPayment,
+        BillPaymentAllocation, Expense, JournalEntry, JournalLine,
+        InventoryAdjustment, InventoryAdjustmentLine, CreditNote,
+        CreditNoteLine, DebitNote, DebitNoteLine, DeliveryChallan,
+        DeliveryChallanLine, SalesOrder, SalesOrderLine, PurchaseOrder,
+        PurchaseOrderLine, EWayBill, BankReconciliation, BankStatement,
+        BankTransaction, StockLedger, GSTReturn, Contact, Product, AuditLog,
+        Account,
     )
 
     try:
+        tenant = db.query(Tenant).filter(
+            Tenant.id == tenant_id,
+            Tenant.deleted_at == None,
+        ).first()
+        if tenant is None:
+            raise HTTPException(status_code=404, detail="Company not found.")
+
+        # The metadata-driven reset handles every tenant-scoped module first,
+        # including tables added after this legacy purge endpoint was written.
+        reset_company_to_signup_defaults(db, tenant, current_user.id)
+
         # 1. Delete lines / children referencing parent documents of this tenant
         db.query(InvoiceLine).filter(InvoiceLine.invoice_id.in_(db.query(Invoice.id).filter(Invoice.tenant_id == tenant_id))).delete(synchronize_session=False)
         db.query(BillLine).filter(BillLine.bill_id.in_(db.query(Bill.id).filter(Bill.tenant_id == tenant_id))).delete(synchronize_session=False)
@@ -763,7 +768,13 @@ def verify_and_execute_purge(
             detail=f"An error occurred while purging company data: {str(e)}"
         )
 
-    return {"detail": "Company data purged successfully. All transactions, contacts, and products have been deleted."}
+    return {
+        "detail": (
+            "Company data purged successfully. Signup defaults were recreated, "
+            "including the chart of accounts, current financial year, main "
+            "warehouse, numbering series, expense categories, and settings."
+        )
+    }
 
 
 # ─── Data Export / Backup ───
