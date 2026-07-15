@@ -19,12 +19,13 @@ class PageHeader extends StatelessWidget {
   /// The effective padding. When [padding] is null a context-aware default is
   /// computed once in [build] so it responds to the current screen size.
   EdgeInsetsGeometry _effectivePadding(BuildContext context) {
-    return padding ?? EdgeInsets.fromLTRB(
-      ResponsiveLayout.isMobile(context) ? 12 : 24,
-      20,
-      ResponsiveLayout.isMobile(context) ? 12 : 24,
-      16,
-    );
+    return padding ??
+        EdgeInsets.fromLTRB(
+          ResponsiveLayout.isMobile(context) ? 12 : 24,
+          20,
+          ResponsiveLayout.isMobile(context) ? 12 : 24,
+          16,
+        );
   }
 
   final String title;
@@ -36,51 +37,62 @@ class PageHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = apexColors(context);
     final effectivePadding = _effectivePadding(context);
+    final mobile = ResponsiveLayout.isMobile(context);
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          title,
+          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            color: colors.textPrimary,
+          ),
+        ),
+        if (subtitle != null) ...[
+          const SizedBox(height: 4),
+          Text(
+            subtitle!,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: colors.textSecondary,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ],
+      ],
+    );
+    final actionRow = actions == null
+        ? null
+        : Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            alignment: mobile ? WrapAlignment.start : WrapAlignment.end,
+            children: actions!,
+          );
     return Padding(
       padding: effectivePadding,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
+      child: mobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  title,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: -0.5,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                if (subtitle != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    subtitle!,
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: colors.textSecondary,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
+                heading,
+                if (actionRow != null) ...[
+                  const SizedBox(height: 12),
+                  actionRow,
+                ],
+              ],
+            )
+          : Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(child: heading),
+                if (actionRow != null) ...[
+                  const SizedBox(width: 16),
+                  actionRow,
                 ],
               ],
             ),
-          ),
-          if (actions != null) ...[
-            const SizedBox(width: 16),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: actions!.map((w) {
-                return Padding(
-                  padding: const EdgeInsets.only(left: 8.0),
-                  child: w,
-                );
-              }).toList(),
-            ),
-          ],
-        ],
-      ),
     );
   }
 }

@@ -172,38 +172,54 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 child: Container(height: 1, color: colors.border),
               ),
               actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(context).maybePop(),
-                  child: Text(
-                    'Cancel',
-                    style: TextStyle(color: colors.textSecondary),
+                if (!ResponsiveLayout.isMobile(context)) ...[
+                  TextButton(
+                    onPressed: () => Navigator.of(context).maybePop(),
+                    child: Text(
+                      'Cancel',
+                      style: TextStyle(color: colors.textSecondary),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 4),
+                  const SizedBox(width: 4),
+                ],
                 Padding(
                   padding: const EdgeInsets.symmetric(
                     vertical: 8,
                     horizontal: 8,
                   ),
-                  child: FilledButton.icon(
-                    onPressed: state.saving ? null : _save,
-                    icon: state.saving
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: LoadingSpinner(size: 16),
-                          )
-                        : const Icon(Icons.check_rounded, size: 18),
-                    label: Text(
-                      widget.editId == null ? 'Save draft' : 'Update',
-                    ),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                    ),
-                  ),
+                  child: ResponsiveLayout.isMobile(context)
+                      ? IconButton.filled(
+                          onPressed: state.saving ? null : _save,
+                          tooltip: widget.editId == null
+                              ? 'Save draft'
+                              : 'Update',
+                          icon: state.saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: LoadingSpinner(size: 16),
+                                )
+                              : const Icon(Icons.check_rounded, size: 20),
+                        )
+                      : FilledButton.icon(
+                          onPressed: state.saving ? null : _save,
+                          icon: state.saving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: LoadingSpinner(size: 16),
+                                )
+                              : const Icon(Icons.check_rounded, size: 18),
+                          label: Text(
+                            widget.editId == null ? 'Save draft' : 'Update',
+                          ),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -243,7 +259,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                     child: ConstrainedBox(
                       constraints: const BoxConstraints(maxWidth: 1200),
                       child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
+                        padding: EdgeInsets.all(
+                          ResponsiveLayout.isMobile(context) ? 10 : 16,
+                        ),
                         itemCount: 3,
                         itemBuilder: (context, idx) {
                           switch (idx) {
@@ -342,13 +360,18 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   children: [
                     customer,
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(child: issue),
-                        const SizedBox(width: 12),
-                        Expanded(child: due),
-                      ],
-                    ),
+                    if (c.maxWidth < 350) ...[
+                      issue,
+                      const SizedBox(height: 12),
+                      due,
+                    ] else
+                      Row(
+                        children: [
+                          Expanded(child: issue),
+                          const SizedBox(width: 12),
+                          Expanded(child: due),
+                        ],
+                      ),
                   ],
                 );
               }
@@ -515,33 +538,49 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   ],
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  crossAxisAlignment: WrapCrossAlignment.center,
+                Row(
                   children: [
-                    _tot('Subtotal', fmt.currency(state.subtotal), colors),
-                    _tot('Discount', fmt.currency(state.discountTotal), colors),
-                    if (gstEnabled)
-                      _tot('Tax', fmt.currency(state.totalTax), colors),
-                    FilledButton.icon(
-                      onPressed: state.saving ? null : _save,
-                      icon: state.saving
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: LoadingSpinner(size: 16),
-                            )
-                          : const Icon(Icons.check_rounded, size: 18),
-                      label: const Text('Save'),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
+                    Expanded(
+                      child: _tot(
+                        'Subtotal',
+                        fmt.currency(state.subtotal),
+                        colors,
                       ),
                     ),
+                    Expanded(
+                      child: _tot(
+                        'Discount',
+                        fmt.currency(state.discountTotal),
+                        colors,
+                      ),
+                    ),
+                    if (gstEnabled)
+                      Expanded(
+                        child: _tot(
+                          'Tax',
+                          fmt.currency(state.totalTax),
+                          colors,
+                        ),
+                      ),
                   ],
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: state.saving ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
                 ),
               ],
             )

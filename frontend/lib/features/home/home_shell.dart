@@ -95,6 +95,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     Membership? company,
     BuildContext context,
   ) {
+    final dashboardIndex = _screens.indexWhere((s) => s.$1 == 'Dashboard');
+    final invoiceIndex = _screens.indexWhere((s) => s.$1 == 'Invoices');
+    final contactsIndex = _screens.indexWhere((s) => s.$1 == 'Contacts');
+    final mobileDestination = _selIdx == dashboardIndex
+        ? 0
+        : _selIdx == invoiceIndex
+        ? 1
+        : _selIdx == contactsIndex
+        ? 2
+        : 3;
     return Scaffold(
       drawer: Drawer(
         child: SafeArea(
@@ -108,57 +118,86 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         ),
       ),
       appBar: AppBar(
-        backgroundColor: colors.surface,
+        backgroundColor: colors.primary,
+        foregroundColor: colors.onPrimary,
         elevation: 0,
         scrolledUnderElevation: 0.5,
         leading: Builder(
           builder: (ctx) => IconButton(
-            icon: Icon(Icons.menu_rounded, color: colors.textPrimary),
+            icon: Icon(Icons.menu_rounded, color: colors.onPrimary),
             tooltip: 'Open menu',
             onPressed: () => Scaffold.of(ctx).openDrawer(),
           ),
         ),
         title: Text(
           company?.displayName ?? 'ApexBooks',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w700,
+            color: colors.onPrimary,
+          ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
         actions: [
           IconButton(
-            icon: Icon(Icons.search_rounded, color: colors.textSecondary),
+            icon: Icon(Icons.search_rounded, color: colors.onPrimary),
             tooltip: 'Search',
             onPressed: () => CommandPalette.show(context),
           ),
           IconButton(
             icon: Icon(
               Icons.notifications_none_rounded,
-              color: colors.textSecondary,
+              color: colors.onPrimary,
             ),
             tooltip: 'Notifications',
             onPressed: () {},
           ),
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: IconButton(
-              icon: Icon(
-                Icons.account_circle_outlined,
-                color: colors.textSecondary,
-              ),
-              tooltip: 'Sign out',
-              onPressed: () async {
-                await ref.read(authControllerProvider.notifier).signOut();
-                if (mounted) context.go(auth_routes.login);
-              },
-            ),
-          ),
         ],
       ),
       body: _screens[_selIdx].$4,
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton(
         onPressed: () => _showQuickCreate(context),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text('Create'),
+        tooltip: 'Create',
+        child: const Icon(Icons.add_rounded),
+      ),
+      bottomNavigationBar: Builder(
+        builder: (scaffoldContext) => NavigationBar(
+          selectedIndex: mobileDestination,
+          height: 68,
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          onDestinationSelected: (index) {
+            if (index == 0 && dashboardIndex >= 0) {
+              setState(() => _selIdx = dashboardIndex);
+            } else if (index == 1 && invoiceIndex >= 0) {
+              setState(() => _selIdx = invoiceIndex);
+            } else if (index == 2 && contactsIndex >= 0) {
+              setState(() => _selIdx = contactsIndex);
+            } else if (index == 3) {
+              Scaffold.of(scaffoldContext).openDrawer();
+            }
+          },
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.grid_view_outlined),
+              selectedIcon: Icon(Icons.grid_view_rounded),
+              label: 'Home',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.receipt_long_outlined),
+              selectedIcon: Icon(Icons.receipt_long_rounded),
+              label: 'Invoices',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.people_outline_rounded),
+              selectedIcon: Icon(Icons.people_alt_rounded),
+              label: 'Contacts',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.menu_rounded),
+              label: 'More',
+            ),
+          ],
+        ),
       ),
     );
   }

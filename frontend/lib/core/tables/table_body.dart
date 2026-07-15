@@ -42,6 +42,108 @@ class ApexTableBody<T extends BaseModel> extends StatelessWidget {
         rows.every((r) => controller.value.selectedIds.contains(rowKey(r)));
     final isMobile = ResponsiveLayout.isMobile(context);
 
+    if (isMobile) {
+      return ListView.separated(
+        shrinkWrap: true,
+        physics: const NeverScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
+        itemCount: rows.length,
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
+        itemBuilder: (context, i) {
+          final row = rows[i];
+          final selected = controller.value.selectedIds.contains(rowKey(row));
+          final cardColumns = visibleCols.take(4).toList();
+          return Card(
+            margin: EdgeInsets.zero,
+            color: selected ? colors.primaryContainer : colors.surfaceRaised,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              onTap: onRowTap == null ? null : () => onRowTap!(row),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 14, 12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Checkbox(
+                      value: selected,
+                      onChanged: (_) => controller.toggleSelection(rowKey(row)),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Column(
+                        children: List.generate(cardColumns.length, (
+                          columnIndex,
+                        ) {
+                          final column = cardColumns[columnIndex];
+                          return Padding(
+                            padding: EdgeInsets.only(
+                              bottom: columnIndex == cardColumns.length - 1
+                                  ? 0
+                                  : 8,
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                SizedBox(
+                                  width: 86,
+                                  child: Text(
+                                    column.label,
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .labelSmall
+                                        ?.copyWith(
+                                          color: colors.textMuted,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                  ),
+                                ),
+                                Expanded(
+                                  child: DefaultTextStyle.merge(
+                                    style: Theme.of(context)
+                                        .textTheme
+                                        .bodyMedium
+                                        ?.copyWith(
+                                          color: colors.textPrimary,
+                                          fontWeight: columnIndex == 0
+                                              ? FontWeight.w700
+                                              : FontWeight.w500,
+                                        ),
+                                    child:
+                                        column.cellBuilder?.call(
+                                          context,
+                                          row,
+                                          i,
+                                        ) ??
+                                        Text(
+                                          _stringify(column.readValue(row)),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
+                    if (onRowTap != null) ...[
+                      const SizedBox(width: 4),
+                      Icon(
+                        Icons.chevron_right_rounded,
+                        color: colors.textMuted,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      );
+    }
+
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
@@ -100,7 +202,8 @@ class ApexTableBody<T extends BaseModel> extends StatelessWidget {
               ...visibleCols.map(
                 (c) => DataCell(
                   RepaintBoundary(
-                    child: c.cellBuilder?.call(context, row, i) ??
+                    child:
+                        c.cellBuilder?.call(context, row, i) ??
                         Text(
                           _stringify(c.readValue(row)),
                           style: Theme.of(context).textTheme.bodyMedium,

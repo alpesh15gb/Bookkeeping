@@ -67,7 +67,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           child: ListView.builder(
             padding: EdgeInsets.fromLTRB(
               ResponsiveLayout.isMobile(context) ? 12 : 28,
-              24,
+              ResponsiveLayout.isMobile(context) ? 16 : 24,
               ResponsiveLayout.isMobile(context) ? 12 : 28,
               40,
             ),
@@ -87,7 +87,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                           'Could not load KPIs',
                           () => ref.read(dashboardProvider.notifier).refresh(),
                         ),
-                        data: (data) => _kpiGrid(context, data, state, colors, fmt),
+                        data: (data) =>
+                            _kpiGrid(context, data, state, colors, fmt),
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -102,7 +103,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                         return Padding(
                           padding: const EdgeInsets.only(bottom: 20),
                           child: Column(
-                            children: [chart, const SizedBox(height: 20), alerts],
+                            children: [
+                              chart,
+                              const SizedBox(height: 20),
+                              alerts,
+                            ],
                           ),
                         );
                       }
@@ -149,67 +154,93 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         : hour < 17
         ? 'Good afternoon'
         : 'Good evening';
+    final mobile = ResponsiveLayout.isMobile(context);
+    final heading = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          greeting,
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+            color: colors.textSecondary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Row(
+          children: [
+            Text(
+              'Overview',
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.w700,
+                letterSpacing: -0.5,
+              ),
+            ),
+            const SizedBox(width: 12),
+            if (refreshing)
+              const Padding(
+                padding: EdgeInsets.only(top: 4),
+                child: LoadingSpinner(size: 16),
+              ),
+          ],
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '${_months[now.month - 1]} ${now.day}, ${now.year}  ·  Live financials',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(color: colors.textMuted),
+        ),
+      ],
+    );
+    final refresh = OutlinedButton.icon(
+      onPressed: () => ref.read(dashboardProvider.notifier).refresh(),
+      icon: const Icon(Icons.refresh_rounded, size: 18),
+      label: Text(mobile ? 'Reload' : 'Refresh'),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: colors.textSecondary,
+        side: BorderSide(color: colors.border),
+        padding: EdgeInsets.symmetric(
+          horizontal: mobile ? 12 : 16,
+          vertical: 14,
+        ),
+      ),
+    );
+    final create = FilledButton.icon(
+      onPressed: () => Navigator.of(
+        context,
+      ).push(MaterialPageRoute(builder: (_) => const InvoiceFormScreen())),
+      icon: const Icon(Icons.add_rounded, size: 18),
+      label: const Text('New Invoice'),
+      style: FilledButton.styleFrom(
+        padding: EdgeInsets.symmetric(
+          horizontal: mobile ? 14 : 18,
+          vertical: 14,
+        ),
+      ),
+    );
+    if (mobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          heading,
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: refresh),
+              const SizedBox(width: 10),
+              Expanded(flex: 2, child: create),
+            ],
+          ),
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                greeting,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: colors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Text(
-                    'Overview',
-                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  if (refreshing)
-                    const Padding(
-                      padding: EdgeInsets.only(top: 4),
-                      child: LoadingSpinner(size: 16),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                '${_months[now.month - 1]} ${now.day}, ${now.year}  ·  Live financials',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.textMuted),
-              ),
-            ],
-          ),
-        ),
-        OutlinedButton.icon(
-          onPressed: () => ref.read(dashboardProvider.notifier).refresh(),
-          icon: const Icon(Icons.refresh_rounded, size: 18),
-          label: const Text('Refresh'),
-          style: OutlinedButton.styleFrom(
-            foregroundColor: colors.textSecondary,
-            side: BorderSide(color: colors.border),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          ),
-        ),
+        Expanded(child: heading),
+        refresh,
         const SizedBox(width: 12),
-        FilledButton.icon(
-          onPressed: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const InvoiceFormScreen())),
-          icon: const Icon(Icons.add_rounded, size: 18),
-          label: const Text('New Invoice'),
-          style: FilledButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          ),
-        ),
+        create,
       ],
     );
   }
@@ -294,8 +325,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             ? 3
             : c.maxWidth >= 560
             ? 2
-            : 1;
-        const gap = 16.0;
+            : 2;
+        final gap = c.maxWidth < 560 ? 10.0 : 16.0;
         final w = (c.maxWidth - gap * (cols - 1)) / cols;
         return Wrap(
           spacing: gap,
@@ -352,21 +383,45 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
-                    'Cash Flow',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                  const Spacer(),
-                  _legendDot(colors.success, 'Revenue'),
-                  const SizedBox(width: 16),
-                  _legendDot(colors.danger, 'Expense'),
-                ],
+              LayoutBuilder(
+                builder: (context, c) => c.maxWidth < 420
+                    ? Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Cash Flow',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 14,
+                            children: [
+                              _legendDot(colors.success, 'Revenue'),
+                              _legendDot(colors.danger, 'Expense'),
+                            ],
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Text(
+                            'Cash Flow',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          const Spacer(),
+                          _legendDot(colors.success, 'Revenue'),
+                          const SizedBox(width: 16),
+                          _legendDot(colors.danger, 'Expense'),
+                        ],
+                      ),
               ),
               const SizedBox(height: 4),
               Text(
@@ -448,8 +503,12 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         ),
         titlesData: FlTitlesData(
           show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -497,10 +556,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
           drawVerticalLine: false,
           horizontalInterval: (maxY == 0 ? 1 : maxY) / 4,
           getDrawingHorizontalLine: (value) {
-            return FlLine(
-              color: colors.border,
-              strokeWidth: 1,
-            );
+            return FlLine(color: colors.border, strokeWidth: 1);
           },
         ),
         borderData: FlBorderData(show: false),
@@ -731,63 +787,93 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       ),
       error: (e, _) => _Panel(
         colors: colors,
-        child: _errorCard(colors, 'Could not load GST summary', () => ref.read(dashboardProvider.notifier).refresh()),
+        child: _errorCard(
+          colors,
+          'Could not load GST summary',
+          () => ref.read(dashboardProvider.notifier).refresh(),
+        ),
       ),
       data: (m) {
         final cgst = m.cgstTotal;
         final sgst = m.sgstTotal;
         final igst = m.igstTotal;
         final totalOutput = cgst + sgst + igst;
-        final netPayable = totalOutput; // Net of ITC; backend provides full calc
+        final netPayable =
+            totalOutput; // Net of ITC; backend provides full calc
         return _Panel(
           colors: colors,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  Text(
+              LayoutBuilder(
+                builder: (context, c) {
+                  final narrow = c.maxWidth < 430;
+                  final title = Text(
                     'GST Summary',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,
                       color: colors.textPrimary,
                     ),
-                  ),
-                  const Spacer(),
-                  Text(
+                  );
+                  final payable = Text(
                     'Net Payable: ${fmt.currency(netPayable)}',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                       color: colors.primary,
                     ),
-                  ),
-                ],
+                  );
+                  return narrow
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [title, const SizedBox(height: 4), payable],
+                        )
+                      : Row(children: [title, const Spacer(), payable]);
+                },
               ),
               const SizedBox(height: 4),
               Text(
                 '${_months[now.month - 1]} ${now.year}  ·  Output GST',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.textMuted),
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: colors.textMuted),
               ),
               const SizedBox(height: 16),
-              Row(
-                children: [
-                  _gstItem('CGST', fmt.currency(cgst), colors),
-                  const SizedBox(width: 16),
-                  _gstItem('SGST', fmt.currency(sgst), colors),
-                  const SizedBox(width: 16),
-                  if (igst > 0) ...[
-                    _gstItem('IGST', fmt.currency(igst), colors),
-                    const SizedBox(width: 16),
-                  ],
-                  _gstItem(
-                    'Total',
-                    fmt.currency(totalOutput),
-                    colors,
-                    emphasize: true,
-                  ),
-                ],
+              LayoutBuilder(
+                builder: (context, c) {
+                  final mobile = c.maxWidth < 560;
+                  final items = <Widget>[
+                    _gstItem('CGST', fmt.currency(cgst), colors),
+                    _gstItem('SGST', fmt.currency(sgst), colors),
+                    if (igst > 0) _gstItem('IGST', fmt.currency(igst), colors),
+                    _gstItem(
+                      'Total',
+                      fmt.currency(totalOutput),
+                      colors,
+                      emphasize: true,
+                    ),
+                  ];
+                  if (!mobile) {
+                    return Row(
+                      children: [
+                        for (int i = 0; i < items.length; i++) ...[
+                          if (i > 0) const SizedBox(width: 16),
+                          Expanded(child: items[i]),
+                        ],
+                      ],
+                    );
+                  }
+                  const gap = 10.0;
+                  final width = (c.maxWidth - gap) / 2;
+                  return Wrap(
+                    spacing: gap,
+                    runSpacing: gap,
+                    children: items
+                        .map((item) => SizedBox(width: width, child: item))
+                        .toList(),
+                  );
+                },
               ),
             ],
           ),
@@ -802,34 +888,34 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     ApexColors colors, {
     bool emphasize = false,
   }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: colors.surfaceMuted,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
-          border: emphasize ? Border.all(color: colors.primary.withValues(alpha: 0.3)) : null,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 11,
-                color: colors.textMuted,
-                fontWeight: FontWeight.w600,
-              ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: colors.surfaceMuted,
+        borderRadius: BorderRadius.circular(ApexRadius.md),
+        border: emphasize
+            ? Border.all(color: colors.primary.withValues(alpha: 0.3))
+            : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: colors.textMuted,
+              fontWeight: FontWeight.w600,
             ),
-            const SizedBox(height: 4),
-            MonetaryText(
-              value: value,
-              fontSize: 15,
-              fontWeight: FontWeight.w700,
-              color: emphasize ? colors.primary : colors.textPrimary,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 4),
+          MonetaryText(
+            value: value,
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+            color: emphasize ? colors.primary : colors.textPrimary,
+          ),
+        ],
       ),
     );
   }
@@ -856,7 +942,10 @@ class _Panel extends StatelessWidget {
   final ApexColors colors;
   final Widget child;
   @override
-  Widget build(BuildContext context) => ApexCard(child: child);
+  Widget build(BuildContext context) => ApexCard(
+    padding: EdgeInsets.all(ResponsiveLayout.isMobile(context) ? 14 : 20),
+    child: child,
+  );
 }
 
 // ── Premium KPI card ────────────────────────────────────────────────────────
@@ -891,6 +980,7 @@ class _KpiCardState extends State<_KpiCard> {
 
   @override
   Widget build(BuildContext context) {
+    final mobile = ResponsiveLayout.isMobile(context);
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
@@ -898,7 +988,7 @@ class _KpiCardState extends State<_KpiCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         curve: Curves.easeOut,
-        padding: const EdgeInsets.all(18),
+        padding: EdgeInsets.all(mobile ? 13 : 18),
         transform: _hovered
             ? (Matrix4.identity()..translate(0.0, -2.0))
             : Matrix4.identity(),
@@ -910,8 +1000,8 @@ class _KpiCardState extends State<_KpiCard> {
             color: _hovered
                 ? widget.tone.withValues(alpha: 0.5)
                 : widget.emphasize
-                    ? widget.tone.withValues(alpha: 0.4)
-                    : widget.colors.border,
+                ? widget.tone.withValues(alpha: 0.4)
+                : widget.colors.border,
           ),
           boxShadow: [
             BoxShadow(
@@ -921,58 +1011,57 @@ class _KpiCardState extends State<_KpiCard> {
             ),
           ],
         ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: widget.tone.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: widget.tone.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  ),
+                  child: Icon(widget.icon, size: 18, color: widget.tone),
                 ),
-                child: Icon(widget.icon, size: 18, color: widget.tone),
-              ),
-              const Spacer(),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            widget.label.toUpperCase(),
-            style: TextStyle(
-              fontSize: 11,
-              color: widget.colors.textMuted,
-              fontWeight: FontWeight.w600,
-              letterSpacing: 0.5,
+                const Spacer(),
+              ],
             ),
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: MonetaryText(
-              value: widget.fmt.currency(widget.value),
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-              color: widget.colors.textPrimary,
-            ),
-          ),
-          if (widget.footer != null) ...[
-            const SizedBox(height: 6),
+            SizedBox(height: mobile ? 10 : 14),
             Text(
-              widget.footer!,
+              widget.label.toUpperCase(),
               style: TextStyle(
                 fontSize: 11,
-                color: widget.footerTone ?? widget.colors.textSecondary,
-                fontWeight: FontWeight.w500,
+                color: widget.colors.textMuted,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.5,
               ),
             ),
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: MonetaryText(
+                value: widget.fmt.currency(widget.value),
+                fontSize: mobile ? 18 : 22,
+                fontWeight: FontWeight.w700,
+                color: widget.colors.textPrimary,
+              ),
+            ),
+            if (widget.footer != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                widget.footer!,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: widget.footerTone ?? widget.colors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ],
-        ],
-      ),
+        ),
       ),
     );
   }
 }
-
