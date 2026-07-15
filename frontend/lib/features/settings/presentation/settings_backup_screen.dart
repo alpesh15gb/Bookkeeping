@@ -15,7 +15,6 @@ import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/dialogs/dialog_service.dart';
-import '../../../core/result/result.dart';
 import '../../../core/utils/formatters.dart';
 import '../../../core/theme/responsive.dart';
 import '../../../core/download/download_service.dart';
@@ -34,6 +33,7 @@ class SettingsBackupScreen extends ConsumerStatefulWidget {
 class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
   bool _isExporting = false;
   bool _isImporting = false;
+  bool _isVyaparImporting = false;
   bool _isPurging = false;
   bool _purgeStep1Done = false;
 
@@ -133,6 +133,71 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
           .read(notificationServiceProvider)
           .error(context, err.message, title: 'Import failed');
     }
+  }
+
+  Future<void> _importVyaparBackup() async {
+    final selected = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['vyb'],
+      withData: true,
+    );
+    final file = selected?.files.single;
+    if (file == null || file.bytes == null || !mounted) return;
+
+    final confirmed = await ref
+        .read(dialogServiceProvider)
+        .confirm(
+          context,
+          title: 'Import Vyapar Backup',
+          message:
+              'This imports parties, items, invoices, purchases, payments, '
+              'opening balances, and stock from ${file.name}. Existing '
+              'matching records are retained. Create an ApexBooks backup '
+              'before continuing.',
+        );
+    if (!confirmed || !mounted) return;
+
+    setState(() => _isVyaparImporting = true);
+    final result = await ref
+        .read(settingsRepositoryProvider)
+        .importVyaparBackup(bytes: file.bytes!, filename: file.name);
+    if (!mounted) return;
+    setState(() => _isVyaparImporting = false);
+
+    if (result is Success<Map<String, dynamic>>) {
+      final summary = result.value;
+      final imported = <String>[
+        _importCount(summary, 'contacts_imported', 'parties'),
+        _importCount(summary, 'products_imported', 'items'),
+        _importCount(summary, 'invoices_imported', 'invoices'),
+        _importCount(summary, 'bills_imported', 'purchases'),
+        _importCount(summary, 'payments_imported', 'payments'),
+        _importCount(summary, 'stock_entries_imported', 'stock entries'),
+      ].where((value) => value.isNotEmpty).join(', ');
+      final errors = summary['errors'] is List
+          ? (summary['errors'] as List).length
+          : 0;
+      ref
+          .read(notificationServiceProvider)
+          .success(
+            context,
+            imported.isEmpty
+                ? 'Vyapar backup processed. No new records were added.'
+                : 'Imported $imported${errors > 0 ? ' with $errors warning(s)' : ''}.',
+            title: 'Vyapar Import Complete',
+          );
+    } else {
+      final err = (result as Failure).error;
+      ref
+          .read(notificationServiceProvider)
+          .error(context, err.message, title: 'Vyapar import failed');
+    }
+  }
+
+  String _importCount(Map<String, dynamic> summary, String key, String label) {
+    final value = summary[key];
+    final count = value is num ? value.toInt() : 0;
+    return count > 0 ? '$count $label' : '';
   }
 
   Future<void> _requestPurge() async {
@@ -303,6 +368,30 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
                       )
                     : const Icon(Icons.upload_rounded, size: 18),
                 label: Text(_isImporting ? 'Importing...' : 'Select & Import'),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildSectionCard(
+              colors: colors,
+              icon: Icons.swap_horiz_rounded,
+              title: 'Import from Vyapar',
+              subtitle:
+                  'Migrate company data from a Vyapar .vyb backup file. '
+                  'Large backups can take several minutes to process.',
+              child: FilledButton.icon(
+                onPressed: _isVyaparImporting ? null : _importVyaparBackup,
+                icon: _isVyaparImporting
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.upload_file_rounded, size: 18),
+                label: Text(
+                  _isVyaparImporting
+                      ? 'Importing Vyapar backup...'
+                      : 'Select Vyapar Backup',
+                ),
               ),
             ),
             const SizedBox(height: 24),

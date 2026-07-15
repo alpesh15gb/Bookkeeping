@@ -225,6 +225,28 @@ class SettingsRepository {
     });
   }
 
+  /// `POST /import/vyapar` — import a Vyapar `.vyb` backup archive.
+  Future<Result<Map<String, dynamic>>> importVyaparBackup({
+    required List<int> bytes,
+    required String filename,
+  }) {
+    return guardDio(() async {
+      final form = FormData.fromMap({
+        'file': MultipartFile.fromBytes(bytes, filename: filename),
+      });
+      final res = await _dio.post(
+        '/import/vyapar',
+        data: form,
+        options: Options(
+          contentType: 'multipart/form-data',
+          sendTimeout: const Duration(minutes: 2),
+          receiveTimeout: const Duration(minutes: 10),
+        ),
+      );
+      return Map<String, dynamic>.from(res.data as Map);
+    });
+  }
+
   /// `POST /purge/request` — request a data purge (OTP sent).
   Future<Result<void>> requestPurge() {
     return guardDio(() async {

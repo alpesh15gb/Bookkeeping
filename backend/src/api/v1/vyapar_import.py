@@ -23,6 +23,7 @@ from src.infrastructure.database.models import (
 from src.api.deps import enforce_permission
 from src.domains.company.services import NumberingSeriesService
 from src.domains.inventory.services import resolve_default_warehouse_id
+from src.common.import_normalization import normalize_hsn_sac
 
 router = APIRouter(prefix="/import", tags=["Data Import"])
 
@@ -422,7 +423,7 @@ def import_vyapar_backup(
             # item_type: 1=product, 2=service
             product_type = "SERVICE" if i["item_type"] == 2 else "GOODS"
 
-            hsn = (i["item_hsn_sac_code"] or "").strip() or "998313"
+            hsn = normalize_hsn_sac(i["item_hsn_sac_code"])
 
             product = Product(
                 tenant_id=tenant_id,
@@ -634,7 +635,7 @@ def import_vyapar_backup(
                         float(line_tax_d), line_tax_id, group_rate_map, txn_is_intrastate
                     )
                     total_rate_pct = group_rate_map.get(line_tax_id or 0, 18.0) if line_tax_id else 18.0
-                    hsn = (vl["_hsn"] or "").strip() or "998313"
+                    hsn = normalize_hsn_sac(vl["_hsn"])
 
                     subtotal += max(line_subtotal_d, Decimal("0"))
                     total_cgst += cgst_a
@@ -796,7 +797,7 @@ def import_vyapar_backup(
                         line_tax_d, line_tax_id, group_rate_map, txn_is_intrastate
                     )
                     total_rate_pct = group_rate_map.get(line_tax_id or 0, Decimal("18.00")) if line_tax_id else Decimal("18.00")
-                    hsn = (vl["_hsn"] or "").strip() or "998313"
+                    hsn = normalize_hsn_sac(vl["_hsn"])
 
                     subtotal += max(line_subtotal_d, Decimal("0"))
                     total_cgst += cgst_a
@@ -1012,7 +1013,7 @@ def import_vyapar_backup(
                         line_tax_d, line_tax_id, group_rate_map, txn_is_intrastate
                     )
                     total_rate_pct = group_rate_map.get(line_tax_id or 0, Decimal("18.00")) if line_tax_id else Decimal("18.00")
-                    hsn = (vl["_hsn"] or "").strip() or "998313"
+                    hsn = normalize_hsn_sac(vl["_hsn"])
 
                     subtotal += max(line_subtotal_d, Decimal("0"))
                     total_cgst += cgst_a
