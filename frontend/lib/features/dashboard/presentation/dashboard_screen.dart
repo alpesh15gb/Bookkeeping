@@ -113,15 +113,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       }
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 20),
-                        child: IntrinsicHeight(
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Expanded(flex: 3, child: chart),
-                              const SizedBox(width: 20),
-                              Expanded(flex: 2, child: alerts),
-                            ],
-                          ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Expanded(flex: 3, child: chart),
+                            const SizedBox(width: 20),
+                            Expanded(flex: 2, child: alerts),
+                          ],
                         ),
                       );
                     },

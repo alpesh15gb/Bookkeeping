@@ -632,7 +632,7 @@ def import_vyapar_backup(
 
                     line_tax_id = vl["lineitem_tax_id"]
                     cgst_r, cgst_a, sgst_r, sgst_a, igst_r, igst_a = _split_gst(
-                        float(line_tax_d), line_tax_id, group_rate_map, txn_is_intrastate
+                        line_tax_d, line_tax_id, group_rate_map, txn_is_intrastate
                     )
                     total_rate_pct = group_rate_map.get(line_tax_id or 0, 18.0) if line_tax_id else 18.0
                     hsn = normalize_hsn_sac(vl["_hsn"])
