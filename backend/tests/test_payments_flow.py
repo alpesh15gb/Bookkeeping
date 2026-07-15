@@ -11,10 +11,11 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
+from src.domains.inventory.services import resolve_default_warehouse_id
 from src.infrastructure.database.models import (
     User, Tenant, TenantMembership, Contact, Product, Invoice, Bill,
     JournalEntry, JournalLine, BankingProfile, Payment, BillPayment, GSTReturn,
-    StockLedger,
+    StockLedger, AuditLog,
 )
 
 class TestPaymentsAndReceiptsFlow(unittest.TestCase):
@@ -134,6 +135,18 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
             )
 
             db.add_all([bank_a, customer_a, vendor_a, product_a])
+            db.flush()
+            default_warehouse_id = resolve_default_warehouse_id(db, self.tenant_a_id)
+            db.add(StockLedger(
+                tenant_id=self.tenant_a_id,
+                product_id=product_a.id,
+                warehouse_id=default_warehouse_id,
+                quantity=Decimal("100.00"),
+                balance_quantity=Decimal("100.00"),
+                reference_type="OPENING",
+                reference_id=product_a.id,
+                rate=product_a.purchase_price,
+            ))
             db.commit()
 
             self.customer_a_id = customer_a.id
@@ -194,7 +207,8 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
         receipt = res.json()
 
         # Verify receipt parameters
-        self.assertTrue(receipt["payment_number"].startswith("REC/2026/"))
+        self.assertTrue(receipt["payment_number"].startswith("REC/"))
+        self.assertTrue(receipt["payment_number"].endswith("/0001"))
         self.assertEqual(receipt["status"], "ACTIVE")
         self.assertEqual(len(receipt["allocations"]), 2)
 
@@ -320,7 +334,8 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
         self.assertEqual(res.status_code, 201)
         disb = res.json()
 
-        self.assertTrue(disb["payment_number"].startswith("PAY/2026/"))
+        self.assertTrue(disb["payment_number"].startswith("PAY/"))
+        self.assertTrue(disb["payment_number"].endswith("/0001"))
         self.assertEqual(disb["status"], "ACTIVE")
 
         # Verify bill state updated to PAID
@@ -593,6 +608,126 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
         self.assertEqual(self.client.get(
             f"/api/v1/invoices/{invoice_id}", headers=self.headers_a
         ).json()["status"], "PAID")
+
+        # Database + ledger: every financial document must have a balanced,
+        # traceable journal entry after the complete commercial workflow.
+        db = SessionLocal()
+        try:
+            entries = db.query(JournalEntry).filter(
+                JournalEntry.tenant_id == self.tenant_a_id,
+                JournalEntry.source_id.in_([
+                    uuid.UUID(invoice_id),
+                    uuid.UUID(receipt.json()["id"]),
+                ]),
+            ).all()
+            self.assertEqual(len(entries), 2)
+            for entry in entries:
+                lines = db.query(JournalLine).filter(
+                    JournalLine.entry_id == entry.id
+                ).all()
+                debits = sum(
+                    (line.amount for line in lines if line.direction == "DEBIT"),
+                    Decimal("0"),
+                )
+                credits = sum(
+                    (line.amount for line in lines if line.direction == "CREDIT"),
+                    Decimal("0"),
+                )
+                self.assertEqual(debits, credits)
+
+            audit_actions = {
+                row.action
+                for row in db.query(AuditLog).filter(
+                    AuditLog.tenant_id == self.tenant_a_id,
+                    AuditLog.entity_id.in_([
+                        uuid.UUID(invoice_id),
+                        uuid.UUID(receipt.json()["id"]),
+                    ]),
+                ).all()
+            }
+            self.assertIn("invoice.created", audit_actions)
+            self.assertIn("invoice.finalized", audit_actions)
+            self.assertIn("payment.created", audit_actions)
+        finally:
+            db.close()
+
+        # Reports: the customer is settled, financial statements balance, and
+        # GST still reflects the invoice (receiving payment never changes GST).
+        outstanding = self.client.get(
+            "/api/v1/reports/outstanding/receivables",
+            params={"as_of_date": str(date.today())},
+            headers=self.headers_a,
+        )
+        self.assertEqual(outstanding.status_code, 200, outstanding.text)
+        self.assertEqual(Decimal(str(outstanding.json()["total_outstanding"])), Decimal("0"))
+
+        aging = self.client.get(
+            "/api/v1/reports/aging/receivables",
+            params={"as_of_date": str(date.today())},
+            headers=self.headers_a,
+        )
+        self.assertEqual(aging.status_code, 200, aging.text)
+        self.assertEqual(Decimal(str(aging.json()["total_outstanding"])), Decimal("0"))
+
+        statement = self.client.get(
+            "/api/v1/reports/party-statement",
+            params={
+                "contact_id": str(self.customer_a_id),
+                "start_date": str(date.today()),
+                "end_date": str(date.today()),
+            },
+            headers=self.headers_a,
+        )
+        self.assertEqual(statement.status_code, 200, statement.text)
+        self.assertEqual(
+            Decimal(str(statement.json()["summary"]["closing_outstanding"])),
+            Decimal("0"),
+        )
+
+        trial_balance = self.client.get(
+            "/api/v1/reports/trial-balance",
+            params={"as_of_date": str(date.today())},
+            headers=self.headers_a,
+        )
+        self.assertEqual(trial_balance.status_code, 200, trial_balance.text)
+        self.assertTrue(trial_balance.json()["is_balanced"])
+        self.assertEqual(
+            Decimal(str(trial_balance.json()["total_debits"])),
+            Decimal(str(trial_balance.json()["total_credits"])),
+        )
+
+        balance_sheet = self.client.get(
+            "/api/v1/reports/balance-sheet",
+            params={"as_of_date": str(date.today())},
+            headers=self.headers_a,
+        )
+        self.assertEqual(balance_sheet.status_code, 200, balance_sheet.text)
+        self.assertTrue(balance_sheet.json()["is_balanced"])
+
+        gstr1 = self.client.get(
+            "/api/v1/reports/gst/gstr1",
+            params={"start_date": str(date.today()), "end_date": str(date.today())},
+            headers=self.headers_a,
+        )
+        self.assertEqual(gstr1.status_code, 200, gstr1.text)
+        self.assertEqual(Decimal(str(gstr1.json()["total_taxable_value"])), Decimal("900"))
+        self.assertEqual(Decimal(str(gstr1.json()["total_cgst"])), Decimal("81"))
+        self.assertEqual(Decimal(str(gstr1.json()["total_sgst"])), Decimal("81"))
+        self.assertEqual(Decimal(str(gstr1.json()["total_invoice_value"])), Decimal("1062"))
+
+        # Document output must be generated from the same persisted invoice.
+        pdf_payload = self.client.get(
+            f"/api/v1/invoices/{invoice_id}/pdf-payload", headers=self.headers_a
+        )
+        self.assertEqual(pdf_payload.status_code, 200, pdf_payload.text)
+        self.assertEqual(pdf_payload.json()["invoice"]["id"], invoice_id)
+
+        pdf = self.client.get(
+            f"/api/v1/invoices/{invoice_id}/print", headers=self.headers_a
+        )
+        self.assertEqual(pdf.status_code, 200, pdf.text)
+        self.assertEqual(pdf.headers["content-type"], "application/pdf")
+        self.assertTrue(pdf.content.startswith(b"%PDF"))
 
     def test_direct_invoice_stock_moves_once_and_cancellation_restores_once(self):
         payload = {

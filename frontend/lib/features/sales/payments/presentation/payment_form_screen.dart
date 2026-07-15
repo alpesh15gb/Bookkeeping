@@ -143,40 +143,76 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                 children: [
                   SizedBox(
                     width: 360,
-                    child: DropdownButtonFormField<String>(
+                    child: Autocomplete<Contact>(
                       key: ValueKey(state.contactId),
-                      initialValue: state.contactId,
-                      autofocus: widget.contactId == null,
-                      decoration: const InputDecoration(
-                        labelText: 'Customer *',
-                        prefixIcon: Icon(Icons.person_outline),
-                      ),
-                      items: [
-                        ...contacts.map(
-                          (c) => DropdownMenuItem(
-                            value: c.id,
-                            child: Text(c.name),
-                          ),
-                        ),
-                        const DropdownMenuItem(
-                          value: '__create_customer__',
-                          child: Row(
+                      initialValue: TextEditingValue(text: state.contactName),
+                      displayStringForOption: (contact) => contact.name,
+                      optionsBuilder: (value) {
+                        final query = value.text.trim().toLowerCase();
+                        if (query.isEmpty) return contacts.take(8);
+                        final matches =
+                            contacts
+                                .where(
+                                  (contact) =>
+                                      contact.name.toLowerCase().contains(
+                                        query,
+                                      ) ||
+                                      (contact.gstin ?? '')
+                                          .toLowerCase()
+                                          .contains(query) ||
+                                      (contact.phone ?? '')
+                                          .toLowerCase()
+                                          .contains(query),
+                                )
+                                .toList()
+                              ..sort((a, b) {
+                                final aStarts = a.name.toLowerCase().startsWith(
+                                  query,
+                                );
+                                final bStarts = b.name.toLowerCase().startsWith(
+                                  query,
+                                );
+                                if (aStarts != bStarts) return aStarts ? -1 : 1;
+                                return a.name.toLowerCase().compareTo(
+                                  b.name.toLowerCase(),
+                                );
+                              });
+                        return matches.take(12);
+                      },
+                      onSelected: (contact) =>
+                          notifier.selectCustomer(contact.id, contact.name),
+                      fieldViewBuilder: (context, controller, focusNode, _) =>
+                          Row(
                             children: [
-                              Icon(Icons.person_add_alt_1_rounded, size: 18),
-                              SizedBox(width: 8),
-                              Text('New customer  Alt+C'),
+                              Expanded(
+                                child: TextField(
+                                  controller: controller,
+                                  focusNode: focusNode,
+                                  autofocus: widget.contactId == null,
+                                  onChanged: (value) {
+                                    if (state.contactId != null &&
+                                        value.trim() != state.contactName) {
+                                      notifier.clearCustomerSelection(value);
+                                    }
+                                  },
+                                  decoration: const InputDecoration(
+                                    labelText: 'Customer *',
+                                    hintText: 'Type name, phone or GSTIN',
+                                    prefixIcon: Icon(
+                                      Icons.person_search_outlined,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'New customer (Alt+C)',
+                                onPressed: _createCustomer,
+                                icon: const Icon(
+                                  Icons.person_add_alt_1_rounded,
+                                ),
+                              ),
                             ],
                           ),
-                        ),
-                      ],
-                      onChanged: (id) async {
-                        if (id == '__create_customer__') {
-                          await _createCustomer();
-                          return;
-                        }
-                        final c = contacts.where((e) => e.id == id).firstOrNull;
-                        if (c != null) notifier.selectCustomer(c.id, c.name);
-                      },
                     ),
                   ),
                   SizedBox(

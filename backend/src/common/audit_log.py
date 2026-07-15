@@ -132,11 +132,11 @@ def _action_name(obj: Any, operation: str, before_state: Optional[Dict[str, Any]
     if operation == "updated" and before_state and after_state:
         old_status = before_state.get("status")
         new_status = after_state.get("status")
-        if entity == "Invoice" and old_status == "DRAFT" and new_status == "SENT":
+        if entity == "Invoice" and old_status == "DRAFT" and new_status in ("POSTED", "SENT"):
             return "invoice.finalized"
         if new_status == "CANCELLED":
             return f"{entity_key}.cancelled"
-        if entity in ("Bill", "CreditNote", "DebitNote") and old_status == "DRAFT" and new_status in ("UNPAID", "ISSUED"):
+        if entity in ("Bill", "CreditNote", "DebitNote") and old_status == "DRAFT" and new_status in ("POSTED", "UNPAID", "ISSUED"):
             return f"{entity_key}.finalized"
 
         old_e_invoice_status = before_state.get("e_invoice_status")

@@ -45,13 +45,23 @@ def validate_period_open(db: Session, tenant_id: uuid.UUID, entry_date: date) ->
             detail=f"Cannot post to {entry_date}: financial year '{locked_fy.name}' is {locked_fy.status.lower()}.",
         )
 
-    # FY boundary enforcement: reject entries dated before the current FY start
+    # Resolve by voucher date first. Accountants can legitimately work in a
+    # prior open/reopened FY after creating or switching years; the selected UI
+    # year must not make another open year's dates invalid.
+    target_fy = db.query(FinancialYear).filter(
+        FinancialYear.tenant_id == tenant_id,
+        FinancialYear.start_date <= entry_date,
+        FinancialYear.end_date >= entry_date,
+    ).order_by(FinancialYear.start_date.desc()).first()
+
+    # When no configured FY contains the date, use the explicitly selected FY
+    # to provide a precise boundary error.
     current_fy = db.query(FinancialYear).filter(
         FinancialYear.tenant_id == tenant_id,
-        FinancialYear.status == "CURRENT",
+        FinancialYear.is_current == True,
     ).first()
 
-    if current_fy:
+    if target_fy is None and current_fy:
         if entry_date < current_fy.start_date:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

@@ -12,8 +12,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
 from src.infrastructure.database.models import (
-    User, Tenant, TenantMembership, Contact, Product, Invoice, EWayBill, BankingProfile
+    User, Tenant, TenantMembership, Contact, Product, Invoice, EWayBill, BankingProfile,
+    StockLedger,
 )
+from src.domains.inventory.services import resolve_default_warehouse_id
 
 from sqlalchemy import text
 from src.core.config import settings
@@ -131,6 +133,17 @@ class TestEWayBillFlow(unittest.TestCase):
             )
 
             db.add_all([bank_a, self.customer, self.product_goods, self.product_service])
+            db.flush()
+            db.add(StockLedger(
+                tenant_id=self.tenant_a_id,
+                product_id=self.product_goods.id,
+                warehouse_id=resolve_default_warehouse_id(db, self.tenant_a_id),
+                quantity=self.product_goods.current_stock,
+                balance_quantity=self.product_goods.current_stock,
+                reference_type="OPENING",
+                reference_id=self.product_goods.id,
+                rate=self.product_goods.purchase_price,
+            ))
             db.commit()
 
             self.customer_id = self.customer.id

@@ -57,9 +57,10 @@ class PaymentFormState {
     bool? loadingInvoices,
     String? error,
     bool clearError = false,
+    bool clearContact = false,
   }) => PaymentFormState(
-    contactId: contactId ?? this.contactId,
-    contactName: contactName ?? this.contactName,
+    contactId: clearContact ? null : (contactId ?? this.contactId),
+    contactName: contactName ?? (clearContact ? '' : this.contactName),
     paymentDate: paymentDate ?? this.paymentDate,
     paymentMode: paymentMode ?? this.paymentMode,
     amount: amount ?? this.amount,

@@ -153,7 +153,8 @@ class TestAccountingFlow(unittest.TestCase):
         self.assertEqual(res.status_code, 201)
         jv = res.json()
 
-        self.assertTrue(jv["reference_number"].startswith("JV/2026/"))
+        self.assertTrue(jv["reference_number"].startswith("JV/"))
+        self.assertTrue(jv["reference_number"].endswith("/0001"))
         self.assertEqual(len(jv["lines"]), 2)
 
         # 2. Check updated current balances of both accounts

@@ -42,6 +42,15 @@ class TestGstToggle:
         assert data['tax_mode'] == 'NON_GST'
         assert data['gst_enabled'] is False
 
+        # Enabling GST requires a valid registration number; the UI collects
+        # this before allowing the mode switch.
+        res = client.put(
+            f"/api/v1/companies/{tid}",
+            json={"legal_name": data["legal_name"], "gstin": "27AAPFU0939F1ZV"},
+            headers=headers,
+        )
+        assert res.status_code == 200
+
         res = client.post(
             f"/api/v1/companies/{tid}/gst-toggle",
             json={"tax_mode": "GST_REGULAR"},

@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
-from src.infrastructure.database.models import User, Tenant, TenantMembership, Account, JournalEntry, JournalLine, AccountingPeriod
+from src.infrastructure.database.models import User, Tenant, TenantMembership, Account, JournalEntry, JournalLine, AccountingPeriod, FinancialYear
 
 class TestYearEndFlow(unittest.TestCase):
     def setUp(self):
@@ -46,6 +46,13 @@ class TestYearEndFlow(unittest.TestCase):
             # Set financial year start in db
             tenant = db.query(Tenant).filter(Tenant.id == self.tenant_id).first()
             tenant.financial_year_start = date(2025, 4, 1)
+            financial_year = db.query(FinancialYear).filter(
+                FinancialYear.tenant_id == self.tenant_id,
+                FinancialYear.is_current == True,
+            ).one()
+            financial_year.name = "2025-26"
+            financial_year.start_date = date(2025, 4, 1)
+            financial_year.end_date = date(2026, 3, 31)
 
             # Resolve/Seed accounts
             from src.domains.accounting.services import AccountResolver

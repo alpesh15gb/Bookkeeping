@@ -12,6 +12,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from src.core.database import SessionLocal, engine
 from src.main import app
 from src.infrastructure.database.models import Base, Product, User, TenantMembership, JournalEntry, StockLedger
+from src.domains.inventory.services import resolve_default_warehouse_id
 
 class TestInventoryAdjustmentWorkflow(unittest.TestCase):
     def setUp(self):
@@ -56,7 +57,18 @@ class TestInventoryAdjustmentWorkflow(unittest.TestCase):
             is_active=True
         )
         self.db.add(self.test_product)
-        
+        self.db.flush()
+        self.db.add(StockLedger(
+            tenant_id=self.tenant_id,
+            product_id=self.test_product.id,
+            warehouse_id=resolve_default_warehouse_id(self.db, self.tenant_id),
+            quantity=self.test_product.opening_stock,
+            balance_quantity=self.test_product.opening_stock,
+            reference_type="OPENING",
+            reference_id=self.test_product.id,
+            rate=self.test_product.purchase_price,
+        ))
+
         self.db.commit()
     
     def tearDown(self):

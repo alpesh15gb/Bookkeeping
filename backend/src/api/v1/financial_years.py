@@ -545,29 +545,42 @@ def close_financial_year(
     except ValueError:
         next_fy_end = date(next_fy_start.year + 1, next_fy_start.month, 28) - timedelta(days=1)
 
-    # CRITICAL: Check for overlap before creating next FY
+    # Onboarding may already have created the adjacent year. Reuse an exact
+    # match for roll-forward; only a partial/misaligned overlap is invalid.
     overlap = db.query(FinancialYear).filter(
         FinancialYear.tenant_id == tenant_id,
         FinancialYear.start_date <= next_fy_end,
         FinancialYear.end_date >= next_fy_start,
     ).first()
-    if overlap:
+    if overlap and (overlap.start_date != next_fy_start or overlap.end_date != next_fy_end):
         raise HTTPException(
             status_code=400,
             detail=f"Cannot create next FY: overlaps with existing FY '{overlap.name}'",
         )
 
-    next_fy = FinancialYear(
-        id=uuid.uuid4(), tenant_id=tenant_id,
-        name=f"{next_fy_start.year}-{((next_fy_start.year + 1) % 100):02d}",
-        start_date=next_fy_start, end_date=next_fy_end,
-        status="CURRENT", is_current=True, transaction_count=0,
-        created_by=actor_id,
-    )
-    db.add(next_fy)
-    db.flush()
-    _log_audit(db, tenant_id, next_fy.id, "CREATED", actor_id,
-               f"Auto-created from year-end close of {fy.name}")
+    if overlap:
+        if overlap.status in ("LOCKED", "ARCHIVED"):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Cannot roll forward into {overlap.status.lower()} FY '{overlap.name}'.",
+            )
+        next_fy = overlap
+        next_fy.status = "CURRENT"
+        next_fy.is_current = True
+        _log_audit(db, tenant_id, next_fy.id, "REUSED_FOR_ROLL_FORWARD", actor_id,
+                   f"Reused existing FY during year-end close of {fy.name}")
+    else:
+        next_fy = FinancialYear(
+            id=uuid.uuid4(), tenant_id=tenant_id,
+            name=f"{next_fy_start.year}-{((next_fy_start.year + 1) % 100):02d}",
+            start_date=next_fy_start, end_date=next_fy_end,
+            status="CURRENT", is_current=True, transaction_count=0,
+            created_by=actor_id,
+        )
+        db.add(next_fy)
+        db.flush()
+        _log_audit(db, tenant_id, next_fy.id, "CREATED", actor_id,
+                   f"Auto-created from year-end close of {fy.name}")
 
     # Roll-forward: carry opening balances to new FY
     balance_result = carry_forward_balances(db, tenant_id, fy, next_fy)

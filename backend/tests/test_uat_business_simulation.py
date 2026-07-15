@@ -72,7 +72,7 @@ def _create_contact(client, headers, name, contact_type, state_code, gstin=None)
 
 
 def _create_product(client, headers, name, hsn, gst_rate, price, product_type="GOODS"):
-    resp = client.post("/api/v1/masters/products", json={
+    payload = {
         "name": name,
         "sku": f"SKU-{uuid.uuid4().hex[:6].upper()}",
         "hsn_sac": hsn,
@@ -81,9 +81,9 @@ def _create_product(client, headers, name, hsn, gst_rate, price, product_type="G
         "sales_price": str(price),
         "purchase_price": str(Decimal(str(price)) * Decimal("0.7")),
         "gst_rate": str(gst_rate),
-        "opening_stock": "1000",
-        "current_stock": "1000",
-    }, headers=headers)
+        "opening_stock": "1000" if product_type == "GOODS" else "0",
+    }
+    resp = client.post("/api/v1/masters/products", json=payload, headers=headers)
     return resp
 
 

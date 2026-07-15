@@ -86,14 +86,14 @@ class TestAuditLogging(unittest.TestCase):
         db = SessionLocal()
         try:
             invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
-            invoice.status = "SENT"
+            invoice.status = "POSTED"
             db.commit()
         finally:
             db.close()
 
         audit = self._wait_for_action("invoice.finalized")
         self.assertEqual(audit.before_state["status"], "DRAFT")
-        self.assertEqual(audit.after_state["status"], "SENT")
+        self.assertEqual(audit.after_state["status"], "POSTED")
 
     def test_sensitive_credentials_are_redacted_from_snapshots(self):
         db = SessionLocal()

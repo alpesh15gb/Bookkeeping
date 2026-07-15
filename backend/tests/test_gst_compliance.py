@@ -11,8 +11,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 
 from src.main import app
 from src.core.database import engine, Base, SessionLocal
+from src.domains.inventory.services import resolve_default_warehouse_id
 from src.infrastructure.database.models import (
-    User, Tenant, TenantMembership, Contact, Product, Invoice, Bill, CreditNote, BankingProfile
+    User, Tenant, TenantMembership, Contact, Product, Invoice, Bill, CreditNote,
+    BankingProfile, StockLedger,
 )
 
 class TestGSTCompliance(unittest.TestCase):
@@ -142,6 +144,17 @@ class TestGSTCompliance(unittest.TestCase):
             )
 
             db.add_all([bank_a, self.customer_b2b, self.customer_b2c, self.vendor_b2b, self.product_a])
+            db.flush()
+            db.add(StockLedger(
+                tenant_id=self.tenant_a_id,
+                product_id=self.product_a.id,
+                warehouse_id=resolve_default_warehouse_id(db, self.tenant_a_id),
+                quantity=Decimal("1000.00"),
+                balance_quantity=Decimal("1000.00"),
+                reference_type="OPENING",
+                reference_id=self.product_a.id,
+                rate=self.product_a.purchase_price,
+            ))
             db.commit()
 
             db.refresh(self.customer_b2b)

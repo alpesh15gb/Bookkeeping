@@ -484,6 +484,13 @@ class TestGstToggleRoundTrip:
         assert comp["tax_mode"] == "NON_GST"
         assert comp["gst_enabled"] is False
 
+        registration = client.put(
+            f"/api/v1/companies/{tid}",
+            json={"legal_name": comp["legal_name"], "gstin": "27AAPFU0939F1ZV"},
+            headers=h,
+        )
+        assert registration.status_code == 200
+
         # Toggle to GST_REGULAR
         r1 = client.post(f"/api/v1/companies/{tid}/gst-toggle",
             json={"tax_mode": "GST_REGULAR"}, headers=h)

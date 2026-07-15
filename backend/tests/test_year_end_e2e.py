@@ -104,7 +104,9 @@ def _post_journal(client, headers, entry_date, description, lines):
         "description": description,
         "lines": lines,
     }
-    return client.post("/api/v1/accounting/journals", json=payload, headers=headers)
+    response = client.post("/api/v1/accounting/journals", json=payload, headers=headers)
+    assert response.status_code == 201, response.text
+    return response
 
 
 def _create_product(client, db, tenant_id, name, sku, purchase_price, current_stock, opening_stock=0):

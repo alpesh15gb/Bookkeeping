@@ -165,7 +165,7 @@ class TestMasterData(unittest.TestCase):
         # Create parent account
         parent_payload = {
             "name": "Current Assets",
-            "code": "1000",
+            "code": "9100",
             "account_type": "ASSET",
             "opening_balance": 0.00
         }
@@ -176,7 +176,7 @@ class TestMasterData(unittest.TestCase):
         # Create child account
         child_payload = {
             "name": "HDFC Bank Account",
-            "code": "1001",
+            "code": "9101",
             "account_type": "ASSET",
             "parent_id": parent_id,
             "opening_balance": 150000.00
@@ -192,7 +192,7 @@ class TestMasterData(unittest.TestCase):
         # Assert duplicate code gets rejected
         dup_payload = {
             "name": "SBI Bank Account",
-            "code": "1001",
+            "code": "9101",
             "account_type": "ASSET",
             "opening_balance": 0.00
         }
@@ -245,7 +245,7 @@ class TestMasterData(unittest.TestCase):
         # Create a ledger account first
         acc_payload = {
             "name": "Rent Expenses",
-            "code": "4001",
+            "code": "9401",
             "account_type": "EXPENSE",
             "opening_balance": 0.00
         }

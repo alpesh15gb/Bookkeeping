@@ -367,9 +367,32 @@ async def ledger_validation_handler(request: Request, exc: LedgerValidationError
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(request: Request, exc: IntegrityError):
     logger.warning(f"DB IntegrityError on {request.url}: {exc.orig}")
+
+    # Do not describe every integrity failure as a duplicate. In particular,
+    # a deployment with a pending nullable-column migration used to report a
+    # NOT NULL violation during quick party creation as "already exists",
+    # sending users in the wrong direction.
+    sqlstate = getattr(exc.orig, "sqlstate", None) or getattr(exc.orig, "pgcode", None)
+    message = str(exc.orig).lower()
+    if sqlstate == "23505" or "unique constraint" in message or "is not unique" in message:
+        http_status = status.HTTP_409_CONFLICT
+        detail = "A record with this data already exists."
+        code = "DUPLICATE_RECORD"
+    elif sqlstate == "23502" or "not null constraint" in message:
+        http_status = status.HTTP_422_UNPROCESSABLE_ENTITY
+        detail = "Required data is missing. Refresh the app and complete all required fields."
+        code = "REQUIRED_DATA_MISSING"
+    elif sqlstate in {"23503", "23514"} or "foreign key constraint" in message or "check constraint" in message:
+        http_status = status.HTTP_422_UNPROCESSABLE_ENTITY
+        detail = "The submitted data conflicts with an accounting or master-data rule."
+        code = "DATA_INTEGRITY_ERROR"
+    else:
+        http_status = status.HTTP_409_CONFLICT
+        detail = "The record could not be saved because its data conflicts with the current records."
+        code = "DATA_INTEGRITY_ERROR"
     response = JSONResponse(
-        status_code=status.HTTP_409_CONFLICT,
-        content={"detail": "A record with this data already exists.", "code": "DUPLICATE_RECORD"},
+        status_code=http_status,
+        content={"detail": detail, "code": code},
     )
     return _add_cors_to_response(response, request)
 

@@ -765,6 +765,24 @@ class _CustomerField extends ConsumerWidget {
       optionsBuilder: (v) async {
         final q = v.text.trim().toLowerCase();
         if (q.isEmpty) return contacts.take(8);
+        final localMatches =
+            contacts
+                .where(
+                  (c) =>
+                      c.name.toLowerCase().contains(q) ||
+                      (c.gstin ?? '').toLowerCase().contains(q) ||
+                      (c.phone ?? '').toLowerCase().contains(q),
+                )
+                .toList()
+              ..sort((a, b) {
+                final aStarts = a.name.toLowerCase().startsWith(q);
+                final bStarts = b.name.toLowerCase().startsWith(q);
+                if (aStarts != bStarts) return aStarts ? -1 : 1;
+                return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+              });
+        // One-character searches must feel instantaneous and are broad enough
+        // to be answered from the customers already loaded for the form.
+        if (q.length == 1) return localMatches.take(12);
         final result = await ref
             .read(contactRepositoryProvider)
             .list(
@@ -774,7 +792,7 @@ class _CustomerField extends ConsumerWidget {
                 extra: const {'contact_type': 'CUSTOMER'},
               ),
             );
-        return result.dataOrNull?.items ?? const <Contact>[];
+        return result.dataOrNull?.items ?? localMatches.take(12);
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {

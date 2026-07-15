@@ -42,6 +42,17 @@ class PaymentFormNotifier extends StateNotifier<PaymentFormState> {
     }
   }
 
+  void clearCustomerSelection(String query) {
+    state = state.copyWith(
+      clearContact: true,
+      contactName: query,
+      availableInvoices: const [],
+      allocations: const [],
+      loadingInvoices: false,
+      clearError: true,
+    );
+  }
+
   void setPaymentDate(String d) => state = state.copyWith(paymentDate: d);
   void setPaymentMode(String m) => state = state.copyWith(paymentMode: m);
   void setReferenceNumber(String r) =>

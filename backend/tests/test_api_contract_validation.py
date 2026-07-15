@@ -88,6 +88,64 @@ def _seed_accounts(client, headers):
 # ---------------------------------------------------------------------------
 
 class TestContactSchema:
+    def test_quick_create_minimal_customer_and_reactivate_it(self, client: TestClient):
+        """Invoice quick-create works without address/GST and restores inactive matches."""
+        headers, _, _ = _register_and_login(client, "quick_contact@test.com")
+        payload = {
+            "name": "  Test Customer  ",
+            "contact_type": "CUSTOMER",
+            "registration_type": "UNREGISTERED",
+        }
+
+        created = client.post("/api/v1/masters/contacts", json=payload, headers=headers)
+        assert created.status_code == status.HTTP_201_CREATED, created.text
+        assert created.json()["name"] == "Test Customer"
+        assert created.json()["billing_address"] is None
+        assert created.json()["state_code"] is None
+
+        contact_id = created.json()["id"]
+        disabled = client.put(
+            f"/api/v1/masters/contacts/{contact_id}",
+            json={"is_active": False},
+            headers=headers,
+        )
+        assert disabled.status_code == status.HTTP_200_OK, disabled.text
+
+        recreated = client.post("/api/v1/masters/contacts", json=payload, headers=headers)
+        assert recreated.status_code == status.HTTP_201_CREATED, recreated.text
+        assert recreated.json()["id"] == contact_id
+        assert recreated.json()["is_active"] is True
+
+        suggestions = client.get(
+            "/api/v1/masters/contacts",
+            params={"search": "t", "contact_type": "CUSTOMER", "limit": 12},
+            headers=headers,
+        )
+        assert suggestions.status_code == status.HTTP_200_OK, suggestions.text
+        assert suggestions.json()[0]["id"] == contact_id
+
+    def test_same_name_with_different_gstin_creates_distinct_parties(self, client: TestClient):
+        """Separate GST registrations must never collapse into one customer ledger."""
+        headers, _, _ = _register_and_login(client, "branch_contacts@test.com")
+        common = {
+            "name": "National Trading Co",
+            "contact_type": "CUSTOMER",
+            "registration_type": "REGULAR",
+        }
+        first = client.post(
+            "/api/v1/masters/contacts",
+            json={**common, "gstin": "27AAACN1234A1Z5", "state_code": "27"},
+            headers=headers,
+        )
+        second = client.post(
+            "/api/v1/masters/contacts",
+            json={**common, "gstin": "29AAACN1234A1Z1", "state_code": "29"},
+            headers=headers,
+        )
+        assert first.status_code == status.HTTP_201_CREATED, first.text
+        assert second.status_code == status.HTTP_201_CREATED, second.text
+        assert first.json()["id"] != second.json()["id"]
+
     def test_create_customer_contact(self, client: TestClient):
         """Contact creation with valid payload returns 201, not 422."""
         headers, _, _ = _register_and_login(client, "contact_schema@test.com")

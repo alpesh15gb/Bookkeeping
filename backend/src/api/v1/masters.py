@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func
+from sqlalchemy import case, func
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -38,9 +38,16 @@ def create_contact(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("contact:create"))
 ):
-    normalized_name = payload.name.strip().lower()
+    clean_name = payload.name.strip()
+    if not clean_name:
+        raise HTTPException(status_code=422, detail="Party name is required.")
+
+    normalized_name = clean_name.lower()
     normalized_gstin = payload.gstin.strip().upper() if payload.gstin else None
 
+    # GSTIN is the authoritative party identity. Two registrations can legally
+    # use the same trade name, so a supplied GSTIN must never fall back to a
+    # name-only match and silently select the wrong ledger party.
     existing = None
     if normalized_gstin:
         existing = db.query(Contact).filter(
@@ -48,22 +55,35 @@ def create_contact(
             func.upper(Contact.gstin) == normalized_gstin,
             Contact.deleted_at == None,
         ).first()
-    if not existing:
+    else:
+        # For unregistered parties an exact name match is reused to make retry
+        # and quick-create safe. Do not merge it with a registered party that
+        # merely has the same display name.
         existing = db.query(Contact).filter(
             Contact.tenant_id == tenant_id,
             func.lower(func.trim(Contact.name)) == normalized_name,
+            Contact.gstin == None,
             Contact.deleted_at == None,
         ).first()
     if existing:
-        if existing.contact_type != payload.contact_type:
+        changed = False
+        if existing.contact_type != payload.contact_type and existing.contact_type != "BOTH":
             existing.contact_type = "BOTH"
+            changed = True
+        # An inactive party is invisible in transaction selectors. Creating it
+        # again is an explicit request to use it, so restore it instead of
+        # returning an unusable record.
+        if not existing.is_active:
+            existing.is_active = True
+            changed = True
+        if changed:
             db.commit()
             db.refresh(existing)
         return existing
 
     contact = Contact(
         tenant_id=tenant_id,
-        name=payload.name,
+        name=clean_name,
         email=payload.email,
         phone=payload.phone,
         contact_type=payload.contact_type,
@@ -101,12 +121,18 @@ def list_contacts(
         else:
             q = q.filter(Contact.contact_type == contact_type)
     if search:
+        term = search.strip()
         q = q.filter(
-            Contact.name.ilike(f"%{search}%") |
-            Contact.email.ilike(f"%{search}%") |
-            Contact.phone.ilike(f"%{search}%") |
-            Contact.gstin.ilike(f"%{search}%")
+            Contact.name.ilike(f"%{term}%") |
+            Contact.email.ilike(f"%{term}%") |
+            Contact.phone.ilike(f"%{term}%") |
+            Contact.gstin.ilike(f"%{term}%")
+        ).order_by(
+            case((Contact.name.ilike(f"{term}%"), 0), else_=1),
+            func.lower(Contact.name),
         )
+    else:
+        q = q.order_by(func.lower(Contact.name))
     return q.offset(offset).limit(limit).all()
 
 @router.get("/contacts/{id}", response_model=ContactResponse)

@@ -109,31 +109,31 @@ class TestReports(unittest.TestCase):
             # Seed accounts
             self.acct_asset = Account(
                 id=uuid.UUID("ffff0001-0000-0000-0000-000000000001"),
-                tenant_id=self.tenant_a, name="Bank Account", code="1001",
+                tenant_id=self.tenant_a, name="Bank Account", code="9101",
                 account_type="ASSET", opening_balance=Decimal("100000.00"),
                 current_balance=Decimal("100000.00"),
             )
             self.acct_rev = Account(
                 id=uuid.UUID("ffff0002-0000-0000-0000-000000000002"),
-                tenant_id=self.tenant_a, name="Sales Revenue", code="4001",
+                tenant_id=self.tenant_a, name="Sales Revenue", code="9401",
                 account_type="REVENUE", opening_balance=Decimal("0.00"),
                 current_balance=Decimal("0.00"),
             )
             self.acct_exp = Account(
                 id=uuid.UUID("ffff0003-0000-0000-0000-000000000003"),
-                tenant_id=self.tenant_a, name="COGS", code="5001",
+                tenant_id=self.tenant_a, name="COGS", code="9501",
                 account_type="EXPENSE", opening_balance=Decimal("0.00"),
                 current_balance=Decimal("0.00"),
             )
             self.acct_equity = Account(
                 id=uuid.UUID("ffff0004-0000-0000-0000-000000000004"),
-                tenant_id=self.tenant_a, name="Owner Capital", code="3001",
+                tenant_id=self.tenant_a, name="Owner Capital", code="9301",
                 account_type="EQUITY", opening_balance=Decimal("500000.00"),
                 current_balance=Decimal("500000.00"),
             )
             self.acct_liab = Account(
                 id=uuid.UUID("ffff0005-0000-0000-0000-000000000005"),
-                tenant_id=self.tenant_a, name="Loan Payable", code="2001",
+                tenant_id=self.tenant_a, name="Loan Payable", code="9201",
                 account_type="LIABILITY", opening_balance=Decimal("200000.00"),
                 current_balance=Decimal("200000.00"),
             )
@@ -332,8 +332,12 @@ class TestReports(unittest.TestCase):
                                headers=self.headers_b)
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        self.assertEqual(data["assets"]["items"], [])
-        self.assertEqual(data["liabilities"]["items"], [])
+        # Signup seeds a complete COA, so an unused tenant has zero-valued
+        # accounts rather than no accounts at all.
+        self.assertTrue(all(Decimal(item["balance"]) == 0 for item in data["assets"]["items"]))
+        self.assertTrue(all(Decimal(item["balance"]) == 0 for item in data["liabilities"]["items"]))
+        self.assertEqual(Decimal(data["assets"]["total"]), Decimal("0"))
+        self.assertEqual(Decimal(data["liabilities"]["total"]), Decimal("0"))
 
     # ----------------------------------------------------------------
     # GSTR-1
