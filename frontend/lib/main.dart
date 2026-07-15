@@ -25,7 +25,7 @@ Future<void> main() async {
 
   // 1. Load environment config — falls back to defaults if .env is missing.
   try {
-    final envContent = await rootBundle.loadString('.env');
+    final envContent = await rootBundle.loadString('assets/.env');
     EnvConfig.initialize(envContent);
   } catch (_) {
     // .env not bundled — use production defaults from EnvConfig.
