@@ -658,17 +658,7 @@ def verify_and_execute_purge(
         )
 
     from src.domains.company.provisioning import reset_company_to_signup_defaults
-    from src.infrastructure.database.models import (
-        Invoice, InvoiceLine, Bill, BillLine, ProformaInvoice,
-        ProformaInvoiceLine, Payment, PaymentAllocation, BillPayment,
-        BillPaymentAllocation, Expense, JournalEntry, JournalLine,
-        InventoryAdjustment, InventoryAdjustmentLine, CreditNote,
-        CreditNoteLine, DebitNote, DebitNoteLine, DeliveryChallan,
-        DeliveryChallanLine, SalesOrder, SalesOrderLine, PurchaseOrder,
-        PurchaseOrderLine, EWayBill, BankReconciliation, BankStatement,
-        BankTransaction, StockLedger, GSTReturn, Contact, Product, AuditLog,
-        Account,
-    )
+    from src.infrastructure.database.models import AuditLog
 
     try:
         tenant = db.query(Tenant).filter(
@@ -678,77 +668,11 @@ def verify_and_execute_purge(
         if tenant is None:
             raise HTTPException(status_code=404, detail="Company not found.")
 
-        # The metadata-driven reset handles every tenant-scoped module first,
-        # including tables added after this legacy purge endpoint was written.
+        # The metadata-driven reset handles every tenant-scoped module in
+        # dependency order, then re-provisions signup defaults (chart of
+        # accounts, current financial year, main warehouse, numbering series,
+        # expense categories, and settings) — all in one call.
         reset_company_to_signup_defaults(db, tenant, current_user.id)
-
-        # 1. Delete lines / children referencing parent documents of this tenant
-        db.query(InvoiceLine).filter(InvoiceLine.invoice_id.in_(db.query(Invoice.id).filter(Invoice.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(BillLine).filter(BillLine.bill_id.in_(db.query(Bill.id).filter(Bill.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(ProformaInvoiceLine).filter(ProformaInvoiceLine.proforma_invoice_id.in_(db.query(ProformaInvoice.id).filter(ProformaInvoice.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(JournalLine).filter(JournalLine.entry_id.in_(db.query(JournalEntry.id).filter(JournalEntry.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(InventoryAdjustmentLine).filter(InventoryAdjustmentLine.adjustment_id.in_(db.query(InventoryAdjustment.id).filter(InventoryAdjustment.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(CreditNoteLine).filter(CreditNoteLine.credit_note_id.in_(db.query(CreditNote.id).filter(CreditNote.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(DebitNoteLine).filter(DebitNoteLine.debit_note_id.in_(db.query(DebitNote.id).filter(DebitNote.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(DeliveryChallanLine).filter(DeliveryChallanLine.delivery_challan_id.in_(db.query(DeliveryChallan.id).filter(DeliveryChallan.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(SalesOrderLine).filter(SalesOrderLine.sales_order_id.in_(db.query(SalesOrder.id).filter(SalesOrder.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(PurchaseOrderLine).filter(PurchaseOrderLine.purchase_order_id.in_(db.query(PurchaseOrder.id).filter(PurchaseOrder.tenant_id == tenant_id))).delete(synchronize_session=False)
-        
-        # Allocations
-        db.query(PaymentAllocation).filter(PaymentAllocation.payment_id.in_(db.query(Payment.id).filter(Payment.tenant_id == tenant_id))).delete(synchronize_session=False)
-        db.query(BillPaymentAllocation).filter(BillPaymentAllocation.payment_id.in_(db.query(BillPayment.id).filter(BillPayment.tenant_id == tenant_id))).delete(synchronize_session=False)
-        
-        # Bank transactions (delete before bank statements)
-        db.query(BankTransaction).filter(BankTransaction.bank_statement_id.in_(db.query(BankStatement.id).filter(BankStatement.tenant_id == tenant_id))).delete(synchronize_session=False)
-        
-        # 2. Delete tables that have foreign keys pointing to Invoices, Bills, Payments, etc.
-        db.query(BankReconciliation).filter(BankReconciliation.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(EWayBill).filter(EWayBill.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(CreditNote).filter(CreditNote.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(DebitNote).filter(DebitNote.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(ProformaInvoice).filter(ProformaInvoice.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(StockLedger).filter(StockLedger.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(GSTReturn).filter(GSTReturn.tenant_id == tenant_id).delete(synchronize_session=False)
-
-        # 3. Delete parent transaction documents
-        db.query(Invoice).filter(Invoice.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(Bill).filter(Bill.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(Payment).filter(Payment.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(BillPayment).filter(BillPayment.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(Expense).filter(Expense.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(JournalEntry).filter(JournalEntry.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(InventoryAdjustment).filter(InventoryAdjustment.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(DeliveryChallan).filter(DeliveryChallan.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(SalesOrder).filter(SalesOrder.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(PurchaseOrder).filter(PurchaseOrder.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(BankStatement).filter(BankStatement.tenant_id == tenant_id).delete(synchronize_session=False)
-
-        # 4. Delete master data
-        db.query(Contact).filter(Contact.tenant_id == tenant_id).delete(synchronize_session=False)
-        db.query(Product).filter(Product.tenant_id == tenant_id).delete(synchronize_session=False)
-        # Preserve audit logs — they are append-only for compliance (ICAI audit trail)
-        # db.query(AuditLog).filter(AuditLog.tenant_id == tenant_id).delete(synchronize_session=False)
-
-        # Remove auto-created per-contact AR/AP accounts. Standard chart accounts
-        # remain and simply have their balances reset.
-        db.query(Account).filter(
-            Account.tenant_id == tenant_id,
-            (Account.code.like("AR-%") | Account.code.like("AP-%")),
-        ).delete(synchronize_session=False)
-
-        # Reset remaining account balances
-        db.query(Account).filter(Account.tenant_id == tenant_id).update(
-            {Account.current_balance: 0, Account.opening_balance: 0},
-            synchronize_session=False
-        )
-
-        # Reset numbering series back to 1
-        db.query(NumberingSeries).filter(
-            NumberingSeries.tenant_id == tenant_id,
-        ).update(
-            {NumberingSeries.next_number: 1},
-            synchronize_session=False
-        )
 
         log = AuditLog(
             action="tenant.purge",
