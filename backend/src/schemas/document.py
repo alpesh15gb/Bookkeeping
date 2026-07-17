@@ -116,6 +116,7 @@ class InvoiceCreate(InvoiceBase):
     supply_type: Optional[str] = Field(default="DOMESTIC", pattern="^(DOMESTIC|EXPORT_WITH_TAX|EXPORT_WITHOUT_TAX|SEZ_WITH_TAX|SEZ_WITHOUT_TAX)$")
     tds_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     tcs_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    post_on_create: bool = True
 
 class InvoicePreviewRequest(SchemaBase):
     pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
@@ -144,6 +145,13 @@ class InvoiceUpdate(SchemaBase):
     reference_number: Optional[str] = None
     sales_person_id: Optional[uuid.UUID] = None
     is_gst_inclusive: Optional[bool] = None
+    is_rcm: Optional[bool] = None
+    supply_type: Optional[str] = Field(
+        default=None,
+        pattern="^(DOMESTIC|EXPORT_WITH_TAX|EXPORT_WITHOUT_TAX|SEZ_WITH_TAX|SEZ_WITHOUT_TAX)$",
+    )
+    tds_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
+    tcs_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
     currency: Optional[str] = None
     exchange_rate: Optional[Decimal] = None
     tds_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)

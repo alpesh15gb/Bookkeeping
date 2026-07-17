@@ -4,7 +4,9 @@ import uuid
 from datetime import date
 from fastapi.testclient import TestClient
 from src.core.database import SessionLocal
-from src.infrastructure.database.models import User, TenantMembership
+from decimal import Decimal
+from src.infrastructure.database.models import User, Tenant, TenantMembership
+from src.domains.taxation.services import GSTEngine
 
 
 class TestGstToggle:
@@ -74,6 +76,16 @@ class TestGstToggle:
         assert res.status_code == 200
         assert res.json()['tax_mode'] == 'NON_GST'
         assert res.json()['gst_enabled'] is False
+
+        # The GSTIN is retained for identity/history, but explicit NON_GST mode
+        # remains authoritative and must never collect tax.
+        db = SessionLocal()
+        try:
+            tenant = db.query(Tenant).filter(Tenant.id == uuid.UUID(tid)).first()
+            assert tenant.gstin == "27AAPFU0939F1ZV"
+            assert GSTEngine.resolve_gst_rate(db, tenant.id, Decimal("18")) == Decimal("0.00")
+        finally:
+            db.close()
 
     def test_disable_gst_preserves_company_data(self, client: TestClient):
         headers, tid = self._register_and_login(client)
@@ -172,3 +184,27 @@ class TestGstToggle:
         assert float(line['cgst_amount']) == 0.0
         assert float(line['sgst_amount']) == 0.0
         assert float(line['igst_amount']) == 0.0
+
+    def test_inward_gst_is_retained_but_itc_follows_buyer_mode(self, client: TestClient):
+        headers, tid = self._register_and_login(
+            client, "gst_inward_policy_test@example.com"
+        )
+        tenant_id = uuid.UUID(tid)
+        db = SessionLocal()
+        try:
+            tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
+            for mode in ("NON_GST", "GST_COMPOSITION"):
+                tenant.tax_mode = mode
+                db.flush()
+                assert GSTEngine.resolve_inward_gst_rate(
+                    db, tenant_id, Decimal("18")
+                ) == Decimal("18")
+                assert GSTEngine.can_claim_itc(db, tenant_id, True) is False
+
+            tenant.tax_mode = "GST_REGULAR"
+            db.flush()
+            assert GSTEngine.can_claim_itc(db, tenant_id, True) is True
+            assert GSTEngine.can_claim_itc(db, tenant_id, False) is False
+        finally:
+            db.rollback()
+            db.close()

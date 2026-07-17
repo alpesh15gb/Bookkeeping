@@ -25,6 +25,10 @@ from src.core.database import Base
 # Register every table with Base.metadata for the guarded fresh-database bootstrap.
 from src.infrastructure.database import models as _models  # noqa: F401
 from src.infrastructure.database.idempotency import IdempotencyRecord as _IdempotencyRecord  # noqa: F401
+from src.integrations.core import models as _integration_models  # noqa: F401
+from src.integrations.cartunez import master_models as _integration_master_models  # noqa: F401
+from src.integrations.cartunez import order_models as _integration_order_models  # noqa: F401
+from src.integrations.cartunez import payment_models as _integration_payment_models  # noqa: F401
 target_metadata = Base.metadata
 
 # Override sqlalchemy.url with DATABASE_URL env var when running in Docker

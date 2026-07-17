@@ -67,7 +67,7 @@ def create_purchase_order(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+            gst_rate=GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate)
         )
 
         db_line = PurchaseOrderLine(
@@ -77,7 +77,7 @@ def create_purchase_order(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
+            gst_rate=GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -318,7 +318,7 @@ def update_purchase_order(
                 origin_state_code=origin_state_code,
                 place_of_supply_state_code=po.pos_state_code,
                 base_amount=line_subtotal,
-                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+                gst_rate=GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate)
             )
 
             db_line = PurchaseOrderLine(
@@ -329,7 +329,7 @@ def update_purchase_order(
                 discount=line.discount,
                 subtotal=line_subtotal,
                 hsn_sac=line.hsn_sac,
-                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
+                gst_rate=GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate),
                 cgst_rate=tax_split.cgst_rate,
                 cgst_amount=tax_split.cgst_amount,
                 sgst_rate=tax_split.sgst_rate,

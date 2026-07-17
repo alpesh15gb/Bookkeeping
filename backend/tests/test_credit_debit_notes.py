@@ -45,6 +45,7 @@ class TestCreditNotes(unittest.TestCase):
                 legal_name="CN Corp Pvt Ltd",
                 trade_name="CN Corp",
                 gstin="27AAPFU0939F1ZV",
+                tax_mode="GST_REGULAR",
                 pan="AAPFU0939F",
                 financial_year_start=date(2026, 4, 1),
             )

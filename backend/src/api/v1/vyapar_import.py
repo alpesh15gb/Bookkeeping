@@ -833,7 +833,7 @@ def import_vyapar_backup(
                             utgst_amount=Decimal("0"),
                             cess_rate=Decimal("0"),
                             cess_amount=Decimal("0"),
-                            total=Decimal(str(round(line_total_f, 2))),
+                            total=line_total_d,
                         ))
                     else:
                         lines_data.append(BillLine(
@@ -988,8 +988,8 @@ def import_vyapar_backup(
                 if existing_bill:
                     continue
 
-                cash_amt = float(txn["txn_cash_amount"] or 0)
-                bal_amt = float(txn["txn_balance_amount"] or 0)
+                cash_amt = Decimal(str(txn["txn_cash_amount"] or 0))
+                bal_amt = Decimal(str(txn["txn_balance_amount"] or 0))
                 total_from_txn = cash_amt + bal_amt
 
                 subtotal = Decimal("0")
@@ -1001,12 +1001,12 @@ def import_vyapar_backup(
 
                 bill_lines_data = []
                 for vl in txn_lines:
-                    line_total_f = float(vl["total_amount"] or 0)
-                    line_tax_f = float(vl["lineitem_tax_amount"] or 0)
-                    line_disc_f = float(vl["lineitem_discount_amount"] or 0)
-                    qty_f = float(vl["quantity"] or 1)
-                    rate_f = float(vl["priceperunit"] or 0)
-                    line_subtotal_f = line_total_f - line_tax_f
+                    line_total_d = Decimal(str(vl["total_amount"] or 0))
+                    line_tax_d = Decimal(str(vl["lineitem_tax_amount"] or 0))
+                    line_disc_d = Decimal(str(vl["lineitem_discount_amount"] or 0))
+                    qty_d = Decimal(str(vl["quantity"] or 1))
+                    rate_d = Decimal(str(vl["priceperunit"] or 0))
+                    line_subtotal_d = line_total_d - line_tax_d
 
                     line_tax_id = vl["lineitem_tax_id"]
                     cgst_r, cgst_a, sgst_r, sgst_a, igst_r, igst_a = _split_gst(
@@ -1019,8 +1019,8 @@ def import_vyapar_backup(
                     total_cgst += cgst_a
                     total_sgst += sgst_a
                     total_igst += igst_a
-                    total_val += Decimal(str(round(line_total_f, 2)))
-                    discount_total += Decimal(str(round(line_disc_f, 2)))
+                    total_val += line_total_d
+                    discount_total += line_disc_d
 
                     product_id = None
                     if vl["item_id"] and vl["item_id"] in item_map:
@@ -1032,10 +1032,10 @@ def import_vyapar_backup(
                     bill_lines_data.append(BillLine(
                         product_id=product_id,
                         description=(vl["_item_name"] or "").strip() or "Item",
-                        quantity=Decimal(str(qty_f)),
-                        rate=Decimal(str(round(rate_f, 6))),
-                        discount=Decimal(str(round(line_disc_f, 2))),
-                        subtotal=Decimal(str(round(max(line_subtotal_f, 0), 2))),
+                        quantity=qty_d,
+                        rate=rate_d,
+                        discount=line_disc_d,
+                        subtotal=max(line_subtotal_d, Decimal("0")),
                         hsn_sac=hsn,
                         gst_rate=Decimal(str(total_rate_pct)),
                         cgst_rate=cgst_r,
@@ -1048,11 +1048,11 @@ def import_vyapar_backup(
                         utgst_amount=Decimal("0"),
                         cess_rate=Decimal("0"),
                         cess_amount=Decimal("0"),
-                        total=Decimal(str(round(line_total_f, 2))),
+                        total=line_total_d,
                     ))
 
                 if not bill_lines_data:
-                    total_val = Decimal(str(round(total_from_txn, 2)))
+                    total_val = total_from_txn
                     subtotal = total_val
                     bill_lines_data.append(BillLine(
                         product_id=None,
@@ -1076,7 +1076,7 @@ def import_vyapar_backup(
                         total=total_val,
                     ))
 
-                amount_paid = Decimal(str(round(cash_amt, 2)))
+                amount_paid = cash_amt
                 if amount_paid > total_val:
                     amount_paid = total_val
                 if amount_paid >= total_val:

@@ -1,0 +1,1 @@
+"""Reusable external integration framework."""

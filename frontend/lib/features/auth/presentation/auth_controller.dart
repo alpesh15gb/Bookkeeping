@@ -197,7 +197,9 @@ class AuthController extends Notifier<AuthState> {
       final current = state.activeMembership;
       Membership? updated;
       if (current != null) {
-        updated = memberships.where((m) => m.tenantId == current.tenantId).firstOrNull;
+        updated = memberships
+            .where((m) => m.tenantId == current.tenantId)
+            .firstOrNull;
       }
       state = state.copyWith(
         memberships: memberships,
@@ -295,4 +297,12 @@ final gstEnabledProvider = Provider<bool>((ref) {
   final membership = ref.watch(authControllerProvider).activeMembership;
   if (membership == null) return false;
   return membership.taxMode != null && membership.taxMode != 'NON_GST';
+});
+
+/// Whether outward documents may collect GST from the customer.
+/// Composition and non-GST businesses issue bills of supply and must not
+/// charge GST, even though composition businesses remain GST-registered.
+final gstCollectionEnabledProvider = Provider<bool>((ref) {
+  final membership = ref.watch(authControllerProvider).activeMembership;
+  return membership?.taxMode == 'GST_REGULAR';
 });

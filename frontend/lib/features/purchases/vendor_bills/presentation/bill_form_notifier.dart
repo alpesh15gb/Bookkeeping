@@ -16,22 +16,32 @@ import 'package:apexbooks/features/masters/products/data/models/product.dart';
 class _BillCalculationService {
   const _BillCalculationService();
 
-  BillLine calculateLine({required BillLine line}) {
+  BillLine calculateLine({
+    required BillLine line,
+    bool isInterState = false,
+    bool isGstInclusive = false,
+  }) {
     final lineSubtotal = line.rate * line.quantity;
-    final discountAmt = lineSubtotal * (line.discount / 100);
-    final taxable = lineSubtotal - discountAmt;
+    // API line-item discount is a currency amount, not a percentage.
+    final discountAmt = line.discount.clamp(0, lineSubtotal).toDouble();
+    final discounted = lineSubtotal - discountAmt;
+    final taxable = isGstInclusive && line.gstRate > 0
+        ? discounted / (1 + line.gstRate / 100)
+        : discounted;
     final gst = taxable * (line.gstRate / 100);
-    final cgst = gst / 2;
-    final sgst = gst / 2;
+    final cgst = isInterState ? 0.0 : gst / 2;
+    final sgst = isInterState ? 0.0 : gst / 2;
+    final igst = isInterState ? gst : 0.0;
     final total = taxable + gst;
 
     return line.copyWith(
-      subtotal: _round2(lineSubtotal),
-      cgstRate: _round2(line.gstRate / 2),
+      subtotal: _round2(taxable),
+      cgstRate: _round2(isInterState ? 0 : line.gstRate / 2),
       cgstAmount: _round2(cgst),
-      sgstRate: _round2(line.gstRate / 2),
+      sgstRate: _round2(isInterState ? 0 : line.gstRate / 2),
       sgstAmount: _round2(sgst),
-      igstAmount: _round2(0),
+      igstRate: _round2(isInterState ? line.gstRate : 0),
+      igstAmount: _round2(igst),
       total: _round2(total),
     );
   }
@@ -46,8 +56,20 @@ class _BillCalculationService {
     double totalTax,
     double total,
   })
-  calculateAll({required List<BillLine> lines}) {
-    final updatedLines = lines.map((l) => calculateLine(line: l)).toList();
+  calculateAll({
+    required List<BillLine> lines,
+    bool isInterState = false,
+    bool isGstInclusive = false,
+  }) {
+    final updatedLines = lines
+        .map(
+          (l) => calculateLine(
+            line: l,
+            isInterState: isInterState,
+            isGstInclusive: isGstInclusive,
+          ),
+        )
+        .toList();
     final subtotal = updatedLines.fold<double>(0, (s, l) => s + l.subtotal);
     final discountTotal = updatedLines.fold<double>(
       0,
@@ -120,6 +142,7 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
   final VendorBillService _service;
   final _calc = const _BillCalculationService();
   final _validation = const _BillValidationService();
+  String _originStateCode = '';
 
   // Header fields -----------------------------------------------------------
   void setBillNumber(String v) => state = state.copyWith(billNumber: v);
@@ -131,7 +154,12 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
     referenceNumber: v.isNotEmpty ? v : null,
     clearReferenceNumber: v.isEmpty,
   );
-  void setPosStateCode(String c) => state = state.copyWith(posStateCode: c);
+  void setOriginStateCode(String c) {
+    _originStateCode = c;
+    _recalc(state);
+  }
+
+  void setPosStateCode(String c) => _recalc(state.copyWith(posStateCode: c));
 
   // TDS / ITC / Notes ------------------------------------------------------
   void setTdsRate(double v) {
@@ -140,7 +168,7 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
   }
 
   void setItcEligible(bool v) => state = state.copyWith(itcEligible: v);
-  void setIsGstInclusive(bool v) => state = state.copyWith(isGstInclusive: v);
+  void setIsGstInclusive(bool v) => _recalc(state.copyWith(isGstInclusive: v));
   void setNotes(String v) => state = state.copyWith(
     notes: v.isNotEmpty ? v : null,
     clearNotes: v.isEmpty,
@@ -200,7 +228,14 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
   }
 
   void _recalc(BillFormState s) {
-    final r = _calc.calculateAll(lines: s.lines);
+    final r = _calc.calculateAll(
+      lines: s.lines,
+      isInterState:
+          _originStateCode.isNotEmpty &&
+          s.posStateCode.isNotEmpty &&
+          _originStateCode != s.posStateCode,
+      isGstInclusive: s.isGstInclusive,
+    );
     final tdsAmount = r.total * (s.tdsRate / 100);
     state = s.copyWith(
       lines: r.lines,

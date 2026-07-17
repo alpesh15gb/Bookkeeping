@@ -73,7 +73,7 @@ def create_bill(
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found in this context.")
 
         line_desc = line.description or product.name or "Item"
-        resolved_gst_rate = GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+        resolved_gst_rate = GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate)
         line_subtotal = (line.quantity * line.rate) - line.discount
 
         # If GST-inclusive, extract the base taxable amount
@@ -164,6 +164,7 @@ def create_bill(
         utgst_amount=final_utgst,
         cess_amount=final_cess,
         round_off=round_off,
+        shipping_charges=header_shipping,
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
@@ -173,14 +174,19 @@ def create_bill(
         tds_rate=tds_rate,
         tds_amount=tds_amount,
         is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive else False,
+        itc_eligible=GSTEngine.can_claim_itc(db, tenant_id, payload.itc_eligible),
         lines=db_lines
     )
 
     db.add(bill)
     db.flush()
 
-    # Auto-post: create journal entry immediately
-    auto_post_bill(db, tenant_id, bill)
+    if payload.post_on_create:
+        try:
+            auto_post_bill(db, tenant_id, bill)
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=422, detail=str(exc))
 
     db.commit()
     db.refresh(bill)
@@ -219,7 +225,7 @@ def preview_bill(
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
 
         line_desc = line.description or product.name or "Item"
-        resolved_gst_rate = GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+        resolved_gst_rate = GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate)
         line_subtotal = (line.quantity * line.rate) - line.discount
 
         if payload.is_gst_inclusive and resolved_gst_rate > 0:
@@ -244,7 +250,7 @@ def preview_bill(
             discount=line.discount,
             subtotal=line_subtotal,
             hsn_sac=line.hsn_sac,
-            gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
+            gst_rate=GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate),
             cgst_rate=tax_split.cgst_rate,
             cgst_amount=tax_split.cgst_amount,
             sgst_rate=tax_split.sgst_rate,
@@ -298,6 +304,7 @@ def preview_bill(
         utgst_amount=final_utgst,
         cess_amount=final_cess,
         round_off=round_off,
+        shipping_charges=header_shipping,
         total=rounded_total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
@@ -550,6 +557,12 @@ def update_bill(
         raise HTTPException(status_code=400, detail="Line items are required when changing GST-inclusive pricing so tax can be recalculated.")
     if payload.is_gst_inclusive is not None:
         bill.is_gst_inclusive = payload.is_gst_inclusive
+    if payload.shipping_charges is not None:
+        bill.shipping_charges = payload.shipping_charges
+    if payload.itc_eligible is not None:
+        bill.itc_eligible = GSTEngine.can_claim_itc(
+            db, tenant_id, payload.itc_eligible
+        )
 
     rounded_total = bill.total
     if payload.line_items is not None:
@@ -579,7 +592,7 @@ def update_bill(
                 origin_state_code=origin_state_code,
                 place_of_supply_state_code=bill.pos_state_code,
                 base_amount=line_subtotal,
-                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+                gst_rate=GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate)
             )
 
             line_desc = line.description or product.name or "Item"
@@ -621,7 +634,7 @@ def update_bill(
                     discount=line.discount,
                     subtotal=line_subtotal,
                     hsn_sac=line.hsn_sac,
-                    gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
+                    gst_rate=GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate),
                     cgst_rate=tax_split.cgst_rate,
                     cgst_amount=tax_split.cgst_amount,
                     sgst_rate=tax_split.sgst_rate,
@@ -675,6 +688,7 @@ def update_bill(
         bill.utgst_amount = final_utgst
         bill.cess_amount = final_cess
         bill.round_off = round_off
+        bill.shipping_charges = header_shipping
         bill.total = rounded_total
         bill.lines = db_lines
 
@@ -721,7 +735,7 @@ def update_bill(
 def finalize_bill(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("bill:update"))
 ):
     bill = db.query(Bill).filter(
         Bill.id == id,
@@ -742,46 +756,11 @@ def finalize_bill(
         db.refresh(bill)
         return bill
 
-    # Guard against double-posting
-    from src.domains.accounting.auto_post import _check_no_existing_posting
-    _check_no_existing_posting(db, tenant_id, "BILL", bill.id)
-
-    resolver = AccountResolver(db, tenant_id)
-    vendor_account_id = resolver.resolve(f"vendor.{bill.contact_id}")
-    purchase_expense_account_id = resolver.resolve("purchases")
-    cgst_account_id = resolver.resolve("cgst_input")
-    sgst_account_id = resolver.resolve("sgst_input")
-    igst_account_id = resolver.resolve("igst_input")
-    utgst_account_id = resolver.resolve("utgst_input")
-    cess_account_id = resolver.resolve("cess_input")
-    round_off_account_id = resolver.resolve("round_off") if bill.round_off != 0 else None
-
-    ledger_draft = LedgerPostingEngine.create_bill_posting(
-        tenant_id=tenant_id,
-        bill_id=bill.id,
-        bill_number=bill.bill_number,
-        bill_date=bill.issue_date,
-        vendor_account_id=vendor_account_id,
-        purchase_expense_account_id=purchase_expense_account_id,
-        subtotal=bill.subtotal,
-        discount_total=bill.discount_total,
-        cgst_account_id=cgst_account_id,
-        cgst_amount=bill.cgst_amount,
-        sgst_account_id=sgst_account_id,
-        sgst_amount=bill.sgst_amount,
-        igst_account_id=igst_account_id,
-        igst_amount=bill.igst_amount,
-        utgst_account_id=utgst_account_id,
-        utgst_amount=bill.utgst_amount,
-        cess_account_id=cess_account_id,
-        cess_amount=bill.cess_amount,
-        round_off_account_id=round_off_account_id,
-        round_off_amount=bill.round_off,
-    )
-
-    journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
-
-    bill.status = "POSTED"
+    try:
+        auto_post_bill(db, tenant_id, bill)
+    except ValueError as exc:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(exc))
     db.commit()
     db.refresh(bill)
     return bill
@@ -1063,7 +1042,7 @@ def clone_bill(
                 discount=line.discount,
                 subtotal=line.subtotal,
                 hsn_sac=line.hsn_sac,
-                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
+                gst_rate=GSTEngine.resolve_inward_gst_rate(db, tenant_id, line.gst_rate),
                 cgst_rate=line.cgst_rate,
                 cgst_amount=line.cgst_amount,
                 sgst_rate=line.sgst_rate,

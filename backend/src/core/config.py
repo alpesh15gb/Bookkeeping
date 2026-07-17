@@ -88,6 +88,15 @@ class Settings(BaseSettings):
     SENTRY_DSN: str = ""
 
     # ----------------------------------------------------------------
+    # Cartunez / Medusa outbound integration
+    # ----------------------------------------------------------------
+    CARTUNEZ_MEDUSA_BASE_URL: str = ""
+    CARTUNEZ_MEDUSA_API_KEY: str = ""
+    CARTUNEZ_OUTBOUND_ENABLED: bool = False
+    CARTUNEZ_DELIVERY_TIMEOUT_SECONDS: int = 15
+    CARTUNEZ_DELIVERY_BATCH_SIZE: int = 25
+
+    # ----------------------------------------------------------------
     # OCR (Bill Scanning)
     # ----------------------------------------------------------------
     OCR_ENGINE: str = "paddleocr"  # "google_vision" or "paddleocr"
@@ -124,6 +133,28 @@ class Settings(BaseSettings):
         import os
         if os.getenv("APP_ENV", "development") == "production" and not v:
             raise ValueError("Rate limiting cannot be disabled in production.")
+        return v
+
+    @field_validator("CARTUNEZ_MEDUSA_BASE_URL")
+    @classmethod
+    def medusa_base_url_must_be_https(cls, v: str) -> str:
+        value = v.strip().rstrip("/")
+        if value and not value.startswith("https://"):
+            raise ValueError("CARTUNEZ_MEDUSA_BASE_URL must use HTTPS.")
+        return value
+
+    @field_validator("CARTUNEZ_DELIVERY_TIMEOUT_SECONDS")
+    @classmethod
+    def delivery_timeout_must_be_bounded(cls, v: int) -> int:
+        if not 1 <= v <= 120:
+            raise ValueError("CARTUNEZ_DELIVERY_TIMEOUT_SECONDS must be between 1 and 120.")
+        return v
+
+    @field_validator("CARTUNEZ_DELIVERY_BATCH_SIZE")
+    @classmethod
+    def delivery_batch_must_be_bounded(cls, v: int) -> int:
+        if not 1 <= v <= 500:
+            raise ValueError("CARTUNEZ_DELIVERY_BATCH_SIZE must be between 1 and 500.")
         return v
 
     @property

@@ -89,11 +89,14 @@ class _EntitySelectorSheetState<T> extends State<_EntitySelectorSheet<T>> {
   @override
   Widget build(BuildContext context) {
     final colors = apexColors(context);
-    final filtered = _query.isEmpty
+    final normalizedQuery = _query.trim().toLowerCase();
+    final filtered = normalizedQuery.isEmpty
         ? widget.items
         : widget.items
               .where(
-                (i) => i.label.toLowerCase().contains(_query.toLowerCase()),
+                (i) =>
+                    i.label.toLowerCase().contains(normalizedQuery) ||
+                    (i.subtitle ?? '').toLowerCase().contains(normalizedQuery),
               )
               .toList();
 

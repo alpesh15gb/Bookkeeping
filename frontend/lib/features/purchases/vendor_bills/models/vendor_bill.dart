@@ -87,6 +87,7 @@ class VendorBill {
     if (termsAndConditions != null) 'terms_and_conditions': termsAndConditions,
     'tds_rate': tdsRate,
     'itc_eligible': itcEligible,
+    'post_on_create': false,
     'is_gst_inclusive': isGstInclusive,
   };
 

@@ -5,6 +5,7 @@ import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/crud/base_crud.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
+import 'package:apexbooks/features/masters/contacts/presentation/contact_search.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
 import 'package:apexbooks/features/masters/shared/presentation/quick_create_dialogs.dart';
 import '../models/payment_enums.dart';
@@ -147,37 +148,13 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                       key: ValueKey(state.contactId),
                       initialValue: TextEditingValue(text: state.contactName),
                       displayStringForOption: (contact) => contact.name,
-                      optionsBuilder: (value) {
-                        final query = value.text.trim().toLowerCase();
-                        if (query.isEmpty) return contacts.take(8);
-                        final matches =
-                            contacts
-                                .where(
-                                  (contact) =>
-                                      contact.name.toLowerCase().contains(
-                                        query,
-                                      ) ||
-                                      (contact.gstin ?? '')
-                                          .toLowerCase()
-                                          .contains(query) ||
-                                      (contact.phone ?? '')
-                                          .toLowerCase()
-                                          .contains(query),
-                                )
-                                .toList()
-                              ..sort((a, b) {
-                                final aStarts = a.name.toLowerCase().startsWith(
-                                  query,
-                                );
-                                final bStarts = b.name.toLowerCase().startsWith(
-                                  query,
-                                );
-                                if (aStarts != bStarts) return aStarts ? -1 : 1;
-                                return a.name.toLowerCase().compareTo(
-                                  b.name.toLowerCase(),
-                                );
-                              });
-                        return matches.take(12);
+                      optionsBuilder: (value) async {
+                        return searchContactOptions(
+                          repository: ref.read(contactRepositoryProvider),
+                          localContacts: contacts,
+                          type: ContactType.customer,
+                          query: value.text,
+                        );
                       },
                       onSelected: (contact) =>
                           notifier.selectCustomer(contact.id, contact.name),

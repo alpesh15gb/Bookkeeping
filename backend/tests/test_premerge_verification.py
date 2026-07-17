@@ -572,10 +572,11 @@ class TestBillCreationBothModes:
 
         # Bills require VENDOR contact
         body = {
-            "name": "Vendor Non-GST",
+            "name": "Registered Vendor",
             "contact_type": "VENDOR",
             "state_code": "27",
-            "registration_type": "CONSUMER",
+            "gstin": "27AAACT1234A1Z1",
+            "registration_type": "REGULAR",
             "billing_address": {
                 "street": "789 Vendor St",
                 "city": "Mumbai",
@@ -592,11 +593,13 @@ class TestBillCreationBothModes:
         assert bill.status_code == 201, f"Bill failed: {bill.status_code} {bill.json()}"
         data = bill.json()
         line = data["lines"][0]
-        # All GST forced to 0
-        assert float(line["gst_rate"]) == 0.0, f"GST rate should be 0, got {line['gst_rate']}"
-        assert float(line["cgst_rate"]) == 0.0
-        assert float(line["sgst_rate"]) == 0.0
+        # A non-GST buyer still pays GST charged by a registered supplier,
+        # but cannot claim it as input tax credit.
+        assert float(line["gst_rate"]) == 18.0
+        assert float(line["cgst_rate"]) == 9.0
+        assert float(line["sgst_rate"]) == 9.0
         assert float(line["igst_rate"]) == 0.0
-        assert abs(float(line["cgst_amount"])) < 0.01
-        assert abs(float(line["sgst_amount"])) < 0.01
+        assert abs(float(line["cgst_amount"]) - 1800.0) < 0.01
+        assert abs(float(line["sgst_amount"]) - 1800.0) < 0.01
         assert abs(float(line["igst_amount"])) < 0.01
+        assert data["itc_eligible"] is False

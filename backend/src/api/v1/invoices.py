@@ -110,7 +110,9 @@ def create_invoice(
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found in this company context.")
 
         line_desc = line.description or product.name or "Item"
-        resolved_gst_rate = GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+        resolved_gst_rate = GSTEngine.resolve_gst_rate(
+            db, tenant_id, line.gst_rate, payload.supply_type
+        )
         line_subtotal = (line.quantity * line.rate) - line.discount
 
         # If GST-inclusive, extract the base taxable amount
@@ -257,36 +259,34 @@ def create_invoice(
         except Exception:
             pass  # QR generation is non-critical
 
-    # Auto-post: create journal entry immediately
-    try:
-        auto_post_invoice(
-            db,
-            tenant_id,
-            invoice,
-            move_stock=invoice.source_document_type != "DELIVERY_CHALLAN",
-        )
-    except ValueError as ve:
-        db.rollback()
-        raise HTTPException(status_code=422, detail=str(ve))
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Auto-post failed for invoice {invoice.id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to post invoice to ledger: {str(e)}")
-
-    # Trigger background e-invoice generation if tenant has e-invoicing enabled
-    if tenant_settings and getattr(tenant_settings, "e_invoice_enabled", None):
+    if payload.post_on_create:
         try:
-            import logging as _logging
-            from src.workers.tasks import submit_e_invoice_to_irp
-            submit_e_invoice_to_irp.delay(str(invoice.id))
-        except Exception as _task_err:
-            import logging as _logging
-            _logging.getLogger(__name__).warning(
-                f"Could not enqueue e-invoice task for invoice {invoice.id}: {_task_err}"
+            auto_post_invoice(
+                db,
+                tenant_id,
+                invoice,
+                move_stock=invoice.source_document_type != "DELIVERY_CHALLAN",
             )
+        except ValueError as exc:
+            db.rollback()
+            raise HTTPException(status_code=422, detail=str(exc))
 
     db.commit()
     db.refresh(invoice)
+    if (
+        invoice.status == "POSTED"
+        and tenant_settings
+        and getattr(tenant_settings, "e_invoice_enabled", None)
+    ):
+        try:
+            from src.workers.tasks import submit_e_invoice_to_irp
+            submit_e_invoice_to_irp.delay(str(invoice.id))
+        except Exception as task_error:
+            logger.warning(
+                "Could not enqueue e-invoice task for invoice %s: %s",
+                invoice.id,
+                task_error,
+            )
     return invoice
 
 
@@ -433,7 +433,9 @@ def preview_invoice(
             raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found.")
 
         line_desc = line.description or product.name or "Item"
-        resolved_gst_rate = GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+        resolved_gst_rate = GSTEngine.resolve_gst_rate(
+            db, tenant_id, line.gst_rate, payload.supply_type
+        )
         line_subtotal = (line.quantity * line.rate) - line.discount
 
         if payload.is_gst_inclusive and resolved_gst_rate > 0:
@@ -446,7 +448,9 @@ def preview_invoice(
             origin_state_code=origin_state_code,
             place_of_supply_state_code=payload.pos_state_code,
             base_amount=line_subtotal,
-            gst_rate=resolved_gst_rate
+            gst_rate=resolved_gst_rate,
+            is_rcm=payload.is_rcm or False,
+            force_igst=payload.supply_type != "DOMESTIC",
         )
 
         db_line = InvoiceLine(
@@ -1555,6 +1559,14 @@ def update_invoice(
 
     if payload.is_gst_inclusive is not None:
         invoice.is_gst_inclusive = payload.is_gst_inclusive
+    if payload.is_rcm is not None:
+        invoice.is_rcm = payload.is_rcm
+    if payload.supply_type is not None:
+        invoice.supply_type = payload.supply_type
+    if payload.tds_rate is not None:
+        invoice.tds_rate = payload.tds_rate
+    if payload.tcs_rate is not None:
+        invoice.tcs_rate = payload.tcs_rate
 
     if payload.line_items is not None:
         origin_state_code = resolve_origin_state_code(db, tenant_id)
@@ -1578,12 +1590,21 @@ def update_invoice(
             if not product:
                 raise HTTPException(status_code=400, detail=f"Product with ID {line.product_id} not found in this context.")
 
+            resolved_gst_rate = GSTEngine.resolve_gst_rate(
+                db, tenant_id, line.gst_rate, invoice.supply_type
+            )
             line_subtotal = (line.quantity * line.rate) - line.discount
+            if invoice.is_gst_inclusive and resolved_gst_rate > 0:
+                line_subtotal = line_subtotal / (
+                    1 + resolved_gst_rate / Decimal("100")
+                )
             tax_split = GSTEngine.calculate_tax(
                 origin_state_code=origin_state_code,
                 place_of_supply_state_code=invoice.pos_state_code,
                 base_amount=line_subtotal,
-                gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate)
+                gst_rate=resolved_gst_rate,
+                is_rcm=invoice.is_rcm,
+                force_igst=invoice.supply_type != "DOMESTIC",
             )
 
             line_desc = line.description or product.name or "Item"
@@ -1603,7 +1624,7 @@ def update_invoice(
                 db_line.discount = line.discount
                 db_line.subtotal = line_subtotal
                 db_line.hsn_sac = line.hsn_sac
-                db_line.gst_rate = line.gst_rate
+                db_line.gst_rate = resolved_gst_rate
                 db_line.cgst_rate = tax_split.cgst_rate
                 db_line.cgst_amount = tax_split.cgst_amount
                 db_line.sgst_rate = tax_split.sgst_rate
@@ -1625,7 +1646,7 @@ def update_invoice(
                     discount=line.discount,
                     subtotal=line_subtotal,
                     hsn_sac=line.hsn_sac,
-                    gst_rate=GSTEngine.resolve_gst_rate(db, tenant_id, line.gst_rate),
+                    gst_rate=resolved_gst_rate,
                     cgst_rate=tax_split.cgst_rate,
                     cgst_amount=tax_split.cgst_amount,
                     sgst_rate=tax_split.sgst_rate,
@@ -1768,6 +1789,20 @@ def finalize_invoice(
         raise HTTPException(status_code=422, detail=str(exc))
     db.commit()
     db.refresh(invoice)
+
+    tenant_settings = db.query(TenantSetting).filter(
+        TenantSetting.tenant_id == tenant_id
+    ).first()
+    if tenant_settings and getattr(tenant_settings, "e_invoice_enabled", None):
+        try:
+            from src.workers.tasks import submit_e_invoice_to_irp
+            submit_e_invoice_to_irp.delay(str(invoice.id))
+        except Exception as task_error:
+            logger.warning(
+                "Could not enqueue e-invoice task for invoice %s: %s",
+                invoice.id,
+                task_error,
+            )
     return invoice
 
 @router.post("/{id}/payment", response_model=InvoiceResponse)
@@ -2104,6 +2139,7 @@ def print_invoice(
         raise HTTPException(status_code=404, detail="Invoice not found.")
 
     setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    tenant = db.query(Tenant).filter(Tenant.id == tenant_id).first()
     template = "professional"
     if setting and setting.extra_settings:
         template = setting.extra_settings.get("pdf_template", "professional")
@@ -2126,6 +2162,13 @@ def print_invoice(
             'total': float(line.total),
         })
 
+    tax_mode = tenant.tax_mode if tenant else "NON_GST"
+    document_title = {
+        "GST_REGULAR": "TAX INVOICE",
+        "GST_COMPOSITION": "BILL OF SUPPLY",
+        "NON_GST": "COMMERCIAL INVOICE",
+    }.get(tax_mode, "INVOICE")
+
     pdf_bytes = generate_invoice_pdf(
         invoice_number=invoice.invoice_number,
         issue_date=invoice.issue_date,
@@ -2140,12 +2183,13 @@ def print_invoice(
         round_off=invoice.round_off,
         total=invoice.total,
         template=template,
-        doc_type="INVOICE",
+        doc_type=document_title,
         tenant_id=tenant_id,
         db=db,
         amount_paid=invoice.amount_paid or Decimal("0.00"),
         customer_address=invoice.contact.billing_address if invoice.contact else None,
         terms_and_conditions=invoice.terms_and_conditions,
+        place_of_supply_state_code=invoice.pos_state_code,
     )
 
     return StreamingResponse(

@@ -171,6 +171,7 @@ def auto_post_invoice(
         cess_amount=invoice.cess_amount,
         round_off_account_id=tax["round_off"],
         round_off_amount=invoice.round_off,
+        is_rcm=invoice.is_rcm,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -230,6 +231,16 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
     purchase_expense_account_id = resolver.resolve("purchases")
     tax = _resolve_tax_accounts(resolver, "input")
     tds_account_id = resolver.resolve("liability.tds") if bill.tds_amount and bill.tds_amount > 0 else None
+    tax_total = (
+        bill.cgst_amount + bill.sgst_amount + bill.igst_amount
+        + bill.utgst_amount + bill.cess_amount
+    )
+    posting_subtotal = bill.subtotal if bill.itc_eligible else bill.subtotal + tax_total
+    posting_cgst = bill.cgst_amount if bill.itc_eligible else Decimal("0")
+    posting_sgst = bill.sgst_amount if bill.itc_eligible else Decimal("0")
+    posting_igst = bill.igst_amount if bill.itc_eligible else Decimal("0")
+    posting_utgst = bill.utgst_amount if bill.itc_eligible else Decimal("0")
+    posting_cess = bill.cess_amount if bill.itc_eligible else Decimal("0")
 
     draft = LedgerPostingEngine.create_bill_posting(
         tenant_id=tenant_id,
@@ -238,18 +249,19 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
         bill_date=bill.issue_date,
         vendor_account_id=vendor_account_id,
         purchase_expense_account_id=purchase_expense_account_id,
-        subtotal=bill.subtotal,
+        subtotal=posting_subtotal,
         discount_total=bill.discount_total,
+        shipping_charges=bill.shipping_charges or Decimal("0"),
         cgst_account_id=tax["cgst"],
-        cgst_amount=bill.cgst_amount,
+        cgst_amount=posting_cgst,
         sgst_account_id=tax["sgst"],
-        sgst_amount=bill.sgst_amount,
+        sgst_amount=posting_sgst,
         igst_account_id=tax["igst"],
-        igst_amount=bill.igst_amount,
+        igst_amount=posting_igst,
         utgst_account_id=tax["utgst"],
-        utgst_amount=bill.utgst_amount,
+        utgst_amount=posting_utgst,
         cess_account_id=tax["cess"],
-        cess_amount=bill.cess_amount,
+        cess_amount=posting_cess,
         round_off_account_id=tax["round_off"],
         round_off_amount=bill.round_off,
         tds_account_id=tds_account_id,
@@ -313,6 +325,16 @@ def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> Jo
     resolver = AccountResolver(db, tenant_id)
     cash_account_id = expense.bank_account_id if expense.bank_account_id else resolver.resolve("assets.cash")
     tax = _resolve_tax_accounts(resolver, "input")
+    from src.domains.taxation.services import GSTEngine
+    claim_itc = GSTEngine.can_claim_itc(db, tenant_id, True)
+    tax_total = (
+        (expense.cgst_amount or Decimal("0"))
+        + (expense.sgst_amount or Decimal("0"))
+        + (expense.igst_amount or Decimal("0"))
+        + (expense.utgst_amount or Decimal("0"))
+        + (expense.cess_amount or Decimal("0"))
+    )
+    posting_amount = expense.amount if claim_itc else expense.amount + tax_total
 
     draft = LedgerPostingEngine.create_expense_posting(
         tenant_id=tenant_id,
@@ -321,17 +343,17 @@ def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> Jo
         expense_date=expense.expense_date,
         expense_account_id=expense_account_id,
         cash_account_id=cash_account_id,
-        amount=expense.amount,
+        amount=posting_amount,
         cgst_account_id=tax["cgst"],
-        cgst_amount=expense.cgst_amount or Decimal("0"),
+        cgst_amount=(expense.cgst_amount or Decimal("0")) if claim_itc else Decimal("0"),
         sgst_account_id=tax["sgst"],
-        sgst_amount=expense.sgst_amount or Decimal("0"),
+        sgst_amount=(expense.sgst_amount or Decimal("0")) if claim_itc else Decimal("0"),
         igst_account_id=tax["igst"],
-        igst_amount=expense.igst_amount or Decimal("0"),
+        igst_amount=(expense.igst_amount or Decimal("0")) if claim_itc else Decimal("0"),
         utgst_account_id=tax["utgst"],
-        utgst_amount=expense.utgst_amount or Decimal("0"),
+        utgst_amount=(expense.utgst_amount or Decimal("0")) if claim_itc else Decimal("0"),
         cess_account_id=tax["cess"],
-        cess_amount=expense.cess_amount or Decimal("0"),
+        cess_amount=(expense.cess_amount or Decimal("0")) if claim_itc else Decimal("0"),
         round_off_account_id=tax["round_off"],
         round_off_amount=expense.round_off or Decimal("0"),
     )
@@ -481,6 +503,7 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
         sales_revenue_account_id=sales_revenue_account_id,
         subtotal=invoice.subtotal,
         discount_total=invoice.discount_total,
+        shipping_charges=invoice.shipping_charges or Decimal("0"),
         cgst_account_id=tax["cgst"],
         cgst_amount=invoice.cgst_amount,
         sgst_account_id=tax["sgst"],
@@ -493,6 +516,7 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
         cess_amount=invoice.cess_amount,
         round_off_account_id=tax["round_off"],
         round_off_amount=invoice.round_off,
+        is_rcm=invoice.is_rcm,
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -546,6 +570,16 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
     purchase_expense_account_id = resolver.resolve("purchases")
     tax = _resolve_tax_accounts(resolver, "input")
     tds_account_id = resolver.resolve("liability.tds") if bill.tds_amount and bill.tds_amount > 0 else None
+    tax_total = (
+        bill.cgst_amount + bill.sgst_amount + bill.igst_amount
+        + bill.utgst_amount + bill.cess_amount
+    )
+    posting_subtotal = bill.subtotal if bill.itc_eligible else bill.subtotal + tax_total
+    posting_cgst = bill.cgst_amount if bill.itc_eligible else Decimal("0")
+    posting_sgst = bill.sgst_amount if bill.itc_eligible else Decimal("0")
+    posting_igst = bill.igst_amount if bill.itc_eligible else Decimal("0")
+    posting_utgst = bill.utgst_amount if bill.itc_eligible else Decimal("0")
+    posting_cess = bill.cess_amount if bill.itc_eligible else Decimal("0")
 
     cancel_date = bill.issue_date
 
@@ -556,18 +590,19 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
         cancel_date=cancel_date,
         vendor_account_id=vendor_account_id,
         purchase_expense_account_id=purchase_expense_account_id,
-        subtotal=bill.subtotal,
+        subtotal=posting_subtotal,
         discount_total=bill.discount_total,
+        shipping_charges=bill.shipping_charges or Decimal("0"),
         cgst_account_id=tax["cgst"],
-        cgst_amount=bill.cgst_amount,
+        cgst_amount=posting_cgst,
         sgst_account_id=tax["sgst"],
-        sgst_amount=bill.sgst_amount,
+        sgst_amount=posting_sgst,
         igst_account_id=tax["igst"],
-        igst_amount=bill.igst_amount,
+        igst_amount=posting_igst,
         utgst_account_id=tax["utgst"],
-        utgst_amount=bill.utgst_amount,
+        utgst_amount=posting_utgst,
         cess_account_id=tax["cess"],
-        cess_amount=bill.cess_amount,
+        cess_amount=posting_cess,
         round_off_account_id=tax["round_off"],
         round_off_amount=bill.round_off,
         tds_account_id=tds_account_id,
@@ -629,6 +664,16 @@ def cancel_expense(db: Session, tenant_id: uuid.UUID, expense: Expense, user_id:
     expense_account_id = category.linked_account_id if category else resolver.resolve("expense.misc")
     cash_account_id = expense.bank_account_id if expense.bank_account_id else resolver.resolve("assets.cash")
     tax = _resolve_tax_accounts(resolver, "input")
+    from src.domains.taxation.services import GSTEngine
+    claim_itc = GSTEngine.can_claim_itc(db, tenant_id, True)
+    tax_total = (
+        (expense.cgst_amount or Decimal("0"))
+        + (expense.sgst_amount or Decimal("0"))
+        + (expense.igst_amount or Decimal("0"))
+        + (expense.utgst_amount or Decimal("0"))
+        + (expense.cess_amount or Decimal("0"))
+    )
+    posting_amount = expense.amount if claim_itc else expense.amount + tax_total
 
     draft = LedgerPostingEngine.create_expense_reversal_posting(
         tenant_id=tenant_id,
@@ -637,17 +682,17 @@ def cancel_expense(db: Session, tenant_id: uuid.UUID, expense: Expense, user_id:
         cancel_date=date.today(),
         expense_account_id=expense_account_id,
         cash_account_id=cash_account_id,
-        amount=expense.amount,
+        amount=posting_amount,
         cgst_account_id=tax["cgst"],
-        cgst_amount=expense.cgst_amount or Decimal("0"),
+        cgst_amount=(expense.cgst_amount or Decimal("0")) if claim_itc else Decimal("0"),
         sgst_account_id=tax["sgst"],
-        sgst_amount=expense.sgst_amount or Decimal("0"),
+        sgst_amount=(expense.sgst_amount or Decimal("0")) if claim_itc else Decimal("0"),
         igst_account_id=tax["igst"],
-        igst_amount=expense.igst_amount or Decimal("0"),
+        igst_amount=(expense.igst_amount or Decimal("0")) if claim_itc else Decimal("0"),
         utgst_account_id=tax["utgst"],
-        utgst_amount=expense.utgst_amount or Decimal("0"),
+        utgst_amount=(expense.utgst_amount or Decimal("0")) if claim_itc else Decimal("0"),
         cess_account_id=tax["cess"],
-        cess_amount=expense.cess_amount or Decimal("0"),
+        cess_amount=(expense.cess_amount or Decimal("0")) if claim_itc else Decimal("0"),
         round_off_account_id=tax["round_off"],
         round_off_amount=expense.round_off or Decimal("0"),
     )

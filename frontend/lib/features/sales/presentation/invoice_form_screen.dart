@@ -9,6 +9,7 @@ import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
+import 'package:apexbooks/features/masters/contacts/presentation/contact_search.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
 import 'package:apexbooks/features/masters/products/presentation/barcode_product_field.dart';
@@ -22,6 +23,7 @@ import 'invoice_form_notifier.dart';
 import 'invoice_form_state.dart';
 import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 import 'package:apexbooks/features/settings/presentation/settings_providers.dart';
+import 'package:apexbooks/features/settings/data/models/gst_config.dart';
 import 'package:apexbooks/core/result/result.dart';
 
 class InvoiceFormScreen extends ConsumerStatefulWidget {
@@ -63,7 +65,14 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
       }
       ref.read(settingsRepositoryProvider).getTenantSettings().then((result) {
         final settings = result.dataOrNull;
+        if (settings != null && mounted) {
+          n.setOriginStateCode(settings.originStateCode ?? '');
+        }
         if (widget.editId == null && settings != null && mounted) {
+          if (ref.read(invoiceFormProvider).posStateCode.isEmpty &&
+              (settings.originStateCode ?? '').isNotEmpty) {
+            n.setPosStateCode(settings.originStateCode!);
+          }
           final terms = settings.extraSettings['terms']?.toString() ?? '';
           if (terms.isNotEmpty &&
               ref.read(invoiceFormProvider).termsAndConditions == null) {
@@ -103,7 +112,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(invoiceFormProvider);
-    final gstEnabled = ref.watch(gstEnabledProvider);
+    final gstEnabled = ref.watch(gstCollectionEnabledProvider);
     final notifier = ref.read(invoiceFormProvider.notifier);
     final colors = apexColors(context);
     final fmt = ref.watch(numberFormatterProvider);
@@ -262,7 +271,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                         padding: EdgeInsets.all(
                           ResponsiveLayout.isMobile(context) ? 10 : 16,
                         ),
-                        itemCount: 3,
+                        itemCount: 4,
                         itemBuilder: (context, idx) {
                           switch (idx) {
                             case 0:
@@ -285,6 +294,14 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                                 ),
                               );
                             case 2:
+                              if (!gstEnabled) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: _gstOptionsCard(state, notifier, colors),
+                              );
+                            case 3:
                               return const SizedBox(height: 80);
                             default:
                               return const SizedBox.shrink();
@@ -327,8 +344,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   colors: colors,
                   onSelected: (ct) {
                     notifier.setContact(ct.id, ct.name);
-                    if (ct.stateCode != null && ct.stateCode!.isNotEmpty)
-                      notifier.setPosStateCode(ct.stateCode!);
+                    final stateCode = _contactStateCode(ct);
+                    if (stateCode != null) notifier.setPosStateCode(stateCode);
                   },
                 ),
                 colors,
@@ -355,6 +372,17 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 ),
                 colors,
               );
+              final placeOfSupply = _labeled(
+                'Place of supply',
+                _PlaceOfSupplyField(
+                  key: ValueKey(state.posStateCode),
+                  value: state.posStateCode,
+                  colors: colors,
+                  onSelected: notifier.setPosStateCode,
+                ),
+                colors,
+                required: true,
+              );
               if (narrow) {
                 return Column(
                   children: [
@@ -372,6 +400,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                           Expanded(child: due),
                         ],
                       ),
+                    const SizedBox(height: 12),
+                    placeOfSupply,
                   ],
                 );
               }
@@ -383,6 +413,8 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                   Expanded(child: issue),
                   const SizedBox(width: 16),
                   Expanded(child: due),
+                  const SizedBox(width: 16),
+                  Expanded(child: placeOfSupply),
                 ],
               );
             },
@@ -390,6 +422,93 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
         ],
       ),
     );
+  }
+
+  Widget _gstOptionsCard(
+    InvoiceFormState state,
+    InvoiceFormNotifier notifier,
+    ApexColors colors,
+  ) {
+    return _Card(
+      colors: colors,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('GST treatment', style: Theme.of(context).textTheme.titleSmall),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 20,
+            runSpacing: 12,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              SizedBox(
+                width: 280,
+                child: DropdownButtonFormField<String>(
+                  initialValue: state.supplyType,
+                  decoration: const InputDecoration(labelText: 'Supply type'),
+                  items: const [
+                    DropdownMenuItem(
+                      value: 'DOMESTIC',
+                      child: Text('Domestic'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'EXPORT_WITH_TAX',
+                      child: Text('Export with tax'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'EXPORT_WITHOUT_TAX',
+                      child: Text('Export without tax'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'SEZ_WITH_TAX',
+                      child: Text('SEZ with tax'),
+                    ),
+                    DropdownMenuItem(
+                      value: 'SEZ_WITHOUT_TAX',
+                      child: Text('SEZ without tax'),
+                    ),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) notifier.setSupplyType(value);
+                  },
+                ),
+              ),
+              FilterChip(
+                label: const Text('Prices include GST'),
+                selected: state.isGstInclusive,
+                onSelected: notifier.setIsGstInclusive,
+              ),
+              FilterChip(
+                label: const Text('Reverse charge (RCM)'),
+                selected: state.isRcm,
+                onSelected: notifier.setIsRcm,
+              ),
+            ],
+          ),
+          if (state.isRcm)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                'GST is shown for reporting but is not added to the customer payable.',
+                style: TextStyle(color: colors.textMuted, fontSize: 12),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String? _contactStateCode(Contact contact) {
+    final candidates = [
+      contact.stateCode,
+      contact.shippingAddress?.stateCode,
+      contact.billingAddress?.stateCode,
+      (contact.gstin?.length ?? 0) >= 2 ? contact.gstin!.substring(0, 2) : null,
+    ];
+    for (final code in candidates) {
+      if (code != null && IndianStates.codes.containsKey(code)) return code;
+    }
+    return null;
   }
 
   // ── Line item grid ──────────────────────────────────────────────────────
@@ -447,7 +566,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 productName: p.name,
                 description: p.name,
                 rate: p.salesPrice,
-                gstRate: p.gstRate,
+                gstRate: gstEnabled ? p.gstRate : 0,
                 hsnSac: p.hsnSac,
               ),
             ),
@@ -763,36 +882,12 @@ class _CustomerField extends ConsumerWidget {
     return Autocomplete<Contact>(
       displayStringForOption: (c) => c.name,
       optionsBuilder: (v) async {
-        final q = v.text.trim().toLowerCase();
-        if (q.isEmpty) return contacts.take(8);
-        final localMatches =
-            contacts
-                .where(
-                  (c) =>
-                      c.name.toLowerCase().contains(q) ||
-                      (c.gstin ?? '').toLowerCase().contains(q) ||
-                      (c.phone ?? '').toLowerCase().contains(q),
-                )
-                .toList()
-              ..sort((a, b) {
-                final aStarts = a.name.toLowerCase().startsWith(q);
-                final bStarts = b.name.toLowerCase().startsWith(q);
-                if (aStarts != bStarts) return aStarts ? -1 : 1;
-                return a.name.toLowerCase().compareTo(b.name.toLowerCase());
-              });
-        // One-character searches must feel instantaneous and are broad enough
-        // to be answered from the customers already loaded for the form.
-        if (q.length == 1) return localMatches.take(12);
-        final result = await ref
-            .read(contactRepositoryProvider)
-            .list(
-              ListQuery(
-                search: q,
-                limit: 12,
-                extra: const {'contact_type': 'CUSTOMER'},
-              ),
-            );
-        return result.dataOrNull?.items ?? localMatches.take(12);
+        return searchContactOptions(
+          repository: ref.read(contactRepositoryProvider),
+          localContacts: contacts,
+          type: ContactType.customer,
+          query: v.text,
+        );
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
@@ -859,6 +954,63 @@ class _CustomerField extends ConsumerWidget {
 }
 
 // ── Date field ──────────────────────────────────────────────────────────────
+// Searchable GST state selector. Showing the code makes the saved tax
+// treatment (intra-state vs inter-state) explicit to the user.
+class _PlaceOfSupplyField extends StatelessWidget {
+  const _PlaceOfSupplyField({
+    super.key,
+    required this.value,
+    required this.colors,
+    required this.onSelected,
+  });
+
+  final String value;
+  final ApexColors colors;
+  final ValueChanged<String> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final states = IndianStates.codes.entries.toList();
+    final selectedName = IndianStates.codes[value];
+    return Autocomplete<MapEntry<String, String>>(
+      initialValue: TextEditingValue(
+        text: selectedName == null ? '' : '$value - $selectedName',
+      ),
+      displayStringForOption: (state) => '${state.key} - ${state.value}',
+      optionsBuilder: (value) {
+        final query = value.text.trim().toLowerCase();
+        if (query.isEmpty) return states;
+        return states.where(
+          (state) =>
+              state.key.contains(query) ||
+              state.value.toLowerCase().contains(query),
+        );
+      },
+      onSelected: (state) => onSelected(state.key),
+      fieldViewBuilder: (context, controller, focusNode, onSubmitted) =>
+          TextField(
+            controller: controller,
+            focusNode: focusNode,
+            onSubmitted: (_) => onSubmitted(),
+            decoration: _dec(
+              colors,
+              hint: 'Type state name or code…',
+              icon: Icons.location_on_outlined,
+            ),
+          ),
+      optionsViewBuilder: (context, select, options) =>
+          _optionsPanel<MapEntry<String, String>>(
+            context,
+            colors,
+            options,
+            select,
+            (state) => state.value,
+            (state) => 'GST state code ${state.key}',
+          ),
+    );
+  }
+}
+
 class _DateField extends StatelessWidget {
   const _DateField({
     required this.value,

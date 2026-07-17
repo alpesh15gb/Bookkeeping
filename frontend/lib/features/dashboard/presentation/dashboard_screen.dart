@@ -114,7 +114,11 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 20),
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          // This row is inside a vertical ListView, so its
+                          // height is intentionally unbounded. Stretching on
+                          // the cross axis would force the cards to an
+                          // infinite height and abort the frame during layout.
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(flex: 3, child: chart),
                             const SizedBox(width: 20),

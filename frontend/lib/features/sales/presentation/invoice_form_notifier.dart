@@ -10,18 +10,25 @@ import '../services/invoice_calculation_service.dart';
 import '../services/invoice_validation_service.dart';
 import 'invoice_form_state.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
+import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 
 class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
-  InvoiceFormNotifier(this._service, this._calc, this._validation)
-    : super(
+  InvoiceFormNotifier(
+    this._service,
+    this._calc,
+    this._validation,
+    this._collectGst,
+  ) : super(
         const InvoiceFormState(
-          lines: [InvoiceLine(productId: '', hsnSac: '', gstRate: 18)],
+          lines: [InvoiceLine(productId: '', hsnSac: '', gstRate: 0)],
         ),
       );
 
   final InvoiceService _service;
   final InvoiceCalculationService _calc;
   final InvoiceValidationService _validation;
+  final bool _collectGst;
+  String _originStateCode = '';
 
   Future<void> loadForEdit(String id) async {
     final result = await _service.get(id);
@@ -60,9 +67,18 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
       state = state.copyWith(contactId: id, contactName: name);
   void setIssueDate(String d) => state = state.copyWith(issueDate: d);
   void setDueDate(String d) => state = state.copyWith(dueDate: d);
-  void setPosStateCode(String c) => state = state.copyWith(posStateCode: c);
+  void setOriginStateCode(String c) {
+    _originStateCode = c;
+    _recalc(state);
+  }
+
+  void setPosStateCode(String c) => _recalc(state.copyWith(posStateCode: c));
   void setDiscountRate(double r) => _recalc(state.copyWith(discountRate: r));
   void setShipping(double s) => _recalc(state.copyWith(shippingCharges: s));
+  void setIsGstInclusive(bool value) =>
+      _recalc(state.copyWith(isGstInclusive: value));
+  void setIsRcm(bool value) => _recalc(state.copyWith(isRcm: value));
+  void setSupplyType(String value) => state = state.copyWith(supplyType: value);
   void setNotes(String n) => state = state.copyWith(notes: n);
   void setTerms(String t) => state = state.copyWith(termsAndConditions: t);
   void setRefNo(String r) => state = state.copyWith(referenceNumber: r);
@@ -77,7 +93,7 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
       state.copyWith(
         lines: [
           ...state.lines,
-          const InvoiceLine(productId: '', hsnSac: '', gstRate: 18),
+          const InvoiceLine(productId: '', hsnSac: '', gstRate: 0),
         ],
       ),
     );
@@ -97,7 +113,7 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
         description: product.name,
         quantity: 1,
         rate: product.salesPrice,
-        gstRate: product.gstRate,
+        gstRate: _collectGst ? product.gstRate : 0,
         hsnSac: product.hsnSac,
       );
       final empty = lines.indexWhere((line) => line.productId.isEmpty);
@@ -120,6 +136,12 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
       lines: s.lines,
       discountRate: s.discountRate,
       shippingCharges: s.shippingCharges,
+      isInterState:
+          _originStateCode.isNotEmpty &&
+          s.posStateCode.isNotEmpty &&
+          _originStateCode != s.posStateCode,
+      isGstInclusive: s.isGstInclusive,
+      isRcm: s.isRcm,
     );
     state = s.copyWith(
       lines: r.lines,
@@ -192,6 +214,7 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
     'supply_type': state.supplyType,
     'tds_rate': state.tdsRate,
     'tcs_rate': state.tcsRate,
+    'post_on_create': false,
   };
 }
 
@@ -203,6 +226,7 @@ final invoiceFormProvider =
         ref.watch(invoiceServiceProvider),
         const InvoiceCalculationService(),
         const InvoiceValidationService(),
+        ref.watch(gstCollectionEnabledProvider),
       );
     });
 

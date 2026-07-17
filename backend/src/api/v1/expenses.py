@@ -48,7 +48,7 @@ class BulkDeleteRequest(BaseModel):
 def _compute_expense_totals(db: Session, tenant_id: uuid.UUID, amount: Decimal, gst_rate: Decimal, place_of_supply_state_code: str) -> dict:
     from src.domains.company.services import resolve_origin_state_code
     origin = resolve_origin_state_code(db, tenant_id)
-    effective_rate = GSTEngine.resolve_gst_rate(db, tenant_id, gst_rate)
+    effective_rate = GSTEngine.resolve_inward_gst_rate(db, tenant_id, gst_rate)
     tax_split = GSTEngine.calculate_tax(
         origin_state_code=origin,
         place_of_supply_state_code=place_of_supply_state_code,
@@ -152,7 +152,7 @@ def preview_expense(
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:view")),
 ):
     totals = _compute_expense_totals(db=db, tenant_id=tenant_id, amount=payload.amount, gst_rate=payload.gst_rate, place_of_supply_state_code=payload.place_of_supply_state_code or "27")
-    totals["gst_rate"] = GSTEngine.resolve_gst_rate(db, tenant_id, payload.gst_rate)
+    totals["gst_rate"] = GSTEngine.resolve_inward_gst_rate(db, tenant_id, payload.gst_rate)
     return ExpensePreviewResponse(**totals)
 
 
@@ -428,6 +428,12 @@ def post_expense(
     utgst_input_id = resolver.resolve("utgst_input")
     cess_input_id = resolver.resolve("cess_input")
     round_off_account_id = resolver.resolve("round_off") if expense.round_off != 0 else None
+    claim_itc = GSTEngine.can_claim_itc(db, tenant_id, True)
+    tax_total = (
+        expense.cgst_amount + expense.sgst_amount + expense.igst_amount
+        + expense.utgst_amount + expense.cess_amount
+    )
+    posting_amount = expense.amount if claim_itc else expense.amount + tax_total
 
     ledger_draft = LedgerPostingEngine.create_expense_posting(
         tenant_id=tenant_id,
@@ -436,17 +442,17 @@ def post_expense(
         expense_date=expense.expense_date,
         expense_account_id=category.linked_account_id,
         cash_account_id=cash_account_id,
-        amount=expense.amount,
+        amount=posting_amount,
         cgst_account_id=cgst_input_id,
-        cgst_amount=expense.cgst_amount,
+        cgst_amount=expense.cgst_amount if claim_itc else Decimal("0"),
         sgst_account_id=sgst_input_id,
-        sgst_amount=expense.sgst_amount,
+        sgst_amount=expense.sgst_amount if claim_itc else Decimal("0"),
         igst_account_id=igst_input_id,
-        igst_amount=expense.igst_amount,
+        igst_amount=expense.igst_amount if claim_itc else Decimal("0"),
         utgst_account_id=utgst_input_id,
-        utgst_amount=expense.utgst_amount,
+        utgst_amount=expense.utgst_amount if claim_itc else Decimal("0"),
         cess_account_id=cess_input_id,
-        cess_amount=expense.cess_amount,
+        cess_amount=expense.cess_amount if claim_itc else Decimal("0"),
         round_off_account_id=round_off_account_id,
         round_off_amount=expense.round_off,
     )
@@ -514,6 +520,12 @@ def cancel_expense(
     utgst_input_id = resolver.resolve("utgst_input")
     cess_input_id = resolver.resolve("cess_input")
     round_off_account_id = resolver.resolve("round_off") if expense.round_off != 0 else None
+    claim_itc = GSTEngine.can_claim_itc(db, tenant_id, True)
+    tax_total = (
+        expense.cgst_amount + expense.sgst_amount + expense.igst_amount
+        + expense.utgst_amount + expense.cess_amount
+    )
+    posting_amount = expense.amount if claim_itc else expense.amount + tax_total
 
     ledger_draft = LedgerPostingEngine.create_expense_reversal_posting(
         tenant_id=tenant_id,
@@ -522,17 +534,17 @@ def cancel_expense(
         cancel_date=expense.expense_date,
         expense_account_id=category.linked_account_id,
         cash_account_id=cash_account_id,
-        amount=expense.amount,
+        amount=posting_amount,
         cgst_account_id=cgst_input_id,
-        cgst_amount=expense.cgst_amount,
+        cgst_amount=expense.cgst_amount if claim_itc else Decimal("0"),
         sgst_account_id=sgst_input_id,
-        sgst_amount=expense.sgst_amount,
+        sgst_amount=expense.sgst_amount if claim_itc else Decimal("0"),
         igst_account_id=igst_input_id,
-        igst_amount=expense.igst_amount,
+        igst_amount=expense.igst_amount if claim_itc else Decimal("0"),
         utgst_account_id=utgst_input_id,
-        utgst_amount=expense.utgst_amount,
+        utgst_amount=expense.utgst_amount if claim_itc else Decimal("0"),
         cess_account_id=cess_input_id,
-        cess_amount=expense.cess_amount,
+        cess_amount=expense.cess_amount if claim_itc else Decimal("0"),
         round_off_account_id=round_off_account_id,
         round_off_amount=expense.round_off,
     )

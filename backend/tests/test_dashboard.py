@@ -44,6 +44,7 @@ class TestDashboard(unittest.TestCase):
                 legal_name="Dashboard Corp A",
                 trade_name="Dashboard A",
                 gstin="27AAPFU0939F1ZV",
+                tax_mode="GST_REGULAR",
                 pan="AAPFU0939F",
                 financial_year_start=date(2026, 4, 1),
             )

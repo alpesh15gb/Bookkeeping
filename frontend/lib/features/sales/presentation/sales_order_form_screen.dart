@@ -17,6 +17,7 @@ import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/crud/base_crud.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
+import 'package:apexbooks/features/masters/contacts/presentation/contact_search.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
 import 'package:apexbooks/features/masters/shared/presentation/quick_create_dialogs.dart';
@@ -891,7 +892,7 @@ class _HCell extends StatelessWidget {
 
 // ── Customer typeahead ───────────────────────────────────────────────────────
 
-class _CustomerField extends StatelessWidget {
+class _CustomerField extends ConsumerWidget {
   const _CustomerField({
     required this.focusNode,
     required this.contacts,
@@ -906,20 +907,17 @@ class _CustomerField extends StatelessWidget {
   final void Function(Contact) onSelected;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final isMobile = ResponsiveLayout.isMobile(context);
     return Autocomplete<Contact>(
       displayStringForOption: (c) => c.name,
-      optionsBuilder: (v) {
-        final q = v.text.trim().toLowerCase();
-        if (q.isEmpty) return contacts.take(8);
-        return contacts
-            .where(
-              (c) =>
-                  c.name.toLowerCase().contains(q) ||
-                  (c.gstin ?? '').toLowerCase().contains(q),
-            )
-            .take(12);
+      optionsBuilder: (v) async {
+        return searchContactOptions(
+          repository: ref.read(contactRepositoryProvider),
+          localContacts: contacts,
+          type: ContactType.customer,
+          query: v.text,
+        );
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {

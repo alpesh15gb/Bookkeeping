@@ -58,19 +58,53 @@ class GSTEngine:
     """
 
     @staticmethod
-    def resolve_gst_rate(db, tenant_id, requested_rate: Decimal) -> Decimal:
-        """If tenant is NON_GST or GST_COMPOSITION, force gst_rate to 0. Otherwise return requested_rate.
-        Auto-detects GST registration from GSTIN presence."""
+    def resolve_gst_rate(
+        db,
+        tenant_id,
+        requested_rate: Decimal,
+        supply_type: str = "DOMESTIC",
+    ) -> Decimal:
+        """Apply the company's explicit tax mode to an outward tax rate.
+
+        A retained GSTIN is identification/history data and must not silently
+        override NON_GST mode. Composition and non-GST businesses cannot
+        collect GST from customers, so both modes force the rate to zero.
+        """
         from src.infrastructure.database.models import Tenant
         tenant = db.query(Tenant).filter(Tenant.id == tenant_id, Tenant.deleted_at == None).first()
         if tenant:
-            # Auto-detect: if tenant has a GSTIN, treat as GST_REGULAR
-            effective_mode = tenant.tax_mode
-            if effective_mode == "NON_GST" and tenant.gstin and len(tenant.gstin) == 15:
-                effective_mode = "GST_REGULAR"
-            if effective_mode in ("NON_GST", "GST_COMPOSITION"):
+            if tenant.tax_mode in ("NON_GST", "GST_COMPOSITION"):
                 return Decimal("0.00")
+        if supply_type in ("EXPORT_WITHOUT_TAX", "SEZ_WITHOUT_TAX"):
+            return Decimal("0.00")
         return requested_rate
+
+    @staticmethod
+    def resolve_inward_gst_rate(db, tenant_id, requested_rate: Decimal) -> Decimal:
+        """Return GST charged by a supplier on an inward supply.
+
+        The buyer's registration mode controls whether input tax credit can be
+        claimed; it does not erase tax legally charged by a regular supplier.
+        Composition and non-GST businesses therefore retain the supplier tax
+        on the purchase document and account for it as cost.
+        """
+        rate = Decimal(str(requested_rate))
+        if rate < Decimal("0.00") or rate > Decimal("100.00"):
+            raise ValueError("GST rate must be between 0 and 100.")
+        return rate
+
+    @staticmethod
+    def can_claim_itc(db, tenant_id, requested_eligibility: bool = True) -> bool:
+        """Resolve ITC eligibility against the buyer's registration mode."""
+        from src.infrastructure.database.models import Tenant
+        tenant = db.query(Tenant).filter(
+            Tenant.id == tenant_id, Tenant.deleted_at == None
+        ).first()
+        return bool(
+            requested_eligibility
+            and tenant
+            and tenant.tax_mode == "GST_REGULAR"
+        )
 
     @staticmethod
     def is_gst_enabled(db, tenant_id) -> bool:

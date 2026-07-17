@@ -44,6 +44,9 @@ services:
       - JWT_SECRET_KEY
       - SECRET_KEY
       - ALLOWED_ORIGINS=https://apexbooks.in,https://api.apexbooks.in,https://app.apexbooks.in,tauri://localhost,https://tauri.localhost,tauri://com.apexbooks.desktop
+      - CARTUNEZ_MEDUSA_BASE_URL
+      - CARTUNEZ_MEDUSA_API_KEY
+      - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
     depends_on:
       db:
         condition: service_healthy
@@ -63,6 +66,31 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
+      - CARTUNEZ_MEDUSA_BASE_URL
+      - CARTUNEZ_MEDUSA_API_KEY
+      - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bookkeeping_net
+
+  beat:
+    build: ./backend
+    container_name: bookkeeping_beat
+    restart: always
+    command: celery -A src.workers.tasks beat --loglevel=info
+    environment:
+      - APP_ENV=production
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-production_secure_db_pass}@db:5432/bookkeeping
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY
+      - SECRET_KEY
+      - CARTUNEZ_MEDUSA_BASE_URL
+      - CARTUNEZ_MEDUSA_API_KEY
+      - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
     depends_on:
       db:
         condition: service_healthy

@@ -73,6 +73,7 @@ def generate_invoice_pdf(
     customer_address: Optional[Any] = None,
     company_address: Optional[Any] = None,
     terms_and_conditions: Optional[str] = None,
+    place_of_supply_state_code: Optional[str] = None,
 ) -> bytes:
     buffer = io.BytesIO()
 
@@ -156,6 +157,7 @@ def generate_invoice_pdf(
     company_phone = company_phone or ""
     company_email = company_email or ""
     company_website = company_website or ""
+    display_pos_code = place_of_supply_state_code or origin_state_code
     
     # 1. Page settings based on template format
     if template == "thermal":
@@ -409,7 +411,7 @@ def generate_invoice_pdf(
 
         # Metadata Details Row
         meta_data = [
-            [Paragraph(f"<b>Document No:</b> {invoice_number}", normal_style), Paragraph(f"<b>Place of Supply:</b> {origin_state_code or 'N/A'}", normal_style)],
+            [Paragraph(f"<b>Document No:</b> {invoice_number}", normal_style), Paragraph(f"<b>Place of Supply:</b> {display_pos_code or 'N/A'}", normal_style)],
             [Paragraph(f"<b>Issue Date:</b> {issue_date}", normal_style), Paragraph(f"<b>Due Date:</b> {due_date}", normal_style)],
             [Paragraph(f"<b>PAN:</b> {company_pan or 'N/A'}", normal_style), ""]
         ]
@@ -529,6 +531,10 @@ def generate_invoice_pdf(
         state_code_str = origin_state_code or (company_gstin[:2] if company_gstin and len(company_gstin) >= 2 and company_gstin[:2].isdigit() else "36")
         state_name = STATE_CODES.get(state_code_str, "Telangana")
         formatted_state = f"{state_code_str}-{state_name}"
+        pos_name = STATE_CODES.get(display_pos_code, "")
+        formatted_pos_state = (
+            f"{display_pos_code}-{pos_name}" if display_pos_code else "N/A"
+        )
 
         co_str = f"<b><font size=12>{company_name}</font></b><br/>"
         if company_address:
@@ -549,7 +555,7 @@ def generate_invoice_pdf(
             [Paragraph(f"<b>{invoice_number}</b>", ParagraphStyle('MetaVal', parent=normal_style, fontName=FONT_BOLD, fontSize=9)),
              Paragraph(f"<b>{issue_date}</b>", ParagraphStyle('MetaVal2', parent=normal_style, fontName=FONT_BOLD, fontSize=9))],
             [Paragraph("Place of supply", ParagraphStyle('MetaH3', parent=normal_style, fontSize=7, textColor=colors.HexColor('#555555'))), ""],
-            [Paragraph(f"<b>{formatted_state}</b>", ParagraphStyle('MetaVal3', parent=normal_style, fontName=FONT_BOLD, fontSize=9)), ""]
+            [Paragraph(f"<b>{formatted_pos_state}</b>", ParagraphStyle('MetaVal3', parent=normal_style, fontName=FONT_BOLD, fontSize=9)), ""]
         ]
         meta_table = Table(meta_table_data, colWidths=[38*mm, 38*mm], style=[
             ('VALIGN', (0,0), (-1,-1), 'TOP'),
@@ -890,7 +896,7 @@ def generate_invoice_pdf(
         elements.append(Spacer(1, 6*mm))
         
         # Metadata
-        meta_left = f"<b>Date:</b> {issue_date}<br/><b>Due Date:</b> {due_date}<br/><b>Place of Supply:</b> {origin_state_code or 'N/A'}"
+        meta_left = f"<b>Date:</b> {issue_date}<br/><b>Due Date:</b> {due_date}<br/><b>Place of Supply:</b> {display_pos_code or 'N/A'}"
         addr_str = f"<br/>{customer_address}" if customer_address else ""
         meta_right = f"<b>Billed To:</b><br/>{customer_name}{addr_str}<br/>GSTIN: {customer_gstin or 'Unregistered'}"
         

@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 # Schedule updates to the imported app (idempotent if already set)
 celery_app.conf.beat_schedule = celery_app.conf.beat_schedule or {}
 celery_app.conf.beat_schedule.update({
+    "deliver-cartunez-master-data": {
+        "task": "tasks.deliver_cartunez_master_data",
+        "schedule": 30.0,
+    },
     "send-overdue-invoice-reminders": {
         "task": "tasks.send_overdue_invoice_reminders",
         "schedule": crontab(hour=9, minute=0),
@@ -36,6 +40,19 @@ celery_app.conf.beat_schedule.update({
         "schedule": crontab(hour=21, minute=0),
     },
 })
+
+
+@celery_app.task(name="tasks.deliver_cartunez_master_data")
+def deliver_cartunez_master_data() -> Dict[str, Any]:
+    """Deliver pending Contract v1 ApexBooks-owned master-data events."""
+    from src.core.database import SessionLocal
+    from src.integrations.cartunez.outbound import CartunezOutboundDispatcher
+
+    db = SessionLocal()
+    try:
+        return CartunezOutboundDispatcher().dispatch_pending(db)
+    finally:
+        db.close()
 
 
 @celery_app.task(bind=True, name="tasks.submit_e_invoice_to_irp", max_retries=3, default_retry_delay=60)

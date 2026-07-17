@@ -102,6 +102,8 @@ class LedgerPostingEngine:
             invoice_total = net_subtotal + shipping_charges
             lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable (RCM): {invoice_number}"))
             lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue (RCM): {invoice_number}"))
+            if shipping_charges > 0:
+                lines.append(JournalLineDraft(sales_revenue_account_id, shipping_charges, "CREDIT", f"Shipping Income (RCM): {invoice_number}"))
         else:
             tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
             # Customer is debited for subtotal + shipping + taxes. Round-off handled separately below.
@@ -109,6 +111,8 @@ class LedgerPostingEngine:
 
             lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable: {invoice_number}"))
             lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue: {invoice_number}"))
+            if shipping_charges > 0:
+                lines.append(JournalLineDraft(sales_revenue_account_id, shipping_charges, "CREDIT", f"Shipping Income: {invoice_number}"))
 
             if cgst_amount > 0 and cgst_account_id:
                 lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "CREDIT", "CGST Output"))
@@ -143,6 +147,7 @@ class LedgerPostingEngine:
         purchase_expense_account_id: uuid.UUID,
         subtotal: Decimal,
         discount_total: Decimal = Decimal("0.00"),
+        shipping_charges: Decimal = Decimal("0.00"),
         cgst_account_id: Optional[uuid.UUID] = None,
         cgst_amount: Decimal = Decimal("0.00"),
         sgst_account_id: Optional[uuid.UUID] = None,
@@ -171,11 +176,13 @@ class LedgerPostingEngine:
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        bill_total = net_subtotal + tax_total
+        bill_total = net_subtotal + shipping_charges + tax_total
         vendor_payable = bill_total - tds_amount
 
         # 1. Debit Purchase Expense (net of discount)
         lines.append(JournalLineDraft(purchase_expense_account_id, net_subtotal, "DEBIT", f"Expense: Bill {bill_number}"))
+        if shipping_charges > 0:
+            lines.append(JournalLineDraft(purchase_expense_account_id, shipping_charges, "DEBIT", f"Freight/Shipping: Bill {bill_number}"))
 
         # 2. Debit Input Tax Accounts (ITC Eligible)
         if cgst_amount > 0 and cgst_account_id:
@@ -625,6 +632,7 @@ class LedgerPostingEngine:
         sales_revenue_account_id: uuid.UUID,
         subtotal: Decimal,
         discount_total: Decimal = Decimal("0.00"),
+        shipping_charges: Decimal = Decimal("0.00"),
         cgst_account_id: Optional[uuid.UUID] = None,
         cgst_amount: Decimal = Decimal("0.00"),
         sgst_account_id: Optional[uuid.UUID] = None,
@@ -637,24 +645,27 @@ class LedgerPostingEngine:
         cess_amount: Decimal = Decimal("0.00"),
         round_off_account_id: Optional[uuid.UUID] = None,
         round_off_amount: Decimal = Decimal("0.00"),
+        is_rcm: bool = False,
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        total = net_subtotal + tax_total
+        total = net_subtotal + shipping_charges + (Decimal("0") if is_rcm else tax_total)
 
         lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "DEBIT", f"Cancellation: {invoice_number}"))
+        if shipping_charges > 0:
+            lines.append(JournalLineDraft(sales_revenue_account_id, shipping_charges, "DEBIT", f"Shipping cancellation: {invoice_number}"))
         lines.append(JournalLineDraft(customer_account_id, total, "CREDIT", f"Cancellation: {invoice_number}"))
 
-        if cgst_amount > 0 and cgst_account_id:
+        if not is_rcm and cgst_amount > 0 and cgst_account_id:
             lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "DEBIT", "CGST Reversal"))
-        if sgst_amount > 0 and sgst_account_id:
+        if not is_rcm and sgst_amount > 0 and sgst_account_id:
             lines.append(JournalLineDraft(sgst_account_id, sgst_amount, "DEBIT", "SGST Reversal"))
-        if igst_amount > 0 and igst_account_id:
+        if not is_rcm and igst_amount > 0 and igst_account_id:
             lines.append(JournalLineDraft(igst_account_id, igst_amount, "DEBIT", "IGST Reversal"))
-        if utgst_amount > 0 and utgst_account_id:
+        if not is_rcm and utgst_amount > 0 and utgst_account_id:
             lines.append(JournalLineDraft(utgst_account_id, utgst_amount, "DEBIT", "UTGST Reversal"))
-        if cess_amount > 0 and cess_account_id:
+        if not is_rcm and cess_amount > 0 and cess_account_id:
             lines.append(JournalLineDraft(cess_account_id, cess_amount, "DEBIT", "Cess Reversal"))
 
         if round_off_amount != 0 and round_off_account_id:
@@ -685,6 +696,7 @@ class LedgerPostingEngine:
         purchase_expense_account_id: uuid.UUID,
         subtotal: Decimal,
         discount_total: Decimal = Decimal("0.00"),
+        shipping_charges: Decimal = Decimal("0.00"),
         cgst_account_id: Optional[uuid.UUID] = None,
         cgst_amount: Decimal = Decimal("0.00"),
         sgst_account_id: Optional[uuid.UUID] = None,
@@ -703,11 +715,13 @@ class LedgerPostingEngine:
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
-        bill_total = net_subtotal + tax_total
+        bill_total = net_subtotal + shipping_charges + tax_total
         vendor_payable = bill_total - tds_amount
 
         lines.append(JournalLineDraft(vendor_account_id, vendor_payable, "DEBIT", f"Reversal of vendor bill: {bill_number}"))
         lines.append(JournalLineDraft(purchase_expense_account_id, net_subtotal, "CREDIT", f"Reversal of purchase expense: {bill_number}"))
+        if shipping_charges > 0:
+            lines.append(JournalLineDraft(purchase_expense_account_id, shipping_charges, "CREDIT", f"Freight/Shipping reversal: {bill_number}"))
 
         if cgst_amount > 0 and cgst_account_id:
             lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "CREDIT", "CGST Input Reversal"))

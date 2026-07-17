@@ -9,6 +9,7 @@ import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
+import 'package:apexbooks/features/masters/contacts/presentation/contact_search.dart';
 import 'package:apexbooks/features/masters/products/presentation/product_controller.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
 import 'package:apexbooks/features/masters/products/presentation/barcode_product_field.dart';
@@ -50,6 +51,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
       ref.read(settingsRepositoryProvider).getTenantSettings().then((result) {
         final settings = result.dataOrNull;
         if (settings != null && mounted) {
+          n.setOriginStateCode(settings.originStateCode ?? '');
           final terms = settings.extraSettings['terms']?.toString() ?? '';
           if (terms.isNotEmpty &&
               ref.read(billFormProvider).termsAndConditions == null) {
@@ -795,18 +797,12 @@ class _VendorField extends ConsumerWidget {
     return Autocomplete<Contact>(
       displayStringForOption: (c) => c.name,
       optionsBuilder: (v) async {
-        final q = v.text.trim().toLowerCase();
-        if (q.isEmpty) return contacts.take(8);
-        final result = await ref
-            .read(contactRepositoryProvider)
-            .list(
-              ListQuery(
-                search: q,
-                limit: 12,
-                extra: const {'contact_type': 'VENDOR'},
-              ),
-            );
-        return result.dataOrNull?.items ?? const <Contact>[];
+        return searchContactOptions(
+          repository: ref.read(contactRepositoryProvider),
+          localContacts: contacts,
+          type: ContactType.vendor,
+          query: v.text,
+        );
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
