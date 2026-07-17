@@ -1,0 +1,2420 @@
+openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
+info:
+  title: Cartunez Medusa ↔ ApexBooks Integration Contract
+  version: 1.0.0
+  summary: Canonical, complete, bidirectional integration contract.
+  description: |
+    This document is the sole normative contract for Cartunez Medusa and ApexBooks v1.
+    ApexBooks owns products, prices, inventory, customer business data, GST, sales
+    orders, invoices, receipts, refunds, credit notes, inventory movements, and
+    accounting. Medusa owns storefront presentation, authentication credentials,
+    carts, checkout, commerce order orchestration, and shipping workflow.
+
+    Both systems communicate only through the HTTPS operations in this document.
+    Direct cross-system database access is prohibited. Every request is authenticated,
+    signed, tenant-scoped, replay-protected, idempotent, and JSON Schema validated.
+
+    Normative lifecycle policy:
+
+    1. `order.created` creates a DRAFT ApexBooks sales order and reserves stock. It
+       never creates an invoice.
+    2. `order.updated` replaces the complete commercial snapshot only while the sales
+       order is DRAFT and has no captured payment or invoice. It updates reservations
+       by the quantity delta. Otherwise it fails with `ORDER_IMMUTABLE`.
+    3. The first `payment.captured` creates and posts one invoice for the full order,
+       converts all reservations to stock-out movements, and creates a receipt for the
+       captured amount. Later captures create receipts against the same invoice. Total
+       captures cannot exceed the invoice total.
+    4. An unpaid, uninvoiced cancellation cancels the sales order and releases all
+       reservations. A paid or invoiced cancellation fails with `REFUND_REQUIRED`.
+       The caller must complete the external refund and send `payment.refunded` with
+       `cancel_order: true`; successful refund processing then cancels the order when
+       captured minus refunded equals zero.
+    5. `return.created` records a goods return only. It never creates a credit note or
+       cash refund. A line with `restock: true` requires `received_at` and creates one
+       RETURN_IN movement immediately. A line with `restock: false` creates no stock
+       movement.
+    6. `payment.refunded` creates one credit note and one refund disbursement. A refund
+       linked to a return that already restocked must set `restock: false`. A standalone
+       refund is permitted to set `restock: true`, creating RETURN_IN exactly once.
+    7. Duplicate delivery of the same event ID, idempotency key, and body returns the
+       byte-equivalent original success response with HTTP 200 and
+       `Idempotency-Replayed: true`. Reuse of either identifier with a different body,
+       event name, source ID, or counterpart identifier returns HTTP 409.
+
+    All money is integer ISO-4217 minor units. Major-unit money is prohibited.
+    GST rates are integer basis points: 1800 means 18.00 percent.
+servers:
+  - url: https://api.apexbooks.in
+    description: ApexBooks production API origin.
+tags:
+  - name: ApexBooks Receiver
+    description: Medusa-to-ApexBooks commerce imports.
+  - name: Medusa Receiver
+    description: ApexBooks-to-Medusa authoritative master-data synchronization.
+security:
+  - ApiKeyAuth: []
+    HmacSignature: []
+x-identifier-mapping:
+  retention: permanent
+  apexbooks_required_columns:
+    - tenant_id
+    - entity_type
+    - medusa_id
+    - apexbooks_id
+    - created_at
+    - updated_at
+  unique_constraints:
+    - [tenant_id, entity_type, medusa_id]
+    - [tenant_id, entity_type, apexbooks_id]
+x-authentication:
+  transport: HTTPS with TLS 1.2 or newer
+  api_key: X-Api-Key identifies one enabled integration client and its allowed tenant IDs.
+  tenant_secret: Each tenant has a distinct 256-bit or stronger HMAC secret.
+  canonical_signature_input: "{X-Timestamp}.{UPPERCASE_METHOD}.{raw_path}.{raw_body_bytes}"
+  timestamp: RFC 3339 UTC with Z suffix; fractional seconds are permitted.
+  maximum_clock_skew_seconds: 300
+  comparison: Decode the 64 lowercase hexadecimal signature and compare in constant time.
+  body: The exact received UTF-8 bytes are signed before JSON parsing or normalization.
+x-idempotency:
+  key_format: "{tenant_id}:{event_name}:{source_id}:{event_version}"
+  event_version: v1
+  retention_days: 30
+  request_hash: SHA-256 of raw request body bytes
+  response_hash: SHA-256 of raw response body bytes
+  exact_replay: Event ID, idempotency key, tenant, event name, source ID, method, path, and request hash all match the stored record; return the stored status body as HTTP 200 with Idempotency-Replayed true.
+  conflict: If either event ID or idempotency key already exists but any other stored identity or request hash differs, return HTTP 409 with REPLAY_DETECTED for event-ID reuse or IDEMPOTENCY_CONFLICT for key reuse.
+  persisted_fields:
+    - event_id
+    - idempotency_key
+    - tenant_id
+    - event_name
+    - source_id
+    - signature_hash
+    - request_hash
+    - response_hash
+    - response_status
+    - response_body
+    - processed_at
+    - status
+x-retry-policy:
+  retryable_http_statuses: [408, 429, 500, 502, 503, 504]
+  retryable_transport_failures: [connection_timeout, read_timeout, connection_reset, dns_temporary_failure]
+  non_retryable_http_statuses: [200, 201, 400, 401, 403, 404, 409, 422]
+  schedule_seconds: [60, 300, 900, 3600, 21600, 86400]
+  maximum_window_seconds: 259200
+  after_schedule: After using each listed delay once, repeat the final 86400-second delay while the next attempt remains inside the 259200-second window.
+  rule: The sender repeats the identical method, path, headers, and raw body until success or the maximum window; after the final failure it writes a dead-letter record and alerts operations.
+x-multi-tenant-resolution:
+  receiver: X-Tenant-Id is authoritative and must equal body tenant_id. The API key must be enabled for exactly that tenant or for an explicit allow-list containing it. The tenant must exist and have an enabled integration secret.
+  medusa_sender_order: Resolve metadata.apexbooks.tenant_id from store, then sales channel, then region, then the configured APEXBOOKS_DEFAULT_TENANT_ID. The first non-empty value wins.
+  prohibited_inference: Tenant identity is never inferred from email, domain, country, address, SKU, handle, or product metadata other than metadata.apexbooks.tenant_id.
+  unresolved_behavior: Do not send the HTTP request; persist a failed outbound event with TENANT_NOT_RESOLVED and alert operations.
+x-ownership:
+  customer: ApexBooks owns names, accounting email, phone, GST identity, addresses, state code, credit terms, active status, and ledger identity. Medusa owns authentication credentials and must not overwrite synchronized business fields after mapping.
+  product: ApexBooks owns title, description, HSN/SAC, GST rate, active status, categories, images, variants, SKUs, and product type. Medusa owns only metadata.medusa.seo_title, metadata.medusa.seo_description, metadata.medusa.search_keywords, and metadata.medusa.merchandising_rank; product.changed leaves those four fields unchanged.
+  price: ApexBooks owns every active price. A price.updated event with replace_all true atomically removes prior active prices for the product and installs the supplied set.
+  inventory: ApexBooks owns available and reserved quantities per variant and warehouse. An inventory.updated event with replace_all true atomically replaces every prior level for the product.
+  order_validation: ApexBooks validates each mapped product/variant, exact SKU, active price at placed_at, tax_inclusive flag, GST rate, HSN/SAC, arithmetic, and available unreserved stock before creating the order.
+x-customer-upsert:
+  match_order:
+    - apexbooks_customer_id when non-null and mapped to the same Medusa customer
+    - existing tenant mapping by medusa_customer_id
+    - exact normalized GSTIN for REGULAR, COMPOSITION, or SEZ customers
+    - exact case-insensitive accounting_email for customers without GSTIN
+  collision: If candidates identify different ApexBooks customers, reject with LIFECYCLE_CONFLICT and create nothing.
+  canonicalization: Trim surrounding text whitespace; lowercase accounting email; uppercase GSTIN; preserve phone in E.164; never merge across tenants.
+x-audit-logging:
+  retention_days: 2555
+  atomic: Audit records are committed in the same transaction as the business change.
+  required_fields: [request_id, event_id, idempotency_key, tenant_id, direction, method, path, api_client_id, signature_hash, request_hash, response_hash, response_status, event_name, source_id, entity_mappings, started_at, processed_at, outcome, retry_count]
+  pii_policy: Store encrypted request and response bodies; mask API keys, signatures, GSTIN characters 3 through 12, phone digits except the last four, and accounting-email local parts in searchable logs.
+  immutability: Audit records are append-only; corrections create linked amendment records.
+x-header-body-consistency:
+  X-Tenant-Id: Must equal body tenant_id.
+  X-Event-Id: Must equal body event_id.
+  X-Idempotency-Key: Must equal body idempotency_key and the canonical key formula.
+  path_identifier: Must equal the matching identifier inside the body and body source_id for operations with a path identifier.
+  mismatch_result: Return HTTP 400 with VALIDATION_ERROR before business processing.
+x-lifecycle-rules:
+  order_created:
+    prerequisites: Customer upsert succeeds; every product and variant mapping is active; SKU, price effective at placed_at, tax mode, HSN/SAC, GST rate, arithmetic, currency, and available unreserved stock match ApexBooks.
+    result: Create one DRAFT sales order, line mappings, and reservations. Return no invoice ID.
+  order_updated:
+    prerequisites: Path ID, source ID, and snapshot order ID match; stored status is DRAFT; no invoice or capture exists; expected_order_revision equals stored revision; new revision equals expected revision plus one.
+    result: Atomically replace the complete snapshot and apply reservation deltas.
+  order_cancelled:
+    unpaid_result: Cancel DRAFT order and release all reservations.
+    paid_or_invoiced_result: Make no change and return HTTP 409 REFUND_REQUIRED.
+  payment_captured:
+    prerequisites: Payment maps to the order; capture sequence is new and exactly one greater than the greatest prior sequence; currency equals order currency; cumulative captured amount does not exceed order grand total.
+    first_capture: Create and post one invoice for the complete order, convert reservations to SALE_OUT, create the receipt, and allocate the captured amount.
+    later_capture: Reuse the invoice, create one receipt, and allocate the captured amount.
+    status: PARTIALLY_PAID until cumulative captures equal invoice total, then PAID.
+  return_created:
+    prerequisites: Invoice and line mappings exist; cumulative returned quantity per invoice line including this request does not exceed invoiced quantity; service lines cannot restock.
+    result: Create one goods return. A restock-true line creates RETURN_IN once and requires received_at. A restock-false line creates no movement.
+    status: RECEIVED when every line has restock true and received_at; PARTIALLY_RECEIVED when at least one but not every line is received; AUTHORIZED when no line is received.
+  payment_refunded:
+    prerequisites: Original payment, order, invoice, and lines map consistently; cumulative refund amount does not exceed cumulative captures; cumulative credited quantity does not exceed invoiced quantity; refund amount equals sum of line refund totals.
+    result: Create one posted credit note and one refund disbursement. Standalone restock-true goods lines create RETURN_IN. Lines linked to an already restocked return must be restock false.
+    cancellation: If cancel_order is true and cumulative refunds equal cumulative captures, set order CANCELLED; otherwise preserve PARTIALLY_PAID or PAID according to remaining net captured amount.
+  customer_created:
+    result: Apply the deterministic customer upsert rules, create the permanent ID mapping, and return the canonical ApexBooks customer.
+  outbound_master_sync:
+    result: Product, price, inventory, and customer PUT operations atomically replace the specified authoritative scope and persist all returned Medusa mappings.
+x-http-status-map:
+  "200": Successful update, cancellation, or exact idempotent replay.
+  "201": Newly created resource or newly accepted upsert.
+  "400": Malformed JSON, schema failure, header/body mismatch, or unsupported event version.
+  "401": Missing or unknown API key.
+  "403": Invalid signature, expired timestamp, disabled tenant, or client not authorized for tenant.
+  "404": Referenced mapped resource does not exist.
+  "409": Identifier reuse conflict, immutable order, refund required, or lifecycle conflict.
+  "422": Valid request that violates price, GST, inventory, capture, refund, or return constraints.
+  "429": Rate limit exceeded.
+  "500": Unhandled receiver failure; no partial business transaction is committed.
+  "502": Gateway could not reach the receiver; retryable.
+  "503": Receiver dependency unavailable; no partial business transaction is committed.
+  "504": Gateway timed out waiting for the receiver; retryable.
+  "408": Receiver timed out reading the request; retryable.
+x-gst-rules:
+  rate_unit: basis points
+  rounding: Half up to the nearest minor unit independently for taxable value and each tax component.
+  line_formulas:
+    gross_amount_minor: unit_price.amount_minor multiplied by quantity
+    exclusive_taxable: gross_amount_minor minus discount.amount_minor
+    inclusive_discounted_gross: gross_amount_minor minus discount.amount_minor
+    component_tax: taxable_value_minor multiplied by component rate basis points divided by 10000, rounded half up
+    tax_amount_minor: cgst plus sgst plus igst plus cess amounts
+    line_total_minor: taxable_value_minor plus tax_amount_minor
+  jurisdiction:
+    intrastate: seller_state_code equals place_of_supply_state_code; IGST rate and amount are zero; CGST plus SGST rates equal GST rate.
+    interstate: seller_state_code differs from place_of_supply_state_code; CGST and SGST rates and amounts are zero; IGST rate equals GST rate.
+  discounts: Order-level discounts are already allocated into each line discount by the sender in proportion to pre-tax line value; shipping discounts appear only on the shipping charge.
+  reconciliation: Invoice total equals the sum of rounded item line totals and rounded shipping line total. No separate rounding adjustment is allowed in v1; a payload that does not reconcile exactly is rejected with GST_MISMATCH.
+x-accounting-rules:
+  invoice_posting:
+    debit: Customer accounts receivable for invoice grand total.
+    credits: Sales revenue for taxable value, output CGST, output SGST, output IGST, output cess, and shipping revenue/tax according to the shipping breakdown.
+  receipt_posting:
+    debit: Cash, bank, card clearing, or payment-gateway clearing account selected by provider_id.
+    credit: Customer accounts receivable.
+  credit_note_posting:
+    debits: Sales return revenue and the original output tax accounts.
+    credit: Customer accounts receivable.
+  refund_disbursement_posting:
+    debit: Customer accounts receivable.
+    credit: The payment-provider clearing or bank account used by the original receipt.
+  atomicity: Each endpoint commits its idempotency row, mappings, audit records, business documents, inventory movements, and journal entries in one database transaction.
+x-inventory-rules:
+  order_created: Create RESERVATION movements; available quantity is unchanged and reserved quantity increases.
+  order_updated: Apply reservation deltas; reject if an increased reservation exceeds available minus reserved.
+  payment_first_capture: Release reservations and create SALE_OUT movements; available and on-hand quantities decrease by invoiced goods quantities.
+  unpaid_cancellation: Release reservations with RESERVATION_RELEASE movements.
+  return_or_refund_restock: Create RETURN_IN only when restock is true and only once for a return/refund linkage.
+  services: Product variants marked SERVICE never create inventory movements.
+x-sequence-diagrams:
+  order_created: |
+    sequenceDiagram
+      participant M as Medusa
+      participant A as ApexBooks
+      M->>A: POST /api/integrations/medusa/v1/orders
+      A->>A: Validate signature, schema, mappings, price, GST, stock
+      A->>A: Create DRAFT sales order and reservations
+      A-->>M: 201 sales_order_id and customer_id
+  payment_captured: |
+    sequenceDiagram
+      participant G as Payment Gateway
+      participant M as Medusa
+      participant A as ApexBooks
+      G->>M: Capture confirmed
+      M->>A: POST /api/integrations/medusa/v1/payments/captured
+      A->>A: Create/post invoice if first capture
+      A->>A: Convert reservations to SALE_OUT and post receipt
+      A-->>M: 201 payment_id, receipt_id, invoice_id
+  return_then_refund: |
+    sequenceDiagram
+      participant M as Medusa
+      participant A as ApexBooks
+      M->>A: POST /api/integrations/medusa/v1/returns
+      A->>A: Record goods return; restock eligible received lines
+      A-->>M: 201 return_id
+      M->>A: POST /api/integrations/medusa/v1/payments/refunded
+      A->>A: Create credit note and refund disbursement without duplicate restock
+      A-->>M: 201 refund_id and credit_note_id
+  master_data_sync: |
+    sequenceDiagram
+      participant A as ApexBooks
+      participant M as Medusa
+      A->>M: PUT authoritative product, price, inventory, or customer event
+      M->>M: Validate, upsert, map IDs, and store event result
+      M-->>A: 200 or 201 standard success envelope
+
+paths:
+  /api/integrations/medusa/v1/orders:
+    post:
+      tags: [ApexBooks Receiver]
+      operationId: importMedusaOrderCreatedV1
+      summary: Create a DRAFT sales order and reserve stock.
+      parameters:
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderCreatedRequest'}
+            examples:
+              consumerOrder:
+                $ref: '#/components/examples/OrderCreatedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/OrderSuccessReplay'}
+        '201': {$ref: '#/components/responses/OrderCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/medusa/v1/orders/{external_order_id}:
+    patch:
+      tags: [ApexBooks Receiver]
+      operationId: importMedusaOrderUpdatedV1
+      summary: Replace the complete DRAFT commercial snapshot.
+      parameters:
+        - $ref: '#/components/parameters/ExternalOrderId'
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderUpdatedRequest'}
+            examples:
+              revisedOrder:
+                $ref: '#/components/examples/OrderUpdatedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/OrderUpdated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/medusa/v1/orders/{external_order_id}/cancel:
+    post:
+      tags: [ApexBooks Receiver]
+      operationId: importMedusaOrderCancelledV1
+      summary: Cancel an unpaid and uninvoiced order.
+      parameters:
+        - $ref: '#/components/parameters/ExternalOrderId'
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/OrderCancelledRequest'}
+            examples:
+              buyerCancellation:
+                $ref: '#/components/examples/OrderCancelledRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/OrderCancelled'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/medusa/v1/payments/captured:
+    post:
+      tags: [ApexBooks Receiver]
+      operationId: importMedusaPaymentCapturedV1
+      summary: Create/post the invoice when required and record a receipt.
+      parameters:
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PaymentCapturedRequest'}
+            examples:
+              fullCapture:
+                $ref: '#/components/examples/PaymentCapturedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/PaymentSuccessReplay'}
+        '201': {$ref: '#/components/responses/PaymentCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/medusa/v1/payments/refunded:
+    post:
+      tags: [ApexBooks Receiver]
+      operationId: importMedusaPaymentRefundedV1
+      summary: Create a credit note, refund disbursement, and optional one-time restock.
+      parameters:
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PaymentRefundedRequest'}
+            examples:
+              returnedGoodsRefund:
+                $ref: '#/components/examples/PaymentRefundedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/RefundSuccessReplay'}
+        '201': {$ref: '#/components/responses/RefundCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/medusa/v1/returns:
+    post:
+      tags: [ApexBooks Receiver]
+      operationId: importMedusaReturnCreatedV1
+      summary: Record a goods return and perform one-time restock when received.
+      parameters:
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReturnCreatedRequest'}
+            examples:
+              receivedReturn:
+                $ref: '#/components/examples/ReturnCreatedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/ReturnSuccessReplay'}
+        '201': {$ref: '#/components/responses/ReturnCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/medusa/v1/customers:
+    post:
+      tags: [ApexBooks Receiver]
+      operationId: importMedusaCustomerCreatedV1
+      summary: Upsert and return the canonical ApexBooks customer.
+      parameters:
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CustomerCreatedRequest'}
+            examples:
+              registeredCustomer:
+                $ref: '#/components/examples/CustomerCreatedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/CustomerUpdated'}
+        '201': {$ref: '#/components/responses/CustomerCreated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/apexbooks/v1/products/{apexbooks_product_id}:
+    put:
+      tags: [Medusa Receiver]
+      operationId: upsertApexBooksProductV1
+      summary: Upsert an ApexBooks-owned product in Medusa.
+      servers: [{url: https://cartunez.in}]
+      parameters:
+        - $ref: '#/components/parameters/ApexBooksProductId'
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ProductChangedRequest'}
+            examples:
+              activeProduct:
+                $ref: '#/components/examples/ProductChangedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/ProductUpserted'}
+        '201': {$ref: '#/components/responses/ProductUpserted'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/apexbooks/v1/prices/{apexbooks_product_id}:
+    put:
+      tags: [Medusa Receiver]
+      operationId: replaceApexBooksPricesV1
+      summary: Replace all active prices for an ApexBooks product.
+      servers: [{url: https://cartunez.in}]
+      parameters:
+        - $ref: '#/components/parameters/ApexBooksProductId'
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PriceUpdatedRequest'}
+            examples:
+              inrRetailPrice:
+                $ref: '#/components/examples/PriceUpdatedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/PriceUpdated'}
+        '201': {$ref: '#/components/responses/PriceUpdated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/apexbooks/v1/inventory/{apexbooks_product_id}:
+    put:
+      tags: [Medusa Receiver]
+      operationId: replaceApexBooksInventoryV1
+      summary: Replace authoritative inventory levels for a product.
+      servers: [{url: https://cartunez.in}]
+      parameters:
+        - $ref: '#/components/parameters/ApexBooksProductId'
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/InventoryUpdatedRequest'}
+            examples:
+              warehouseStock:
+                $ref: '#/components/examples/InventoryUpdatedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/InventoryUpdated'}
+        '201': {$ref: '#/components/responses/InventoryUpdated'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+  /api/integrations/apexbooks/v1/customers/{apexbooks_customer_id}:
+    put:
+      tags: [Medusa Receiver]
+      operationId: updateApexBooksCustomerV1
+      summary: Replace Medusa customer business data with ApexBooks canonical data.
+      servers: [{url: https://cartunez.in}]
+      parameters:
+        - $ref: '#/components/parameters/ApexBooksCustomerId'
+        - $ref: '#/components/parameters/ApiKey'
+        - $ref: '#/components/parameters/TenantId'
+        - $ref: '#/components/parameters/EventId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/Timestamp'
+        - $ref: '#/components/parameters/Signature'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CustomerUpdatedRequest'}
+            examples:
+              canonicalCustomer:
+                $ref: '#/components/examples/CustomerUpdatedRequestExample'
+      responses:
+        '200': {$ref: '#/components/responses/CustomerSynced'}
+        '201': {$ref: '#/components/responses/CustomerSynced'}
+        '400': {$ref: '#/components/responses/BadRequest'}
+        '401': {$ref: '#/components/responses/Unauthorized'}
+        '403': {$ref: '#/components/responses/Forbidden'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/Unprocessable'}
+        '429': {$ref: '#/components/responses/RateLimited'}
+        '408': {$ref: '#/components/responses/RequestTimeout'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/BadGateway'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+        '504': {$ref: '#/components/responses/GatewayTimeout'}
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+    HmacSignature:
+      type: apiKey
+      in: header
+      name: X-Signature
+  parameters:
+    ApiKey:
+      name: X-Api-Key
+      in: header
+      required: true
+      schema: {type: string, minLength: 32, maxLength: 256}
+      example: ctz_live_7f91f651f6f64564a588a347a7f56c8e
+    TenantId:
+      name: X-Tenant-Id
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/TenantId'}
+      example: tenant_cartunez_in
+    EventId:
+      name: X-Event-Id
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/EventId'}
+      example: evt_01J2Y8N4E6W7P3M9T5K1Q0R2S4
+    IdempotencyKey:
+      name: X-Idempotency-Key
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/IdempotencyKey'}
+      example: tenant_cartunez_in:order.created:order_01J2Y8MZ4R3E2S1T0V9W8X7Y6Z:v1
+    Timestamp:
+      name: X-Timestamp
+      in: header
+      required: true
+      schema: {$ref: '#/components/schemas/UtcTimestamp'}
+      example: '2026-07-17T10:00:00Z'
+    Signature:
+      name: X-Signature
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^sha256=[a-f0-9]{64}$'
+      example: sha256=4c68d6df7f87742e62f2cae2f91ef269900c093dfde406422673ea2c83c1a7a9
+    ExternalOrderId:
+      name: external_order_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/MedusaOrderId'}
+    ApexBooksProductId:
+      name: apexbooks_product_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/ApexBooksId'}
+    ApexBooksCustomerId:
+      name: apexbooks_customer_id
+      in: path
+      required: true
+      schema: {$ref: '#/components/schemas/ApexBooksId'}
+  schemas:
+    TenantId:
+      type: string
+      pattern: '^[a-z][a-z0-9_]{2,63}$'
+    EventId:
+      type: string
+      pattern: '^evt_[A-Z0-9]{26}$'
+    IdempotencyKey:
+      type: string
+      minLength: 15
+      maxLength: 255
+      pattern: '^[a-z][a-z0-9_]{2,63}:[a-z]+\.[a-z]+:[A-Za-z0-9_-]+:v1$'
+    UtcTimestamp:
+      type: string
+      format: date-time
+      pattern: 'Z$'
+    MedusaOrderId:
+      type: string
+      pattern: '^order_[A-Z0-9]{26}$'
+    ApexBooksId:
+      type: string
+      pattern: '^ab_[a-z]+_[A-Z0-9]{26}$'
+    Money:
+      type: object
+      additionalProperties: false
+      required: [currency_code, amount_minor]
+      properties:
+        currency_code:
+          type: string
+          pattern: '^[A-Z]{3}$'
+        amount_minor:
+          type: integer
+          minimum: 0
+    Address:
+      type: object
+      additionalProperties: false
+      required: [name, address_1, city, state, state_code, postal_code, country_code]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 150}
+        company: {type: [string, 'null'], maxLength: 150}
+        phone: {type: [string, 'null'], pattern: '^\+[1-9][0-9]{7,14}$'}
+        address_1: {type: string, minLength: 1, maxLength: 200}
+        address_2: {type: [string, 'null'], maxLength: 200}
+        city: {type: string, minLength: 1, maxLength: 100}
+        state: {type: string, minLength: 1, maxLength: 100}
+        state_code: {type: string, pattern: '^[0-9]{2}$'}
+        postal_code: {type: string, pattern: '^[0-9]{6}$'}
+        country_code: {type: string, const: IN}
+    GstIdentity:
+      type: object
+      additionalProperties: false
+      required: [gstin, gst_type, state_code]
+      properties:
+        gstin:
+          type: [string, 'null']
+          pattern: '^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$'
+        gst_type:
+          type: string
+          enum: [CONSUMER, UNREGISTERED, REGULAR, COMPOSITION, SEZ, OVERSEAS]
+        state_code: {type: string, pattern: '^[0-9]{2}$'}
+      allOf:
+        - if:
+            properties: {gst_type: {enum: [REGULAR, COMPOSITION, SEZ]}}
+          then:
+            properties: {gstin: {type: string}}
+        - if:
+            properties: {gst_type: {enum: [CONSUMER, UNREGISTERED, OVERSEAS]}}
+          then:
+            properties: {gstin: {type: 'null'}}
+    CustomerInput:
+      type: object
+      additionalProperties: false
+      required:
+        - medusa_customer_id
+        - accounting_email
+        - first_name
+        - last_name
+        - phone
+        - gst
+        - billing_address
+        - shipping_address
+        - credit_terms_days
+      properties:
+        medusa_customer_id: {type: string, pattern: '^cus_[A-Z0-9]{26}$'}
+        apexbooks_customer_id:
+          oneOf:
+            - {$ref: '#/components/schemas/ApexBooksId'}
+            - {type: 'null'}
+        accounting_email: {type: string, format: email, maxLength: 255}
+        first_name: {type: string, minLength: 1, maxLength: 75}
+        last_name: {type: string, minLength: 1, maxLength: 75}
+        phone: {type: string, pattern: '^\+[1-9][0-9]{7,14}$'}
+        gst: {$ref: '#/components/schemas/GstIdentity'}
+        billing_address: {$ref: '#/components/schemas/Address'}
+        shipping_address: {$ref: '#/components/schemas/Address'}
+        credit_terms_days: {type: integer, minimum: 0, maximum: 365}
+    CanonicalCustomer:
+      type: object
+      additionalProperties: false
+      required:
+        - apexbooks_customer_id
+        - medusa_customer_id
+        - accounting_email
+        - first_name
+        - last_name
+        - phone
+        - gst
+        - billing_address
+        - shipping_address
+        - credit_terms_days
+        - active
+        - updated_at
+      properties:
+        apexbooks_customer_id: {$ref: '#/components/schemas/ApexBooksId'}
+        medusa_customer_id: {type: string, pattern: '^cus_[A-Z0-9]{26}$'}
+        accounting_email: {type: string, format: email, maxLength: 255}
+        first_name: {type: string, minLength: 1, maxLength: 75}
+        last_name: {type: string, minLength: 1, maxLength: 75}
+        phone: {type: string, pattern: '^\+[1-9][0-9]{7,14}$'}
+        gst: {$ref: '#/components/schemas/GstIdentity'}
+        billing_address: {$ref: '#/components/schemas/Address'}
+        shipping_address: {$ref: '#/components/schemas/Address'}
+        credit_terms_days: {type: integer, minimum: 0, maximum: 365}
+        active: {type: boolean}
+        updated_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    GstBreakdown:
+      type: object
+      additionalProperties: false
+      required:
+        - hsn_sac
+        - gst_rate_bps
+        - taxable_value_minor
+        - discount_minor
+        - cgst_rate_bps
+        - cgst_amount_minor
+        - sgst_rate_bps
+        - sgst_amount_minor
+        - igst_rate_bps
+        - igst_amount_minor
+        - cess_rate_bps
+        - cess_amount_minor
+        - tax_amount_minor
+      properties:
+        hsn_sac: {type: string, pattern: '^[0-9]{4,8}$'}
+        gst_rate_bps: {type: integer, minimum: 0, maximum: 10000}
+        taxable_value_minor: {type: integer, minimum: 0}
+        discount_minor: {type: integer, minimum: 0}
+        cgst_rate_bps: {type: integer, minimum: 0, maximum: 10000}
+        cgst_amount_minor: {type: integer, minimum: 0}
+        sgst_rate_bps: {type: integer, minimum: 0, maximum: 10000}
+        sgst_amount_minor: {type: integer, minimum: 0}
+        igst_rate_bps: {type: integer, minimum: 0, maximum: 10000}
+        igst_amount_minor: {type: integer, minimum: 0}
+        cess_rate_bps: {type: integer, minimum: 0, maximum: 10000}
+        cess_amount_minor: {type: integer, minimum: 0}
+        tax_amount_minor: {type: integer, minimum: 0}
+    OrderLine:
+      type: object
+      additionalProperties: false
+      required:
+        - medusa_line_id
+        - medusa_product_id
+        - medusa_variant_id
+        - apexbooks_product_id
+        - apexbooks_variant_id
+        - sku
+        - title
+        - product_type
+        - quantity
+        - unit_price
+        - tax_inclusive
+        - discount
+        - gst
+        - line_total
+      properties:
+        medusa_line_id: {type: string, pattern: '^item_[A-Z0-9]{26}$'}
+        medusa_product_id: {type: string, pattern: '^prod_[A-Z0-9]{26}$'}
+        medusa_variant_id: {type: string, pattern: '^variant_[A-Z0-9]{26}$'}
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        apexbooks_variant_id: {$ref: '#/components/schemas/ApexBooksId'}
+        sku: {type: string, minLength: 1, maxLength: 64}
+        title: {type: string, minLength: 1, maxLength: 200}
+        product_type: {type: string, enum: [GOODS, SERVICE]}
+        quantity: {type: integer, minimum: 1, maximum: 1000000}
+        unit_price: {$ref: '#/components/schemas/Money'}
+        tax_inclusive: {type: boolean}
+        discount: {$ref: '#/components/schemas/Money'}
+        gst: {$ref: '#/components/schemas/GstBreakdown'}
+        line_total: {$ref: '#/components/schemas/Money'}
+    ShippingCharge:
+      type: object
+      additionalProperties: false
+      required: [title, unit_price, tax_inclusive, discount, gst, line_total]
+      properties:
+        title: {type: string, const: Shipping}
+        unit_price: {$ref: '#/components/schemas/Money'}
+        tax_inclusive: {type: boolean}
+        discount: {$ref: '#/components/schemas/Money'}
+        gst: {$ref: '#/components/schemas/GstBreakdown'}
+        line_total: {$ref: '#/components/schemas/Money'}
+    OrderTotals:
+      type: object
+      additionalProperties: false
+      required: [items_gross, discount_total, taxable_total, tax_total, shipping_total, grand_total]
+      properties:
+        items_gross: {$ref: '#/components/schemas/Money'}
+        discount_total: {$ref: '#/components/schemas/Money'}
+        taxable_total: {$ref: '#/components/schemas/Money'}
+        tax_total: {$ref: '#/components/schemas/Money'}
+        shipping_total: {$ref: '#/components/schemas/Money'}
+        grand_total: {$ref: '#/components/schemas/Money'}
+    OrderSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+        - medusa_order_id
+        - display_id
+        - order_revision
+        - currency_code
+        - seller_state_code
+        - place_of_supply_state_code
+        - customer
+        - billing_address
+        - shipping_address
+        - lines
+        - shipping
+        - totals
+        - placed_at
+      properties:
+        medusa_order_id: {$ref: '#/components/schemas/MedusaOrderId'}
+        display_id: {type: integer, minimum: 1}
+        order_revision: {type: integer, minimum: 1}
+        currency_code: {type: string, pattern: '^[A-Z]{3}$'}
+        seller_state_code: {type: string, pattern: '^[0-9]{2}$'}
+        place_of_supply_state_code: {type: string, pattern: '^[0-9]{2}$'}
+        customer: {$ref: '#/components/schemas/CustomerInput'}
+        billing_address: {$ref: '#/components/schemas/Address'}
+        shipping_address: {$ref: '#/components/schemas/Address'}
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/OrderLine'}
+        shipping: {$ref: '#/components/schemas/ShippingCharge'}
+        totals: {$ref: '#/components/schemas/OrderTotals'}
+        customer_reference: {type: [string, 'null'], maxLength: 100}
+        notes: {type: [string, 'null'], maxLength: 2000}
+        placed_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    EventEnvelope:
+      type: object
+      required:
+        - event_id
+        - event_name
+        - event_version
+        - tenant_id
+        - occurred_at
+        - source_system
+        - source_id
+        - idempotency_key
+      properties:
+        event_id: {$ref: '#/components/schemas/EventId'}
+        event_name: {type: string}
+        event_version: {type: string, const: v1}
+        tenant_id: {$ref: '#/components/schemas/TenantId'}
+        occurred_at: {$ref: '#/components/schemas/UtcTimestamp'}
+        source_system: {type: string, enum: [MEDUSA, APEXBOOKS]}
+        source_id: {type: string, pattern: '^[A-Za-z][A-Za-z0-9_-]{2,100}$'}
+        idempotency_key: {$ref: '#/components/schemas/IdempotencyKey'}
+    OrderCreatedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, order]
+          properties:
+            event_name: {const: order.created}
+            source_system: {const: MEDUSA}
+            order: {$ref: '#/components/schemas/OrderSnapshot'}
+      unevaluatedProperties: false
+    OrderUpdatedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, expected_order_revision, order]
+          properties:
+            event_name: {const: order.updated}
+            source_system: {const: MEDUSA}
+            expected_order_revision: {type: integer, minimum: 1}
+            order: {$ref: '#/components/schemas/OrderSnapshot'}
+      unevaluatedProperties: false
+    OrderCancellation:
+      type: object
+      additionalProperties: false
+      required: [medusa_order_id, expected_order_revision, reason_code, reason, cancelled_at]
+      properties:
+        medusa_order_id: {$ref: '#/components/schemas/MedusaOrderId'}
+        expected_order_revision: {type: integer, minimum: 1}
+        reason_code: {type: string, enum: [CUSTOMER_REQUEST, PAYMENT_FAILED, FRAUD, INVENTORY_UNAVAILABLE, DUPLICATE_ORDER, OTHER]}
+        reason: {type: string, minLength: 3, maxLength: 500}
+        cancelled_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    OrderCancelledRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, cancellation]
+          properties:
+            event_name: {const: order.cancelled}
+            source_system: {const: MEDUSA}
+            cancellation: {$ref: '#/components/schemas/OrderCancellation'}
+      unevaluatedProperties: false
+    PaymentCapture:
+      type: object
+      additionalProperties: false
+      required:
+        - medusa_payment_id
+        - medusa_order_id
+        - capture_sequence
+        - amount
+        - provider_id
+        - transaction_id
+        - captured_at
+      properties:
+        medusa_payment_id: {type: string, pattern: '^pay_[A-Z0-9]{26}$'}
+        medusa_order_id: {$ref: '#/components/schemas/MedusaOrderId'}
+        capture_sequence: {type: integer, minimum: 1}
+        amount: {$ref: '#/components/schemas/Money'}
+        provider_id: {type: string, minLength: 1, maxLength: 100}
+        transaction_id: {type: string, minLength: 1, maxLength: 150}
+        captured_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    PaymentCapturedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, payment]
+          properties:
+            event_name: {const: payment.captured}
+            source_system: {const: MEDUSA}
+            payment: {$ref: '#/components/schemas/PaymentCapture'}
+      unevaluatedProperties: false
+    RefundLine:
+      type: object
+      additionalProperties: false
+      required:
+        - original_invoice_line_id
+        - medusa_line_id
+        - apexbooks_product_id
+        - apexbooks_variant_id
+        - sku
+        - product_type
+        - quantity
+        - unit_price
+        - tax_inclusive
+        - discount
+        - gst
+        - refund_total
+        - restock
+        - related_medusa_return_id
+      properties:
+        original_invoice_line_id: {$ref: '#/components/schemas/ApexBooksId'}
+        medusa_line_id: {type: string, pattern: '^item_[A-Z0-9]{26}$'}
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        apexbooks_variant_id: {$ref: '#/components/schemas/ApexBooksId'}
+        sku: {type: string, minLength: 1, maxLength: 64}
+        product_type: {type: string, enum: [GOODS, SERVICE]}
+        quantity: {type: integer, minimum: 1}
+        unit_price: {$ref: '#/components/schemas/Money'}
+        tax_inclusive: {type: boolean}
+        discount: {$ref: '#/components/schemas/Money'}
+        gst: {$ref: '#/components/schemas/GstBreakdown'}
+        refund_total: {$ref: '#/components/schemas/Money'}
+        restock: {type: boolean}
+        related_medusa_return_id:
+          type: [string, 'null']
+          pattern: '^ret_[A-Z0-9]{26}$'
+    Refund:
+      type: object
+      additionalProperties: false
+      required:
+        - medusa_refund_id
+        - medusa_payment_id
+        - medusa_order_id
+        - apexbooks_invoice_id
+        - amount
+        - provider_refund_id
+        - refunded_at
+        - reason
+        - cancel_order
+        - lines
+      properties:
+        medusa_refund_id: {type: string, pattern: '^refund_[A-Z0-9]{26}$'}
+        medusa_payment_id: {type: string, pattern: '^pay_[A-Z0-9]{26}$'}
+        medusa_order_id: {$ref: '#/components/schemas/MedusaOrderId'}
+        apexbooks_invoice_id: {$ref: '#/components/schemas/ApexBooksId'}
+        amount: {$ref: '#/components/schemas/Money'}
+        provider_refund_id: {type: string, minLength: 1, maxLength: 150}
+        refunded_at: {$ref: '#/components/schemas/UtcTimestamp'}
+        reason: {type: string, minLength: 3, maxLength: 500}
+        cancel_order: {type: boolean}
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/RefundLine'}
+    PaymentRefundedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, refund]
+          properties:
+            event_name: {const: payment.refunded}
+            source_system: {const: MEDUSA}
+            refund: {$ref: '#/components/schemas/Refund'}
+      unevaluatedProperties: false
+    ReturnLine:
+      type: object
+      additionalProperties: false
+      required:
+        - original_invoice_line_id
+        - medusa_line_id
+        - apexbooks_product_id
+        - apexbooks_variant_id
+        - sku
+        - product_type
+        - quantity
+        - restock
+        - received_at
+        - reason_code
+      properties:
+        original_invoice_line_id: {$ref: '#/components/schemas/ApexBooksId'}
+        medusa_line_id: {type: string, pattern: '^item_[A-Z0-9]{26}$'}
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        apexbooks_variant_id: {$ref: '#/components/schemas/ApexBooksId'}
+        sku: {type: string, minLength: 1, maxLength: 64}
+        product_type: {type: string, enum: [GOODS, SERVICE]}
+        quantity: {type: integer, minimum: 1}
+        restock: {type: boolean}
+        received_at:
+          oneOf:
+            - {$ref: '#/components/schemas/UtcTimestamp'}
+            - {type: 'null'}
+        reason_code: {type: string, enum: [DAMAGED, DEFECTIVE, INCORRECT_ITEM, SIZE_MISMATCH, CUSTOMER_CHANGED_MIND, OTHER]}
+      allOf:
+        - if:
+            properties: {restock: {const: true}}
+          then:
+            properties:
+              received_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    GoodsReturn:
+      type: object
+      additionalProperties: false
+      required: [medusa_return_id, medusa_order_id, apexbooks_invoice_id, requested_at, lines]
+      properties:
+        medusa_return_id: {type: string, pattern: '^ret_[A-Z0-9]{26}$'}
+        medusa_order_id: {$ref: '#/components/schemas/MedusaOrderId'}
+        apexbooks_invoice_id: {$ref: '#/components/schemas/ApexBooksId'}
+        requested_at: {$ref: '#/components/schemas/UtcTimestamp'}
+        lines:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/ReturnLine'}
+    ReturnCreatedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, return]
+          properties:
+            event_name: {const: return.created}
+            source_system: {const: MEDUSA}
+            return: {$ref: '#/components/schemas/GoodsReturn'}
+      unevaluatedProperties: false
+    CustomerCreatedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, customer]
+          properties:
+            event_name: {const: customer.created}
+            source_system: {const: MEDUSA}
+            customer: {$ref: '#/components/schemas/CustomerInput'}
+      unevaluatedProperties: false
+    ProductVariant:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_variant_id, sku, title, product_type, active]
+      properties:
+        apexbooks_variant_id: {$ref: '#/components/schemas/ApexBooksId'}
+        sku: {type: string, minLength: 1, maxLength: 64}
+        title: {type: string, minLength: 1, maxLength: 150}
+        product_type: {type: string, enum: [GOODS, SERVICE]}
+        active: {type: boolean}
+    Product:
+      type: object
+      additionalProperties: false
+      required:
+        - apexbooks_product_id
+        - title
+        - description
+        - hsn_sac
+        - gst_rate_bps
+        - active
+        - categories
+        - images
+        - variants
+        - updated_at
+      properties:
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        title: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 10000}
+        hsn_sac: {type: string, pattern: '^[0-9]{4,8}$'}
+        gst_rate_bps: {type: integer, minimum: 0, maximum: 10000}
+        active: {type: boolean}
+        categories:
+          type: array
+          uniqueItems: true
+          items: {type: string, minLength: 1, maxLength: 100}
+        images:
+          type: array
+          uniqueItems: true
+          items: {type: string, format: uri, pattern: '^https://'}
+        variants:
+          type: array
+          minItems: 1
+          maxItems: 1000
+          items: {$ref: '#/components/schemas/ProductVariant'}
+        updated_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    ProductChangedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, product]
+          properties:
+            event_name: {const: product.changed}
+            source_system: {const: APEXBOOKS}
+            product: {$ref: '#/components/schemas/Product'}
+      unevaluatedProperties: false
+    PriceEntry:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_variant_id, currency_code, amount_minor, tax_inclusive, price_list_id, valid_from, valid_to]
+      properties:
+        apexbooks_variant_id: {$ref: '#/components/schemas/ApexBooksId'}
+        currency_code: {type: string, pattern: '^[A-Z]{3}$'}
+        amount_minor: {type: integer, minimum: 0}
+        tax_inclusive: {type: boolean}
+        price_list_id: {type: [string, 'null'], maxLength: 100}
+        valid_from:
+          oneOf:
+            - {$ref: '#/components/schemas/UtcTimestamp'}
+            - {type: 'null'}
+        valid_to:
+          oneOf:
+            - {$ref: '#/components/schemas/UtcTimestamp'}
+            - {type: 'null'}
+    PriceUpdate:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_product_id, replace_all, prices, updated_at]
+      properties:
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        replace_all: {type: boolean, const: true}
+        prices:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          items: {$ref: '#/components/schemas/PriceEntry'}
+        updated_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    PriceUpdatedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, price_update]
+          properties:
+            event_name: {const: price.updated}
+            source_system: {const: APEXBOOKS}
+            price_update: {$ref: '#/components/schemas/PriceUpdate'}
+      unevaluatedProperties: false
+    InventoryLevel:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_variant_id, warehouse_id, available_quantity, reserved_quantity, updated_at]
+      properties:
+        apexbooks_variant_id: {$ref: '#/components/schemas/ApexBooksId'}
+        warehouse_id: {$ref: '#/components/schemas/ApexBooksId'}
+        available_quantity: {type: integer, minimum: 0}
+        reserved_quantity: {type: integer, minimum: 0}
+        updated_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    InventoryUpdate:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_product_id, replace_all, levels, updated_at]
+      properties:
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        replace_all: {type: boolean, const: true}
+        levels:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          items: {$ref: '#/components/schemas/InventoryLevel'}
+        updated_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    InventoryUpdatedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, inventory_update]
+          properties:
+            event_name: {const: inventory.updated}
+            source_system: {const: APEXBOOKS}
+            inventory_update: {$ref: '#/components/schemas/InventoryUpdate'}
+      unevaluatedProperties: false
+    CustomerUpdatedRequest:
+      allOf:
+        - {$ref: '#/components/schemas/EventEnvelope'}
+        - type: object
+          required: [event_name, customer]
+          properties:
+            event_name: {const: customer.updated}
+            source_system: {const: APEXBOOKS}
+            customer: {$ref: '#/components/schemas/CanonicalCustomer'}
+      unevaluatedProperties: false
+    SuccessMeta:
+      type: object
+      additionalProperties: false
+      required: [request_id, event_id, tenant_id, version, idempotency_key, processed_at]
+      properties:
+        request_id: {type: string, pattern: '^req_[A-Z0-9]{26}$'}
+        event_id: {$ref: '#/components/schemas/EventId'}
+        tenant_id: {$ref: '#/components/schemas/TenantId'}
+        version: {type: string, const: v1}
+        idempotency_key: {$ref: '#/components/schemas/IdempotencyKey'}
+        processed_at: {$ref: '#/components/schemas/UtcTimestamp'}
+    SuccessResponse:
+      type: object
+      required: [success, data, meta]
+      properties:
+        success: {type: boolean, const: true}
+        data: {type: object}
+        meta: {$ref: '#/components/schemas/SuccessMeta'}
+    OrderResponseData:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_order_id, apexbooks_customer_id, apexbooks_invoice_id, order_status, order_revision]
+      properties:
+        apexbooks_order_id: {$ref: '#/components/schemas/ApexBooksId'}
+        apexbooks_customer_id: {$ref: '#/components/schemas/ApexBooksId'}
+        apexbooks_invoice_id:
+          oneOf:
+            - {$ref: '#/components/schemas/ApexBooksId'}
+            - {type: 'null'}
+        order_status: {type: string, enum: [DRAFT, PARTIALLY_PAID, PAID, CANCELLED]}
+        order_revision: {type: integer, minimum: 1}
+    OrderSuccessResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/OrderResponseData'}
+      unevaluatedProperties: false
+    PaymentResponseData:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_payment_id, receipt_id, apexbooks_invoice_id, invoice_status, amount_applied]
+      properties:
+        apexbooks_payment_id: {$ref: '#/components/schemas/ApexBooksId'}
+        receipt_id: {$ref: '#/components/schemas/ApexBooksId'}
+        apexbooks_invoice_id: {$ref: '#/components/schemas/ApexBooksId'}
+        invoice_status: {type: string, enum: [POSTED, PARTIALLY_PAID, PAID]}
+        amount_applied: {$ref: '#/components/schemas/Money'}
+    PaymentSuccessResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/PaymentResponseData'}
+      unevaluatedProperties: false
+    RefundResponseData:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_refund_id, credit_note_id, refund_disbursement_id, order_status, restocked]
+      properties:
+        apexbooks_refund_id: {$ref: '#/components/schemas/ApexBooksId'}
+        credit_note_id: {$ref: '#/components/schemas/ApexBooksId'}
+        refund_disbursement_id: {$ref: '#/components/schemas/ApexBooksId'}
+        order_status: {type: string, enum: [PARTIALLY_PAID, PAID, CANCELLED]}
+        restocked: {type: boolean}
+    RefundSuccessResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/RefundResponseData'}
+      unevaluatedProperties: false
+    ReturnResponseData:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_return_id, return_status, restocked_line_count]
+      properties:
+        apexbooks_return_id: {$ref: '#/components/schemas/ApexBooksId'}
+        return_status: {type: string, enum: [AUTHORIZED, PARTIALLY_RECEIVED, RECEIVED]}
+        restocked_line_count: {type: integer, minimum: 0}
+    ReturnSuccessResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/ReturnResponseData'}
+      unevaluatedProperties: false
+    CustomerResponseData:
+      type: object
+      additionalProperties: false
+      required: [customer, created]
+      properties:
+        customer: {$ref: '#/components/schemas/CanonicalCustomer'}
+        created: {type: boolean}
+    CustomerSuccessResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties:
+            data: {$ref: '#/components/schemas/CustomerResponseData'}
+      unevaluatedProperties: false
+    ProductSyncData:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_product_id, medusa_product_id, medusa_variant_ids]
+      properties:
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        medusa_product_id: {type: string, pattern: '^prod_[A-Z0-9]{26}$'}
+        medusa_variant_ids:
+          type: array
+          minItems: 1
+          items: {type: string, pattern: '^variant_[A-Z0-9]{26}$'}
+    PriceSyncData:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_product_id, replaced_price_count]
+      properties:
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        replaced_price_count: {type: integer, minimum: 1}
+    InventorySyncData:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_product_id, replaced_level_count]
+      properties:
+        apexbooks_product_id: {$ref: '#/components/schemas/ApexBooksId'}
+        replaced_level_count: {type: integer, minimum: 1}
+    CustomerSyncData:
+      type: object
+      additionalProperties: false
+      required: [apexbooks_customer_id, medusa_customer_id]
+      properties:
+        apexbooks_customer_id: {$ref: '#/components/schemas/ApexBooksId'}
+        medusa_customer_id: {type: string, pattern: '^cus_[A-Z0-9]{26}$'}
+    ProductSyncResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties: {data: {$ref: '#/components/schemas/ProductSyncData'}}
+      unevaluatedProperties: false
+    PriceSyncResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties: {data: {$ref: '#/components/schemas/PriceSyncData'}}
+      unevaluatedProperties: false
+    InventorySyncResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties: {data: {$ref: '#/components/schemas/InventorySyncData'}}
+      unevaluatedProperties: false
+    CustomerSyncResponse:
+      allOf:
+        - {$ref: '#/components/schemas/SuccessResponse'}
+        - type: object
+          properties: {data: {$ref: '#/components/schemas/CustomerSyncData'}}
+      unevaluatedProperties: false
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [location, field, issue]
+      properties:
+        location: {type: string, enum: [header, path, body, business]}
+        field: {type: string, minLength: 1, maxLength: 200}
+        issue: {type: string, minLength: 1, maxLength: 500}
+    ErrorBody:
+      type: object
+      additionalProperties: false
+      required: [code, message, details, retryable]
+      properties:
+        code:
+          type: string
+          enum:
+            - VALIDATION_ERROR
+            - VERSION_UNSUPPORTED
+            - AUTH_FAILED
+            - SIGNATURE_INVALID
+            - TIMESTAMP_EXPIRED
+            - TENANT_NOT_RESOLVED
+            - TENANT_DISABLED
+            - REPLAY_DETECTED
+            - IDEMPOTENCY_CONFLICT
+            - RESOURCE_NOT_FOUND
+            - ORDER_IMMUTABLE
+            - REFUND_REQUIRED
+            - LIFECYCLE_CONFLICT
+            - PRICE_MISMATCH
+            - GST_MISMATCH
+            - INVENTORY_REJECTED
+            - CAPTURE_LIMIT_EXCEEDED
+            - REFUND_LIMIT_EXCEEDED
+            - RETURN_QUANTITY_EXCEEDED
+            - DUPLICATE_RESTOCK
+            - RATE_LIMITED
+            - INTERNAL_ERROR
+            - UPSTREAM_UNAVAILABLE
+        message: {type: string, minLength: 1, maxLength: 500}
+        details:
+          type: array
+          maxItems: 100
+          items: {$ref: '#/components/schemas/ErrorDetail'}
+        retryable: {type: boolean}
+    ErrorMeta:
+      type: object
+      additionalProperties: false
+      required: [request_id, event_id, tenant_id, version]
+      properties:
+        request_id: {type: string, pattern: '^req_[A-Z0-9]{26}$'}
+        event_id:
+          oneOf:
+            - {$ref: '#/components/schemas/EventId'}
+            - {type: 'null'}
+        tenant_id:
+          oneOf:
+            - {$ref: '#/components/schemas/TenantId'}
+            - {type: 'null'}
+        version: {type: string, const: v1}
+    ErrorResponse:
+      type: object
+      additionalProperties: false
+      required: [success, error, meta]
+      properties:
+        success: {type: boolean, const: false}
+        error: {$ref: '#/components/schemas/ErrorBody'}
+        meta: {$ref: '#/components/schemas/ErrorMeta'}
+  responses:
+    OrderCreated:
+      description: A new DRAFT sales order and stock reservations were created.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/OrderSuccessResponse'}
+          examples: {created: {$ref: '#/components/examples/OrderCreatedResponseExample'}}
+    OrderSuccessReplay:
+      description: Exact replay of the original order creation result.
+      headers:
+        Idempotency-Replayed: {schema: {type: string, const: 'true'}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/OrderSuccessResponse'}
+          examples: {replayed: {$ref: '#/components/examples/OrderCreatedResponseExample'}}
+    OrderUpdated:
+      description: The DRAFT order snapshot and reservation deltas were updated, or an exact replay was returned.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/OrderSuccessResponse'}
+          examples: {updated: {$ref: '#/components/examples/OrderUpdatedResponseExample'}}
+    OrderCancelled:
+      description: The unpaid order was cancelled and reservations released, or an exact replay was returned.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/OrderSuccessResponse'}
+          examples: {cancelled: {$ref: '#/components/examples/OrderCancelledResponseExample'}}
+    PaymentCreated:
+      description: Payment capture was recorded and a receipt created.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PaymentSuccessResponse'}
+          examples: {created: {$ref: '#/components/examples/PaymentCapturedResponseExample'}}
+    PaymentSuccessReplay:
+      description: Exact replay of the original capture result.
+      headers:
+        Idempotency-Replayed: {schema: {type: string, const: 'true'}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PaymentSuccessResponse'}
+          examples: {replayed: {$ref: '#/components/examples/PaymentCapturedResponseExample'}}
+    RefundCreated:
+      description: Credit note and refund disbursement were created.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RefundSuccessResponse'}
+          examples: {created: {$ref: '#/components/examples/PaymentRefundedResponseExample'}}
+    RefundSuccessReplay:
+      description: Exact replay of the original refund result.
+      headers:
+        Idempotency-Replayed: {schema: {type: string, const: 'true'}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/RefundSuccessResponse'}
+          examples: {replayed: {$ref: '#/components/examples/PaymentRefundedResponseExample'}}
+    ReturnCreated:
+      description: Goods return was recorded and eligible received lines were restocked.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ReturnSuccessResponse'}
+          examples: {created: {$ref: '#/components/examples/ReturnCreatedResponseExample'}}
+    ReturnSuccessReplay:
+      description: Exact replay of the original goods-return result.
+      headers:
+        Idempotency-Replayed: {schema: {type: string, const: 'true'}}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ReturnSuccessResponse'}
+          examples: {replayed: {$ref: '#/components/examples/ReturnCreatedResponseExample'}}
+    CustomerCreated:
+      description: A new canonical ApexBooks customer was created.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CustomerSuccessResponse'}
+          examples: {created: {$ref: '#/components/examples/CustomerCreatedResponseExample'}}
+    CustomerUpdated:
+      description: Existing customer was updated or the original result replayed.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CustomerSuccessResponse'}
+          examples: {updated: {$ref: '#/components/examples/CustomerUpdatedImportResponseExample'}}
+    ProductUpserted:
+      description: Product and variant mappings were upserted.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ProductSyncResponse'}
+          examples: {synced: {$ref: '#/components/examples/ProductChangedResponseExample'}}
+    PriceUpdated:
+      description: Active price set was replaced atomically.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/PriceSyncResponse'}
+          examples: {synced: {$ref: '#/components/examples/PriceUpdatedResponseExample'}}
+    InventoryUpdated:
+      description: Inventory levels were replaced atomically.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/InventorySyncResponse'}
+          examples: {synced: {$ref: '#/components/examples/InventoryUpdatedResponseExample'}}
+    CustomerSynced:
+      description: Customer business data and mapping were updated.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/CustomerSyncResponse'}
+          examples: {synced: {$ref: '#/components/examples/CustomerUpdatedResponseExample'}}
+    BadRequest:
+      description: Malformed JSON, schema/header mismatch, or unsupported version. Not retryable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {invalid: {$ref: '#/components/examples/ValidationErrorExample'}}
+    Unauthorized:
+      description: API key is absent or unknown. Not retryable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {unauthorized: {$ref: '#/components/examples/AuthErrorExample'}}
+    Forbidden:
+      description: Signature, timestamp, tenant authorization, or tenant status failure. Not retryable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {forbidden: {$ref: '#/components/examples/SignatureErrorExample'}}
+    NotFound:
+      description: A mapped resource does not exist. Not retryable until source data is corrected.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {missing: {$ref: '#/components/examples/NotFoundErrorExample'}}
+    Conflict:
+      description: Idempotency, replay, immutability, refund-required, or lifecycle conflict. Not retryable without a new corrected event.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {conflict: {$ref: '#/components/examples/ConflictErrorExample'}}
+    Unprocessable:
+      description: Price, GST, inventory, capture, refund, return, or restock business validation failed. Not retryable without a new corrected event.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {rejected: {$ref: '#/components/examples/BusinessErrorExample'}}
+    RateLimited:
+      description: Receiver rate limit exceeded. Retry according to Retry-After.
+      headers:
+        Retry-After: {schema: {type: integer, minimum: 1}, example: 60}
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {limited: {$ref: '#/components/examples/RateLimitErrorExample'}}
+    InternalError:
+      description: Atomic processing failed. Retryable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {failed: {$ref: '#/components/examples/InternalErrorExample'}}
+    Unavailable:
+      description: Required receiver dependency is unavailable. Retryable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {unavailable: {$ref: '#/components/examples/UnavailableErrorExample'}}
+    RequestTimeout:
+      description: Receiver timed out while reading the request. Retryable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {timeout: {$ref: '#/components/examples/TimeoutErrorExample'}}
+    BadGateway:
+      description: Integration gateway could not reach the receiver. Retryable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {badGateway: {$ref: '#/components/examples/BadGatewayErrorExample'}}
+    GatewayTimeout:
+      description: Integration gateway timed out waiting for the receiver. Retryable.
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/ErrorResponse'}
+          examples: {gatewayTimeout: {$ref: '#/components/examples/GatewayTimeoutErrorExample'}}
+  examples:
+    OrderCreatedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW
+        event_name: order.created
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T10:00:00Z'
+        source_system: MEDUSA
+        source_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+        idempotency_key: tenant_cartunez_in:order.created:order_01ARZ3NDEKTSV4RRFFQ69G5FAV:v1
+        order:
+          medusa_order_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+          display_id: 1001
+          order_revision: 1
+          currency_code: INR
+          seller_state_code: '27'
+          place_of_supply_state_code: '27'
+          customer:
+            medusa_customer_id: cus_01ARZ3NDEKTSV4RRFFQ69G5FAX
+            apexbooks_customer_id: null
+            accounting_email: amit.sharma@cartunez.in
+            first_name: Amit
+            last_name: Sharma
+            phone: '+919999999999'
+            gst: {gstin: null, gst_type: CONSUMER, state_code: '27'}
+            billing_address: &order_billing_address
+              name: Amit Sharma
+              company: null
+              phone: '+919999999999'
+              address_1: 24 Linking Road
+              address_2: Bandra West
+              city: Mumbai
+              state: Maharashtra
+              state_code: '27'
+              postal_code: '400050'
+              country_code: IN
+            shipping_address: &order_shipping_address
+              name: Amit Sharma
+              company: null
+              phone: '+919999999999'
+              address_1: 24 Linking Road
+              address_2: Bandra West
+              city: Mumbai
+              state: Maharashtra
+              state_code: '27'
+              postal_code: '400050'
+              country_code: IN
+            credit_terms_days: 0
+          billing_address: *order_billing_address
+          shipping_address: *order_shipping_address
+          lines:
+            - medusa_line_id: item_01ARZ3NDEKTSV4RRFFQ69G5FB0
+              medusa_product_id: prod_01ARZ3NDEKTSV4RRFFQ69G5FAY
+              medusa_variant_id: variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+              apexbooks_variant_id: ab_variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              sku: LED-H7
+              title: H7 LED Headlamp Pair
+              product_type: GOODS
+              quantity: 1
+              unit_price: {currency_code: INR, amount_minor: 118000}
+              tax_inclusive: true
+              discount: {currency_code: INR, amount_minor: 0}
+              gst:
+                hsn_sac: '851220'
+                gst_rate_bps: 1800
+                taxable_value_minor: 100000
+                discount_minor: 0
+                cgst_rate_bps: 900
+                cgst_amount_minor: 9000
+                sgst_rate_bps: 900
+                sgst_amount_minor: 9000
+                igst_rate_bps: 0
+                igst_amount_minor: 0
+                cess_rate_bps: 0
+                cess_amount_minor: 0
+                tax_amount_minor: 18000
+              line_total: {currency_code: INR, amount_minor: 118000}
+          shipping:
+            title: Shipping
+            unit_price: {currency_code: INR, amount_minor: 0}
+            tax_inclusive: false
+            discount: {currency_code: INR, amount_minor: 0}
+            gst:
+              hsn_sac: '996812'
+              gst_rate_bps: 1800
+              taxable_value_minor: 0
+              discount_minor: 0
+              cgst_rate_bps: 900
+              cgst_amount_minor: 0
+              sgst_rate_bps: 900
+              sgst_amount_minor: 0
+              igst_rate_bps: 0
+              igst_amount_minor: 0
+              cess_rate_bps: 0
+              cess_amount_minor: 0
+              tax_amount_minor: 0
+            line_total: {currency_code: INR, amount_minor: 0}
+          totals:
+            items_gross: {currency_code: INR, amount_minor: 118000}
+            discount_total: {currency_code: INR, amount_minor: 0}
+            taxable_total: {currency_code: INR, amount_minor: 100000}
+            tax_total: {currency_code: INR, amount_minor: 18000}
+            shipping_total: {currency_code: INR, amount_minor: 0}
+            grand_total: {currency_code: INR, amount_minor: 118000}
+          customer_reference: WEB-1001
+          notes: Deliver between 10:00 and 18:00 IST.
+          placed_at: '2026-07-17T10:00:00Z'
+    OrderUpdatedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FB1
+        event_name: order.updated
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T10:02:00Z'
+        source_system: MEDUSA
+        source_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+        idempotency_key: tenant_cartunez_in:order.updated:order_01ARZ3NDEKTSV4RRFFQ69G5FAV:v1
+        expected_order_revision: 1
+        order:
+          medusa_order_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+          display_id: 1001
+          order_revision: 2
+          currency_code: INR
+          seller_state_code: '27'
+          place_of_supply_state_code: '27'
+          customer:
+            medusa_customer_id: cus_01ARZ3NDEKTSV4RRFFQ69G5FAX
+            apexbooks_customer_id: ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2
+            accounting_email: amit.sharma@cartunez.in
+            first_name: Amit
+            last_name: Sharma
+            phone: '+919999999999'
+            gst: {gstin: null, gst_type: CONSUMER, state_code: '27'}
+            billing_address: &updated_billing_address
+              name: Amit Sharma
+              company: null
+              phone: '+919999999999'
+              address_1: 24 Linking Road
+              address_2: Bandra West
+              city: Mumbai
+              state: Maharashtra
+              state_code: '27'
+              postal_code: '400050'
+              country_code: IN
+            shipping_address: &updated_shipping_address
+              name: Amit Sharma
+              company: null
+              phone: '+919999999999'
+              address_1: 25 Linking Road
+              address_2: Bandra West
+              city: Mumbai
+              state: Maharashtra
+              state_code: '27'
+              postal_code: '400050'
+              country_code: IN
+            credit_terms_days: 0
+          billing_address: *updated_billing_address
+          shipping_address: *updated_shipping_address
+          lines:
+            - medusa_line_id: item_01ARZ3NDEKTSV4RRFFQ69G5FB0
+              medusa_product_id: prod_01ARZ3NDEKTSV4RRFFQ69G5FAY
+              medusa_variant_id: variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+              apexbooks_variant_id: ab_variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              sku: LED-H7
+              title: H7 LED Headlamp Pair
+              product_type: GOODS
+              quantity: 1
+              unit_price: {currency_code: INR, amount_minor: 118000}
+              tax_inclusive: true
+              discount: {currency_code: INR, amount_minor: 0}
+              gst: {hsn_sac: '851220', gst_rate_bps: 1800, taxable_value_minor: 100000, discount_minor: 0, cgst_rate_bps: 900, cgst_amount_minor: 9000, sgst_rate_bps: 900, sgst_amount_minor: 9000, igst_rate_bps: 0, igst_amount_minor: 0, cess_rate_bps: 0, cess_amount_minor: 0, tax_amount_minor: 18000}
+              line_total: {currency_code: INR, amount_minor: 118000}
+          shipping:
+            title: Shipping
+            unit_price: {currency_code: INR, amount_minor: 0}
+            tax_inclusive: false
+            discount: {currency_code: INR, amount_minor: 0}
+            gst: {hsn_sac: '996812', gst_rate_bps: 1800, taxable_value_minor: 0, discount_minor: 0, cgst_rate_bps: 900, cgst_amount_minor: 0, sgst_rate_bps: 900, sgst_amount_minor: 0, igst_rate_bps: 0, igst_amount_minor: 0, cess_rate_bps: 0, cess_amount_minor: 0, tax_amount_minor: 0}
+            line_total: {currency_code: INR, amount_minor: 0}
+          totals: {items_gross: {currency_code: INR, amount_minor: 118000}, discount_total: {currency_code: INR, amount_minor: 0}, taxable_total: {currency_code: INR, amount_minor: 100000}, tax_total: {currency_code: INR, amount_minor: 18000}, shipping_total: {currency_code: INR, amount_minor: 0}, grand_total: {currency_code: INR, amount_minor: 118000}}
+          customer_reference: WEB-1001
+          notes: Use the corrected delivery address.
+          placed_at: '2026-07-17T10:00:00Z'
+    OrderCancelledRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FB3
+        event_name: order.cancelled
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T10:03:00Z'
+        source_system: MEDUSA
+        source_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+        idempotency_key: tenant_cartunez_in:order.cancelled:order_01ARZ3NDEKTSV4RRFFQ69G5FAV:v1
+        cancellation:
+          medusa_order_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+          expected_order_revision: 2
+          reason_code: CUSTOMER_REQUEST
+          reason: Buyer requested cancellation before payment.
+          cancelled_at: '2026-07-17T10:03:00Z'
+    PaymentCapturedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FB4
+        event_name: payment.captured
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T10:05:00Z'
+        source_system: MEDUSA
+        source_id: pay_01ARZ3NDEKTSV4RRFFQ69G5FB5
+        idempotency_key: tenant_cartunez_in:payment.captured:pay_01ARZ3NDEKTSV4RRFFQ69G5FB5:v1
+        payment:
+          medusa_payment_id: pay_01ARZ3NDEKTSV4RRFFQ69G5FB5
+          medusa_order_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+          capture_sequence: 1
+          amount: {currency_code: INR, amount_minor: 118000}
+          provider_id: razorpay
+          transaction_id: pay_RZP20260717A001
+          captured_at: '2026-07-17T10:05:00Z'
+    ReturnCreatedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FB6
+        event_name: return.created
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-20T09:00:00Z'
+        source_system: MEDUSA
+        source_id: ret_01ARZ3NDEKTSV4RRFFQ69G5FB7
+        idempotency_key: tenant_cartunez_in:return.created:ret_01ARZ3NDEKTSV4RRFFQ69G5FB7:v1
+        return:
+          medusa_return_id: ret_01ARZ3NDEKTSV4RRFFQ69G5FB7
+          medusa_order_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+          apexbooks_invoice_id: ab_invoice_01ARZ3NDEKTSV4RRFFQ69G5FB8
+          requested_at: '2026-07-19T15:00:00Z'
+          lines:
+            - original_invoice_line_id: ab_invoiceline_01ARZ3NDEKTSV4RRFFQ69G5FB9
+              medusa_line_id: item_01ARZ3NDEKTSV4RRFFQ69G5FB0
+              apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+              apexbooks_variant_id: ab_variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              sku: LED-H7
+              product_type: GOODS
+              quantity: 1
+              restock: true
+              received_at: '2026-07-20T08:55:00Z'
+              reason_code: DEFECTIVE
+    PaymentRefundedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBA
+        event_name: payment.refunded
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-20T10:00:00Z'
+        source_system: MEDUSA
+        source_id: refund_01ARZ3NDEKTSV4RRFFQ69G5FBB
+        idempotency_key: tenant_cartunez_in:payment.refunded:refund_01ARZ3NDEKTSV4RRFFQ69G5FBB:v1
+        refund:
+          medusa_refund_id: refund_01ARZ3NDEKTSV4RRFFQ69G5FBB
+          medusa_payment_id: pay_01ARZ3NDEKTSV4RRFFQ69G5FB5
+          medusa_order_id: order_01ARZ3NDEKTSV4RRFFQ69G5FAV
+          apexbooks_invoice_id: ab_invoice_01ARZ3NDEKTSV4RRFFQ69G5FB8
+          amount: {currency_code: INR, amount_minor: 118000}
+          provider_refund_id: rfnd_RZP20260720A001
+          refunded_at: '2026-07-20T10:00:00Z'
+          reason: Full refund for defective returned goods.
+          cancel_order: true
+          lines:
+            - original_invoice_line_id: ab_invoiceline_01ARZ3NDEKTSV4RRFFQ69G5FB9
+              medusa_line_id: item_01ARZ3NDEKTSV4RRFFQ69G5FB0
+              apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+              apexbooks_variant_id: ab_variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              sku: LED-H7
+              product_type: GOODS
+              quantity: 1
+              unit_price: {currency_code: INR, amount_minor: 118000}
+              tax_inclusive: true
+              discount: {currency_code: INR, amount_minor: 0}
+              gst: {hsn_sac: '851220', gst_rate_bps: 1800, taxable_value_minor: 100000, discount_minor: 0, cgst_rate_bps: 900, cgst_amount_minor: 9000, sgst_rate_bps: 900, sgst_amount_minor: 9000, igst_rate_bps: 0, igst_amount_minor: 0, cess_rate_bps: 0, cess_amount_minor: 0, tax_amount_minor: 18000}
+              refund_total: {currency_code: INR, amount_minor: 118000}
+              restock: false
+              related_medusa_return_id: ret_01ARZ3NDEKTSV4RRFFQ69G5FB7
+    CustomerCreatedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBC
+        event_name: customer.created
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T09:30:00Z'
+        source_system: MEDUSA
+        source_id: cus_01ARZ3NDEKTSV4RRFFQ69G5FAX
+        idempotency_key: tenant_cartunez_in:customer.created:cus_01ARZ3NDEKTSV4RRFFQ69G5FAX:v1
+        customer:
+          medusa_customer_id: cus_01ARZ3NDEKTSV4RRFFQ69G5FAX
+          apexbooks_customer_id: null
+          accounting_email: amit.sharma@cartunez.in
+          first_name: Amit
+          last_name: Sharma
+          phone: '+919999999999'
+          gst: {gstin: '27ABCDE1234F1Z5', gst_type: REGULAR, state_code: '27'}
+          billing_address: &customer_billing_address
+            name: Amit Sharma
+            company: Amit Auto Works
+            phone: '+919999999999'
+            address_1: 24 Linking Road
+            address_2: Bandra West
+            city: Mumbai
+            state: Maharashtra
+            state_code: '27'
+            postal_code: '400050'
+            country_code: IN
+          shipping_address: *customer_billing_address
+          credit_terms_days: 15
+    ProductChangedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBD
+        event_name: product.changed
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T08:00:00Z'
+        source_system: APEXBOOKS
+        source_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+        idempotency_key: tenant_cartunez_in:product.changed:ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY:v1
+        product:
+          apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+          title: H7 LED Headlamp Pair
+          description: Road-legal 6000K H7 LED headlamp pair with aluminium heat sink.
+          hsn_sac: '851220'
+          gst_rate_bps: 1800
+          active: true
+          categories: [Lighting, Headlamps]
+          images:
+            - https://cdn.cartunez.in/products/h7-led-headlamp/front.webp
+            - https://cdn.cartunez.in/products/h7-led-headlamp/installed.webp
+          variants:
+            - apexbooks_variant_id: ab_variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              sku: LED-H7
+              title: H7 Pair
+              product_type: GOODS
+              active: true
+          updated_at: '2026-07-17T07:59:00Z'
+    PriceUpdatedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBE
+        event_name: price.updated
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T08:05:00Z'
+        source_system: APEXBOOKS
+        source_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+        idempotency_key: tenant_cartunez_in:price.updated:ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY:v1
+        price_update:
+          apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+          replace_all: true
+          prices:
+            - apexbooks_variant_id: ab_variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              currency_code: INR
+              amount_minor: 118000
+              tax_inclusive: true
+              price_list_id: RETAIL-IN-2026
+              valid_from: '2026-07-17T08:00:00Z'
+              valid_to: null
+          updated_at: '2026-07-17T08:04:00Z'
+    InventoryUpdatedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBF
+        event_name: inventory.updated
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T08:10:00Z'
+        source_system: APEXBOOKS
+        source_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+        idempotency_key: tenant_cartunez_in:inventory.updated:ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY:v1
+        inventory_update:
+          apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+          replace_all: true
+          levels:
+            - apexbooks_variant_id: ab_variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ
+              warehouse_id: ab_warehouse_01ARZ3NDEKTSV4RRFFQ69G5FBG
+              available_quantity: 24
+              reserved_quantity: 2
+              updated_at: '2026-07-17T08:09:00Z'
+          updated_at: '2026-07-17T08:09:00Z'
+    CustomerUpdatedRequestExample:
+      value:
+        event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBH
+        event_name: customer.updated
+        event_version: v1
+        tenant_id: tenant_cartunez_in
+        occurred_at: '2026-07-17T08:15:00Z'
+        source_system: APEXBOOKS
+        source_id: ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2
+        idempotency_key: tenant_cartunez_in:customer.updated:ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2:v1
+        customer:
+          apexbooks_customer_id: ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2
+          medusa_customer_id: cus_01ARZ3NDEKTSV4RRFFQ69G5FAX
+          accounting_email: accounts@amitautoworks.in
+          first_name: Amit
+          last_name: Sharma
+          phone: '+919999999999'
+          gst: {gstin: '27ABCDE1234F1Z5', gst_type: REGULAR, state_code: '27'}
+          billing_address: &canonical_billing_address
+            name: Amit Sharma
+            company: Amit Auto Works
+            phone: '+919999999999'
+            address_1: 24 Linking Road
+            address_2: Bandra West
+            city: Mumbai
+            state: Maharashtra
+            state_code: '27'
+            postal_code: '400050'
+            country_code: IN
+          shipping_address: *canonical_billing_address
+          credit_terms_days: 15
+          active: true
+          updated_at: '2026-07-17T08:14:00Z'
+    OrderCreatedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_order_id: ab_order_01ARZ3NDEKTSV4RRFFQ69G5FBJ
+          apexbooks_customer_id: ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2
+          apexbooks_invoice_id: null
+          order_status: DRAFT
+          order_revision: 1
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FBK
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:order.created:order_01ARZ3NDEKTSV4RRFFQ69G5FAV:v1
+          processed_at: '2026-07-17T10:00:01Z'
+    OrderUpdatedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_order_id: ab_order_01ARZ3NDEKTSV4RRFFQ69G5FBJ
+          apexbooks_customer_id: ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2
+          apexbooks_invoice_id: null
+          order_status: DRAFT
+          order_revision: 2
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FBL
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FB1
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:order.updated:order_01ARZ3NDEKTSV4RRFFQ69G5FAV:v1
+          processed_at: '2026-07-17T10:02:01Z'
+    OrderCancelledResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_order_id: ab_order_01ARZ3NDEKTSV4RRFFQ69G5FBJ
+          apexbooks_customer_id: ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2
+          apexbooks_invoice_id: null
+          order_status: CANCELLED
+          order_revision: 2
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FBM
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FB3
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:order.cancelled:order_01ARZ3NDEKTSV4RRFFQ69G5FAV:v1
+          processed_at: '2026-07-17T10:03:01Z'
+    PaymentCapturedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_payment_id: ab_payment_01ARZ3NDEKTSV4RRFFQ69G5FBN
+          receipt_id: ab_receipt_01ARZ3NDEKTSV4RRFFQ69G5FBP
+          apexbooks_invoice_id: ab_invoice_01ARZ3NDEKTSV4RRFFQ69G5FB8
+          invoice_status: PAID
+          amount_applied: {currency_code: INR, amount_minor: 118000}
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FBQ
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FB4
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:payment.captured:pay_01ARZ3NDEKTSV4RRFFQ69G5FB5:v1
+          processed_at: '2026-07-17T10:05:01Z'
+    ReturnCreatedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_return_id: ab_return_01ARZ3NDEKTSV4RRFFQ69G5FBR
+          return_status: RECEIVED
+          restocked_line_count: 1
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FBS
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FB6
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:return.created:ret_01ARZ3NDEKTSV4RRFFQ69G5FB7:v1
+          processed_at: '2026-07-20T09:00:01Z'
+    PaymentRefundedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_refund_id: ab_refund_01ARZ3NDEKTSV4RRFFQ69G5FBT
+          credit_note_id: ab_creditnote_01ARZ3NDEKTSV4RRFFQ69G5FBV
+          refund_disbursement_id: ab_disbursement_01ARZ3NDEKTSV4RRFFQ69G5FBW
+          order_status: CANCELLED
+          restocked: false
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FBX
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBA
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:payment.refunded:refund_01ARZ3NDEKTSV4RRFFQ69G5FBB:v1
+          processed_at: '2026-07-20T10:00:01Z'
+    CustomerCreatedResponseExample:
+      value:
+        success: true
+        data:
+          customer: &canonical_customer_response
+            apexbooks_customer_id: ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2
+            medusa_customer_id: cus_01ARZ3NDEKTSV4RRFFQ69G5FAX
+            accounting_email: amit.sharma@cartunez.in
+            first_name: Amit
+            last_name: Sharma
+            phone: '+919999999999'
+            gst: {gstin: '27ABCDE1234F1Z5', gst_type: REGULAR, state_code: '27'}
+            billing_address: &response_customer_address
+              name: Amit Sharma
+              company: Amit Auto Works
+              phone: '+919999999999'
+              address_1: 24 Linking Road
+              address_2: Bandra West
+              city: Mumbai
+              state: Maharashtra
+              state_code: '27'
+              postal_code: '400050'
+              country_code: IN
+            shipping_address: *response_customer_address
+            credit_terms_days: 15
+            active: true
+            updated_at: '2026-07-17T09:30:01Z'
+          created: true
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FBY
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBC
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:customer.created:cus_01ARZ3NDEKTSV4RRFFQ69G5FAX:v1
+          processed_at: '2026-07-17T09:30:01Z'
+    CustomerUpdatedImportResponseExample:
+      value:
+        success: true
+        data:
+          customer: *canonical_customer_response
+          created: false
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FBZ
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBC
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:customer.created:cus_01ARZ3NDEKTSV4RRFFQ69G5FAX:v1
+          processed_at: '2026-07-17T09:30:01Z'
+    ProductChangedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+          medusa_product_id: prod_01ARZ3NDEKTSV4RRFFQ69G5FAY
+          medusa_variant_ids: [variant_01ARZ3NDEKTSV4RRFFQ69G5FAZ]
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC0
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBD
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:product.changed:ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY:v1
+          processed_at: '2026-07-17T08:00:01Z'
+    PriceUpdatedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+          replaced_price_count: 1
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC1
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBE
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:price.updated:ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY:v1
+          processed_at: '2026-07-17T08:05:01Z'
+    InventoryUpdatedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_product_id: ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY
+          replaced_level_count: 1
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC2
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBF
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:inventory.updated:ab_product_01ARZ3NDEKTSV4RRFFQ69G5FAY:v1
+          processed_at: '2026-07-17T08:10:01Z'
+    CustomerUpdatedResponseExample:
+      value:
+        success: true
+        data:
+          apexbooks_customer_id: ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2
+          medusa_customer_id: cus_01ARZ3NDEKTSV4RRFFQ69G5FAX
+        meta:
+          request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC3
+          event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FBH
+          tenant_id: tenant_cartunez_in
+          version: v1
+          idempotency_key: tenant_cartunez_in:customer.updated:ab_customer_01ARZ3NDEKTSV4RRFFQ69G5FB2:v1
+          processed_at: '2026-07-17T08:15:01Z'
+    ValidationErrorExample:
+      value:
+        success: false
+        error:
+          code: VALIDATION_ERROR
+          message: Request body does not conform to OrderCreatedRequest.
+          details:
+            - {location: body, field: 'order.lines[0].quantity', issue: 'Must be an integer greater than or equal to 1.'}
+          retryable: false
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC4, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    AuthErrorExample:
+      value:
+        success: false
+        error: {code: AUTH_FAILED, message: X-Api-Key is missing or unknown., details: [], retryable: false}
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC5, event_id: null, tenant_id: null, version: v1}
+    SignatureErrorExample:
+      value:
+        success: false
+        error: {code: SIGNATURE_INVALID, message: X-Signature does not match the canonical request., details: [], retryable: false}
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC6, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    NotFoundErrorExample:
+      value:
+        success: false
+        error:
+          code: RESOURCE_NOT_FOUND
+          message: The mapped ApexBooks product does not exist.
+          details: [{location: business, field: 'order.lines[0].apexbooks_product_id', issue: 'No active product mapping exists for this tenant.'}]
+          retryable: false
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC7, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    ConflictErrorExample:
+      value:
+        success: false
+        error:
+          code: IDEMPOTENCY_CONFLICT
+          message: The idempotency key was previously used with a different request body.
+          details: [{location: header, field: X-Idempotency-Key, issue: Stored and received request hashes differ.}]
+          retryable: false
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC8, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    BusinessErrorExample:
+      value:
+        success: false
+        error:
+          code: INVENTORY_REJECTED
+          message: Available stock is insufficient for the requested reservation.
+          details: [{location: business, field: 'order.lines[0].quantity', issue: 'Available unreserved quantity is 0 and requested quantity is 1.'}]
+          retryable: false
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FC9, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    RateLimitErrorExample:
+      value:
+        success: false
+        error: {code: RATE_LIMITED, message: Integration request rate exceeded., details: [], retryable: true}
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FCA, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    InternalErrorExample:
+      value:
+        success: false
+        error: {code: INTERNAL_ERROR, message: Atomic event processing failed., details: [], retryable: true}
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FCB, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    UnavailableErrorExample:
+      value:
+        success: false
+        error: {code: UPSTREAM_UNAVAILABLE, message: The accounting database is temporarily unavailable., details: [], retryable: true}
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FCC, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    TimeoutErrorExample:
+      value:
+        success: false
+        error: {code: UPSTREAM_UNAVAILABLE, message: The receiver timed out while reading the signed request., details: [], retryable: true}
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FCD, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    BadGatewayErrorExample:
+      value:
+        success: false
+        error: {code: UPSTREAM_UNAVAILABLE, message: The integration gateway could not connect to the receiver., details: [], retryable: true}
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FCE, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
+    GatewayTimeoutErrorExample:
+      value:
+        success: false
+        error: {code: UPSTREAM_UNAVAILABLE, message: The integration gateway timed out waiting for the receiver., details: [], retryable: true}
+        meta: {request_id: req_01ARZ3NDEKTSV4RRFFQ69G5FCF, event_id: evt_01ARZ3NDEKTSV4RRFFQ69G5FAW, tenant_id: tenant_cartunez_in, version: v1}
