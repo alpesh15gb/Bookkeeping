@@ -728,6 +728,10 @@ def _handle_item_created(
         current_stock=quantity,
         reorder_level=_micros_to_decimal(p.get("reorder_quantity_micros")),
     )
+    for field in ("description", "category", "brand"):
+        val = p.get(field)
+        if val:
+            setattr(product, field, val)
     try:
         db.add(product)
         db.flush()
@@ -1138,8 +1142,8 @@ def _handle_money_account_created(
         id=event.aggregate_id,
         tenant_id=tenant_id,
         bank_name=bank_name,
-        account_number="",
-        ifsc_code="",
+        account_number=p.get("account_number", ""),
+        ifsc_code=p.get("ifsc", ""),
         account_holder_name=name,
     )
     try:
@@ -1167,13 +1171,14 @@ def _handle_money_transaction_posted(
     narration = p.get("narration", "")
 
     if txn_kind == "receipt":
-        dest_id_str = p.get("destination_account_id")
+        # Resolve contact_id from payload if present (money_account_id != contact_id)
         contact = None
-        if dest_id_str:
+        contact_id_str = p.get("contact_id")
+        if contact_id_str:
             try:
-                did = uuid.UUID(dest_id_str) if isinstance(dest_id_str, str) else dest_id_str
+                cid = uuid.UUID(contact_id_str) if isinstance(contact_id_str, str) else contact_id_str
                 contact = db.query(Contact).filter(
-                    Contact.id == did,
+                    Contact.id == cid,
                     Contact.tenant_id == tenant_id,
                 ).first()
             except (ValueError, TypeError):
@@ -1194,13 +1199,14 @@ def _handle_money_transaction_posted(
         db.add(pmt)
 
     elif txn_kind == "payment":
-        src_id_str = p.get("source_account_id")
+        # Resolve contact_id from payload if present (money_account_id != contact_id)
         contact = None
-        if src_id_str:
+        contact_id_str = p.get("contact_id")
+        if contact_id_str:
             try:
-                sid = uuid.UUID(src_id_str) if isinstance(src_id_str, str) else src_id_str
+                cid = uuid.UUID(contact_id_str) if isinstance(contact_id_str, str) else contact_id_str
                 contact = db.query(Contact).filter(
-                    Contact.id == sid,
+                    Contact.id == cid,
                     Contact.tenant_id == tenant_id,
                 ).first()
             except (ValueError, TypeError):
