@@ -86,7 +86,8 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
       final decoded = jsonDecode(utf8.decode(file.bytes!));
       if (decoded is! Map) throw const FormatException('Expected JSON object');
       backup = Map<String, dynamic>.from(decoded);
-    } catch (_) {
+    } catch (e) {
+      debugPrint('SettingsBackupScreen: invalid backup file — $e');
       ref
           .read(notificationServiceProvider)
           .error(

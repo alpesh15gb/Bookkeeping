@@ -21,8 +21,10 @@ import 'invoice_search_bar.dart';
 import 'invoice_table_body.dart';
 
 /// Lightweight table controller for the invoice list screen.
+// Not autoDispose — the controller must survive navigation away and back
+// so child widgets (ValueListenableBuilder) don't hold stale references.
 final _invoiceTableCtrlProvider =
-    ChangeNotifierProvider.autoDispose<ApexTableController>(
+    ChangeNotifierProvider<ApexTableController>(
       (ref) => ApexTableController(),
     );
 
@@ -35,7 +37,7 @@ class InvoiceListScreen extends ConsumerStatefulWidget {
 class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
   InvoiceListItem? _selectedItem;
   late final ApexTableController _tableCtrl;
-  InvoiceListQuery _query = const InvoiceListQuery(page: 1, limit: 25);
+  InvoiceListQuery _query = const InvoiceListQuery(page: 1, limit: 20);
 
   @override
   void initState() {

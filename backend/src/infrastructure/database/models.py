@@ -11,8 +11,8 @@ Key rules:
 import uuid
 from datetime import datetime, date, timezone
 from sqlalchemy import (
-    Column, String, Boolean, Numeric, Date, DateTime,
-    ForeignKey, Text, JSON, Integer, Index, UniqueConstraint, CheckConstraint, text
+    BigInteger, Column, String, Boolean, Numeric, Date, DateTime,
+    ForeignKey, Text, JSON, Integer, Index, UniqueConstraint, CheckConstraint, text, Uuid,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -2046,3 +2046,44 @@ class TermsTemplate(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
 
     tenant = relationship("Tenant")
+
+
+# ---------------------------------------------------------------------------
+# SYNC EVENTS — ApexBooks offline-first event-sourced sync
+# ---------------------------------------------------------------------------
+
+class SyncEvent(Base):
+    """Durable event store for ApexBooks offline-first sync.
+
+    Each row represents one domain event pushed by an ApexBooks client or
+    published by the server.  The (tenant_id, event_id) unique constraint
+    makes push idempotent; server_sequence provides an ordered pull cursor.
+    """
+    __tablename__ = "sync_events"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "event_id", name="uq_sync_event_tenant_event"),
+        Index("ix_sync_pull", "tenant_id", "server_sequence"),
+        Index("ix_sync_tenant_processed", "tenant_id", "processed"),
+        Index("ix_sync_tenant_event_type", "tenant_id", "event_type"),
+    )
+
+    server_sequence: int = Column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    event_id: uuid.UUID = Column(Uuid(), nullable=False)
+    tenant_id: uuid.UUID = Column(Uuid(), nullable=False, index=True)
+    company_id: uuid.UUID = Column(Uuid(), nullable=False)
+    device_id: uuid.UUID = Column(Uuid(), nullable=False)
+    aggregate_type: str = Column(String(60), nullable=False)
+    aggregate_id: uuid.UUID = Column(Uuid(), nullable=False)
+    event_type: str = Column(String(100), nullable=False)
+    event_version: int = Column(Integer, nullable=False)
+    payload: dict = Column(JSON, nullable=False)
+    occurred_at: datetime = Column(DateTime(timezone=True), nullable=False)
+    received_at: datetime = Column(
+        DateTime(timezone=True), nullable=False, server_default=text("CURRENT_TIMESTAMP")
+    )
+    processed: bool = Column(Boolean, nullable=False, default=False)
+    processing_error: str | None = Column(Text, nullable=True)

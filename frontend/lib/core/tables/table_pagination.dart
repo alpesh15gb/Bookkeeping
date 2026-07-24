@@ -69,7 +69,10 @@ class ApexPaginationControls extends StatelessWidget {
               ),
               const SizedBox(width: 8),
               DropdownButton<int>(
-                value: paged.limit,
+                // The backend may return a limit not in pageSizeOptions
+                // (e.g. 25).  Clamp to the nearest valid option so the
+                // DropdownButton assertion doesn't fire.
+                value: _closestPageSize(paged.limit),
                 underline: const SizedBox.shrink(),
                 items: AppConstants.pageSizeOptions
                     .map(
@@ -120,6 +123,22 @@ class ApexPaginationControls extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Returns the closest value from [AppConstants.pageSizeOptions] to [limit],
+  /// so the [DropdownButton] never asserts on a server-returned value it can't
+  /// display.
+  static int _closestPageSize(int limit) {
+    var best = AppConstants.pageSizeOptions.first;
+    var minDelta = (limit - best).abs();
+    for (final opt in AppConstants.pageSizeOptions) {
+      final delta = (limit - opt).abs();
+      if (delta < minDelta) {
+        minDelta = delta;
+        best = opt;
+      }
+    }
+    return best;
   }
 
   Widget _pageBtn(IconData icon, VoidCallback? onPressed) {

@@ -49,7 +49,8 @@ class _ApexTableToolbarState<T extends BaseModel>
     try {
       widget.controller.addListener(_sync);
     } catch (_) {
-      // Controller was disposed (HubTabWidget tab switch). Ignore.
+      // Controller was disposed (HubTabWidget tab switch). This is expected
+      // during tab switches and not actionable.
     }
   }
 

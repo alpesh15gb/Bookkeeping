@@ -13,6 +13,7 @@ library;
 import 'dart:async';
 
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../config/env_config.dart';
@@ -102,7 +103,8 @@ class RefreshInterceptor extends Interceptor {
       // the session. The in-memory token is updated via the reader's source.
       _publishTokens(access, newRefresh);
       return true;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('RefreshInterceptor: token refresh failed — $e');
       return false;
     } finally {
       final completer = _refreshCompleter;

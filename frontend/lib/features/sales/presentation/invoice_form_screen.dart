@@ -703,13 +703,15 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 ),
               ],
             )
-          : Row(
+          : SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
               children: [
                 Text(
                   '${state.lines.where((l) => l.productId.isNotEmpty).length} item(s)',
                   style: TextStyle(color: colors.textMuted, fontSize: 12),
                 ),
-                const Spacer(),
+                const SizedBox(width: 24),
                 _tot('Subtotal', fmt.currency(state.subtotal), colors),
                 _sep(colors),
                 _tot('Discount', fmt.currency(state.discountTotal), colors),
@@ -747,6 +749,7 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
                 ),
               ],
             ),
+          ),
     );
   }
 

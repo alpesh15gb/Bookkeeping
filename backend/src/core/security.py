@@ -92,6 +92,12 @@ class Permissions:
     INVENTORY_TRANSFER = "inventory:transfer"
     INVENTORY_FINALIZE = "inventory:finalize"
 
+    # ApexBooks Offline Sync
+    SYNC_WRITE = "sync:write"
+    SYNC_READ = "sync:read"
+    SYNC_BOOTSTRAP = "sync:bootstrap"
+    SYNC_AUTH = "sync:auth"
+
 ROLE_PERMISSIONS = {
 
 "owner": [
@@ -114,6 +120,7 @@ ROLE_PERMISSIONS = {
     Permissions.DATA_IMPORT,
     Permissions.INVENTORY_VIEW, Permissions.INVENTORY_ADJUST,
     Permissions.INVENTORY_TRANSFER, Permissions.INVENTORY_FINALIZE,
+    Permissions.SYNC_WRITE, Permissions.SYNC_READ, Permissions.SYNC_BOOTSTRAP, Permissions.SYNC_AUTH,
 ],
 "accountant": [
     Permissions.TENANT_VIEW,

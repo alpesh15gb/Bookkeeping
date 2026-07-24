@@ -413,7 +413,9 @@ class _PurchaseRegisterScreenState
         );
         return '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('PurchaseRegisterScreen: failed to format date — $e');
+    }
     return isoDate;
   }
 

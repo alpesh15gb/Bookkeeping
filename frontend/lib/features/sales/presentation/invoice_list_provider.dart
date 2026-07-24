@@ -9,7 +9,7 @@ import '../services/invoice_service.dart';
 class InvoiceListQuery {
   const InvoiceListQuery({
     this.page = 1,
-    this.limit = 25,
+    this.limit = 20,
     this.search,
     this.status,
     this.contactId,

@@ -34,7 +34,8 @@ class OutstandingInvoice {
     try {
       final due = DateTime.parse(dueDate);
       return DateTime.now().difference(due).inDays;
-    } catch (_) {
+    } catch (e) {
+      debugPrint('OutstandingInvoice.daysOverdue: invalid dueDate "$dueDate" — $e');
       return 0;
     }
   }

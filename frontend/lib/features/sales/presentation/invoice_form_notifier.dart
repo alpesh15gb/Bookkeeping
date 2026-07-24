@@ -1,6 +1,7 @@
 /// Invoice form notifier — orchestrates create/edit with live calculations.
 library;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../models/invoice.dart';
@@ -169,6 +170,10 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
     state = state.copyWith(saving: false);
     if (result is Success<Invoice>) return result.value;
     if (result is Failure<Invoice>) {
+      debugPrint(
+        'InvoiceFormNotifier.create failed (HTTP ${result.error.statusCode})'
+        ' — ${result.error.message}',
+      );
       state = state.copyWith(error: result.error.message);
     }
     return null;
@@ -191,6 +196,10 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
     state = state.copyWith(saving: false);
     if (result is Success<Invoice>) return result.value;
     if (result is Failure<Invoice>) {
+      debugPrint(
+        'InvoiceFormNotifier.update failed (HTTP ${result.error.statusCode})'
+        ' — ${result.error.message}',
+      );
       state = state.copyWith(error: result.error.message);
     }
     return null;

@@ -64,7 +64,7 @@ logger = logging.getLogger("bookkeeping")
 # Keep this in sync with the single Alembic head. The ORM is allowed to start
 # so operators can still reach /health, but readiness becomes degraded until
 # migrations are applied. `create_all()` cannot add columns to existing tables.
-REQUIRED_SCHEMA_REVISION = "20260718_0005"
+REQUIRED_SCHEMA_REVISION = "20260725_0001"
 
 
 def _database_schema_revision(connection) -> Optional[str]:
@@ -113,6 +113,7 @@ from src.api.v1.recurring_invoices import router as recurring_invoices_router
 from src.api.v1.terms_templates import router as terms_templates_router
 from src.api.v1.warehouses import router as warehouses_router
 from src.api.v1.stock_ledger import router as stock_ledger_router
+from src.api.v1.apexbooks_sync import router as apexbooks_sync_router
 from src.integrations.cartunez.routes import router as cartunez_integration_router
 from src.integrations.cartunez.order_routes import router as cartunez_order_router
 from src.integrations.cartunez.payment_routes import router as cartunez_payment_router
@@ -473,6 +474,7 @@ app.include_router(recurring_invoices_router, prefix="/api/v1")
 app.include_router(terms_templates_router, prefix="/api/v1")
 app.include_router(warehouses_router, prefix="/api/v1")
 app.include_router(stock_ledger_router, prefix="/api/v1")
+app.include_router(apexbooks_sync_router, prefix="/api/v1")
 app.include_router(cartunez_integration_router)
 app.include_router(cartunez_order_router)
 app.include_router(cartunez_payment_router)

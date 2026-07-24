@@ -2,6 +2,7 @@
 /// and negative-value formatting. Never format directly in widgets.
 library;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:apexbooks/features/settings/presentation/settings_providers.dart';
@@ -67,8 +68,9 @@ class NumberFormatter {
       // ignore: depend_on_referenced_packages
       final fmt = NumberFormat('#,##0.${'0' * fractionDigits}', locale);
       return fmt.format(value);
-    } catch (_) {
-      // Fallback for when intl is absent.
+    } catch (e) {
+      debugPrint('NumberFormatter: intl formatting failed — $e');
+      // Fallback for when intl is absent or another formatting error occurs.
       final negative = value < 0;
       final abs = value.abs();
       final intPart = abs.floor();

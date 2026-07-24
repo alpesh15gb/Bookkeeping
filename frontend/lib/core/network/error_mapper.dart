@@ -18,7 +18,13 @@ ApiError toApiError(DioException err) {
     } else {
       detail = data;
     }
-    return ApiError.fromDetail(detail, response.statusCode ?? 0);
+    // For 5xx errors use the standard message rather than the server's
+    // generic response body (which is often unhelpful).
+    final statusCode = response.statusCode ?? 0;
+    if (statusCode >= 500) {
+      return ApiError.fromDetail(null, statusCode);
+    }
+    return ApiError.fromDetail(detail, statusCode);
   }
 
   // No HTTP response → connectivity / timeout / cancellation.

@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/result/result.dart';
 
@@ -35,6 +37,12 @@ Future<Iterable<Contact>> searchContactOptions({
       extra: {'contact_type': type.apiValue},
     ),
   );
+
+  // Log a failed remote search so it's visible in the terminal; the function
+  // still returns local matches as a resilient fallback.
+  if (result case Failure(:final error)) {
+    debugPrint('ContactSearch: remote search failed — ${error.message}');
+  }
 
   final byId = <String, Contact>{};
   for (final contact in [...?result.dataOrNull?.items, ...localMatches]) {

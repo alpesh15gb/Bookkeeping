@@ -525,7 +525,9 @@ class GstReturn {
         ];
         return '${months[month - 1]} $year';
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('GstReturn.label: failed to format period — $e');
+    }
     return periodStart;
   }
 
