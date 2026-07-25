@@ -150,8 +150,6 @@ class InvoiceUpdate(SchemaBase):
         default=None,
         pattern="^(DOMESTIC|EXPORT_WITH_TAX|EXPORT_WITHOUT_TAX|SEZ_WITH_TAX|SEZ_WITHOUT_TAX)$",
     )
-    tds_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
-    tcs_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)
     currency: Optional[str] = None
     exchange_rate: Optional[Decimal] = None
     tds_rate: Optional[Decimal] = Field(default=None, ge=0, le=100)

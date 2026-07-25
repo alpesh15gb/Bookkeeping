@@ -7,9 +7,10 @@ class BillCalculationService {
   const BillCalculationService();
 
   /// Recalculate a single line item from its raw inputs.
+  /// Discount is a flat amount (not a percentage), matching the backend schema.
   BillLine calculateLine({required BillLine line}) {
     final lineSubtotal = line.rate * line.quantity;
-    final discountAmt = lineSubtotal * (line.discount / 100);
+    final discountAmt = line.discount.clamp(0, lineSubtotal);
     final taxable = lineSubtotal - discountAmt;
     final gst = taxable * (line.gstRate / 100);
     final cgst = gst / 2;

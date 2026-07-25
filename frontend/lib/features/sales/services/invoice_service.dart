@@ -18,23 +18,25 @@ class InvoiceService {
   Future<Result<Invoice>> _get(String path) {
     return guardDio(() async {
       return Invoice.fromJson(
-        (await _dio.get(path)).data as Map<String, dynamic>,
+        ((await _dio.get(path)).data),
       );
     });
   }
 
   Future<Result<Invoice>> _post(String path, [Map<String, dynamic>? body]) {
     return guardDio(() async {
+      final data = (await _dio.post(path, data: body)).data;
       return Invoice.fromJson(
-        (await _dio.post(path, data: body)).data as Map<String, dynamic>,
+        data is Map<String, dynamic> ? data : <String, dynamic>{},
       );
     });
   }
 
   Future<Result<Invoice>> _put(String path, Map<String, dynamic> body) {
     return guardDio(() async {
+      final data = (await _dio.put(path, data: body)).data;
       return Invoice.fromJson(
-        (await _dio.put(path, data: body)).data as Map<String, dynamic>,
+        data is Map<String, dynamic> ? data : <String, dynamic>{},
       );
     });
   }
@@ -75,9 +77,11 @@ class InvoiceService {
         if (dateTo != null) 'date_to': dateTo,
       };
       final res = await _dio.get('/invoices', queryParameters: q);
-      final data = res.data as Map<String, dynamic>;
-      final items = (data['items'] as List)
-          .map((e) => InvoiceListItem.fromJson(e as Map<String, dynamic>))
+      final data = res.data is Map ? (res.data as Map<String, dynamic>) : <String, dynamic>{};
+      final rawItems = data['items'];
+      final items = (rawItems is List ? rawItems : <dynamic>[])
+          .map((e) => InvoiceListItem.fromJson(
+              e is Map<String, dynamic> ? e : <String, dynamic>{}))
           .toList();
       return (
         items: items,

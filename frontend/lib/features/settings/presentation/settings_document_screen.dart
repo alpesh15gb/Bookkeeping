@@ -135,6 +135,7 @@ class _SettingsDocumentScreenState
 
   Widget _content(TenantSettings settings, List<Warehouse> warehouses) {
     final colors = apexColors(context);
+    final theme = Theme.of(context);
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -158,51 +159,63 @@ class _SettingsDocumentScreenState
             ],
           ),
           const SizedBox(height: 8),
+
+          // ── PDF Template ──
+          _sectionLabel(colors, 'PDF Template', Icons.description_outlined),
+          const SizedBox(height: 8),
           ApexCard(
+            padding: const EdgeInsets.all(16),
+            child: DropdownButtonFormField<String>(
+              initialValue: _template,
+              decoration: const InputDecoration(
+                labelText: 'Template',
+                prefixIcon: Icon(Icons.description_outlined),
+              ),
+              items: const [
+                DropdownMenuItem(
+                  value: 'professional',
+                  child: Text('Professional A4'),
+                ),
+                DropdownMenuItem(value: 'modern', child: Text('Modern A4')),
+                DropdownMenuItem(
+                  value: 'tally_gst',
+                  child: Text('Tally GST A4'),
+                ),
+                DropdownMenuItem(
+                  value: 'classic_blue',
+                  child: Text('Classic Blue A4'),
+                ),
+                DropdownMenuItem(
+                  value: 'sleek_modern',
+                  child: Text('Sleek Modern A4'),
+                ),
+                DropdownMenuItem(
+                  value: 'minimal',
+                  child: Text('Minimal A4'),
+                ),
+                DropdownMenuItem(
+                  value: 'elegant',
+                  child: Text('Elegant A4'),
+                ),
+                DropdownMenuItem(
+                  value: 'thermal',
+                  child: Text('Thermal / POS'),
+                ),
+              ],
+              onChanged: (value) {
+                if (value != null) setState(() => _template = value);
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Payment on Invoice ──
+          _sectionLabel(colors, 'Payment on Invoice', Icons.payment_outlined),
+          const SizedBox(height: 8),
+          ApexCard(
+            padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                DropdownButtonFormField<String>(
-                  initialValue: _template,
-                  decoration: const InputDecoration(
-                    labelText: 'PDF Template',
-                    prefixIcon: Icon(Icons.description_outlined),
-                  ),
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'professional',
-                      child: Text('Professional A4'),
-                    ),
-                    DropdownMenuItem(value: 'modern', child: Text('Modern A4')),
-                    DropdownMenuItem(
-                      value: 'tally_gst',
-                      child: Text('Tally GST A4'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'classic_blue',
-                      child: Text('Classic Blue A4'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'sleek_modern',
-                      child: Text('Sleek Modern A4'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'minimal',
-                      child: Text('Minimal A4'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'elegant',
-                      child: Text('Elegant A4'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'thermal',
-                      child: Text('Thermal / POS'),
-                    ),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) setState(() => _template = value);
-                  },
-                ),
-                const SizedBox(height: 16),
                 TextFormField(
                   controller: _upi,
                   decoration: const InputDecoration(
@@ -211,6 +224,7 @@ class _SettingsDocumentScreenState
                     prefixIcon: Icon(Icons.qr_code_2_outlined),
                   ),
                 ),
+                const SizedBox(height: 8),
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   title: const Text('Show UPI QR on invoices'),
@@ -226,14 +240,19 @@ class _SettingsDocumentScreenState
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
+
+          // ── Warehouse ──
+          _sectionLabel(colors, 'Stock Defaults', Icons.inventory_2_outlined),
+          const SizedBox(height: 8),
           ApexCard(
+            padding: const EdgeInsets.all(16),
             child: DropdownButtonFormField<String>(
               initialValue: warehouses.any((w) => w.id == _defaultWarehouseId)
                   ? _defaultWarehouseId
                   : null,
               decoration: const InputDecoration(
-                labelText: 'Default Stock Warehouse',
+                labelText: 'Default Warehouse',
                 helperText:
                     'Used for direct invoices, purchases, returns and adjustments.',
                 prefixIcon: Icon(Icons.warehouse_outlined),
@@ -250,8 +269,13 @@ class _SettingsDocumentScreenState
               onChanged: (value) => setState(() => _defaultWarehouseId = value),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
+
+          // ── Legal / Footer ──
+          _sectionLabel(colors, 'Legal & Footer', Icons.gavel_outlined),
+          const SizedBox(height: 8),
           ApexCard(
+            padding: const EdgeInsets.all(16),
             child: Column(
               children: [
                 TextFormField(
@@ -299,12 +323,30 @@ class _SettingsDocumentScreenState
           Text(
             'These defaults apply to newly generated PDFs. Existing posted '
             'documents retain their accounting values.',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: colors.textSecondary,
+            ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _sectionLabel(ApexColors colors, String title, IconData icon) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: colors.textSecondary),
+        const SizedBox(width: 8),
+        Text(
+          title,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: colors.textSecondary,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ],
     );
   }
 }

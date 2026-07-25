@@ -5,6 +5,15 @@ import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
+
+def _uuid_param(db: Session, uid: uuid.UUID) -> str:
+    """Return UUID in dialect-appropriate format for raw SQL queries.
+    SQLite stores UUIDs as hex; PostgreSQL accepts standard hyphenated format."""
+    if db.bind.dialect.name == "sqlite":
+        return uid.hex
+    return str(uid)
+
+
 class ReportItem:
     def __init__(self, account_name: str, account_code: str, classification: str, balance: Decimal):
         self.account_name = account_name
@@ -40,49 +49,59 @@ class FinancialReportingService:
             raise ValueError("tenant_id is required for get_trial_balance")
             
         query = text("""
-            SELECT 
+            SELECT
                 a.name AS account_name,
                 a.code AS account_code,
                 a.account_type AS classification,
-                COALESCE(SUM(CASE WHEN jl.direction = 'DEBIT' THEN jl.amount ELSE 0 END), 0) AS total_debit,
-                COALESCE(SUM(CASE WHEN jl.direction = 'CREDIT' THEN jl.amount ELSE 0 END), 0) AS total_credit
+                a.opening_balance,
+                COALESCE(SUM(CASE WHEN jl.direction = 'DEBIT' THEN jl.amount ELSE 0 END), 0) AS tx_debit,
+                COALESCE(SUM(CASE WHEN jl.direction = 'CREDIT' THEN jl.amount ELSE 0 END), 0) AS tx_credit
             FROM accounts a
             LEFT JOIN journal_lines jl ON a.id = jl.account_id
             LEFT JOIN journal_entries je ON jl.entry_id = je.id AND je.tenant_id = :tenant_id
             WHERE (je.entry_date <= :as_of_date OR je.entry_date IS NULL)
               AND a.tenant_id = :tenant_id
               AND a.deleted_at IS NULL
-            GROUP BY a.id, a.name, a.code, a.account_type
+            GROUP BY a.id, a.name, a.code, a.account_type, a.opening_balance
             ORDER BY a.code
         """)
 
-        result = db.execute(query, {"as_of_date": as_of_date, "tenant_id": tenant_id.hex}).fetchall()
+        result = db.execute(query, {"as_of_date": as_of_date, "tenant_id": _uuid_param(db, tenant_id)}).fetchall()
 
         trial_balance_lines = []
         total_debits = Decimal("0.00")
         total_credits = Decimal("0.00")
 
         for row in result:
-            debit = Decimal(str(row.total_debit))
-            credit = Decimal(str(row.total_credit))
-            
+            tx_debit = Decimal(str(row.tx_debit))
+            tx_credit = Decimal(str(row.tx_credit))
+            op_bal = Decimal(str(row.opening_balance or 0))
+
+            # Include opening balance: ASSET/EXPENSE have debit opening; others have credit opening
+            if row.classification in ("ASSET", "EXPENSE"):
+                total_debit = tx_debit + op_bal
+                total_credit = tx_credit
+            else:
+                total_debit = tx_debit
+                total_credit = tx_credit + op_bal
+
             # Net balance calculation based on account type
             if row.classification in ("ASSET", "EXPENSE"):
-                net_balance = debit - credit
+                net_balance = total_debit - total_credit
             else:
-                net_balance = credit - debit
+                net_balance = total_credit - total_debit
 
             trial_balance_lines.append({
                 "account_name": row.account_name,
                 "account_code": row.account_code,
                 "classification": row.classification,
-                "debit": float(debit.quantize(Decimal("0.01"))),
-                "credit": float(credit.quantize(Decimal("0.01"))),
+                "debit": float(total_debit.quantize(Decimal("0.01"))),
+                "credit": float(total_credit.quantize(Decimal("0.01"))),
                 "net_balance": float(net_balance.quantize(Decimal("0.01")))
             })
 
-            total_debits += debit
-            total_credits += credit
+            total_debits += total_debit
+            total_credits += total_credit
 
         return {
             "as_of_date": as_of_date.isoformat(),
@@ -122,7 +141,7 @@ class FinancialReportingService:
             ORDER BY a.account_type DESC, a.code ASC
         """)
 
-        result = db.execute(query, {"start_date": start_date, "end_date": end_date, "tenant_id": tenant_id.hex}).fetchall()
+        result = db.execute(query, {"start_date": start_date, "end_date": end_date, "tenant_id": _uuid_param(db, tenant_id)}).fetchall()
 
         revenue_items = []
         expense_items = []
@@ -190,7 +209,7 @@ class FinancialReportingService:
             ORDER BY a.account_type ASC, a.code ASC
         """)
 
-        result = db.execute(query, {"as_of_date": as_of_date, "tenant_id": tenant_id.hex}).fetchall()
+        result = db.execute(query, {"as_of_date": as_of_date, "tenant_id": _uuid_param(db, tenant_id)}).fetchall()
 
         assets = []
         liabilities = []
@@ -233,7 +252,7 @@ class FinancialReportingService:
                   AND entry_date BETWEEN :fy_start AND :as_of_date
                 LIMIT 1
             """), {
-                "tenant_id": tenant_id.hex,
+                "tenant_id": _uuid_param(db, tenant_id),
                 "fy_start": fy_start,
                 "as_of_date": as_of_date,
             }).first() is not None

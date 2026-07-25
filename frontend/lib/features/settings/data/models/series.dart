@@ -66,7 +66,13 @@ class InvoiceSeries {
       identical(this, other) ||
       other is InvoiceSeries &&
           runtimeType == other.runtimeType &&
-          id == other.id;
+          id == other.id &&
+          documentType == other.documentType &&
+          prefix == other.prefix &&
+          suffix == other.suffix &&
+          nextNumber == other.nextNumber &&
+          paddingDigits == other.paddingDigits &&
+          isActive == other.isActive;
 
   @override
   int get hashCode => id.hashCode;

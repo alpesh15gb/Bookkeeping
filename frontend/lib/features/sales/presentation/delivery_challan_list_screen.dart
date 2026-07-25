@@ -279,6 +279,14 @@ class _TableBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return _MobileDeliveryChallanList(
+        items: items,
+        colors: colors,
+        fmt: fmt,
+        onWorkflow: onWorkflow,
+      );
+    }
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: SizedBox(
@@ -417,6 +425,104 @@ class _TableBody extends StatelessWidget {
           color: colors.textMuted,
         ),
       ),
+    );
+  }
+}
+
+/// Mobile card layout for delivery challans. Mirrors the pattern from
+/// InvoiceTableBody._MobileInvoiceList so the experience is consistent.
+class _MobileDeliveryChallanList extends StatelessWidget {
+  const _MobileDeliveryChallanList({
+    required this.items,
+    required this.colors,
+    required this.fmt,
+    required this.onWorkflow,
+  });
+
+  final List<DeliveryChallanListItem> items;
+  final ApexColors colors;
+  final NumberFormatter fmt;
+  final void Function(DeliveryChallanListItem, String) onWorkflow;
+
+  @override
+  Widget build(BuildContext context) {
+    if (items.isEmpty) {
+      return const EmptyData(message: 'No delivery challans found.');
+    }
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+      itemCount: items.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, i) {
+        final item = items[i];
+        final overdue = DateTime.tryParse(item.dueDate)
+            ?.isBefore(DateTime.now()) == true;
+        return Card(
+          margin: EdgeInsets.zero,
+          child: InkWell(
+            borderRadius: BorderRadius.circular(ApexRadius.lg),
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => DeliveryChallanFormScreen(editId: item.id),
+                ),
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(item.challanNumber,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      StatusBadge(
+                        label: item.status.value.replaceAll('_', ' '),
+                        tone: toneForStatus(item.status.value),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Icon(Icons.person_outline, size: 15, color: colors.textMuted),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(item.contactName,
+                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: colors.textSecondary),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Icon(Icons.event_outlined, size: 15, color: colors.textMuted),
+                      const SizedBox(width: 4),
+                      Text(
+                        overdue ? 'Overdue ${item.dueDate}' : 'Due ${item.dueDate}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: overdue ? colors.warning : colors.textMuted,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(fmt.currency(item.total),
+                        style: const TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

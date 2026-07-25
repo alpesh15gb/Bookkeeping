@@ -62,10 +62,27 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
             if result.rowcount == 0:
                 existing = db.execute(text(
-                    "SELECT request_hash, status, response_status, response_body, response_content_type "
+                    "SELECT request_hash, status, response_status, response_body, response_content_type, created_at "
                     "FROM idempotency_keys WHERE idempotency_key=:key AND tenant_id=:tenant "
                     "AND method=:method AND path=:path"
                 ), {"key": idempotency_key, "tenant": tenant_id, "method": request.method, "path": str(request.url.path)}).mappings().first()
+                if existing and existing["status"] == "PROCESSING":
+                    # Detect stale processing records (older than 60s) and delete+retry
+                    import datetime as dt
+                    now = dt.datetime.now(dt.timezone.utc)
+                    age = now - existing["created_at"]
+                    if age > dt.timedelta(seconds=60):
+                        db.execute(
+                            text("DELETE FROM idempotency_keys WHERE idempotency_key=:key AND tenant_id=:tenant "
+                                 "AND method=:method AND path=:path AND status='PROCESSING'"),
+                            {"key": idempotency_key, "tenant": tenant_id, "method": request.method, "path": str(request.url.path)},
+                        )
+                        db.commit()
+                        return await self.dispatch(request, call_next)  # Retry with fresh record
+                    return JSONResponse(status_code=409, content={
+                        "detail": "A request with this idempotency key is still processing.",
+                        "code": "REQUEST_IN_PROGRESS",
+                    })
                 if existing and existing["request_hash"] and existing["request_hash"] != request_hash:
                     return JSONResponse(status_code=422, content={
                         "detail": "Idempotency-Key was already used with a different request payload.",

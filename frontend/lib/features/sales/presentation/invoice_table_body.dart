@@ -42,96 +42,112 @@ class InvoiceTableBody extends StatelessWidget {
       );
     }
     final textTheme = Theme.of(context).textTheme;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: 760,
-        child: Column(
-          children: [
-            // Sticky header row
-            Container(
-              color: colors.surfaceMuted,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
+    return Column(
+      children: [
+        // Sticky header row
+        Container(
+          color: colors.surfaceMuted,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              final codeW = (w * 0.15).clamp(90, 180).toDouble();
+              final nameW = (w * 0.19).clamp(110, 240).toDouble();
+              final dateW = (w * 0.10).clamp(70, 110).toDouble();
+              final dueW = (w * 0.10).clamp(70, 110).toDouble();
+              final totalW = (w * 0.14).clamp(80, 150).toDouble();
+              final outstandingW = (w * 0.14).clamp(80, 150).toDouble();
+              final statusW = (w * 0.14).clamp(90, 160).toDouble();
+              return Row(
                 children: [
-                  _sortableHeader(context, 'Code', 'invoiceNumber', 140),
-                  _sortableHeader(context, 'Customer', 'contactName', 180),
-                  _sortableHeader(context, 'Date', 'issueDate', 100),
-                  _sortableHeader(
-                    context,
-                    'Total',
-                    'total',
-                    120,
-                    alignRight: true,
-                  ),
-                  const SizedBox(
-                    width: 140,
-                    child: Text(
-                      'Status',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                      ),
+                  _sortableHeader(context, 'Code', 'invoiceNumber', codeW),
+                  _sortableHeader(context, 'Customer', 'contactName', nameW),
+                  _sortableHeader(context, 'Date', 'issueDate', dateW),
+                  _sortableHeader(context, 'Due On', 'dueDate', dueW),
+                  _sortableHeader(context, 'Total', 'total', totalW, alignRight: true),
+                  _sortableHeader(context, 'Outstanding', 'outstanding', outstandingW, alignRight: true),
+                  SizedBox(
+                    width: statusW,
+                    child: Text('Status',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                     ),
                   ),
                 ],
-              ),
-            ),
-            // Data rows
-            Expanded(
-              child: ListView.separated(
+              );
+            },
+          ),
+        ),
+        // Data rows
+        Expanded(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              final codeW = (w * 0.15).clamp(90, 180).toDouble();
+              final nameW = (w * 0.19).clamp(110, 240).toDouble();
+              final dateW = (w * 0.10).clamp(70, 110).toDouble();
+              final dueW = (w * 0.10).clamp(70, 110).toDouble();
+              final totalW = (w * 0.14).clamp(80, 150).toDouble();
+              final outstandingW = (w * 0.14).clamp(80, 150).toDouble();
+              final statusW = (w * 0.14).clamp(90, 160).toDouble();
+              return ListView.separated(
                 padding: EdgeInsets.zero,
-                separatorBuilder: (_, __) =>
-                    Divider(height: 1, color: colors.border),
+                separatorBuilder: (_, __) => Divider(height: 1, color: colors.border),
                 itemCount: items.length,
                 itemBuilder: (context, i) {
                   final item = items[i];
                   final isSelected = item.id == selectedId;
+                  final overdue = item.outstanding > 0 && DateTime.tryParse(item.dueDate)?.isBefore(DateTime.now()) == true;
                   return InkWell(
                     onTap: () => onSelect(item),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                       color: isSelected ? colors.primaryContainer : null,
                       child: Row(
                         children: [
                           SizedBox(
-                            width: 140,
-                            child: Text(
-                              item.invoiceNumber,
+                            width: codeW,
+                            child: Text(item.invoiceNumber,
+                              style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                          SizedBox(
+                            width: nameW,
+                            child: Text(item.contactName, style: textTheme.bodyMedium,
+                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          SizedBox(
+                            width: dateW,
+                            child: Text(item.issueDate, style: textTheme.bodyMedium),
+                          ),
+                          SizedBox(
+                            width: dueW,
+                            child: Text(item.dueDate,
                               style: textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
+                                color: overdue ? colors.danger : null,
+                                fontWeight: overdue ? FontWeight.w600 : null,
                               ),
                             ),
                           ),
                           SizedBox(
-                            width: 180,
-                            child: Text(
-                              item.contactName,
-                              style: textTheme.bodyMedium,
+                            width: totalW,
+                            child: Text(fmt.currency(item.total),
+                              textAlign: TextAlign.right,
+                              style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                             ),
                           ),
                           SizedBox(
-                            width: 100,
-                            child: Text(
-                              item.issueDate,
-                              style: textTheme.bodyMedium,
-                            ),
-                          ),
-                          SizedBox(
-                            width: 120,
-                            child: Text(
-                              fmt.currency(item.total),
+                            width: outstandingW,
+                            child: Text(fmt.currency(item.outstanding),
                               textAlign: TextAlign.right,
                               style: textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
+                                color: item.outstanding > 0 ? colors.danger : null,
                               ),
                             ),
                           ),
                           SizedBox(
-                            width: 140,
+                            width: statusW,
                             child: _statusBadge(item.status),
                           ),
                         ],
@@ -139,11 +155,11 @@ class InvoiceTableBody extends StatelessWidget {
                     ),
                   );
                 },
-              ),
-            ),
-          ],
+              );
+            },
+          ),
         ),
-      ),
+      ],
     );
   }
 

@@ -20,7 +20,14 @@ def get_dashboard_metrics(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
 ):
-    params = {"tenant_id": str(tenant_id).replace("-", "")}
+    from sqlalchemy import text as _txt
+    _dialect = None
+    try:
+        _dialect = db.bind.dialect.name if hasattr(db, 'bind') else None
+    except Exception:
+        pass
+    _tid = tenant_id.hex if _dialect == "sqlite" else str(tenant_id)
+    params = {"tenant_id": _tid}
     date_filter = ""
     if date_from and date_to:
         date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"

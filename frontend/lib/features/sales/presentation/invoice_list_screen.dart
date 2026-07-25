@@ -75,7 +75,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
           'invoiceNumber' => a.invoiceNumber.compareTo(b.invoiceNumber),
           'contactName' => a.contactName.compareTo(b.contactName),
           'issueDate' => a.issueDate.compareTo(b.issueDate),
+          'dueDate' => a.dueDate.compareTo(b.dueDate),
           'total' => a.total.compareTo(b.total),
+          'outstanding' => a.outstanding.compareTo(b.outstanding),
           _ => 0,
         };
     items.sort((a, b) {
@@ -98,6 +100,15 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
             title: 'Sales Invoices',
             subtitle: 'Billing and collections.',
             actions: [
+              IconButton(
+                icon: const Icon(Icons.download_rounded, size: 20),
+                tooltip: 'Export list',
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Export feature coming soon.')),
+                  );
+                },
+              ),
               PermissionGate(
                 permission: Permissions.invoiceCreate,
                 child: FilledButton.icon(

@@ -55,7 +55,7 @@ class InvoiceFormState {
   final String? error;
 
   bool get isValid =>
-      contactId != null && lines.any((l) => l.productId.isNotEmpty);
+      contactId != null && contactId!.isNotEmpty && lines.any((l) => l.productId.isNotEmpty);
 
   InvoiceFormState copyWith({
     String? contactId,
@@ -105,6 +105,6 @@ class InvoiceFormState {
     totalTax: totalTax ?? this.totalTax,
     total: total ?? this.total,
     saving: saving ?? this.saving,
-    error: clearError ? null : (error ?? this.error),
+    error: error ?? (clearError ? null : this.error),
   );
 }

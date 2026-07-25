@@ -10,6 +10,7 @@ import '../data/models/financial_year.dart';
 import '../data/models/gst_config.dart';
 import '../data/models/preferences.dart';
 import '../data/models/series.dart';
+import '../data/models/export_record.dart';
 import '../data/models/team_member.dart';
 import '../data/models/tenant_settings.dart';
 import '../data/settings_repository.dart';
@@ -101,6 +102,17 @@ final gstConfigProvider = FutureProvider<GstConfig>((ref) {
 final userPreferencesProvider = FutureProvider<UserPreferences>((ref) {
   final repo = ref.watch(settingsRepositoryProvider);
   return _unwrapResult(repo.getPreferences());
+});
+
+// ---------------------------------------------------------------------------
+// Export Records
+// ---------------------------------------------------------------------------
+
+/// Fetches the export history for a company.
+final exportRecordsProvider =
+    FutureProvider.family<List<ExportRecord>, String>((ref, companyId) async {
+  final repo = ref.watch(settingsRepositoryProvider);
+  return _unwrapResult(repo.getExportRecords(companyId));
 });
 
 // ---------------------------------------------------------------------------

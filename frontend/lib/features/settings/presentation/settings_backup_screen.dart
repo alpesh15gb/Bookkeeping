@@ -12,6 +12,7 @@ import 'package:file_picker/file_picker.dart';
 
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_header.dart';
+import '../../../core/widgets/states.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/dialogs/dialog_service.dart';
@@ -298,7 +299,30 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
       return const Center(child: Text('No company selected.'));
     }
 
-    return Scaffold(appBar: null, body: _buildContent(colors, const []));
+    final exportsAsync = ref.watch(exportRecordsProvider(companyId));
+
+    return Scaffold(
+      appBar: null,
+      body: exportsAsync.when(
+        loading: () => const Center(child: LoadingSpinner(size: 36)),
+        error: (err, _) => Column(
+          children: [
+            MaterialBanner(
+              content: Text('Could not load export history: $err'),
+              actions: [
+                TextButton(
+                  onPressed: () =>
+                      ref.invalidate(exportRecordsProvider(companyId)),
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+            Expanded(child: _buildContent(colors, const [])),
+          ],
+        ),
+        data: (exports) => _buildContent(colors, exports),
+      ),
+    );
   }
 
   Widget _buildContent(ApexColors colors, List<ExportRecord> exports) {

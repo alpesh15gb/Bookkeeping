@@ -33,6 +33,12 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
   String _search = '';
 
   @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final asyncVal = ref.watch(trialBalanceReportProvider);
     final colors = apexColors(context);

@@ -26,15 +26,12 @@ class ApexApp extends ConsumerWidget {
       themeMode: themeMode.toMaterial(),
       routerConfig: router,
       builder: (context, child) {
-        // Clamp text scaling so huge accessibility scales don't break layouts.
-        final media = MediaQuery.of(context);
-        final scale = media.textScaler.clamp(
-          minScaleFactor: 0.85,
-          maxScaleFactor: 1.3,
-        );
+        // Respect system text scaling for WCAG 1.4.4 compliance (200%).
+        // If layout issues appear at large scales, fix the layout rather than
+        // clamping — a clamp below 2.0 is an accessibility violation.
         return ResponsiveLayout(
           child: MediaQuery(
-            data: MediaQuery.of(context).copyWith(textScaler: scale),
+            data: MediaQuery.of(context),
             child: child ?? const SizedBox.shrink(),
           ),
         );

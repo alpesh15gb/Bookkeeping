@@ -135,7 +135,10 @@ class _PaymentFormScreenState extends ConsumerState<PaymentFormScreen> {
                   content: Text(state.error!),
                   leading: const Icon(Icons.error_outline),
                   actions: [
-                    TextButton(onPressed: () {}, child: const Text('REVIEW')),
+                    TextButton(
+                      onPressed: () => ref.read(paymentFormProvider.notifier).clearError(),
+                      child: const Text('DISMISS'),
+                    ),
                   ],
                 ),
               Wrap(

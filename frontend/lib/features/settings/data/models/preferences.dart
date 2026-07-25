@@ -58,17 +58,43 @@ class UserPreferences {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is UserPreferences && runtimeType == other.runtimeType;
+      other is UserPreferences &&
+          runtimeType == other.runtimeType &&
+          currency == other.currency &&
+          dateFormat == other.dateFormat &&
+          numberFormat == other.numberFormat &&
+          themeMode == other.themeMode &&
+          timezone == other.timezone;
 
   @override
   int get hashCode =>
-      Object.hash(currency, dateFormat, numberFormat, themeMode);
+      Object.hash(currency, dateFormat, numberFormat, themeMode, timezone);
 }
 
 /// Supported currencies.
 class CurrencyCodes {
   CurrencyCodes._();
-  static const Map<String, String> labels = {'INR': 'Indian Rupee (₹)'};
+  static const Map<String, String> labels = {
+    'INR': 'Indian Rupee (₹)',
+    'USD': 'US Dollar (\$)',
+    'EUR': 'Euro (€)',
+    'GBP': 'British Pound (£)',
+    'AED': 'UAE Dirham (د.إ)',
+    'SAR': 'Saudi Riyal (﷼)',
+    'SGD': 'Singapore Dollar (S\$)',
+    'MYR': 'Malaysian Ringgit (RM)',
+    'LKR': 'Sri Lankan Rupee (Rs)',
+    'NPR': 'Nepalese Rupee (Rs)',
+    'BDT': 'Bangladeshi Taka (৳)',
+    'PKR': 'Pakistani Rupee (Rs)',
+    'THB': 'Thai Baht (฿)',
+    'IDR': 'Indonesian Rupiah (Rp)',
+    'CNY': 'Chinese Yuan (¥)',
+    'JPY': 'Japanese Yen (¥)',
+    'AUD': 'Australian Dollar (A\$)',
+    'CAD': 'Canadian Dollar (C\$)',
+    'CHF': 'Swiss Franc (Fr)',
+  };
 }
 
 /// Date format presets.

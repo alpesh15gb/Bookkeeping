@@ -48,10 +48,16 @@ class GstConfig {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is GstConfig && runtimeType == other.runtimeType;
+      other is GstConfig &&
+          runtimeType == other.runtimeType &&
+          taxMode == other.taxMode &&
+          stateCode == other.stateCode &&
+          registrationType == other.registrationType &&
+          filingFrequency == other.filingFrequency &&
+          gstin == other.gstin;
 
   @override
-  int get hashCode => Object.hash(taxMode, stateCode, registrationType);
+  int get hashCode => Object.hash(taxMode, stateCode, registrationType, filingFrequency, gstin);
 }
 
 /// Known GST tax modes.

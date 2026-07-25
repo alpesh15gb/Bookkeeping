@@ -100,6 +100,15 @@ class _BillListScreenState extends ConsumerState<BillListScreen> {
             subtitle:
                 'Track vendor bills, purchase receipts, and accounts payable.',
             actions: [
+              IconButton(
+                icon: const Icon(Icons.download_rounded, size: 20),
+                tooltip: 'Export list',
+                onPressed: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Export feature coming soon.')),
+                  );
+                },
+              ),
               OutlinedButton.icon(
                 onPressed: () async {
                   final created = await Navigator.of(context).push<bool>(

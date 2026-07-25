@@ -24,10 +24,14 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(dashboardProvider.notifier).load());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) ref.read(dashboardProvider.notifier).load();
+    });
     _refreshTimer = Timer.periodic(
       const Duration(seconds: 60),
-      (_) => ref.read(dashboardProvider.notifier).refresh(),
+      (_) {
+        if (mounted) ref.read(dashboardProvider.notifier).refresh();
+      },
     );
   }
 
@@ -62,7 +66,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     return Scaffold(
       backgroundColor: colors.surfaceMuted,
       body: RefreshIndicator(
-        onRefresh: () => ref.read(dashboardProvider.notifier).refresh(),
+        onRefresh: () async {
+          try {
+            await ref.read(dashboardProvider.notifier).refresh();
+          } catch (_) {
+            // RefreshIndicator requires the future to complete or it hangs
+          }
+        },
         child: Scrollbar(
           child: ListView.builder(
             padding: EdgeInsets.fromLTRB(

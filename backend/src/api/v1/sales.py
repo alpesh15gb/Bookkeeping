@@ -25,7 +25,8 @@ def get_sales_summary(
     Compiles overall sales KPI metrics from finalized invoices.
     Uses database-level SUM aggregations.
     """
-    params = {"tenant_id": str(tenant_id).replace("-", "")}
+    _tid = tenant_id.hex if db.bind.dialect.name == "sqlite" else str(tenant_id)
+    params = {"tenant_id": _tid}
     date_filter = ""
     if date_from and date_to:
         date_filter = "AND issue_date >= :date_from AND issue_date <= :date_to"
@@ -81,7 +82,8 @@ def get_customer_wise_sales(
         GROUP BY c.id, c.name
         ORDER BY total_sales DESC
     """)
-    results = db.execute(query, {'tenant_id': str(tenant_id)}).fetchall()
+    _tid_cw = tenant_id.hex if db.bind.dialect.name == "sqlite" else str(tenant_id)
+    results = db.execute(query, {'tenant_id': _tid_cw}).fetchall()
 
     response = []
     for row in results:
@@ -130,7 +132,8 @@ def get_period_wise_sales(
             ORDER BY month_key ASC
         """)
         
-    results = db.execute(query, {'tenant_id': str(tenant_id)}).fetchall()
+    _tid_pw = tenant_id.hex if db.bind.dialect.name == "sqlite" else str(tenant_id)
+    results = db.execute(query, {'tenant_id': _tid_pw}).fetchall()
 
     response = []
     for row in results:

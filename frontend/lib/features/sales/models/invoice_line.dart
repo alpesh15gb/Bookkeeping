@@ -53,7 +53,8 @@ class InvoiceLine {
   final double total;
 
   double get lineSubtotal => rate * quantity;
-  double get discountAmount => lineSubtotal * (discount / 100);
+  /// Discount is a flat amount (not a percentage), matching the backend schema.
+  double get discountAmount => discount.clamp(0, lineSubtotal);
 
   InvoiceLine copyWith({
     String? id,

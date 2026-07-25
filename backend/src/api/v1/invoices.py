@@ -186,6 +186,13 @@ def create_invoice(
     final_cess = (inv_cess * tax_multiplier).quantize(Decimal("0.0001"))
     
     # Round-off adjustment calculations
+    # Under RCM, GST is self-assessed by the buyer, so the seller's invoice total excludes tax.
+    if payload.is_rcm:
+        final_cgst = Decimal("0.0000")
+        final_sgst = Decimal("0.0000")
+        final_igst = Decimal("0.0000")
+        final_utgst = Decimal("0.0000")
+        final_cess = Decimal("0.0000")
     raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
@@ -2180,6 +2187,8 @@ def print_invoice(
         cgst=invoice.cgst_amount,
         sgst=invoice.sgst_amount,
         igst=invoice.igst_amount,
+        utgst=invoice.utgst_amount,
+        cess=invoice.cess_amount,
         round_off=invoice.round_off,
         total=invoice.total,
         template=template,

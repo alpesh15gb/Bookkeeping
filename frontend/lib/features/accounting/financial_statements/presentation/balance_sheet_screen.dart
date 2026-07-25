@@ -55,6 +55,13 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
   void initState() {
     super.initState();
     _asOnDate = DateTime.now();
+    // Push initial date to provider so the first API call respects it
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(bsAsOnDateProvider.notifier).state =
+            _asOnDate!.toIso8601String().split('T')[0];
+      }
+    });
   }
 
   @override
@@ -389,7 +396,9 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
     ApexColors colors,
     NumberFormatter fmt,
   ) {
-    final equityTotal = report.totalEquity + report.netProfit;
+    // totalEquity from the backend already includes netProfit for the period.
+    // Do NOT add netProfit again — that would double-count.
+    final equityTotal = report.totalEquity;
 
     return ApexCard(
       child: Column(
@@ -498,7 +507,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
                   SizedBox(
                     width: 120,
                     child: MonetaryText(
-                      value: fmt.currency(report.netProfit.abs()),
+                      value: fmt.currency(report.netProfit),  // Negative shown in ( ) per accounting standard
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: report.netProfit >= 0

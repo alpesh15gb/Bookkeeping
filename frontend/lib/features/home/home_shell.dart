@@ -9,6 +9,7 @@ import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 import 'package:apexbooks/features/auth/presentation/auth_routes.dart'
     as auth_routes;
 import 'package:apexbooks/core/search/command_palette.dart';
+import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/screens.dart';
 import 'home_shell_widgets.dart';
 
@@ -149,8 +150,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               Icons.notifications_none_rounded,
               color: colors.onPrimary,
             ),
-            tooltip: 'Notifications',
-            onPressed: () {},
+            tooltip: 'Notifications (coming soon)',
+            onPressed: () {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: const Text('Notifications are coming soon.'),
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
           ),
         ],
       ),

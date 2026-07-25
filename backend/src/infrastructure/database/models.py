@@ -2010,7 +2010,7 @@ class Transfer(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     transfer_number = Column(String(50))
-    transfer_date = Column(String(10))  # ISO date string (YYYY-MM-DD)
+    transfer_date = Column(Date)
     from_warehouse_id = Column(UUID(as_uuid=True))
     from_warehouse_name = Column(String(200))
     to_warehouse_id = Column(UUID(as_uuid=True))

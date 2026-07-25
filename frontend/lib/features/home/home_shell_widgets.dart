@@ -131,48 +131,41 @@ List<(String, IconData, String, Widget)> getScreensList({
     (
       'Inventory',
       Icons.inventory_2_outlined,
-      'TRANSACTIONS',
+      'INVENTORY',
       HubTabWidget(
-        tabs: ['Stock', 'Ledger', 'Transfers', 'Adjustments', 'Warehouses'],
+        tabs: ['Stock', 'Ledger', 'Transfers', 'Adjustments', 'Warehouse'],
         views: [
           InventoryListScreen(),
           StockMovementListScreen(),
           TransferListScreen(),
           AdjustmentListScreen(),
-          HubTabWidget(
-            tabs: ['Dashboard', 'Warehouses', 'Stock'],
-            views: [
-              WarehouseDashboardScreen(),
-              WarehouseListScreen(),
-              const _WarehouseStockTabView(),
-            ],
-          ),
+          WarehouseDashboardScreen(),
         ],
       ),
     ),
     (
-      'Ledger',
+      'Accounting',
       Icons.account_tree_outlined,
       'FINANCIALS',
       const HubTabWidget(
-        tabs: [
-          'COA',
-          'Journals',
-          'Trial Balance',
-          'General Ledger',
-          'P&L',
-          'Balance Sheet',
-          'Cash Book',
-          'Bank Book',
-          'Day Book',
-        ],
+        tabs: ['COA', 'Journals', 'Trial Balance', 'P&L', 'Balance Sheet'],
         views: [
           AccountListScreen(),
           JournalListScreen(),
           TrialBalanceScreen(),
-          GeneralLedgerScreen(),
           ProfitLossScreen(),
           BalanceSheetScreen(),
+        ],
+      ),
+    ),
+    (
+      'Books & Registers',
+      Icons.book_rounded,
+      'FINANCIALS',
+      const HubTabWidget(
+        tabs: ['General Ledger', 'Cash Book', 'Bank Book', 'Day Book'],
+        views: [
+          GeneralLedgerScreen(),
           CashBookScreen(),
           BankBookScreen(),
           DayBookScreen(),
@@ -183,22 +176,22 @@ List<(String, IconData, String, Widget)> getScreensList({
       ('GST', Icons.fact_check_rounded, 'FINANCIALS', const GstShell()),
     ('Reports', Icons.assessment_rounded, 'REPORTS', const ReportsShell()),
     (
+      'Banking',
+      Icons.account_balance_rounded,
+      'BANKING',
+      const BankingProfileListScreen(),
+    ),
+    (
       'Contacts',
       Icons.people_alt_outlined,
-      'DIRECTORIES',
+      'MASTERS',
       const ContactListScreen(),
     ),
     (
       'Products',
       Icons.shopping_basket_outlined,
-      'DIRECTORIES',
+      'MASTERS',
       const ProductListScreen(),
-    ),
-    (
-      'Banking',
-      Icons.account_balance_rounded,
-      'FINANCIALS',
-      const BankingProfileListScreen(),
     ),
     ('Settings', Icons.tune_rounded, 'SYSTEM', const SettingsShell()),
   ];

@@ -455,36 +455,29 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
     if invoice.status not in ("POSTED", "PARTIALLY_PAID"):
         raise ValueError(f"Cannot cancel invoice in status {invoice.status}")
 
-    from src.infrastructure.database.models import PaymentAllocation, JournalEntry, JournalLine
+    from src.infrastructure.database.models import PaymentAllocation, Account, JournalEntry, JournalLine
     allocations = db.query(PaymentAllocation).filter(
         PaymentAllocation.invoice_id == invoice.id,
     ).first()
     if allocations:
         raise ValueError("Cannot cancel invoice with existing payments. Reverse payments first.")
 
-    # Secondary guard: check for any PAYMENT journal entries linked to this contact
-    # after the invoice date (catches direct payments without allocation records)
-    payment_entries = db.query(JournalEntry).join(
-        JournalLine, JournalLine.entry_id == JournalEntry.id
-    ).filter(
-        JournalEntry.tenant_id == tenant_id,
-        JournalEntry.source_type.in_(["PAYMENT"]),
-        JournalEntry.entry_date >= invoice.issue_date,
-    ).first()
-    if payment_entries:
-        # Verify the payment is for the same contact by checking the customer account
-        customer_account_id = db.query(Account.id).filter(
-            Account.tenant_id == tenant_id,
-            Account.name.ilike(f"%{invoice.contact.name}%"),
-            Account.account_type == "ASSET",
+    # Check for any unlinked payment journal entries referencing this customer's account.
+    # This catches direct payments recorded without explicit PaymentAllocation records.
+    resolver_check = AccountResolver(db, tenant_id)
+    try:
+        customer_account_id = resolver_check.resolve(f"customer.{invoice.contact_id}")
+        unlinked_payment = db.query(JournalEntry.id).join(
+            JournalLine, JournalLine.entry_id == JournalEntry.id
+        ).filter(
+            JournalEntry.tenant_id == tenant_id,
+            JournalEntry.source_type == "PAYMENT",
+            JournalLine.account_id == customer_account_id,
         ).first()
-        if customer_account_id:
-            linked_payment = db.query(JournalLine).filter(
-                JournalLine.entry_id == payment_entries.id,
-                JournalLine.account_id == customer_account_id[0],
-            ).first()
-            if linked_payment:
-                raise ValueError("Cannot cancel: active payment journal entries exist for this customer. Reverse payments first.")
+        if unlinked_payment:
+            raise ValueError("Cannot cancel: active payment journal entries exist for this customer. Reverse payments first.")
+    except Exception:
+        pass  # If account resolution fails, proceed with the cancellation
 
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")

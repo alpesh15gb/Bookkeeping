@@ -49,11 +49,12 @@ class _SettingsPreferencesScreenState
   Future<void> _save() async {
     setState(() => _isSaving = true);
     final repo = ref.read(settingsRepositoryProvider);
+    // Theme is device-local and applied immediately via themeControllerProvider.
+    // Do NOT persist it server-side so it does not cross-pollinate devices.
     final result = await repo.updatePreferences({
       'currency': _currency,
       'date_format': _dateFormat,
       'number_format': _numberFormat,
-      'theme_mode': _themeMode,
     });
     setState(() => _isSaving = false);
 

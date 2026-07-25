@@ -12,6 +12,7 @@ import 'models/gst_config.dart';
 import 'models/preferences.dart';
 import 'models/series.dart';
 import 'models/team_member.dart';
+import 'models/export_record.dart';
 import 'models/tenant_settings.dart';
 
 class SettingsRepository {
@@ -212,6 +213,17 @@ class SettingsRepository {
     return guardDio(() async {
       final res = await _dio.get('/companies/$companyId/export');
       return Map<String, dynamic>.from(res.data as Map);
+    });
+  }
+
+  /// `GET /companies/{id}/exports` — list of past export records.
+  Future<Result<List<ExportRecord>>> getExportRecords(String companyId) {
+    return guardDio(() async {
+      final res = await _dio.get('/companies/$companyId/exports');
+      final list = res.data as List<dynamic>;
+      return list
+          .map((e) => ExportRecord.fromJson(e as Map<String, dynamic>))
+          .toList();
     });
   }
 

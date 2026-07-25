@@ -58,6 +58,15 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
     final now = DateTime.now();
     _fromDate = DateTime(now.year, now.month, 1);
     _toDate = now;
+    // Push initial dates to providers so the first API call respects them
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(pnlDateFromProvider.notifier).state =
+            _fromDate!.toIso8601String().split('T')[0];
+        ref.read(pnlDateToProvider.notifier).state =
+            _toDate!.toIso8601String().split('T')[0];
+      }
+    });
   }
 
   @override
@@ -397,7 +406,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
             ),
           ),
           MonetaryText(
-            value: fmt.currency(report.netProfit.abs()),
+            value: fmt.currency(report.netProfit),  // Negative shown in ( ) per accounting standard
             fontSize: 20,
             fontWeight: FontWeight.w800,
             color: color,

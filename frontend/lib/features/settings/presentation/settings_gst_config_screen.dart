@@ -1,7 +1,8 @@
 /// GST Configuration settings screen.
 ///
 /// Allows toggling the GST tax mode (REGULAR / COMPOSITION / NON_GST),
-/// selecting the state code, registration type, and filing frequency.
+/// selecting the state code, registration type, filing frequency,
+/// and e-invoicing / e-waybill credentials.
 library;
 
 import 'package:flutter/material.dart';
@@ -14,6 +15,7 @@ import '../../../core/services/notification_service.dart';
 import '../../../core/result/result.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/gst_config.dart';
+import '../data/models/tenant_settings.dart';
 import 'settings_providers.dart';
 
 class SettingsGstConfigScreen extends ConsumerStatefulWidget {
@@ -37,14 +39,22 @@ class _SettingsGstConfigScreenState
   String? _registrationType;
   String? _filingFrequency;
   String? _gstin;
+  bool _eInvoicingEnabled = false;
+  String _eInvoiceUsername = '';
+  String _eWayBillUsername = '';
 
-  void _initFields(GstConfig config) {
+  void _initFields(GstConfig config, TenantSettings? settings) {
     if (_populated) return;
     _taxMode = config.taxMode;
     _stateCode = config.stateCode;
     _registrationType = config.registrationType;
     _filingFrequency = config.filingFrequency;
     _gstin = config.gstin;
+    if (settings != null) {
+      _eInvoicingEnabled = settings.eInvoicingEnabled;
+      _eInvoiceUsername = settings.eInvoiceUsername ?? '';
+      _eWayBillUsername = settings.eWayBillUsername ?? '';
+    }
     _populated = true;
   }
 
@@ -85,6 +95,19 @@ class _SettingsGstConfigScreenState
       ),
     );
 
+    // Also persist e-invoicing/e-waybill settings when GST is enabled.
+    if (gstResult is Success && _taxMode != TaxMode.nonGst) {
+      await repo.updateTenantSettings({
+        'e_invoicing_enabled': _eInvoicingEnabled,
+        'e_invoice_username': _eInvoiceUsername.trim().isEmpty
+            ? null
+            : _eInvoiceUsername.trim(),
+        'e_way_bill_username': _eWayBillUsername.trim().isEmpty
+            ? null
+            : _eWayBillUsername.trim(),
+      });
+    }
+
     setState(() => _isSaving = false);
 
     if (!mounted) return;
@@ -107,25 +130,31 @@ class _SettingsGstConfigScreenState
   @override
   Widget build(BuildContext context) {
     final colors = apexColors(context);
-    final async = ref.watch(gstConfigProvider);
+    final gstAsync = ref.watch(gstConfigProvider);
+    final settingsAsync = ref.watch(tenantSettingsProvider);
 
     return Scaffold(
       appBar: null,
-      body: async.when(
+      body: gstAsync.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
           message: err.toString(),
           onRetry: () => ref.invalidate(gstConfigProvider),
         ),
         data: (config) {
-          _initFields(config);
-          return _buildContent(colors, config);
+          final settings = settingsAsync.valueOrNull;
+          _initFields(config, settings);
+          return _buildContent(colors, config, settings);
         },
       ),
     );
   }
 
-  Widget _buildContent(ApexColors colors, GstConfig config) {
+  Widget _buildContent(
+    ApexColors colors,
+    GstConfig config,
+    TenantSettings? settings,
+  ) {
     final isGst = _taxMode != TaxMode.nonGst;
 
     return SingleChildScrollView(
@@ -292,6 +321,66 @@ class _SettingsGstConfigScreenState
                 ],
               ),
             ),
+          // E-invoicing / E-waybill (only when GST is enabled)
+          if (isGst) ...[
+            const SizedBox(height: 16),
+            ApexCard(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'E-Invoicing & E-Waybill',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Configure IRN/e-invoice and e-waybill credentials.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text('Enable E-Invoicing'),
+                    subtitle: Text(
+                      'Generate IRN for all B2B invoices via the GST portal.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    value: _eInvoicingEnabled,
+                    onChanged: (v) => setState(() => _eInvoicingEnabled = v),
+                  ),
+                  if (_eInvoicingEnabled) ...[
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: _eInvoiceUsername,
+                      decoration: const InputDecoration(
+                        labelText: 'E-Invoice Username (GST Portal)',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                      onChanged: (v) => _eInvoiceUsername = v,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      initialValue: _eWayBillUsername,
+                      decoration: const InputDecoration(
+                        labelText: 'E-Waybill Username',
+                        prefixIcon: Icon(Icons.local_shipping_outlined),
+                        helperText: 'Separate if different from e-invoice username.',
+                      ),
+                      onChanged: (v) => _eWayBillUsername = v,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
           // Non-GST info card
           if (!isGst)
             ApexCard(
