@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 import uuid
 from datetime import date
+from decimal import Decimal
 
 from src.core.database import get_db_session
 from src.api.deps import enforce_permission
