@@ -167,26 +167,32 @@ class _ContactListScreenState extends ConsumerState<ContactListScreen> {
                 icon: const Icon(Icons.edit_rounded, size: 20),
                 tooltip: 'Edit',
                 onPressed: () => Navigator.of(context)
-                    .push(MaterialPageRoute(
-                      builder: (_) => ContactFormScreen(contact: _selected),
-                    ))
+                    .push(
+                      MaterialPageRoute(
+                        builder: (_) => ContactFormScreen(contact: _selected),
+                      ),
+                    )
                     .then((_) {
                       ref.invalidate(contactControllerProvider);
                       setState(() => _selected = null);
                     }),
               ),
               IconButton(
-                icon: Icon(Icons.delete_outline_rounded, size: 20,
-                    color: colors.danger),
+                icon: Icon(
+                  Icons.delete_outline_rounded,
+                  size: 20,
+                  color: colors.danger,
+                ),
                 tooltip: 'Delete',
                 onPressed: () async {
                   final ok = await ref
                       .read(contactControllerProvider.notifier)
                       .delete(_selected!, context);
+                  if (!context.mounted) return;
                   if (ok) {
                     ref.invalidate(contactControllerProvider);
                     setState(() => _selected = null);
-                    if (mounted) Navigator.of(context).maybePop();
+                    await Navigator.of(context).maybePop();
                   }
                 },
               ),
@@ -210,9 +216,11 @@ class _ContactListScreenState extends ConsumerState<ContactListScreen> {
                 icon: const Icon(Icons.edit_rounded, size: 16),
                 label: const Text('Edit Contact'),
                 onPressed: () => Navigator.of(context)
-                    .push(MaterialPageRoute(
-                      builder: (_) => ContactFormScreen(contact: _selected),
-                    ))
+                    .push(
+                      MaterialPageRoute(
+                        builder: (_) => ContactFormScreen(contact: _selected),
+                      ),
+                    )
                     .then((_) {
                       ref.invalidate(contactControllerProvider);
                       setState(() => _selected = null);

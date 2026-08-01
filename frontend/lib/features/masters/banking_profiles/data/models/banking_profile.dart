@@ -37,7 +37,7 @@ class BankingProfile extends BaseModel {
   /// Masked account number for display (shows last 4 digits).
   String get maskedNumber {
     if (accountNumber.length <= 4) return accountNumber;
-    return '••••' + accountNumber.substring(accountNumber.length - 4);
+    return '••••${accountNumber.substring(accountNumber.length - 4)}';
   }
 
   /// Short bank+last4 label for dropdowns/cells.

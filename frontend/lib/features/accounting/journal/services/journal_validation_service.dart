@@ -41,8 +41,9 @@ class JournalValidationService {
 
   String? validateLine(JournalLine line) {
     if (line.accountId.isEmpty) return 'Account is required on all lines';
-    if (line.amount <= 0)
+    if (line.amount <= 0) {
       return 'Amount must be greater than zero on all lines';
+    }
     return null;
   }
 

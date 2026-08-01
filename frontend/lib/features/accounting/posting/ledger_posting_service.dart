@@ -77,14 +77,17 @@ class LedgerPostingService {
         },
       ];
 
-      final res = await _dio.post('/accounting/journals', data: {
-        'entry_date': date,
-        'reference_number': invoiceNumber,
-        'description': 'Auto-posting from invoice $invoiceNumber',
-        'source_type': 'INVOICE',
-        'source_id': invoiceId,
-        'lines': lines,
-      });
+      final res = await _dio.post(
+        '/accounting/journals',
+        data: {
+          'entry_date': date,
+          'reference_number': invoiceNumber,
+          'description': 'Auto-posting from invoice $invoiceNumber',
+          'source_type': 'INVOICE',
+          'source_id': invoiceId,
+          'lines': lines,
+        },
+      );
 
       final data = res.data as Map<String, dynamic>;
       return _parseResult(data);
@@ -116,14 +119,17 @@ class LedgerPostingService {
         },
       ];
 
-      final res = await _dio.post('/accounting/journals', data: {
-        'entry_date': date,
-        'reference_number': paymentNumber,
-        'description': 'Auto-posting from payment $paymentNumber',
-        'source_type': 'PAYMENT',
-        'source_id': paymentId,
-        'lines': lines,
-      });
+      final res = await _dio.post(
+        '/accounting/journals',
+        data: {
+          'entry_date': date,
+          'reference_number': paymentNumber,
+          'description': 'Auto-posting from payment $paymentNumber',
+          'source_type': 'PAYMENT',
+          'source_id': paymentId,
+          'lines': lines,
+        },
+      );
 
       final data = res.data as Map<String, dynamic>;
       return _parseResult(data);
@@ -152,14 +158,18 @@ class LedgerPostingService {
         };
       }).toList();
 
-      final res = await _dio.post('/accounting/journals', data: {
-        'entry_date': DateTime.now().toIso8601String().split('T').first,
-        'reference_number': 'REV-${origData['reference_number'] ?? originalEntryId}',
-        'description': 'Reversal of entry $originalEntryId: $reversalReason',
-        'source_type': 'REVERSAL',
-        'source_id': originalEntryId,
-        'lines': reversalLines,
-      });
+      final res = await _dio.post(
+        '/accounting/journals',
+        data: {
+          'entry_date': DateTime.now().toIso8601String().split('T').first,
+          'reference_number':
+              'REV-${origData['reference_number'] ?? originalEntryId}',
+          'description': 'Reversal of entry $originalEntryId: $reversalReason',
+          'source_type': 'REVERSAL',
+          'source_id': originalEntryId,
+          'lines': reversalLines,
+        },
+      );
 
       final data = res.data as Map<String, dynamic>;
       return _parseResult(data);
@@ -170,7 +180,8 @@ class LedgerPostingService {
     return PostingResult(
       journalEntryId: data['id'] as String,
       entryNumber: data['reference_number'] as String? ?? '',
-      lines: (data['lines'] as List?)?.map((l) {
+      lines:
+          (data['lines'] as List?)?.map((l) {
             final m = l as Map<String, dynamic>;
             return PostingLine(
               accountId: m['account_id'] as String,
@@ -182,7 +193,8 @@ class LedgerPostingService {
                   : 0,
               description: m['narration'] as String?,
             );
-          }).toList() ?? [],
+          }).toList() ??
+          [],
     );
   }
 }

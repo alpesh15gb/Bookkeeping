@@ -72,8 +72,9 @@ class Address {
         state == null &&
         stateCode == null &&
         pincode == null &&
-        country == null)
+        country == null) {
       return null;
+    }
     return {
       if (street != null) 'street': street,
       if (city != null) 'city': city,

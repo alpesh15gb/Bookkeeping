@@ -6,20 +6,51 @@ import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
-import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/core/download/download_service.dart';
+import 'package:apexbooks/features/offline_repository_providers.dart';
+import 'package:apexbooks/features/purchases/vendor_bills/models/bill_status.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/vendor_bill.dart';
 import '../models/bill_line.dart';
 import '../services/vendor_bill_service.dart';
 
 final billDetailProvider = FutureProvider.autoDispose
     .family<VendorBill, String>((ref, id) async {
-      final res = await ref.watch(vendorBillServiceProvider).get(id);
-      return switch (res) {
-        Success(:final value) => value,
-        Failure(:final error) => throw error,
-        _ => throw Exception(),
-      };
+      final repo = ref.watch(purchasingRepositoryProvider);
+      final pi = await repo.getPurchaseInvoice(id);
+      if (pi == null) throw Exception('Bill not found locally');
+      return VendorBill(
+        id: pi.localId,
+        billNumber: pi.invoiceNumber,
+        contactId: pi.supplierId,
+        contactName: pi.supplierName,
+        issueDate: pi.invoiceDate,
+        dueDate: pi.invoiceDate,
+        status: BillStatus.fromString(pi.lifecycleStatus),
+        subtotal: pi.totalBeforeTaxPaise / 100.0,
+        discountTotal: 0,
+        cgstAmount: pi.taxPaise / 200.0,
+        sgstAmount: pi.taxPaise / 200.0,
+        igstAmount: 0,
+        utgstAmount: 0,
+        cessAmount: 0,
+        roundOff: 0,
+        total: pi.totalPaise / 100.0,
+        amountPaid: 0,
+        posStateCode: '',
+        referenceNumber: pi.referenceNumber,
+        notes: pi.description,
+        lines: pi.lines.map((l) {
+          return BillLine(
+            id: l.localId,
+            productName: l.productName,
+            description: l.description,
+            quantity: double.tryParse(l.quantity) ?? 0,
+            rate: l.unitPricePaise / 100.0,
+            total: l.totalPaise / 100.0,
+          );
+        }).toList(),
+      );
     });
 
 class BillDetailScreen extends ConsumerStatefulWidget {
@@ -61,7 +92,7 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
       body: asyncVal.when(
         loading: () => const Center(child: LoadingSpinner(size: 32)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(billDetailProvider(widget.billId)),
         ),
         data: (bill) => Column(
@@ -162,14 +193,16 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                       icon: const Icon(Icons.print_rounded, size: 18),
                       label: const Text('Print'),
                     ),
-                    if (_operating)
-                      const LoadingSpinner(size: 18),
+                    if (_operating) const LoadingSpinner(size: 18),
                     if (bill.status.name == 'draft')
                       FilledButton.icon(
                         onPressed: _operating
                             ? null
                             : () => _act(() => service.post(bill.id)),
-                        icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                        icon: const Icon(
+                          Icons.check_circle_outline_rounded,
+                          size: 18,
+                        ),
                         label: const Text('Post Bill'),
                       ),
                     if (bill.status.name == 'posted')
@@ -177,10 +210,19 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                         onPressed: _operating
                             ? null
                             : () => _act(() => service.cancel(bill.id)),
-                        icon: Icon(Icons.cancel_outlined, size: 18, color: colors.danger),
-                        label: Text('Cancel', style: TextStyle(color: colors.danger)),
+                        icon: Icon(
+                          Icons.cancel_outlined,
+                          size: 18,
+                          color: colors.danger,
+                        ),
+                        label: Text(
+                          'Cancel',
+                          style: TextStyle(color: colors.danger),
+                        ),
                         style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: colors.danger.withValues(alpha: 0.4)),
+                          side: BorderSide(
+                            color: colors.danger.withValues(alpha: 0.4),
+                          ),
                         ),
                       ),
                   ],
@@ -227,7 +269,10 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                     onPressed: _operating
                         ? null
                         : () => _act(() => service.post(bill.id)),
-                    icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
+                    icon: const Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 18,
+                    ),
                     label: const Text('Post Bill'),
                   ),
                 if (bill.status.name == 'posted') ...[
@@ -236,10 +281,19 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
                     onPressed: _operating
                         ? null
                         : () => _act(() => service.cancel(bill.id)),
-                    icon: Icon(Icons.cancel_outlined, size: 18, color: colors.danger),
-                    label: Text('Cancel', style: TextStyle(color: colors.danger)),
+                    icon: Icon(
+                      Icons.cancel_outlined,
+                      size: 18,
+                      color: colors.danger,
+                    ),
+                    label: Text(
+                      'Cancel',
+                      style: TextStyle(color: colors.danger),
+                    ),
                     style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: colors.danger.withValues(alpha: 0.4)),
+                      side: BorderSide(
+                        color: colors.danger.withValues(alpha: 0.4),
+                      ),
                     ),
                   ),
                 ],
@@ -374,8 +428,7 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
           ),
         ),
         ...bill.lines.asMap().entries.map(
-          (e) =>
-              _lineRow(e.value, e.key == bill.lines.length - 1, colors, fmt),
+          (e) => _lineRow(e.value, e.key == bill.lines.length - 1, colors, fmt),
         ),
       ],
     );
@@ -566,11 +619,7 @@ class _BillDetailScreenState extends ConsumerState<BillDetailScreen> {
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Panel({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;

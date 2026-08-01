@@ -197,12 +197,14 @@ class _ProductListScreenState extends ConsumerState<ProductListScreen> {
                 ),
                 tooltip: 'Delete',
                 onPressed: () async {
-                  if (await ref
+                  final ok = await ref
                       .read(productControllerProvider.notifier)
-                      .delete(_selected!, context)) {
+                      .delete(_selected!, context);
+                  if (!context.mounted) return;
+                  if (ok) {
                     ref.invalidate(productControllerProvider);
                     setState(() => _selected = null);
-                    Navigator.of(context).maybePop();
+                    await Navigator.of(context).maybePop();
                   }
                 },
               ),

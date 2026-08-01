@@ -27,12 +27,9 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(dashboardProvider.notifier).load();
     });
-    _refreshTimer = Timer.periodic(
-      const Duration(seconds: 60),
-      (_) {
-        if (mounted) ref.read(dashboardProvider.notifier).refresh();
-      },
-    );
+    _refreshTimer = Timer.periodic(const Duration(seconds: 60), (_) {
+      if (mounted) ref.read(dashboardProvider.notifier).refresh();
+    });
   }
 
   @override
@@ -504,7 +501,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
               final seriesLabel = rodIndex == 0 ? 'Revenue' : 'Expense';
               return BarTooltipItem(
                 '$seriesLabel\n${fmt.currency(value)}',
-                TextStyle(
+                const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w600,
@@ -581,26 +578,26 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             barRods: [
               BarChartRodData(
                 toY: revValue,
-                color: colors.success,
-                width: 14,
+                color: colors.success.withValues(alpha: 0.85),
+                width: 16,
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(4),
+                  top: Radius.circular(6),
                 ),
               ),
               BarChartRodData(
                 toY: expValue,
-                color: colors.danger,
-                width: 14,
+                color: colors.danger.withValues(alpha: 0.85),
+                width: 16,
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(4),
+                  top: Radius.circular(6),
                 ),
               ),
             ],
           );
         }),
       ),
-      swapAnimationDuration: const Duration(milliseconds: 600),
-      swapAnimationCurve: Curves.easeOutCubic,
+      duration: const Duration(milliseconds: 600),
+      curve: Curves.easeOutCubic,
     );
   }
 
@@ -1002,7 +999,7 @@ class _KpiCardState extends State<_KpiCard> {
         curve: Curves.easeOut,
         padding: EdgeInsets.all(mobile ? 13 : 18),
         transform: _hovered
-            ? (Matrix4.identity()..translate(0.0, -2.0))
+            ? (Matrix4.identity()..translateByDouble(0.0, -2.0, 0, 1))
             : Matrix4.identity(),
         transformAlignment: Alignment.center,
         decoration: BoxDecoration(
@@ -1032,7 +1029,7 @@ class _KpiCardState extends State<_KpiCard> {
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: widget.tone.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    shape: BoxShape.circle,
                   ),
                   child: Icon(widget.icon, size: 18, color: widget.tone),
                 ),

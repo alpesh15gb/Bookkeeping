@@ -19,6 +19,7 @@ import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/permissions/permissions.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import 'proforma_form_screen.dart';
 import 'proforma_detail_screen.dart';
 import 'invoice_search_bar.dart';
@@ -246,7 +247,7 @@ class _ProformaListScreenState extends ConsumerState<ProformaListScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(proformaListProvider),
               ),
               data: (data) {
@@ -380,7 +381,7 @@ class _TableBody extends StatelessWidget {
       return ListView.separated(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final item = items[index];
           return Card(
@@ -465,7 +466,7 @@ class _TableBody extends StatelessWidget {
             Expanded(
               child: ListView.separated(
                 padding: EdgeInsets.zero,
-                separatorBuilder: (_, __) =>
+                separatorBuilder: (_, _) =>
                     Divider(height: 1, color: colors.border),
                 itemCount: items.length,
                 itemBuilder: (context, i) {

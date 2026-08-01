@@ -8,17 +8,21 @@ enum InvoiceStatus {
   sent('SENT'),
   partiallyPaid('PARTIALLY_PAID'),
   paid('PAID'),
+  overdue('OVERDUE'),
   cancelled('CANCELLED');
 
   const InvoiceStatus(this.value);
   final String value;
 
-  static InvoiceStatus fromString(String s) =>
+  static InvoiceStatus fromString(String? s) =>
       InvoiceStatus.values.firstWhere((e) => e.value == s, orElse: () => draft);
 
   bool get isEditable => this == draft;
   bool get isFinalized =>
-      this == posted || this == partiallyPaid || this == paid;
+      this == posted ||
+      this == partiallyPaid ||
+      this == paid ||
+      this == overdue;
   bool get isCancellable => isFinalized;
   bool get isDeletable => this == draft;
 }

@@ -233,8 +233,9 @@ class _PurchaseReturnFormScreenState
             ),
             colors,
           );
-          if (narrow)
+          if (narrow) {
             return Column(children: [bill, const SizedBox(height: 12), date]);
+          }
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -453,7 +454,7 @@ class _BillSelectorField extends ConsumerWidget {
         Text('Failed to load bills', style: TextStyle(color: colors.danger)),
       ),
       data: (bills) {
-        if (bills.isEmpty)
+        if (bills.isEmpty) {
           return _box(
             colors,
             Text(
@@ -461,6 +462,7 @@ class _BillSelectorField extends ConsumerWidget {
               style: TextStyle(color: colors.textMuted),
             ),
           );
+        }
         return InkWell(
           borderRadius: BorderRadius.circular(ApexRadius.sm),
           onTap: () async {

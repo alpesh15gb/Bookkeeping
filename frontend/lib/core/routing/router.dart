@@ -22,26 +22,55 @@ import '../../features/auth/presentation/reset_password_screen.dart';
 import '../../features/home/home_shell.dart';
 import '../../app/app_splash.dart';
 
+String? authRedirect(AuthState auth, String location) {
+  final isAuthRoute =
+      location == auth_routes.login ||
+      location == auth_routes.register ||
+      location == auth_routes.forgotPassword ||
+      location.startsWith(auth_routes.resetPassword);
+  final isCompanyRoute = location == auth_routes.companySelection;
+
+  switch (auth.status) {
+    case AuthStatus.initial:
+      return location == '/splash' ? null : '/splash';
+    case AuthStatus.unauthenticated:
+      return isAuthRoute ? null : auth_routes.login;
+    case AuthStatus.authenticated:
+      final hasTenant = auth.hasActiveTenant;
+      if (location == '/splash') {
+        return hasTenant ? '/' : auth_routes.companySelection;
+      }
+      if (isAuthRoute) return hasTenant ? '/' : auth_routes.companySelection;
+      if (!hasTenant && !isCompanyRoute) return auth_routes.companySelection;
+      if (hasTenant && isCompanyRoute) return '/';
+      return null;
+  }
+}
+
 /// Slide-up page transition for detail/form screens
 class SlideUpTransitionPage extends CustomTransitionPage<void> {
   SlideUpTransitionPage({required super.child})
-      : super(
-          transitionDuration: const Duration(milliseconds: 200),
-          reverseTransitionDuration: const Duration(milliseconds: 150),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            final tween = Tween(begin: const Offset(0, 0.04), end: Offset.zero)
-                .chain(CurveTween(curve: Curves.easeOutCubic));
-            final fadeTween = Tween(begin: 0.0, end: 1.0)
-                .chain(CurveTween(curve: Curves.easeOut));
-            return FadeTransition(
-              opacity: animation.drive(fadeTween),
-              child: SlideTransition(
-                position: animation.drive(tween),
-                child: child,
-              ),
-            );
-          },
-        );
+    : super(
+        transitionDuration: const Duration(milliseconds: 200),
+        reverseTransitionDuration: const Duration(milliseconds: 150),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          final tween = Tween(
+            begin: const Offset(0, 0.04),
+            end: Offset.zero,
+          ).chain(CurveTween(curve: Curves.easeOutCubic));
+          final fadeTween = Tween(
+            begin: 0.0,
+            end: 1.0,
+          ).chain(CurveTween(curve: Curves.easeOut));
+          return FadeTransition(
+            opacity: animation.drive(fadeTween),
+            child: SlideTransition(
+              position: animation.drive(tween),
+              child: child,
+            ),
+          );
+        },
+      );
 }
 
 /// Provider that exposes the configured [GoRouter]. It listens to the auth
@@ -68,11 +97,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       switch (status) {
         case AuthStatus.initial:
           // While restoring the session, hold on the splash.
-          return location == '/splash' ? null : '/splash';
+          if (location.startsWith('/splash')) return null;
+          return '/splash?returnTo=${Uri.encodeComponent(location)}';
         case AuthStatus.unauthenticated:
           return isAuthRoute ? null : auth_routes.login;
         case AuthStatus.authenticated:
           final hasTenant = auth.value.hasActiveTenant;
+          if (location.startsWith('/splash')) {
+            final returnTo = state.uri.queryParameters['returnTo'];
+            final target = returnTo == null || returnTo.isEmpty
+                ? '/'
+                : Uri.decodeComponent(returnTo);
+            return hasTenant ? target : auth_routes.companySelection;
+          }
           if (isAuthRoute) {
             // Signed in but sitting on a login page → go home or pick company.
             return hasTenant ? '/' : auth_routes.companySelection;
@@ -90,9 +127,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/splash',
         name: 'splash',
-        pageBuilder: (context, state) => SlideUpTransitionPage(
-          child: const AppSplash(),
-        ),
+        pageBuilder: (context, state) =>
+            SlideUpTransitionPage(child: const AppSplash()),
       ),
       GoRoute(
         path: auth_routes.login,
@@ -124,7 +160,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/',
         name: 'home',
-        builder: (context, state) => const HomeShell(),
+        builder: (context, state) =>
+            HomeShell(section: state.uri.queryParameters['section']),
       ),
     ],
     errorBuilder: (context, state) =>

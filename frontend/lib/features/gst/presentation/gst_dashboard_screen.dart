@@ -5,6 +5,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/presentation/design_system/tokens/app_spacing.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
@@ -12,6 +13,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/gst_service.dart';
 import '../models/gst_models.dart';
 
@@ -28,13 +30,17 @@ final _gstPeriodProvider = StateProvider<String>((ref) {
 // Data providers
 // ---------------------------------------------------------------------------
 
-final _gstDashboardGstr1Provider =
-    FutureProvider.autoDispose<Gstr1Summary>((ref) async {
+final _gstDashboardGstr1Provider = FutureProvider.autoDispose<Gstr1Summary>((
+  ref,
+) async {
   final period = ref.watch(_gstPeriodProvider);
   final parts = period.split('-');
-  final res = await ref.read(gstServiceProvider).getGstr1(
+  final res = await ref
+      .read(gstServiceProvider)
+      .getGstr1(
         startDate: '$period-01',
-        endDate: '${parts[0]}-${parts[1]}-${_daysInMonth(int.parse(parts[0]), int.parse(parts[1]))}',
+        endDate:
+            '${parts[0]}-${parts[1]}-${_daysInMonth(int.parse(parts[0]), int.parse(parts[1]))}',
       );
   return switch (res) {
     Success(:final value) => value,
@@ -43,13 +49,17 @@ final _gstDashboardGstr1Provider =
   };
 });
 
-final _gstDashboardGstr3bProvider =
-    FutureProvider.autoDispose<Gstr3BSummary>((ref) async {
+final _gstDashboardGstr3bProvider = FutureProvider.autoDispose<Gstr3BSummary>((
+  ref,
+) async {
   final period = ref.watch(_gstPeriodProvider);
   final parts = period.split('-');
-  final res = await ref.read(gstServiceProvider).getGstr3b(
+  final res = await ref
+      .read(gstServiceProvider)
+      .getGstr3b(
         startDate: '$period-01',
-        endDate: '${parts[0]}-${parts[1]}-${_daysInMonth(int.parse(parts[0]), int.parse(parts[1]))}',
+        endDate:
+            '${parts[0]}-${parts[1]}-${_daysInMonth(int.parse(parts[0]), int.parse(parts[1]))}',
       );
   return switch (res) {
     Success(:final value) => value,
@@ -60,13 +70,13 @@ final _gstDashboardGstr3bProvider =
 
 final _gstDashboardReturnsProvider =
     FutureProvider.autoDispose<List<GstReturn>>((ref) async {
-  final res = await ref.read(gstServiceProvider).listReturns();
-  return switch (res) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
-});
+      final res = await ref.read(gstServiceProvider).listReturns();
+      return switch (res) {
+        Success(:final value) => value,
+        Failure(:final error) => throw error,
+        _ => throw Exception(),
+      };
+    });
 
 int _daysInMonth(int year, int month) {
   if (month == 2) {
@@ -99,7 +109,12 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
     return Scaffold(
       backgroundColor: colors.surfaceMuted,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.xxl),
+        padding: const EdgeInsets.fromLTRB(
+          ApexSpacing.xl,
+          0,
+          ApexSpacing.xl,
+          ApexSpacing.xxl,
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -158,8 +173,18 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
     final year = int.parse(parts[0]);
     final month = int.parse(parts[1]);
     const months = [
-      'January', 'February', 'March', 'April', 'May', 'June',
-      'July', 'August', 'September', 'October', 'November', 'December',
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
     ];
     return InkWell(
       onTap: () => _pickPeriod(),
@@ -174,7 +199,11 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.calendar_month_rounded, size: 16, color: colors.textSecondary),
+            Icon(
+              Icons.calendar_month_rounded,
+              size: 16,
+              color: colors.textSecondary,
+            ),
             const SizedBox(width: 8),
             Text(
               '${months[month - 1]} $year',
@@ -215,7 +244,8 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
   Widget _kpiRow(Gstr3BSummary gstr3b, ApexColors colors, NumberFormatter fmt) {
     final outputGst = gstr3b.outwardTaxableSupplies;
     final itc = gstr3b.inwardSuppliesItc;
-    final outputTotal = outputGst.integratedTax + outputGst.centralTax + outputGst.stateUtTax;
+    final outputTotal =
+        outputGst.integratedTax + outputGst.centralTax + outputGst.stateUtTax;
     final inputTotal = itc.integratedTax + itc.centralTax + itc.stateUtTax;
     final netPayable = outputTotal - inputTotal;
 
@@ -342,23 +372,23 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SkeletonBox(width: 120, height: 16),
-              const SizedBox(height: 16),
+              const SkeletonBox(width: 120, height: 16),
+              const SizedBox(height: AppSpacing.lg),
               for (int i = 0; i < 4; i++) ...[
-                Row(
+                const Row(
                   children: [
                     SkeletonBox(width: 100, height: 12),
-                    const Spacer(),
+                    Spacer(),
                     SkeletonBox(width: 80, height: 12),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
               ],
             ],
           ),
         ),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(_gstDashboardGstr1Provider),
         ),
         data: (summary) => Column(
@@ -366,7 +396,11 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
           children: [
             Row(
               children: [
-                Icon(Icons.receipt_long_rounded, size: 18, color: colors.primary),
+                Icon(
+                  Icons.receipt_long_rounded,
+                  size: 18,
+                  color: colors.primary,
+                ),
                 const SizedBox(width: 8),
                 Text(
                   'GSTR-1 Summary',
@@ -381,9 +415,24 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
             const SizedBox(height: ApexSpacing.md),
             Divider(height: 1, color: colors.border),
             const SizedBox(height: ApexSpacing.sm),
-            _summaryRow('B2B Invoices', '${summary.b2b.length}', fmt.currency(summary.totalTaxableValue), colors),
-            _summaryRow('B2C Large', '${summary.b2cl.length}', fmt.currency(summary.totalIgst), colors),
-            _summaryRow('Credit/Debit Notes', '${summary.cdnr.length + summary.cdnur.length}', fmt.currency(summary.totalCgst + summary.totalSgst), colors),
+            _summaryRow(
+              'B2B Invoices',
+              '${summary.b2b.length}',
+              fmt.currency(summary.totalTaxableValue),
+              colors,
+            ),
+            _summaryRow(
+              'B2C Large',
+              '${summary.b2cl.length}',
+              fmt.currency(summary.totalIgst),
+              colors,
+            ),
+            _summaryRow(
+              'Credit/Debit Notes',
+              '${summary.cdnr.length + summary.cdnur.length}',
+              fmt.currency(summary.totalCgst + summary.totalSgst),
+              colors,
+            ),
             const SizedBox(height: ApexSpacing.sm),
             Divider(height: 1, color: colors.border),
             const SizedBox(height: ApexSpacing.sm),
@@ -400,7 +449,13 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
     );
   }
 
-  Widget _summaryRow(String label, String count, String value, ApexColors colors, {bool bold = false}) {
+  Widget _summaryRow(
+    String label,
+    String count,
+    String value,
+    ApexColors colors, {
+    bool bold = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -419,14 +474,21 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
                 if (count.isNotEmpty) ...[
                   const SizedBox(width: 6),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
                       color: colors.surfaceMuted,
                       borderRadius: BorderRadius.circular(ApexRadius.pill),
                     ),
                     child: Text(
                       count,
-                      style: TextStyle(fontSize: 11, color: colors.textMuted, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: colors.textMuted,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                 ],
@@ -459,23 +521,23 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SkeletonBox(width: 120, height: 16),
-              const SizedBox(height: 16),
+              const SkeletonBox(width: 120, height: 16),
+              const SizedBox(height: AppSpacing.lg),
               for (int i = 0; i < 4; i++) ...[
-                Row(
+                const Row(
                   children: [
                     SkeletonBox(width: 100, height: 12),
-                    const Spacer(),
+                    Spacer(),
                     SkeletonBox(width: 80, height: 12),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
               ],
             ],
           ),
         ),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(_gstDashboardGstr3bProvider),
         ),
         data: (gstr3b) => Column(
@@ -547,23 +609,23 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              SkeletonBox(width: 140, height: 16),
-              const SizedBox(height: 16),
+              const SkeletonBox(width: 140, height: 16),
+              const SizedBox(height: AppSpacing.lg),
               for (int i = 0; i < 3; i++) ...[
-                Row(
+                const Row(
                   children: [
                     SkeletonBox(width: 100, height: 14),
-                    const Spacer(),
+                    Spacer(),
                     SkeletonBox(width: 60, height: 22),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
               ],
             ],
           ),
         ),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(_gstDashboardReturnsProvider),
         ),
         data: (returns) {
@@ -575,7 +637,11 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
             children: [
               Row(
                 children: [
-                  Icon(Icons.assignment_rounded, size: 18, color: colors.success),
+                  Icon(
+                    Icons.assignment_rounded,
+                    size: 18,
+                    color: colors.success,
+                  ),
                   const SizedBox(width: 8),
                   Text(
                     'Recent GST Returns',

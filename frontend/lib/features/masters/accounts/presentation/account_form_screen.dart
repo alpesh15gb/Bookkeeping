@@ -112,124 +112,133 @@ class _AccountFormScreenState extends ConsumerState<AccountFormScreen> {
         }
       },
       child: CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
-        const SingleActivator(LogicalKeyboardKey.keyS, meta: true): _save,
-      },
-      child: Focus(
-        autofocus: true,
-        child: Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Edit Account' : 'New Account')),
-      body: ApexForm(
-        controller: _ctrl,
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _section('Account Details'),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _codeCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Code *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.numbers_outlined),
-                  hintText: 'e.g. 1001',
-                ),
-                textCapitalization: TextCapitalization.characters,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _nameCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Name *',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.label_outline),
-                ),
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              ApexDropdownField<AccountType>(
-                name: 'account_type',
-                label: 'Account Type *',
-                initialValue: _type,
-                options: AccountType.values,
-                toLabel: (t) => '${t.displayLabel} (${t.statementGroup})',
-                onChanged: (v) =>
-                    setState(() => _type = v ?? AccountType.asset),
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _groupCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Account Group',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.folder_outlined),
-                  hintText: 'e.g. Cash & Bank, Receivables (optional)',
-                ),
-              ),
-              const SizedBox(height: 12),
-              ApexDropdownField<Account?>(
-                name: 'parent_id',
-                label: 'Parent Account',
-                initialValue: _parent,
-                options: [null, ..._parentOptions],
-                toLabel: (a) =>
-                    a == null ? '— None (root) —' : '${a.code} · ${a.name}',
-                onChanged: (v) => setState(() => _parent = v),
-              ),
-              const SizedBox(height: 16),
-              _section('Opening Balance'),
-              const SizedBox(height: 8),
-              ApexMoneyField(
-                name: 'opening_balance',
-                label: 'Opening Balance',
-                initialValue: _openingBalance,
-                onChanged: (v) => _openingBalance = v ?? 0,
-              ),
-              const SizedBox(height: 4),
-              Padding(
-                padding: const EdgeInsets.only(left: 4),
-                child: Text(
-                  _type.debitIncreases
-                      ? 'Debit increases this account.'
-                      : 'Credit increases this account.',
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                title: const Text('Active'),
-                value: _isActive,
-                onChanged: (v) => setState(() => _isActive = v),
-              ),
-              const SizedBox(height: 24),
-              PermissionGate(
-                permission: Permissions.accountsManage,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          _isEditing ? Icons.save_rounded : Icons.add_rounded,
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
+          const SingleActivator(LogicalKeyboardKey.keyS, meta: true): _save,
+        },
+        child: Focus(
+          autofocus: true,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Text(_isEditing ? 'Edit Account' : 'New Account'),
+            ),
+            body: ApexForm(
+              controller: _ctrl,
+              child: Form(
+                key: _formKey,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _section('Account Details'),
+                    const SizedBox(height: 8),
+                    TextFormField(
+                      controller: _codeCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Code *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.numbers_outlined),
+                        hintText: 'e.g. 1001',
+                      ),
+                      textCapitalization: TextCapitalization.characters,
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Name *',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.label_outline),
+                      ),
+                      validator: (v) =>
+                          v == null || v.trim().isEmpty ? 'Required' : null,
+                    ),
+                    const SizedBox(height: 12),
+                    ApexDropdownField<AccountType>(
+                      name: 'account_type',
+                      label: 'Account Type *',
+                      initialValue: _type,
+                      options: AccountType.values,
+                      toLabel: (t) => '${t.displayLabel} (${t.statementGroup})',
+                      onChanged: (v) =>
+                          setState(() => _type = v ?? AccountType.asset),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _groupCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Account Group',
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.folder_outlined),
+                        hintText: 'e.g. Cash & Bank, Receivables (optional)',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    ApexDropdownField<Account?>(
+                      name: 'parent_id',
+                      label: 'Parent Account',
+                      initialValue: _parent,
+                      options: [null, ..._parentOptions],
+                      toLabel: (a) => a == null
+                          ? '— None (root) —'
+                          : '${a.code} · ${a.name}',
+                      onChanged: (v) => setState(() => _parent = v),
+                    ),
+                    const SizedBox(height: 16),
+                    _section('Opening Balance'),
+                    const SizedBox(height: 8),
+                    ApexMoneyField(
+                      name: 'opening_balance',
+                      label: 'Opening Balance',
+                      initialValue: _openingBalance,
+                      onChanged: (v) => _openingBalance = v ?? 0,
+                    ),
+                    const SizedBox(height: 4),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text(
+                        _type.debitIncreases
+                            ? 'Debit increases this account.'
+                            : 'Credit increases this account.',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    SwitchListTile(
+                      title: const Text('Active'),
+                      value: _isActive,
+                      onChanged: (v) => setState(() => _isActive = v),
+                    ),
+                    const SizedBox(height: 24),
+                    PermissionGate(
+                      permission: Permissions.accountsManage,
+                      child: FilledButton.icon(
+                        onPressed: _saving ? null : _save,
+                        icon: _saving
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : Icon(
+                                _isEditing
+                                    ? Icons.save_rounded
+                                    : Icons.add_rounded,
+                              ),
+                        label: Text(
+                          _isEditing ? 'Update Account' : 'Create Account',
                         ),
-                  label: Text(_isEditing ? 'Update Account' : 'Create Account'),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
         ),
-      ),
-      ),
-      ),
       ),
     );
   }

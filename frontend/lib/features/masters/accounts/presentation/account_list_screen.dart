@@ -391,8 +391,9 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
           'Existing accounts with the same code are skipped. Continue?',
       confirmLabel: 'Seed',
     );
-    if (ok && mounted) {
-      await ref.read(accountControllerProvider.notifier).seedDefaults(context);
+    if (!ok || !context.mounted) {
+      return;
     }
+    await ref.read(accountControllerProvider.notifier).seedDefaults(context);
   }
 }

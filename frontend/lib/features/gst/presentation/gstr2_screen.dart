@@ -9,9 +9,10 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/download/download_service.dart';
 import '../../../core/formatting/number_formatting.dart';
 import '../../../core/network/api_client.dart';
-import '../../../core/result/result.dart';
 import '../../../core/services/notification_service.dart';
-import '../../../core/theme/app_colors.dart';
+import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/presentation/design_system/tokens/app_spacing.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/states.dart';
 import '../models/gst_models.dart';
@@ -104,6 +105,7 @@ class _Gstr2ScreenState extends ConsumerState<Gstr2Screen> {
     );
     final file = picked?.files.single;
     if (file == null) return;
+    if (!mounted) return;
     if (file.bytes == null) {
       ref
           .read(notificationServiceProvider)
@@ -184,7 +186,7 @@ class _Gstr2ScreenState extends ConsumerState<Gstr2Screen> {
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
             child: Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
                 color: colors.info.withValues(alpha: .08),
                 border: Border.all(color: colors.info.withValues(alpha: .25)),
@@ -207,7 +209,7 @@ class _Gstr2ScreenState extends ConsumerState<Gstr2Screen> {
             child: report.when(
               loading: () => const Center(child: LoadingSpinner()),
               error: (error, _) => ErrorView(
-                message: error.toString(),
+                message: userFacingErrorMessage(error),
                 onRetry: () => ref.invalidate(_gstr2ReportProvider),
               ),
               data: (value) => _report(value, colors),
@@ -265,7 +267,7 @@ class _Gstr2ScreenState extends ConsumerState<Gstr2Screen> {
             ),
           ],
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: AppSpacing.lg),
         if (lines.isEmpty)
           const EmptyState(
             icon: Icons.receipt_long_outlined,
@@ -372,12 +374,12 @@ class _ReconciliationDialog extends StatelessWidget {
                   Chip(label: Text('${_count('unmatched')} missing in books')),
                 ],
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: AppSpacing.md),
               const Text(
                 'Review differences before claiming ITC. A match checks supplier GSTIN, normalized invoice number, invoice value, and total tax within ₹1.',
               ),
               if (matches.isNotEmpty) ...[
-                const SizedBox(height: 16),
+                const SizedBox(height: AppSpacing.lg),
                 const Text(
                   'Matched / different documents',
                   style: TextStyle(fontWeight: FontWeight.w700),
@@ -403,7 +405,7 @@ class _ReconciliationDialog extends StatelessWidget {
                 }),
               ],
               if (unmatched.isNotEmpty) ...[
-                const SizedBox(height: 12),
+                const SizedBox(height: AppSpacing.md),
                 const Text(
                   'Portal documents missing in books',
                   style: TextStyle(fontWeight: FontWeight.w700),

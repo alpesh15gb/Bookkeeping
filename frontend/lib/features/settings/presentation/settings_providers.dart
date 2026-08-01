@@ -4,7 +4,6 @@ library;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/api_client.dart';
-import '../../../core/result/result.dart';
 import '../../auth/data/models/membership_models.dart';
 import '../data/models/financial_year.dart';
 import '../data/models/gst_config.dart';
@@ -109,11 +108,12 @@ final userPreferencesProvider = FutureProvider<UserPreferences>((ref) {
 // ---------------------------------------------------------------------------
 
 /// Fetches the export history for a company.
-final exportRecordsProvider =
-    FutureProvider.family<List<ExportRecord>, String>((ref, companyId) async {
-  final repo = ref.watch(settingsRepositoryProvider);
-  return _unwrapResult(repo.getExportRecords(companyId));
-});
+final exportRecordsProvider = FutureProvider.family<List<ExportRecord>, String>(
+  (ref, companyId) async {
+    final repo = ref.watch(settingsRepositoryProvider);
+    return _unwrapResult(repo.getExportRecords(companyId));
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Internal helpers

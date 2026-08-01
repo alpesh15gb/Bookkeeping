@@ -10,6 +10,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/features/inventory/stock/models/stock_models.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/warehouse_service.dart';
 import 'warehouse_providers.dart';
 import 'warehouse_form_screen.dart';
@@ -27,21 +28,18 @@ class WarehouseDetailScreen extends ConsumerWidget {
     final colors = apexColors(context);
     final fmt = ref.watch(numberFormatterProvider);
     final isMobile = ResponsiveLayout.isMobile(context);
+    final warehouse = whAsync.valueOrNull;
 
     return Scaffold(
       backgroundColor: colors.surfaceMuted,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight + 12),
-        child: _DetailAppBar(
-          title: '',
-          warehouseId: warehouseId,
-          colors: colors,
-        ),
+        child: _DetailAppBar(warehouse: warehouse, colors: colors),
       ),
       body: whAsync.when(
         loading: () => _buildLoading(colors),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(warehouseDetailProvider(warehouseId)),
         ),
         data: (warehouse) => _DetailContent(
@@ -71,14 +69,9 @@ class WarehouseDetailScreen extends ConsumerWidget {
 }
 
 class _DetailAppBar extends StatelessWidget {
-  const _DetailAppBar({
-    required this.title,
-    required this.warehouseId,
-    required this.colors,
-  });
+  const _DetailAppBar({required this.warehouse, required this.colors});
 
-  final String title;
-  final String warehouseId;
+  final Warehouse? warehouse;
   final ApexColors colors;
 
   @override
@@ -129,18 +122,20 @@ class _DetailAppBar extends StatelessWidget {
                 icon: Icon(
                   Icons.edit_outlined,
                   size: 20,
-                  color: colors.textSecondary,
+                  color: warehouse == null
+                      ? colors.textMuted
+                      : colors.textSecondary,
                 ),
-                onPressed: () {
-                  Navigator.of(context)
-                      .push(
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              WarehouseDetailScreen(warehouseId: warehouseId),
-                        ),
-                      )
-                      .then((_) {});
-                },
+                onPressed: warehouse == null
+                    ? null
+                    : () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                WarehouseFormScreen(warehouse: warehouse),
+                          ),
+                        );
+                      },
               ),
             ],
           ),

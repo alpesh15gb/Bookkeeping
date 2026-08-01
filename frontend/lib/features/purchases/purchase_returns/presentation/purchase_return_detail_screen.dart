@@ -7,6 +7,8 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/features/offline_repository_providers.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/purchase_return.dart';
 import '../models/purchase_return_line.dart';
 import '../models/purchase_return_status.dart';
@@ -14,12 +16,32 @@ import '../services/purchase_return_service.dart';
 
 final purchaseReturnDetailProvider = FutureProvider.autoDispose
     .family<PurchaseReturn, String>((ref, id) async {
-      final res = await ref.watch(purchaseReturnServiceProvider).get(id);
-      return switch (res) {
-        Success(:final value) => value,
-        Failure(:final error) => throw error,
-        _ => throw Exception(),
-      };
+      final repo = ref.watch(returnsRepositoryProvider);
+      final pr = await repo.getPurchaseReturn(id);
+      if (pr == null) throw Exception('Purchase return not found locally');
+      return PurchaseReturn(
+        id: pr.localId,
+        billId: pr.sourceReceiptLocalId ?? '',
+        billNumber: pr.referenceNumber ?? '',
+        contactId: pr.supplierId,
+        contactName: pr.supplierName,
+        returnDate: pr.returnDate,
+        total: pr.totalPaise / 100.0,
+        status: PurchaseReturnStatus.fromString(pr.lifecycleStatus),
+        notes: pr.description,
+        lines: pr.lines.map((l) {
+          return PurchaseReturnLine(
+            billLineId: l.sourceReceiptLineLocalId ?? '',
+            productId: '',
+            productName: l.productName,
+            quantityReturned: double.tryParse(l.quantity) ?? 0,
+            maximumQuantity: double.tryParse(l.quantity) ?? 0,
+            rate: l.unitCostPaise / 100.0,
+            gstRate: 0,
+            hsnSac: '',
+          );
+        }).toList(),
+      );
     });
 
 class PurchaseReturnDetailScreen extends ConsumerStatefulWidget {
@@ -63,7 +85,7 @@ class _PurchaseReturnDetailScreenState
       body: asyncVal.when(
         loading: () => const Center(child: LoadingSpinner(size: 32)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () =>
               ref.invalidate(purchaseReturnDetailProvider(widget.returnId)),
         ),

@@ -38,90 +38,121 @@ class ApexPaginationControls extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    _pageBtn(Icons.first_page_rounded, page > 1 ? () => controller.setPage(1) : null),
-                    _pageBtn(Icons.chevron_left_rounded, page > 1 ? () => controller.setPage(page - 1) : null),
+                    _pageBtn(
+                      Icons.first_page_rounded,
+                      page > 1 ? () => controller.setPage(1) : null,
+                    ),
+                    _pageBtn(
+                      Icons.chevron_left_rounded,
+                      page > 1 ? () => controller.setPage(page - 1) : null,
+                    ),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      child: Text('  $page / $totalPages  ', style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600)),
+                      child: Text(
+                        '  $page / $totalPages  ',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
                     ),
-                    _pageBtn(Icons.chevron_right_rounded, page < totalPages ? () => controller.setPage(page + 1) : null),
-                    _pageBtn(Icons.last_page_rounded, page < totalPages ? () => controller.setPage(totalPages) : null),
+                    _pageBtn(
+                      Icons.chevron_right_rounded,
+                      page < totalPages
+                          ? () => controller.setPage(page + 1)
+                          : null,
+                    ),
+                    _pageBtn(
+                      Icons.last_page_rounded,
+                      page < totalPages
+                          ? () => controller.setPage(totalPages)
+                          : null,
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
-                Text('$from–$to of ${paged.total}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colors.textSecondary)),
+                Text(
+                  '$from–$to of ${paged.total}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
+                ),
               ],
             )
           : Wrap(
-        alignment: WrapAlignment.spaceBetween,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          // Page size selector
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'Rows per page',
-                style: Theme.of(
-                  context,
-                ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
-              ),
-              const SizedBox(width: 8),
-              DropdownButton<int>(
-                // The backend may return a limit not in pageSizeOptions
-                // (e.g. 25).  Clamp to the nearest valid option so the
-                // DropdownButton assertion doesn't fire.
-                value: _closestPageSize(paged.limit),
-                underline: const SizedBox.shrink(),
-                items: AppConstants.pageSizeOptions
-                    .map(
-                      (s) => DropdownMenuItem<int>(value: s, child: Text('$s')),
-                    )
-                    .toList(),
-                onChanged: (v) => v == null ? null : controller.setLimit(v),
-              ),
-            ],
-          ),
-          Text(
-            '$from–$to of ${paged.total}',
-            style: Theme.of(
-              context,
-            ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
-          ),
-          // Page navigation
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              IconButton(
-                tooltip: 'First page',
-                icon: const Icon(Icons.first_page_rounded),
-                onPressed: page > 1 ? () => controller.setPage(1) : null,
-              ),
-              IconButton(
-                tooltip: 'Previous page',
-                icon: const Icon(Icons.chevron_left_rounded),
-                onPressed: page > 1 ? () => controller.setPage(page - 1) : null,
-              ),
-              Text('  $page / $totalPages  '),
-              IconButton(
-                tooltip: 'Next page',
-                icon: const Icon(Icons.chevron_right_rounded),
-                onPressed: page < totalPages
-                    ? () => controller.setPage(page + 1)
-                    : null,
-              ),
-              IconButton(
-                tooltip: 'Last page',
-                icon: const Icon(Icons.last_page_rounded),
-                onPressed: page < totalPages
-                    ? () => controller.setPage(totalPages)
-                    : null,
-              ),
-            ],
-          ),
-        ],
-      ),
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                // Page size selector
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Rows per page',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    DropdownButton<int>(
+                      // The backend may return a limit not in pageSizeOptions
+                      // (e.g. 25).  Clamp to the nearest valid option so the
+                      // DropdownButton assertion doesn't fire.
+                      value: _closestPageSize(paged.limit),
+                      underline: const SizedBox.shrink(),
+                      items: AppConstants.pageSizeOptions
+                          .map(
+                            (s) => DropdownMenuItem<int>(
+                              value: s,
+                              child: Text('$s'),
+                            ),
+                          )
+                          .toList(),
+                      onChanged: (v) =>
+                          v == null ? null : controller.setLimit(v),
+                    ),
+                  ],
+                ),
+                Text(
+                  '$from–$to of ${paged.total}',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: colors.textSecondary),
+                ),
+                // Page navigation
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      tooltip: 'First page',
+                      icon: const Icon(Icons.first_page_rounded),
+                      onPressed: page > 1 ? () => controller.setPage(1) : null,
+                    ),
+                    IconButton(
+                      tooltip: 'Previous page',
+                      icon: const Icon(Icons.chevron_left_rounded),
+                      onPressed: page > 1
+                          ? () => controller.setPage(page - 1)
+                          : null,
+                    ),
+                    Text('  $page / $totalPages  '),
+                    IconButton(
+                      tooltip: 'Next page',
+                      icon: const Icon(Icons.chevron_right_rounded),
+                      onPressed: page < totalPages
+                          ? () => controller.setPage(page + 1)
+                          : null,
+                    ),
+                    IconButton(
+                      tooltip: 'Last page',
+                      icon: const Icon(Icons.last_page_rounded),
+                      onPressed: page < totalPages
+                          ? () => controller.setPage(totalPages)
+                          : null,
+                    ),
+                  ],
+                ),
+              ],
+            ),
     );
   }
 

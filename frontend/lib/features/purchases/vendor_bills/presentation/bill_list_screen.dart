@@ -7,23 +7,32 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/tables/table_controller.dart';
-import 'package:apexbooks/core/result/result.dart';
 import '../models/vendor_bill.dart';
-import '../services/vendor_bill_service.dart';
 import 'bill_detail_screen.dart';
 import 'bill_form_screen.dart';
 import 'bill_table_body.dart';
 import 'bill_scan_screen.dart';
 
-final billsListProvider = FutureProvider.autoDispose<List<VendorBillListItem>>((
-  ref,
-) async {
-  final res = await ref.watch(vendorBillServiceProvider).list();
-  return switch (res) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
+import 'package:apexbooks/features/offline_repository_providers.dart';
+import 'package:apexbooks/features/purchases/vendor_bills/models/bill_status.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
+
+final billsListProvider = StreamProvider.autoDispose<List<VendorBillListItem>>((ref) {
+  final repo = ref.watch(purchasingRepositoryProvider);
+  return repo.watchPurchaseInvoices().map((list) {
+    return list.map((item) {
+      return VendorBillListItem(
+        id: item.localId,
+        billNumber: item.invoiceNumber,
+        issueDate: item.invoiceDate,
+        status: BillStatus.fromString(item.lifecycleStatus),
+        total: item.totalPaise / 100.0,
+        amountPaid: 0,
+        contactName: item.supplierName,
+        createdAt: item.createdAt.toIso8601String(),
+      );
+    }).toList();
+  });
 });
 
 class BillListScreen extends ConsumerStatefulWidget {
@@ -35,6 +44,7 @@ class BillListScreen extends ConsumerStatefulWidget {
 class _BillListScreenState extends ConsumerState<BillListScreen> {
   VendorBillListItem? _selectedItem;
   late final ApexTableController _tableCtrl;
+  String _search = '';
 
   @override
   void initState() {
@@ -51,6 +61,19 @@ class _BillListScreenState extends ConsumerState<BillListScreen> {
   }
 
   void _onTableChange() => setState(() {});
+
+  /// Client-side search: filters by vendor name or bill number.
+  List<VendorBillListItem> _filtered(List<VendorBillListItem> items) {
+    if (_search.isEmpty) return items;
+    final q = _search.toLowerCase();
+    return items
+        .where(
+          (i) =>
+              i.contactName.toLowerCase().contains(q) ||
+              i.billNumber.toLowerCase().contains(q),
+        )
+        .toList();
+  }
 
   /// Client-side sort: the vendor-bill service returns a flat list with no
   /// server-side sort params, so we order the rows here without touching the
@@ -105,7 +128,9 @@ class _BillListScreenState extends ConsumerState<BillListScreen> {
                 tooltip: 'Export list',
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Export feature coming soon.')),
+                    const SnackBar(
+                      content: Text('Export feature coming soon.'),
+                    ),
                   );
                 },
               ),
@@ -131,6 +156,24 @@ class _BillListScreenState extends ConsumerState<BillListScreen> {
               ),
             ],
           ),
+          // ── Search bar (desktop + mobile) ──────────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search by vendor or bill number…',
+                prefixIcon: const Icon(Icons.search_rounded, size: 20),
+                isDense: true,
+                filled: true,
+                fillColor: colors.surfaceMuted,
+                border: const OutlineInputBorder(
+                  borderSide: BorderSide.none,
+                  borderRadius: BorderRadius.all(Radius.circular(8)),
+                ),
+              ),
+              onChanged: (v) => setState(() => _search = v),
+            ),
+          ),
           Expanded(
             child: asyncVals.when(
               loading: () => Column(
@@ -143,19 +186,22 @@ class _BillListScreenState extends ConsumerState<BillListScreen> {
                 ],
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(billsListProvider),
               ),
               data: (items) {
-                if (items.isEmpty) {
-                  return const EmptyState(
+                final visible = _sorted(_filtered(items));
+                if (visible.isEmpty) {
+                  return EmptyState(
                     icon: Icons.receipt_outlined,
-                    title: 'No bills found',
-                    subtitle: 'Add new vendor bills to track payables.',
+                    title: _search.isEmpty ? 'No bills found' : 'No matches',
+                    subtitle: _search.isEmpty
+                        ? 'Add new vendor bills to track payables.'
+                        : 'Try a different search term.',
                   );
                 }
                 return BillTableBody(
-                  items: _sorted(items),
+                  items: visible,
                   sort: _tableCtrl.value.sort,
                   onSort: (id) => _tableCtrl.toggleSort(id),
                   selectedId: _selectedItem?.id,

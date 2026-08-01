@@ -68,8 +68,9 @@ class _GoodsReceiptFormScreenState
           onPopInvokedWithResult: (didPop, _) async {
             if (didPop) return;
             if (_hasUnsavedChanges) {
-              final result =
-                  await const DialogService().unsavedChanges(context);
+              final result = await const DialogService().unsavedChanges(
+                context,
+              );
               if (result == DialogResult.discard && context.mounted) {
                 Navigator.of(context).pop();
               }
@@ -78,124 +79,124 @@ class _GoodsReceiptFormScreenState
             }
           },
           child: Scaffold(
-          backgroundColor: colors.surfaceMuted,
-          appBar: AppBar(
-            backgroundColor: colors.surfaceRaised,
-            elevation: 0,
-            titleSpacing: 20,
-            title: Text(
-              'New Goods Receipt',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
-            bottom: PreferredSize(
-              preferredSize: const Size.fromHeight(1),
-              child: Container(height: 1, color: colors.border),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text('Cancel'),
-              ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 10,
-                  horizontal: 16,
-                ),
-                child: FilledButton.icon(
-                  onPressed: (state.saving || !state.hasPo) ? null : _save,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: LoadingSpinner(size: 16),
-                        )
-                      : const Icon(Icons.check_rounded, size: 18),
-                  label: const Text('Save GRN'),
+            backgroundColor: colors.surfaceMuted,
+            appBar: AppBar(
+              backgroundColor: colors.surfaceRaised,
+              elevation: 0,
+              titleSpacing: 20,
+              title: Text(
+                'New Goods Receipt',
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
                 ),
               ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (state.error != null)
-                Container(
-                  width: double.infinity,
-                  color: colors.danger.withValues(alpha: 0.1),
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(height: 1, color: colors.border),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).maybePop(),
+                  child: const Text('Cancel'),
+                ),
+                const SizedBox(width: 8),
+                Padding(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
                     vertical: 10,
+                    horizontal: 16,
                   ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.error_outline_rounded,
-                        size: 18,
-                        color: colors.danger,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          state.error!,
-                          style: TextStyle(
-                            color: colors.danger,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: FilledButton.icon(
+                    onPressed: (state.saving || !state.hasPo) ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: const Text('Save GRN'),
                   ),
                 ),
-              Expanded(
-                child: Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1100),
-                    child: ListView(
-                      padding: const EdgeInsets.all(20),
+              ],
+            ),
+            body: Column(
+              children: [
+                if (state.error != null)
+                  Container(
+                    width: double.infinity,
+                    color: colors.danger.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 10,
+                    ),
+                    child: Row(
                       children: [
-                        _headerCard(state, notifier, colors),
-                        const SizedBox(height: 16),
-                        if (state.loadingPo)
-                          const Padding(
-                            padding: EdgeInsets.all(40),
-                            child: Center(child: LoadingSpinner(size: 30)),
-                          )
-                        else if (state.hasPo)
-                          _linesCard(state, notifier, colors, fmt, warehouses)
-                        else
-                          _Card(
-                            colors: colors,
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.info_outline_rounded,
-                                  size: 18,
-                                  color: colors.textMuted,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    'Select a confirmed purchase order to receive goods against.',
-                                    style: TextStyle(
-                                      color: colors.textSecondary,
-                                      fontSize: 13,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: 18,
+                          color: colors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            state.error!,
+                            style: TextStyle(
+                              color: colors.danger,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 13,
                             ),
                           ),
+                        ),
                       ],
                     ),
                   ),
+                Expanded(
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 1100),
+                      child: ListView(
+                        padding: const EdgeInsets.all(20),
+                        children: [
+                          _headerCard(state, notifier, colors),
+                          const SizedBox(height: 16),
+                          if (state.loadingPo)
+                            const Padding(
+                              padding: EdgeInsets.all(40),
+                              child: Center(child: LoadingSpinner(size: 30)),
+                            )
+                          else if (state.hasPo)
+                            _linesCard(state, notifier, colors, fmt, warehouses)
+                          else
+                            _Card(
+                              colors: colors,
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.info_outline_rounded,
+                                    size: 18,
+                                    color: colors.textMuted,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Text(
+                                      'Select a confirmed purchase order to receive goods against.',
+                                      style: TextStyle(
+                                        color: colors.textSecondary,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
+              ],
+            ),
           ),
         ),
       ),
@@ -234,8 +235,9 @@ class _GoodsReceiptFormScreenState
             ),
             colors,
           );
-          if (narrow)
+          if (narrow) {
             return Column(children: [po, const SizedBox(height: 12), date]);
+          }
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -294,10 +296,7 @@ class _GoodsReceiptFormScreenState
                   style: _th(colors),
                 ),
               ),
-              Expanded(
-                flex: 18,
-                child: Text('WAREHOUSE', style: _th(colors)),
-              ),
+              Expanded(flex: 18, child: Text('WAREHOUSE', style: _th(colors))),
             ],
           ),
         ),
@@ -370,11 +369,7 @@ class _GoodsReceiptFormScreenState
 }
 
 class _Card extends StatelessWidget {
-  const _Card({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Card({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;
@@ -404,7 +399,7 @@ class _PoSelectorField extends ConsumerWidget {
         Text('Failed to load POs', style: TextStyle(color: colors.danger)),
       ),
       data: (pos) {
-        if (pos.isEmpty)
+        if (pos.isEmpty) {
           return _box(
             colors,
             Text(
@@ -412,6 +407,7 @@ class _PoSelectorField extends ConsumerWidget {
               style: TextStyle(color: colors.textMuted),
             ),
           );
+        }
         return InkWell(
           borderRadius: BorderRadius.circular(ApexRadius.sm),
           onTap: () async {
@@ -594,107 +590,294 @@ class _ReceiptLineRowState extends State<_ReceiptLineRow> {
 
   Widget _buildDesktopLine(ApexColors c, bool over) {
     return Container(
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: c.border))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: c.border)),
+      ),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(children: [
-        Expanded(flex: 34, child: Text(widget.line.productName ?? 'Item',
-          maxLines: 1, overflow: TextOverflow.ellipsis,
-          style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600, color: c.textPrimary))),
-        Expanded(flex: 16, child: Text(widget.fmt.quantity(widget.line.quantityOrdered),
-          textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: c.textSecondary))),
-        Expanded(flex: 16, child: Text(widget.fmt.quantity(widget.line.outstandingQuantity),
-          textAlign: TextAlign.right, style: TextStyle(fontSize: 13, color: c.textMuted))),
-        Expanded(flex: 16, child: TextField(controller: _qty, textAlign: TextAlign.right,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-          style: TextStyle(fontSize: 13, color: over ? c.danger : c.textPrimary),
-          decoration: InputDecoration(isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm)),
-            enabledBorder: over ? OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm),
-              borderSide: BorderSide(color: c.danger)) : null),
-          onChanged: (v) => widget.onQty(double.tryParse(v) ?? 0))),
-        const SizedBox(width: 8),
-        Expanded(flex: 18, child: _warehouseDropdown(c)),
-      ]),
+      child: Row(
+        children: [
+          Expanded(
+            flex: 34,
+            child: Text(
+              widget.line.productName ?? 'Item',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: c.textPrimary,
+              ),
+            ),
+          ),
+          Expanded(
+            flex: 16,
+            child: Text(
+              widget.fmt.quantity(widget.line.quantityOrdered),
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 13, color: c.textSecondary),
+            ),
+          ),
+          Expanded(
+            flex: 16,
+            child: Text(
+              widget.fmt.quantity(widget.line.outstandingQuantity),
+              textAlign: TextAlign.right,
+              style: TextStyle(fontSize: 13, color: c.textMuted),
+            ),
+          ),
+          Expanded(
+            flex: 16,
+            child: TextField(
+              controller: _qty,
+              textAlign: TextAlign.right,
+              keyboardType: const TextInputType.numberWithOptions(
+                decimal: true,
+              ),
+              inputFormatters: [
+                FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+              ],
+              style: TextStyle(
+                fontSize: 13,
+                color: over ? c.danger : c.textPrimary,
+              ),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 8,
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                ),
+                enabledBorder: over
+                    ? OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(ApexRadius.sm),
+                        borderSide: BorderSide(color: c.danger),
+                      )
+                    : null,
+              ),
+              onChanged: (v) => widget.onQty(double.tryParse(v) ?? 0),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(flex: 18, child: _warehouseDropdown(c)),
+        ],
+      ),
     );
   }
 
   Widget _buildMobileLine(ApexColors c, bool over) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(color: c.surfaceRaised, borderRadius: BorderRadius.circular(ApexRadius.lg),
-        border: Border.all(color: c.border)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          decoration: BoxDecoration(color: c.surfaceMuted,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(ApexRadius.lg))),
-          child: Text(widget.line.productName ?? 'Item', maxLines: 1, overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: c.textPrimary)),
-        ),
-        Padding(padding: const EdgeInsets.all(14), child: Column(children: [
-          Row(children: [
-            _infoChip(c, 'Ordered', widget.fmt.quantity(widget.line.quantityOrdered)),
-            const SizedBox(width: 8),
-            _infoChip(c, 'Pending', widget.fmt.quantity(widget.line.outstandingQuantity)),
-          ]),
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(flex: 2, child: _mobileField(c, 'QTY', _qty, over,
-              onChanged: (v) => widget.onQty(double.tryParse(v) ?? 0))),
-            const SizedBox(width: 12),
-            Expanded(flex: 3, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('WAREHOUSE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.textMuted, letterSpacing: 0.5)),
-              const SizedBox(height: 6),
-              _warehouseDropdown(c),
-            ])),
-          ]),
-        ])),
-      ]),
+      decoration: BoxDecoration(
+        color: c.surfaceRaised,
+        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        border: Border.all(color: c.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: c.surfaceMuted,
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(ApexRadius.lg),
+              ),
+            ),
+            child: Text(
+              widget.line.productName ?? 'Item',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: c.textPrimary,
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    _infoChip(
+                      c,
+                      'Ordered',
+                      widget.fmt.quantity(widget.line.quantityOrdered),
+                    ),
+                    const SizedBox(width: 8),
+                    _infoChip(
+                      c,
+                      'Pending',
+                      widget.fmt.quantity(widget.line.outstandingQuantity),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: _mobileField(
+                        c,
+                        'QTY',
+                        _qty,
+                        over,
+                        onChanged: (v) => widget.onQty(double.tryParse(v) ?? 0),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 3,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'WAREHOUSE',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w700,
+                              color: c.textMuted,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          _warehouseDropdown(c),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _mobileField(ApexColors c, String label, TextEditingController ctrl, bool over, {required ValueChanged<String> onChanged}) {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(label, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: c.textMuted, letterSpacing: 0.5)),
-      const SizedBox(height: 6),
-      TextField(controller: ctrl, textAlign: TextAlign.right,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
-        style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: over ? c.danger : c.textPrimary),
-        decoration: InputDecoration(isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.border)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm), borderSide: BorderSide(color: c.primary, width: 1.5)),
-          filled: true, fillColor: c.surfaceMuted),
-        onChanged: onChanged),
-    ]);
+  Widget _mobileField(
+    ApexColors c,
+    String label,
+    TextEditingController ctrl,
+    bool over, {
+    required ValueChanged<String> onChanged,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: c.textMuted,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: ctrl,
+          textAlign: TextAlign.right,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
+          style: TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            color: over ? c.danger : c.textPrimary,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 12,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderSide: BorderSide(color: c.primary, width: 1.5),
+            ),
+            filled: true,
+            fillColor: c.surfaceMuted,
+          ),
+          onChanged: onChanged,
+        ),
+      ],
+    );
   }
 
   Widget _warehouseDropdown(ApexColors c) {
     return DropdownButtonFormField<String>(
       initialValue: widget.line.warehouseId,
-      isDense: true, isExpanded: true,
-      decoration: InputDecoration(isDense: true,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(ApexRadius.sm))),
-      hint: Text('Warehouse', style: TextStyle(fontSize: 12, color: c.textMuted)),
-      items: widget.warehouses.map((w) => DropdownMenuItem(value: w.id,
-        child: Text(w.name, style: const TextStyle(fontSize: 12), overflow: TextOverflow.ellipsis))).toList(),
+      isDense: true,
+      isExpanded: true,
+      decoration: InputDecoration(
+        isDense: true,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 10,
+          vertical: 10,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(ApexRadius.sm),
+        ),
+      ),
+      hint: Text(
+        'Warehouse',
+        style: TextStyle(fontSize: 12, color: c.textMuted),
+      ),
+      items: widget.warehouses
+          .map(
+            (w) => DropdownMenuItem(
+              value: w.id,
+              child: Text(
+                w.name,
+                style: const TextStyle(fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
       onChanged: (id) => widget.onWarehouse(
-        id == null ? null : widget.warehouses.firstWhere((w) => w.id == id)),
+        id == null ? null : widget.warehouses.firstWhere((w) => w.id == id),
+      ),
     );
   }
 
   Widget _infoChip(ApexColors c, String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: c.surfaceMuted, borderRadius: BorderRadius.circular(ApexRadius.sm)),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Text('$label ', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: c.textMuted)),
-        Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: c.textSecondary)),
-      ]),
+      decoration: BoxDecoration(
+        color: c.surfaceMuted,
+        borderRadius: BorderRadius.circular(ApexRadius.sm),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            '$label ',
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: c.textMuted,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: c.textSecondary,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

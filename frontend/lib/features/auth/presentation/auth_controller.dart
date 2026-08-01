@@ -10,6 +10,8 @@
 ///   * Sign out (clears storage + in-memory state + notifies the router).
 library;
 
+import 'dart:developer' as developer;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/network/auth_token_state.dart';
@@ -35,6 +37,7 @@ class AuthState {
     this.memberships = const [],
     this.activeMembership,
     this.isLoading = false,
+    this.isOfflineSession = false,
     this.error,
   });
 
@@ -43,6 +46,7 @@ class AuthState {
   final List<Membership> memberships;
   final Membership? activeMembership;
   final bool isLoading;
+  final bool isOfflineSession;
   final ApiError? error;
 
   /// `true` once the user has selected (or has a single) active company.
@@ -54,6 +58,7 @@ class AuthState {
     List<Membership>? memberships,
     Membership? activeMembership,
     bool? isLoading,
+    bool? isOfflineSession,
     ApiError? error,
     bool clearError = false,
   }) {
@@ -63,6 +68,7 @@ class AuthState {
       memberships: memberships ?? this.memberships,
       activeMembership: activeMembership ?? this.activeMembership,
       isLoading: isLoading ?? this.isLoading,
+      isOfflineSession: isOfflineSession ?? this.isOfflineSession,
       error: clearError ? null : (error ?? this.error),
     );
   }
@@ -70,8 +76,11 @@ class AuthState {
 
 /// Notifier backing [authControllerProvider].
 class AuthController extends Notifier<AuthState> {
+  static const offlineAuthorizationWindow = Duration(days: 7);
+
   late final AuthRepository _repo;
   late final SessionStorage _storage;
+  Future<void>? _restoreInFlight;
 
   @override
   AuthState build() {
@@ -82,43 +91,171 @@ class AuthController extends Notifier<AuthState> {
 
   /// Restores the session from secure storage on app launch. Sets the status
   /// to `authenticated`/`unauthenticated` and primes the in-memory token state.
-  Future<void> restore() async {
-    final stored = await _storage.read();
-    if (stored == null || !stored.isValid) {
-      state = const AuthState(status: AuthStatus.unauthenticated);
-      return;
-    }
-    // Prime the in-memory token holder so interceptors can attach headers.
-    ref
-        .read(authTokenProvider.notifier)
-        .setTokens(access: stored.accessToken, refresh: stored.refreshToken);
-    ref.read(authTokenProvider.notifier).setActiveTenant(stored.activeTenantId);
+  Future<void> restore() {
+    final inFlight = _restoreInFlight;
+    if (inFlight != null) return inFlight;
 
-    // Fetch the profile and memberships to fully hydrate the UI.
-    final meResult = await _repo.me();
-    final membershipsResult = await _repo.memberships();
-    if (meResult is Success<UserModel> &&
-        membershipsResult is Success<List<Membership>>) {
-      final memberships = membershipsResult.value;
-      Membership? active;
-      if (memberships.isNotEmpty) {
-        active = memberships.firstWhere(
-          (m) => m.tenantId == stored.activeTenantId,
-          orElse: () => memberships.first,
-        );
+    final operation = _restoreInternal();
+    _restoreInFlight = operation;
+    operation.whenComplete(() {
+      if (identical(_restoreInFlight, operation)) _restoreInFlight = null;
+    });
+    return operation;
+  }
+
+  Future<void> _restoreInternal() async {
+    try {
+      final stored = await _storage.read();
+      if (stored == null || !stored.isValid) {
+        await _finishUnauthenticated(clearStorage: true);
+        return;
       }
+      String tenantKey(String value) =>
+          value.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+      final storedTenantId = stored.activeTenantId.trim();
+      final storedTenantKey = tenantKey(storedTenantId);
+
+      ref
+          .read(authTokenProvider.notifier)
+          .setTokens(access: stored.accessToken, refresh: stored.refreshToken);
+      ref.read(authTokenProvider.notifier).setActiveTenant(storedTenantId);
+
+      final meResult = await _repo.me();
+      final membershipsResult = await _repo.memberships();
+      if (meResult is! Success<UserModel> ||
+          membershipsResult is! Success<List<Membership>>) {
+        final failures = <ApiError>[
+          if (meResult is Failure<UserModel>) meResult.error,
+          if (membershipsResult is Failure<List<Membership>>)
+            membershipsResult.error,
+        ];
+        final rejected = failures.any(
+          (error) => error.isUnauthorized || error.isForbidden,
+        );
+        final transient =
+            failures.isNotEmpty &&
+            failures.every((error) => error.isNetwork || error.isServer);
+        if (!rejected && transient) {
+          final restored = await _restoreCachedContext(
+            storedTenantKey: storedTenantKey,
+            tenantKey: tenantKey,
+          );
+          if (restored) return;
+        }
+        await _finishUnauthenticated(clearStorage: rejected);
+        return;
+      }
+
+      final memberships = membershipsResult.value
+          .where((membership) => membership.tenantId.isNotEmpty)
+          .toList(growable: false);
+      Membership? active;
+      for (final membership in memberships) {
+        final matchesStoredTenant =
+            tenantKey(membership.tenantId) == storedTenantKey;
+        if (matchesStoredTenant && membership.isActive) {
+          active = membership;
+          break;
+        }
+      }
+      if (active == null) {
+        await _finishUnauthenticated(clearStorage: true);
+        return;
+      }
+
+      await _cacheValidatedContext(meResult.value, memberships);
       state = AuthState(
         status: AuthStatus.authenticated,
         user: meResult.value,
         memberships: memberships,
         activeMembership: active,
+        isOfflineSession: false,
       );
-    } else {
-      // Tokens present but profile fetch failed (e.g. revoked) → sign out.
-      await _storage.clear();
-      ref.read(authTokenProvider.notifier).clear();
-      state = const AuthState(status: AuthStatus.unauthenticated);
+    } catch (error, stackTrace) {
+      developer.log(
+        'Persisted session restore failed; returning to login.',
+        name: 'apexbooks.auth.restore',
+        error: error.runtimeType,
+        stackTrace: stackTrace,
+      );
+      await _finishUnauthenticated(clearStorage: true);
     }
+  }
+
+  Future<bool> _restoreCachedContext({
+    required String storedTenantKey,
+    required String Function(String value) tenantKey,
+  }) async {
+    final cached = await _storage.readCachedAuthContext();
+    if (cached == null ||
+        DateTime.now().toUtc().difference(cached.validatedAt) >
+            offlineAuthorizationWindow) {
+      return false;
+    }
+    try {
+      final user = UserModel.fromJson(cached.user);
+      final memberships = cached.memberships
+          .map(Membership.fromJson)
+          .where((membership) => membership.tenantId.isNotEmpty)
+          .toList(growable: false);
+      final active = memberships
+          .where(
+            (membership) =>
+                membership.isActive &&
+                tenantKey(membership.tenantId) == storedTenantKey,
+          )
+          .firstOrNull;
+      if (!user.isActive || active == null) return false;
+      state = AuthState(
+        status: AuthStatus.authenticated,
+        user: user,
+        memberships: memberships,
+        activeMembership: active,
+        isOfflineSession: true,
+      );
+      return true;
+    } catch (error, stackTrace) {
+      developer.log(
+        'Unable to restore cached offline authorization.',
+        name: 'apexbooks.auth.restore',
+        error: error.runtimeType,
+        stackTrace: stackTrace,
+      );
+      return false;
+    }
+  }
+
+  Future<void> _cacheValidatedContext(
+    UserModel user,
+    List<Membership> memberships,
+  ) {
+    return _storage.writeCachedAuthContext(
+      CachedAuthContext(
+        user: user.toJson(),
+        memberships: memberships
+            .map((membership) => membership.toJson())
+            .toList(growable: false),
+        validatedAt: DateTime.now().toUtc(),
+      ),
+    );
+  }
+
+  Future<void> _finishUnauthenticated({bool clearStorage = false}) async {
+    if (clearStorage) {
+      try {
+        await _storage.clear();
+      } catch (error, stackTrace) {
+        developer.log(
+          'Unable to clear invalid persisted session.',
+          name: 'apexbooks.auth.restore',
+          error: error.runtimeType,
+          stackTrace: stackTrace,
+        );
+      }
+    }
+    ref.read(authTokenProvider.notifier).clear();
+    state = const AuthState(status: AuthStatus.unauthenticated);
   }
 
   /// Signs in with [email]/[password] and hydrates the session.
@@ -204,7 +341,10 @@ class AuthController extends Notifier<AuthState> {
       state = state.copyWith(
         memberships: memberships,
         activeMembership: updated ?? memberships.firstOrNull,
+        isOfflineSession: false,
       );
+      final user = state.user;
+      if (user != null) await _cacheValidatedContext(user, memberships);
     }
   }
 
@@ -281,7 +421,9 @@ class AuthController extends Notifier<AuthState> {
       memberships: memberships,
       activeMembership: active,
       isLoading: false,
+      isOfflineSession: false,
     );
+    await _cacheValidatedContext(meResult.value, memberships);
     return const Success<void>(null);
   }
 }

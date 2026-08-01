@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../data/models/tax_template.dart';
 import 'tax_template_provider.dart';
 
@@ -20,7 +21,7 @@ class TaxTemplateListScreen extends ConsumerWidget {
       body: async.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(taxTemplateListProvider),
         ),
         data: (templates) => templates.isEmpty

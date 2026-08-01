@@ -66,6 +66,8 @@ class PaymentFormNotifier extends StateNotifier<PaymentFormState> {
     _resuggest();
   }
 
+  void clearError() => state = state.copyWith(clearError: true);
+
   void setAvailableInvoices(List<OutstandingInvoice> invoices) {
     state = state.copyWith(availableInvoices: invoices);
     _resuggest();

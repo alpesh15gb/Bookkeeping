@@ -26,7 +26,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError, NoResultFound, OperationalError
+from sqlalchemy.exc import IntegrityError, NoResultFound
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
@@ -64,7 +64,7 @@ logger = logging.getLogger("bookkeeping")
 # Keep this in sync with the single Alembic head. The ORM is allowed to start
 # so operators can still reach /health, but readiness becomes degraded until
 # migrations are applied. `create_all()` cannot add columns to existing tables.
-REQUIRED_SCHEMA_REVISION = "20260725_0002"
+REQUIRED_SCHEMA_REVISION = "20260731_0002"
 
 
 def _database_schema_revision(connection) -> Optional[str]:
@@ -85,6 +85,7 @@ from src.api.v1.bills import router as bills_router
 from src.api.v1.purchase_orders import router as purchase_orders_router
 from src.api.v1.sales_orders import router as sales_orders_router
 from src.api.v1.delivery_challans import router as delivery_challans_router
+from src.api.v1.goods_receipts import router as goods_receipts_router
 from src.api.v1.proforma_invoices import router as proforma_invoices_router
 from src.api.v1.inventory_adjustments import router as inventory_adjustments_router
 from src.api.v1.transfers import router as transfers_router
@@ -337,6 +338,12 @@ async def add_request_id(request: Request, call_next):
     token = request_id_var.set(request_id)
     try:
         response = await call_next(request)
+    except Exception:
+        # Preserve the original exception so FastAPI's structured exception
+        # handler can produce a response.  Do not attempt to mutate an
+        # unassigned response after an exception (the old code masked the
+        # root cause with a secondary no-response failure).
+        raise
     finally:
         request_id_var.reset(token)
     response.headers["X-Request-ID"] = request_id
@@ -447,6 +454,7 @@ app.include_router(bills_router,      prefix="/api/v1")
 app.include_router(purchase_orders_router, prefix="/api/v1")
 app.include_router(sales_orders_router, prefix="/api/v1")
 app.include_router(delivery_challans_router, prefix="/api/v1")
+app.include_router(goods_receipts_router, prefix="/api/v1")
 app.include_router(proforma_invoices_router, prefix="/api/v1")
 app.include_router(inventory_adjustments_router, prefix="/api/v1")
 app.include_router(transfers_router, prefix="/api/v1")
@@ -539,11 +547,13 @@ def alias_list_products(
 # Health Check — deep ping of DB and Redis
 # ---------------------------------------------------------------------------
 
-@app.get("/health", tags=["Infrastructure"])
-def health_check():
+def _dependency_health() -> dict[str, str]:
     """
-    Deep health check. Pings PostgreSQL and Redis.
-    Returns 503 if any dependency is unreachable.
+    Return dependency statuses without leaking driver errors or secrets.
+
+    Catching all dependency exceptions is intentional: DNS failures, invalid
+    URLs, pool exhaustion, and schema-query failures must become an
+    operationally useful 503 rather than an unstructured middleware error.
     """
     checks = {}
 
@@ -558,8 +568,8 @@ def health_check():
             if current_revision == REQUIRED_SCHEMA_REVISION
             else f"outdated:{current_revision or 'unknown'}"
         )
-    except OperationalError as e:
-        logger.error(f"Health check — DB unreachable: {e}")
+    except Exception as e:
+        logger.error("Health check — DB unavailable: %s", type(e).__name__)
         checks["database"] = "error"
 
     # Redis
@@ -569,9 +579,13 @@ def health_check():
         r.ping()
         checks["redis"] = "ok"
     except Exception as e:
-        logger.error(f"Health check — Redis unreachable: {e}")
+        logger.error("Health check — Redis unavailable: %s", type(e).__name__)
         checks["redis"] = "error"
 
+    return checks
+
+
+def _health_response(checks: dict[str, str]) -> JSONResponse:
     all_ok = all(v == "ok" for v in checks.values())
     return JSONResponse(
         status_code=200 if all_ok else 503,
@@ -580,6 +594,33 @@ def health_check():
             "service": "accounting-gst-api",
             "version": "1.0.0",
             "checks": checks,
+        },
+    )
+
+
+@app.get("/health", tags=["Infrastructure"])
+def health_check():
+    """Deep health check. Pings PostgreSQL, schema, and Redis."""
+    return _health_response(_dependency_health())
+
+
+@app.get("/readyz", tags=["Infrastructure"])
+@app.get("/readiness", include_in_schema=False, tags=["Infrastructure"])
+def readiness_check():
+    """Readiness probe: only ready when all serving dependencies are healthy."""
+    return _health_response(_dependency_health())
+
+
+@app.get("/livez", tags=["Infrastructure"])
+@app.get("/liveness", include_in_schema=False, tags=["Infrastructure"])
+def liveness_check():
+    """Liveness probe: process is alive; dependency health is readiness."""
+    return JSONResponse(
+        status_code=200,
+        content={
+            "status": "alive",
+            "service": "accounting-gst-api",
+            "version": "1.0.0",
         },
     )
 

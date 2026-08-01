@@ -347,7 +347,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
     ApexColors colors,
   ) {
     return DropdownButtonFormField<String>(
-      value: current.isNotEmpty ? current : null,
+      initialValue: current.isNotEmpty ? current : null,
       decoration: InputDecoration(
         labelText: label,
         labelStyle: TextStyle(fontSize: 13, color: colors.textMuted),

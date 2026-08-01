@@ -6,7 +6,7 @@ import 'package:apexbooks/features/sales/models/invoice_line.dart';
 
 void main() {
   const calc = InvoiceCalculationService();
-  const _eps = 0.001;
+  const eps = 0.001;
 
   group('Tax corner cases — calculateLine', () {
     test('CESS 1% applied correctly', () {
@@ -19,11 +19,11 @@ void main() {
         rate: 100,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(1000, _eps));
-      expect(r.cgstAmount, closeTo(90, _eps)); // 1000 * 18% / 2
-      expect(r.sgstAmount, closeTo(90, _eps));
-      expect(r.cessAmount, closeTo(10, _eps)); // 1000 * 1%
-      expect(r.total, closeTo(1190, _eps)); // 1000 + 180 + 10
+      expect(r.subtotal, closeTo(1000, eps));
+      expect(r.cgstAmount, closeTo(90, eps)); // 1000 * 18% / 2
+      expect(r.sgstAmount, closeTo(90, eps));
+      expect(r.cessAmount, closeTo(10, eps)); // 1000 * 1%
+      expect(r.total, closeTo(1190, eps)); // 1000 + 180 + 10
     });
 
     test('zero-rated (0% GST) produces no tax', () {
@@ -35,10 +35,10 @@ void main() {
         rate: 100,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(1000, _eps));
-      expect(r.cgstAmount, closeTo(0, _eps));
-      expect(r.sgstAmount, closeTo(0, _eps));
-      expect(r.total, closeTo(1000, _eps));
+      expect(r.subtotal, closeTo(1000, eps));
+      expect(r.cgstAmount, closeTo(0, eps));
+      expect(r.sgstAmount, closeTo(0, eps));
+      expect(r.total, closeTo(1000, eps));
     });
 
     test('exempt (null/0 GST) still calculates subtotal correctly', () {
@@ -50,8 +50,8 @@ void main() {
         rate: 200,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(1000, _eps));
-      expect(r.total, closeTo(1000, _eps));
+      expect(r.subtotal, closeTo(1000, eps));
+      expect(r.total, closeTo(1000, eps));
     });
 
     test('mixed taxable and zero-rated lines in calculateAll', () {
@@ -72,9 +72,9 @@ void main() {
         ), // zero-rated: 1000
       ];
       final r = calc.calculateAll(lines: lines);
-      expect(r.subtotal, closeTo(2000, _eps));
-      expect(r.totalTax, closeTo(180, _eps)); // only from line a
-      expect(r.total, closeTo(2180, _eps)); // 2000 + 180
+      expect(r.subtotal, closeTo(2000, eps));
+      expect(r.totalTax, closeTo(180, eps)); // only from line a
+      expect(r.total, closeTo(2180, eps)); // 2000 + 180
     });
 
     test('CESS + GST combined on high-GST item', () {
@@ -87,11 +87,11 @@ void main() {
         rate: 100,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(1000, _eps));
-      expect(r.cgstAmount, closeTo(140, _eps)); // 1000 * 28% / 2
-      expect(r.sgstAmount, closeTo(140, _eps));
-      expect(r.cessAmount, closeTo(150, _eps)); // 1000 * 15%
-      expect(r.total, closeTo(1430, _eps)); // 1000 + 280 + 150
+      expect(r.subtotal, closeTo(1000, eps));
+      expect(r.cgstAmount, closeTo(140, eps)); // 1000 * 28% / 2
+      expect(r.sgstAmount, closeTo(140, eps));
+      expect(r.cessAmount, closeTo(150, eps)); // 1000 * 15%
+      expect(r.total, closeTo(1430, eps)); // 1000 + 280 + 150
     });
   });
 
@@ -108,7 +108,7 @@ void main() {
       ];
       final r = calc.calculateAll(lines: lines);
       // subtotal = 99.995 → 100.00
-      expect(r.subtotal, closeTo(100.00, _eps));
+      expect(r.subtotal, closeTo(100.00, eps));
     });
 
     test('large quantity small rate', () {
@@ -122,9 +122,9 @@ void main() {
         ),
       ];
       final r = calc.calculateAll(lines: lines);
-      expect(r.subtotal, closeTo(5000, _eps));
-      expect(r.totalTax, closeTo(250, _eps)); // 5000 * 5%
-      expect(r.total, closeTo(5250, _eps));
+      expect(r.subtotal, closeTo(5000, eps));
+      expect(r.totalTax, closeTo(250, eps)); // 5000 * 5%
+      expect(r.total, closeTo(5250, eps));
     });
 
     test('round-off with discount — exact numbers', () {
@@ -152,10 +152,10 @@ void main() {
       // raw total = 1187.50 + 210 = 1397.50; invoice payable is rounded
       // to the nearest rupee to match the backend, so total = 1398.00.
       final r = calc.calculateAll(lines: lines, discountRate: 5);
-      expect(r.subtotal, closeTo(1250, _eps));
-      expect(r.discountTotal, closeTo(62.50, _eps));
-      expect(r.totalTax, closeTo(210, _eps));
-      expect(r.total, closeTo(1398.00, _eps));
+      expect(r.subtotal, closeTo(1250, eps));
+      expect(r.discountTotal, closeTo(62.50, eps));
+      expect(r.totalTax, closeTo(210, eps));
+      expect(r.total, closeTo(1398.00, eps));
     });
   });
 }

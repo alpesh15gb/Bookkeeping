@@ -27,8 +27,5 @@ final bankingProfileControllerProvider =
     });
 
 class BankingProfileController extends BaseCrudController<BankingProfile> {
-  BankingProfileController(
-    BankingProfileRepository repo,
-    NotificationService notif,
-  ) : super(repo, notif);
+  BankingProfileController(BankingProfileRepository super.repo, super.notif);
 }

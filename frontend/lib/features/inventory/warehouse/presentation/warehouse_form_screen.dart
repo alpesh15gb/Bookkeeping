@@ -290,40 +290,34 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                 required: true,
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _labeled(
-                      'Code',
-                      TextFormField(
-                        controller: _codeCtrl,
-                        decoration: _dec(
-                          colors,
-                          hint: 'e.g. WH-001',
-                          icon: Icons.tag_rounded,
-                        ),
-                      ),
+              _fieldPair(
+                isMobile,
+                first: _labeled(
+                  'Code',
+                  TextFormField(
+                    controller: _codeCtrl,
+                    decoration: _dec(
                       colors,
+                      hint: 'e.g. WH-001',
+                      icon: Icons.tag_rounded,
                     ),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _labeled(
-                      'GSTIN',
-                      TextFormField(
-                        controller: _gstinCtrl,
-                        decoration: _dec(
-                          colors,
-                          hint: 'e.g. 27ABCDE1234F1Z5',
-                          icon: Icons.badge_outlined,
-                        ),
-                        textCapitalization: TextCapitalization.characters,
-                        maxLength: 15,
-                      ),
+                  colors,
+                ),
+                second: _labeled(
+                  'GSTIN',
+                  TextFormField(
+                    controller: _gstinCtrl,
+                    decoration: _dec(
                       colors,
+                      hint: 'e.g. 27ABCDE1234F1Z5',
+                      icon: Icons.badge_outlined,
                     ),
+                    textCapitalization: TextCapitalization.characters,
+                    maxLength: 15,
                   ),
-                ],
+                  colors,
+                ),
               ),
               const SizedBox(height: 14),
               _labeled(
@@ -355,52 +349,42 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
                 colors,
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _labeled(
-                      'City',
-                      TextFormField(
-                        controller: _cityCtrl,
-                        decoration: _dec(colors, hint: 'e.g. Mumbai'),
-                      ),
-                      colors,
-                    ),
+              _fieldPair(
+                isMobile,
+                first: _labeled(
+                  'City',
+                  TextFormField(
+                    controller: _cityCtrl,
+                    decoration: _dec(colors, hint: 'e.g. Mumbai'),
                   ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: _labeled(
-                      'State',
-                      TextFormField(
-                        controller: _stateCtrl,
-                        decoration: _dec(colors, hint: 'e.g. Maharashtra'),
-                      ),
-                      colors,
-                    ),
+                  colors,
+                ),
+                second: _labeled(
+                  'State',
+                  TextFormField(
+                    controller: _stateCtrl,
+                    decoration: _dec(colors, hint: 'e.g. Maharashtra'),
                   ),
-                ],
+                  colors,
+                ),
               ),
               const SizedBox(height: 14),
-              Row(
-                children: [
-                  Expanded(
-                    child: _labeled(
-                      'Pincode',
-                      TextFormField(
-                        controller: _pincodeCtrl,
-                        decoration: _dec(
-                          colors,
-                          hint: 'e.g. 400001',
-                          icon: Icons.numbers_outlined,
-                        ),
-                        keyboardType: TextInputType.number,
-                        maxLength: 6,
-                      ),
+              _fieldPair(
+                isMobile,
+                first: _labeled(
+                  'Pincode',
+                  TextFormField(
+                    controller: _pincodeCtrl,
+                    decoration: _dec(
                       colors,
+                      hint: 'e.g. 400001',
+                      icon: Icons.numbers_outlined,
                     ),
+                    keyboardType: TextInputType.number,
+                    maxLength: 6,
                   ),
-                  const Spacer(),
-                ],
+                  colors,
+                ),
               ),
               const SizedBox(height: 24),
               _section('Settings', colors),
@@ -460,6 +444,32 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _fieldPair(bool isMobile, {required Widget first, Widget? second}) {
+    if (second == null) {
+      return Align(alignment: Alignment.centerLeft, child: first);
+    }
+
+    if (isMobile) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          first,
+          const SizedBox(height: ApexSpacing.md),
+          second,
+        ],
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(child: first),
+        const SizedBox(width: ApexSpacing.lg),
+        Expanded(child: second),
+      ],
     );
   }
 

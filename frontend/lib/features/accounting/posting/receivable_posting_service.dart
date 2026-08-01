@@ -85,10 +85,10 @@ class ReceivablePostingService {
 
   Future<Result<CustomerBalance>> getCustomerBalance(String contactId) {
     return guardDio(() async {
-      final res = await _dio.get('/invoices', queryParameters: {
-        'contact_id': contactId,
-        'limit': 1,
-      });
+      final res = await _dio.get(
+        '/invoices',
+        queryParameters: {'contact_id': contactId, 'limit': 1},
+      );
       final data = res.data;
       if (data is Map<String, dynamic>) {
         return CustomerBalance.fromJson(data);

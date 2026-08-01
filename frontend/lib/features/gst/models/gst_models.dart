@@ -5,8 +5,8 @@ library;
 import 'package:flutter/foundation.dart';
 
 double _gstDouble(Object? value) => switch (value) {
-  num n => n.toDouble(),
-  String s => double.tryParse(s) ?? 0,
+  final num n => n.toDouble(),
+  final String s => double.tryParse(s) ?? 0,
   _ => 0,
 };
 
@@ -304,39 +304,75 @@ class Gstr1Summary {
   /// Aggregated taxable value across all sections.
   double get totalTaxableValue {
     double sum = 0;
-    for (final l in b2b) sum += l.taxableValue;
-    for (final l in b2cl) sum += l.taxableValue;
-    for (final l in b2cs) sum += l.taxableValue;
-    for (final l in cdnr) sum += l.taxableValue;
-    for (final l in cdnur) sum += l.taxableValue;
+    for (final l in b2b) {
+      sum += l.taxableValue;
+    }
+    for (final l in b2cl) {
+      sum += l.taxableValue;
+    }
+    for (final l in b2cs) {
+      sum += l.taxableValue;
+    }
+    for (final l in cdnr) {
+      sum += l.taxableValue;
+    }
+    for (final l in cdnur) {
+      sum += l.taxableValue;
+    }
     return sum;
   }
 
   double get totalCgst {
     double sum = 0;
-    for (final l in b2b) sum += l.cgstAmount;
-    for (final l in b2cs) sum += l.cgstAmount;
-    for (final l in cdnr) sum += l.cgstAmount;
-    for (final l in cdnur) sum += l.cgstAmount;
+    for (final l in b2b) {
+      sum += l.cgstAmount;
+    }
+    for (final l in b2cs) {
+      sum += l.cgstAmount;
+    }
+    for (final l in cdnr) {
+      sum += l.cgstAmount;
+    }
+    for (final l in cdnur) {
+      sum += l.cgstAmount;
+    }
     return sum;
   }
 
   double get totalSgst {
     double sum = 0;
-    for (final l in b2b) sum += l.sgstAmount;
-    for (final l in b2cs) sum += l.sgstAmount;
-    for (final l in cdnr) sum += l.sgstAmount;
-    for (final l in cdnur) sum += l.sgstAmount;
+    for (final l in b2b) {
+      sum += l.sgstAmount;
+    }
+    for (final l in b2cs) {
+      sum += l.sgstAmount;
+    }
+    for (final l in cdnr) {
+      sum += l.sgstAmount;
+    }
+    for (final l in cdnur) {
+      sum += l.sgstAmount;
+    }
     return sum;
   }
 
   double get totalIgst {
     double sum = 0;
-    for (final l in b2b) sum += l.igstAmount;
-    for (final l in b2cl) sum += l.igstAmount;
-    for (final l in b2cs) sum += l.igstAmount;
-    for (final l in cdnr) sum += l.igstAmount;
-    for (final l in cdnur) sum += l.igstAmount;
+    for (final l in b2b) {
+      sum += l.igstAmount;
+    }
+    for (final l in b2cl) {
+      sum += l.igstAmount;
+    }
+    for (final l in b2cs) {
+      sum += l.igstAmount;
+    }
+    for (final l in cdnr) {
+      sum += l.igstAmount;
+    }
+    for (final l in cdnur) {
+      sum += l.igstAmount;
+    }
     return sum;
   }
 

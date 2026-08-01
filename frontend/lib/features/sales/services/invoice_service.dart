@@ -17,8 +17,9 @@ class InvoiceService {
 
   Future<Result<Invoice>> _get(String path) {
     return guardDio(() async {
+      final data = (await _dio.get(path)).data;
       return Invoice.fromJson(
-        ((await _dio.get(path)).data),
+        data is Map<String, dynamic> ? data : <String, dynamic>{},
       );
     });
   }
@@ -70,18 +71,23 @@ class InvoiceService {
       final q = <String, dynamic>{
         'page': page,
         'limit': limit,
-        if (search != null) 'search': search,
-        if (status != null) 'status': status,
-        if (contactId != null) 'contact_id': contactId,
-        if (dateFrom != null) 'date_from': dateFrom,
-        if (dateTo != null) 'date_to': dateTo,
+        'search': ?search,
+        'status': ?status,
+        'contact_id': ?contactId,
+        'date_from': ?dateFrom,
+        'date_to': ?dateTo,
       };
       final res = await _dio.get('/invoices', queryParameters: q);
-      final data = res.data is Map ? (res.data as Map<String, dynamic>) : <String, dynamic>{};
+      final data = res.data is Map
+          ? (res.data as Map<String, dynamic>)
+          : <String, dynamic>{};
       final rawItems = data['items'];
       final items = (rawItems is List ? rawItems : <dynamic>[])
-          .map((e) => InvoiceListItem.fromJson(
-              e is Map<String, dynamic> ? e : <String, dynamic>{}))
+          .map(
+            (e) => InvoiceListItem.fromJson(
+              e is Map<String, dynamic> ? e : <String, dynamic>{},
+            ),
+          )
           .toList();
       return (
         items: items,
@@ -115,9 +121,9 @@ class InvoiceService {
     'payment_date':
         paymentDate ?? DateTime.now().toIso8601String().split('T').first,
     'amount': amount,
-    if (paymentNumber != null) 'payment_number': paymentNumber,
-    if (referenceNumber != null) 'reference_number': referenceNumber,
-    if (description != null) 'description': description,
+    'payment_number': ?paymentNumber,
+    'reference_number': ?referenceNumber,
+    'description': ?description,
     'allocations': allocations ?? [],
   });
 

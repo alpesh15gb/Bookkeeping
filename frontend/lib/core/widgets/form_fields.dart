@@ -51,32 +51,43 @@ class ApexTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveLayout.isMobile(context);
-    return TextFormField(
-      controller: controller,
-      decoration: InputDecoration(
-        labelText: label,
-        hintText: hint,
-        prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
-        suffixIcon: suffixIcon,
-        contentPadding: EdgeInsets.symmetric(
-          horizontal: 14,
-          vertical: isMobile ? 16 : 14,
-        ),
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.008),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      obscureText: obscureText,
-      keyboardType: keyboardType,
-      textInputAction: textInputAction,
-      textCapitalization: textCapitalization,
-      maxLines: obscureText ? 1 : maxLines,
-      enabled: enabled,
-      readOnly: readOnly,
-      autofocus: false,
-      focusNode: focusNode,
-      autofillHints: autofillHints,
-      validator: validator,
-      onFieldSubmitted: onFieldSubmitted,
-      onTap: onTap,
-      style: Theme.of(context).textTheme.bodyLarge,
+      child: TextFormField(
+        controller: controller,
+        decoration: InputDecoration(
+          labelText: label,
+          hintText: hint,
+          prefixIcon: prefixIcon != null ? Icon(prefixIcon) : null,
+          suffixIcon: suffixIcon,
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: 14,
+            vertical: isMobile ? 16 : 14,
+          ),
+        ),
+        obscureText: obscureText,
+        keyboardType: keyboardType,
+        textInputAction: textInputAction,
+        textCapitalization: textCapitalization,
+        maxLines: obscureText ? 1 : maxLines,
+        enabled: enabled,
+        readOnly: readOnly,
+        autofocus: false,
+        focusNode: focusNode,
+        autofillHints: autofillHints,
+        validator: validator,
+        onFieldSubmitted: onFieldSubmitted,
+        onTap: onTap,
+        style: Theme.of(context).textTheme.bodyLarge,
+      ),
     );
   }
 }

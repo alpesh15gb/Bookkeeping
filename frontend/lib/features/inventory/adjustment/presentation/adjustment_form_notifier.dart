@@ -38,14 +38,16 @@ class AdjustmentFormNotifier extends StateNotifier<AdjustmentFormState> {
   }
 
   String? _validate() {
-    if (state.adjustmentNumber.trim().isEmpty)
+    if (state.adjustmentNumber.trim().isEmpty) {
       return 'Adjustment number is required';
+    }
     if (state.adjustmentDate.isEmpty) return 'Adjustment date is required';
     final valid = state.lines
         .where((l) => l.productId.isNotEmpty && l.quantityChange != 0)
         .toList();
-    if (valid.isEmpty)
+    if (valid.isEmpty) {
       return 'Add at least one product with a non-zero quantity change';
+    }
     return null;
   }
 

@@ -13,6 +13,7 @@ import '../../inventory/warehouse/presentation/warehouse_providers.dart';
 import '../../inventory/warehouse/services/warehouse_service.dart';
 import '../data/models/tenant_settings.dart';
 import 'settings_providers.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 
 class SettingsDocumentScreen extends ConsumerStatefulWidget {
   const SettingsDocumentScreen({super.key});
@@ -122,7 +123,7 @@ class _SettingsDocumentScreenState
       body: async.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (error, _) => ErrorView(
-          message: error.toString(),
+          message: userFacingErrorMessage(error),
           onRetry: () => ref.invalidate(tenantSettingsProvider),
         ),
         data: (settings) {
@@ -189,14 +190,8 @@ class _SettingsDocumentScreenState
                   value: 'sleek_modern',
                   child: Text('Sleek Modern A4'),
                 ),
-                DropdownMenuItem(
-                  value: 'minimal',
-                  child: Text('Minimal A4'),
-                ),
-                DropdownMenuItem(
-                  value: 'elegant',
-                  child: Text('Elegant A4'),
-                ),
+                DropdownMenuItem(value: 'minimal', child: Text('Minimal A4')),
+                DropdownMenuItem(value: 'elegant', child: Text('Elegant A4')),
                 DropdownMenuItem(
                   value: 'thermal',
                   child: Text('Thermal / POS'),

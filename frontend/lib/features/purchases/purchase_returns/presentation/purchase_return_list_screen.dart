@@ -7,6 +7,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/tables/table_controller.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/purchase_return.dart';
 import 'purchase_return_list_provider.dart';
 import 'purchase_return_detail_screen.dart';
@@ -101,7 +102,7 @@ class _PurchaseReturnListScreenState
                 ],
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(purchaseReturnListProvider),
               ),
               data: (items) {

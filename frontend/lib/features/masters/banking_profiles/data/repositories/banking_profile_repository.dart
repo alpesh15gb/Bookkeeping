@@ -1,13 +1,11 @@
 /// Repository for /masters/banking-profiles.
 library;
 
-import 'package:dio/dio.dart';
 import 'package:apexbooks/core/api/base_repository.dart';
-import 'package:apexbooks/core/cache/cache_service.dart';
 import '../models/banking_profile.dart';
 
 class BankingProfileRepository extends BaseRepository<BankingProfile> {
-  BankingProfileRepository(Dio dio, CacheService cache) : super(dio, cache);
+  BankingProfileRepository(super.dio, super.cache);
 
   @override
   String get path => '/masters/banking-profiles';

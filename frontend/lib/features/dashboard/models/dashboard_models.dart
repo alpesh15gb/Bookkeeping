@@ -146,8 +146,7 @@ class OverdueAlertsResponse {
                 ?.map((e) => OverdueAlert.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             [],
-        totalOverdueAmount:
-            parseDoubleSafe(json['total_overdue_amount']),
+        totalOverdueAmount: parseDoubleSafe(json['total_overdue_amount']),
         count: parseIntSafe(json['count']),
       );
 }

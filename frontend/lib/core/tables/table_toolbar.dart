@@ -100,7 +100,9 @@ class _ApexTableToolbarState<T extends BaseModel>
                 hintText: widget.searchHint,
                 prefixIcon: const Icon(Icons.search_rounded, size: 20),
                 isDense: true,
-                contentPadding: EdgeInsets.symmetric(vertical: ResponsiveLayout.isMobile(context) ? 14 : 10),
+                contentPadding: EdgeInsets.symmetric(
+                  vertical: ResponsiveLayout.isMobile(context) ? 14 : 10,
+                ),
                 suffixIcon: _search.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear_rounded, size: 18),

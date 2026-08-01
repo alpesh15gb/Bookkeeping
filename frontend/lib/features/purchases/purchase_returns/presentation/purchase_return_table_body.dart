@@ -30,6 +30,17 @@ class PurchaseReturnTableBody extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (MediaQuery.sizeOf(context).width < 600) {
+      return _MobilePurchaseReturnList(
+        items: items,
+        sort: sort,
+        onSort: onSort,
+        selectedId: selectedId,
+        onSelect: onSelect,
+        fmt: fmt,
+        colors: colors,
+      );
+    }
     final textTheme = Theme.of(context).textTheme;
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
@@ -190,4 +201,208 @@ class PurchaseReturnTableBody extends StatelessWidget {
     PurchaseReturnStatus.posted => StatusTone.success,
     PurchaseReturnStatus.cancelled => StatusTone.danger,
   };
+}
+
+class _MobilePurchaseReturnList extends StatelessWidget {
+  const _MobilePurchaseReturnList({
+    required this.items,
+    required this.sort,
+    required this.onSort,
+    required this.selectedId,
+    required this.onSelect,
+    required this.fmt,
+    required this.colors,
+  });
+
+  final List<PurchaseReturnListItem> items;
+  final TableSort sort;
+  final void Function(String columnId) onSort;
+  final String? selectedId;
+  final void Function(PurchaseReturnListItem) onSelect;
+  final NumberFormatter fmt;
+  final ApexColors colors;
+
+  static const _sortColumns = [
+    ('returnNumber', 'Number'),
+    ('returnDate', 'Date'),
+    ('total', 'Amount'),
+    ('contactName', 'Vendor'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Mobile sort chips ─────────────────────────────────────────
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+          child: Row(
+            children: [
+              for (final (id, label) in _sortColumns)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _PRSortChip(
+                    label: label,
+                    columnId: id,
+                    sort: sort,
+                    onSort: onSort,
+                    colors: colors,
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+            itemCount: items.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final isSelected = item.id == selectedId;
+              final numText = item.returnNumber.isNotEmpty
+                  ? item.returnNumber
+                  : 'DN #${item.id.length >= 6 ? item.id.substring(0, 6) : item.id}';
+
+              return Card(
+                margin: EdgeInsets.zero,
+                color: isSelected ? colors.primaryContainer : null,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(ApexRadius.lg),
+                  onTap: () => onSelect(item),
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                numText,
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ),
+                            Text(
+                              fmt.currency(item.total),
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.w800),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                item.contactName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    TextStyle(color: colors.textSecondary),
+                              ),
+                            ),
+                            StatusBadge(
+                              label: item.status.value,
+                              tone: _tone(item.status),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              Icons.event_outlined,
+                              size: 15,
+                              color: colors.textMuted,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Returned ${item.returnDate}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colors.textMuted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  StatusTone _tone(PurchaseReturnStatus s) => switch (s) {
+    PurchaseReturnStatus.draft => StatusTone.neutral,
+    PurchaseReturnStatus.posted => StatusTone.success,
+    PurchaseReturnStatus.cancelled => StatusTone.danger,
+  };
+}
+
+/// Compact sort chip for the purchase-return mobile sort strip.
+class _PRSortChip extends StatelessWidget {
+  const _PRSortChip({
+    required this.label,
+    required this.columnId,
+    required this.sort,
+    required this.onSort,
+    required this.colors,
+  });
+
+  final String label;
+  final String columnId;
+  final TableSort sort;
+  final void Function(String) onSort;
+  final ApexColors colors;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = sort.columnId == columnId;
+    final asc = sort.direction == SortDirection.ascending;
+    return GestureDetector(
+      onTap: () => onSort(columnId),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: active ? colors.primary : colors.surfaceMuted,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: active ? colors.primary : colors.border,
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: active ? colors.onPrimary : colors.textSecondary,
+              ),
+            ),
+            if (active) ...[
+              const SizedBox(width: 4),
+              Icon(
+                asc
+                    ? Icons.arrow_upward_rounded
+                    : Icons.arrow_downward_rounded,
+                size: 12,
+                color: colors.onPrimary,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }

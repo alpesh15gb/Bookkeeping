@@ -26,7 +26,7 @@ class MovementService {
         'product_id': productId,
         'page': page,
         'limit': limit.clamp(1, 100),
-        if (referenceType != null) 'reference_type': referenceType,
+        'reference_type': ?referenceType,
       };
       final res = await _dio.get('/stock-ledger', queryParameters: q);
       final rows = res.data;
@@ -51,9 +51,9 @@ class MovementService {
       final q = <String, dynamic>{
         'page': page,
         'limit': limit.clamp(1, 100),
-        if (productId != null) 'product_id': productId,
-        if (referenceType != null) 'reference_type': referenceType,
-        if (warehouseId != null) 'warehouse_id': warehouseId,
+        'product_id': ?productId,
+        'reference_type': ?referenceType,
+        'warehouse_id': ?warehouseId,
       };
       final res = await _dio.get('/stock-ledger', queryParameters: q);
       final rows = res.data;

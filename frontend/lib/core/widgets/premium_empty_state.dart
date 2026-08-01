@@ -45,10 +45,7 @@ class PremiumEmptyState extends StatelessWidget {
               duration: const Duration(milliseconds: 600),
               curve: Curves.easeOutBack,
               builder: (context, value, child) {
-                return Transform.scale(
-                  scale: value,
-                  child: child,
-                );
+                return Transform.scale(scale: value, child: child);
               },
               child: Container(
                 width: 80,

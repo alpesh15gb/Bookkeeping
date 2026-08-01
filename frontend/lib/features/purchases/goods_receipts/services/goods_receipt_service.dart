@@ -35,7 +35,8 @@ class GoodsReceiptService {
         '/goods-receipts',
         queryParameters: {'page': page, 'limit': limit},
       );
-      return (res.data as List)
+      final body = res.data as Map<String, dynamic>;
+      return ((body['items'] as List?) ?? const [])
           .map((e) => GoodsReceiptListItem.fromJson(e as Map<String, dynamic>))
           .toList();
     });

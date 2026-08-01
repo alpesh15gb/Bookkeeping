@@ -68,8 +68,7 @@ class EmptyProducts extends StatelessWidget {
     return PremiumEmptyState(
       icon: Icons.inventory_2_rounded,
       title: 'No products',
-      subtitle:
-          'Add products and services to include them in your invoices.',
+      subtitle: 'Add products and services to include them in your invoices.',
       actionLabel: 'Add Product',
       onAction: onCreate,
     );

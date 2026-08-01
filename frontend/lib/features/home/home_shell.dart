@@ -9,7 +9,6 @@ import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 import 'package:apexbooks/features/auth/presentation/auth_routes.dart'
     as auth_routes;
 import 'package:apexbooks/core/search/command_palette.dart';
-import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/screens.dart';
 import 'home_shell_widgets.dart';
 
@@ -31,19 +30,48 @@ class _NavItem extends _NavEntry {
 }
 
 class HomeShell extends ConsumerStatefulWidget {
-  const HomeShell({super.key});
+  const HomeShell({super.key, this.section});
+
+  /// The active top-level destination, supplied by the router URL.
+  final String? section;
+
   @override
   ConsumerState<HomeShell> createState() => _HomeShellState();
 }
 
 class _HomeShellState extends ConsumerState<HomeShell> {
-  int _selIdx = 0;
   bool _coll = false;
+
+  static String sectionKey(String name) => name
+      .toLowerCase()
+      .replaceAll(RegExp(r'[^a-z0-9]+'), '_')
+      .replaceAll(RegExp(r'^_|_$'), '');
+
+  String get _selectedSection => widget.section ?? 'dashboard';
+
   List<(String, IconData, String, Widget)> get _screens {
     final membership = ref.watch(authControllerProvider).activeMembership;
     final gstEnabled =
         membership?.taxMode != null && membership!.taxMode != 'NON_GST';
     return getScreensList(gstEnabled: gstEnabled);
+  }
+
+  int get _selectedIndex {
+    final index = _screens.indexWhere(
+      (screen) => sectionKey(screen.$1) == _selectedSection,
+    );
+    return index < 0 ? 0 : index;
+  }
+
+  void _selectSection(String name) {
+    final section = sectionKey(name);
+    if (section == _selectedSection) return;
+    // Build the app route explicitly. Browser-level query parameters (for
+    // example capture flags before the hash URL) must not be mistaken for
+    // the app's own route state.
+    context.go(
+      Uri(path: '/', queryParameters: {'section': section}).toString(),
+    );
   }
 
   @override
@@ -99,11 +127,12 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     final dashboardIndex = _screens.indexWhere((s) => s.$1 == 'Dashboard');
     final invoiceIndex = _screens.indexWhere((s) => s.$1 == 'Invoices');
     final contactsIndex = _screens.indexWhere((s) => s.$1 == 'Contacts');
-    final mobileDestination = _selIdx == dashboardIndex
+    final selectedIndex = _selectedIndex;
+    final mobileDestination = selectedIndex == dashboardIndex
         ? 0
-        : _selIdx == invoiceIndex
+        : selectedIndex == invoiceIndex
         ? 1
-        : _selIdx == contactsIndex
+        : selectedIndex == contactsIndex
         ? 2
         : 3;
     return Scaffold(
@@ -153,17 +182,17 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             tooltip: 'Notifications (coming soon)',
             onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: const Text('Notifications are coming soon.'),
+                const SnackBar(
+                  content: Text('Notifications are coming soon.'),
                   behavior: SnackBarBehavior.floating,
-                  duration: const Duration(seconds: 2),
+                  duration: Duration(seconds: 2),
                 ),
               );
             },
           ),
         ],
       ),
-      body: _screens[_selIdx].$4,
+      body: _screens[selectedIndex].$4,
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showQuickCreate(context),
         tooltip: 'Create',
@@ -176,11 +205,11 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
           onDestinationSelected: (index) {
             if (index == 0 && dashboardIndex >= 0) {
-              setState(() => _selIdx = dashboardIndex);
+              _selectSection(_screens[dashboardIndex].$1);
             } else if (index == 1 && invoiceIndex >= 0) {
-              setState(() => _selIdx = invoiceIndex);
+              _selectSection(_screens[invoiceIndex].$1);
             } else if (index == 2 && contactsIndex >= 0) {
-              setState(() => _selIdx = contactsIndex);
+              _selectSection(_screens[contactsIndex].$1);
             } else if (index == 3) {
               Scaffold.of(scaffoldContext).openDrawer();
             }
@@ -265,7 +294,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                         _NavHeader(:final label) =>
                           !_coll
                               ? Padding(
-                                  padding: EdgeInsets.fromLTRB(
+                                  padding: const EdgeInsets.fromLTRB(
                                     ApexSpacing.sm,
                                     ApexSpacing.md,
                                     ApexSpacing.sm,
@@ -300,7 +329,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 if (!_coll)
                   buildProfileBox(context, false, colors, userEmail, () async {
                     await ref.read(authControllerProvider.notifier).signOut();
-                    if (mounted) context.go(auth_routes.login);
+                    if (context.mounted) context.go(auth_routes.login);
                   }, role: company?.role.label),
                 IconButton(
                   icon: Icon(
@@ -309,6 +338,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                         : Icons.keyboard_double_arrow_left_rounded,
                     size: 18,
                   ),
+                  tooltip: _coll ? 'Expand sidebar' : 'Collapse sidebar',
                   onPressed: () => setState(() => _coll = !_coll),
                 ),
                 const SizedBox(height: ApexSpacing.sm),
@@ -326,7 +356,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   () => CommandPalette.show(context),
                   () => _showQuickCreate(context),
                 ),
-                Expanded(child: _screens[_selIdx].$4),
+                Expanded(child: _screens[_selectedIndex].$4),
               ],
             ),
           ),
@@ -376,7 +406,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                         _NavHeader(:final label) =>
                           !_coll
                               ? Padding(
-                                  padding: EdgeInsets.fromLTRB(
+                                  padding: const EdgeInsets.fromLTRB(
                                     ApexSpacing.md,
                                     ApexSpacing.lg,
                                     ApexSpacing.md,
@@ -410,7 +440,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                 const Divider(height: 1),
                 buildProfileBox(context, _coll, colors, userEmail, () async {
                   await ref.read(authControllerProvider.notifier).signOut();
-                  if (mounted) context.go(auth_routes.login);
+                  if (context.mounted) context.go(auth_routes.login);
                 }, role: company?.role.label),
                 IconButton(
                   icon: Icon(
@@ -419,6 +449,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                         : Icons.keyboard_double_arrow_left_rounded,
                     size: 18,
                   ),
+                  tooltip: _coll ? 'Expand sidebar' : 'Collapse sidebar',
                   onPressed: () => setState(() => _coll = !_coll),
                 ),
                 const SizedBox(height: ApexSpacing.md),
@@ -436,7 +467,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   () => CommandPalette.show(context),
                   () => _showQuickCreate(context),
                 ),
-                Expanded(child: _screens[_selIdx].$4),
+                Expanded(child: _screens[_selectedIndex].$4),
               ],
             ),
           ),
@@ -515,7 +546,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         ),
       ),
     );
-    if (!mounted || selection == null) return;
+    if (!context.mounted || selection == null) return;
     final screen = switch (selection) {
       'invoice' => const InvoiceFormScreen(),
       'receipt' => const PaymentFormScreen(),
@@ -576,7 +607,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
               final entry = navEntries[i];
               return switch (entry) {
                 _NavHeader(:final label) => Padding(
-                  padding: EdgeInsets.fromLTRB(
+                  padding: const EdgeInsets.fromLTRB(
                     ApexSpacing.md,
                     ApexSpacing.lg,
                     ApexSpacing.md,
@@ -596,6 +627,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
                   name,
                   icon,
                   colors,
+                  closeDrawer: true,
                 ),
               };
             },
@@ -616,18 +648,18 @@ class _HomeShellState extends ConsumerState<HomeShell> {
     IconData icon,
     ApexColors colors, {
     bool compact = false,
+    bool closeDrawer = false,
   }) {
-    final active = _selIdx == idx;
+    final active = sectionKey(name) == _selectedSection;
     final tile = Padding(
-      padding: EdgeInsets.symmetric(
+      padding: const EdgeInsets.symmetric(
         vertical: ApexSpacing.xs,
         horizontal: ApexSpacing.xs,
       ),
       child: InkWell(
         onTap: () {
-          setState(() => _selIdx = idx);
-          // Close drawer when in drawer mode
-          Navigator.of(context).maybePop();
+          _selectSection(name);
+          if (closeDrawer && mounted) Navigator.of(context).pop();
         },
         borderRadius: BorderRadius.circular(ApexRadius.sm),
         child: Container(
@@ -676,12 +708,16 @@ class _HomeShellState extends ConsumerState<HomeShell> {
         ),
       ),
     );
+    final keyedTile = KeyedSubtree(
+      key: ValueKey<String>('home-nav-${sectionKey(name)}'),
+      child: tile,
+    );
     return compact
         ? Tooltip(
             message: name,
             waitDuration: const Duration(milliseconds: 400),
-            child: tile,
+            child: keyedTile,
           )
-        : tile;
+        : keyedTile;
   }
 }

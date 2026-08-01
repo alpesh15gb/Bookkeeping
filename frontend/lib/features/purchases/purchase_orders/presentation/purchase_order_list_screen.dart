@@ -7,6 +7,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/tables/table_controller.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/purchase_order.dart';
 import '../models/purchase_order_status.dart';
 import 'purchase_order_list_provider.dart';
@@ -122,7 +123,7 @@ class _PurchaseOrderListScreenState
                 ],
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(purchaseOrderListProvider),
               ),
               data: (items) {

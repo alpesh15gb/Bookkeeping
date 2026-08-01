@@ -31,7 +31,7 @@ class ApexColumn<T extends BaseModel> {
     this.cellBuilder,
     this.headerBuilder,
     this.filterOptions,
-  }) : this._value = value;
+  }) : _value = value;
 
   /// Stable id used for visibility/sort state persistence.
   final String id;

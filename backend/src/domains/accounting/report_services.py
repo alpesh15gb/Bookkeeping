@@ -14,7 +14,7 @@ from datetime import date, timedelta
 import uuid
 
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import func, case, and_, cast, Numeric as SaNumeric
+from sqlalchemy import func, case, and_, or_, cast, Numeric as SaNumeric
 
 from src.infrastructure.database.models import (
     Invoice, InvoiceLine, Bill, BillLine,
@@ -1351,16 +1351,39 @@ class PartyStatementService:
 class CashBookService:
     @staticmethod
     def get(db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date) -> CashBookResponse:
-        return CashBookService._get_register(db, tenant_id, start_date, end_date, "CASH%")
+        # Provisioned accounts use numeric codes (1001 Cash on Hand, 1003 UPI,
+        # 1004 POS, 1005 Petty Cash), while imported/custom charts may retain
+        # the historical CASH* convention.  Select by the accounting group as
+        # well as the legacy code so the register reflects real journal lines.
+        return CashBookService._get_register(db, tenant_id, start_date, end_date, "cash")
 
     @staticmethod
     def _get_register(
-        db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date, code_pattern: str
+        db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date, register_kind: str
     ) -> CashBookResponse:
+        if register_kind == "cash":
+            register_filter = or_(
+                Account.code.like("CASH%"),
+                Account.code.in_(["1001", "1003", "1004", "1005"]),
+                and_(
+                    Account.account_group == "Cash & Bank",
+                    ~Account.name.ilike("%bank%"),
+                ),
+            )
+        else:
+            register_filter = or_(
+                Account.code.like("BANK%"),
+                Account.code == "1002",
+                and_(
+                    Account.account_group == "Cash & Bank",
+                    Account.name.ilike("%bank%"),
+                ),
+            )
+
         accounts = db.query(Account).filter(
             Account.tenant_id == tenant_id,
             Account.deleted_at == None,
-            Account.code.like(code_pattern)
+            register_filter,
         ).all()
         account_ids = [a.id for a in accounts]
 
@@ -1468,4 +1491,4 @@ class BankBookService:
     """Bank Book: tracks bank account inflows and outflows."""
     @staticmethod
     def get(db: Session, tenant_id: uuid.UUID, start_date: date, end_date: date) -> CashBookResponse:
-        return CashBookService._get_register(db, tenant_id, start_date, end_date, "BANK%")
+        return CashBookService._get_register(db, tenant_id, start_date, end_date, "bank")

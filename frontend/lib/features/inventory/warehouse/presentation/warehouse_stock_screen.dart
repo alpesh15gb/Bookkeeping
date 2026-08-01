@@ -10,6 +10,7 @@ import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/warehouse_service.dart';
 import 'warehouse_providers.dart';
 
@@ -66,7 +67,7 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () =>
                     ref.invalidate(warehouseStockProvider(widget.warehouseId)),
               ),

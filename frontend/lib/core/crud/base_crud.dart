@@ -59,7 +59,7 @@ class BaseCrudController<T extends BaseModel> extends StateNotifier<ListState> {
     final result = await _repo.list(query);
     switch (result) {
       case Success<PagedResult<T>>(:final value):
-        state = value.items.isEmpty ? ListEmpty() : ListData(value);
+        state = value.items.isEmpty ? const ListEmpty() : ListData(value);
       case Failure(:final error):
         state = ListError(error.message);
       case Loading():
@@ -75,7 +75,10 @@ class BaseCrudController<T extends BaseModel> extends StateNotifier<ListState> {
   /// the delete failed. Notifications are only shown while the controller is
   /// still mounted so we never touch a stale [BuildContext].
   Future<bool> delete(T record, BuildContext context) async {
-    final confirmed = await ApexDialogs.delete(context, itemName: record.toString());
+    final confirmed = await ApexDialogs.delete(
+      context,
+      itemName: record.toString(),
+    );
     if (confirmed != true) return false;
     final result = await _repo.delete(record.id);
     if (!mounted || !context.mounted) return result is Success;
@@ -189,19 +192,22 @@ class _BaseListScreenState<T extends BaseModel>
             actions: [
               if (widget.onCreate != null)
                 ResponsiveLayout.isMobile(context)
-                  ? FilledButton.icon(
-                      icon: const Icon(Icons.add_rounded, size: 20),
-                      label: const Text('Add'),
-                      style: FilledButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+                    ? FilledButton.icon(
+                        icon: const Icon(Icons.add_rounded, size: 20),
+                        label: const Text('Add'),
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 14,
+                          ),
+                        ),
+                        onPressed: widget.onCreate,
+                      )
+                    : FilledButton.icon(
+                        icon: const Icon(Icons.add_rounded, size: 18),
+                        label: const Text('Add New'),
+                        onPressed: widget.onCreate,
                       ),
-                      onPressed: widget.onCreate,
-                    )
-                  : FilledButton.icon(
-                      icon: const Icon(Icons.add_rounded, size: 18),
-                      label: const Text('Add New'),
-                      onPressed: widget.onCreate,
-                    ),
             ],
           ),
           const Divider(),

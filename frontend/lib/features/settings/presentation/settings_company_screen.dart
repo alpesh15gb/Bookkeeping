@@ -13,11 +13,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/services/notification_service.dart';
-import '../../../core/result/result.dart';
 import '../../auth/data/models/membership_models.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/tenant_settings.dart';
 import 'settings_providers.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 
 class SettingsCompanyScreen extends ConsumerStatefulWidget {
   const SettingsCompanyScreen({super.key});
@@ -187,7 +187,7 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
       body: async.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(companyProfileProvider(companyId)),
         ),
         data: (company) => ref
@@ -195,7 +195,7 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
             .when(
               loading: () => const Center(child: LoadingSpinner(size: 36)),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(tenantSettingsProvider),
               ),
               data: (settings) {

@@ -701,6 +701,50 @@ class NumberingSeries(Base):
     tenant = relationship("Tenant")
 
 
+class OfflineNumberAllocation(Base):
+    """A durable document-number lease assigned to one installation."""
+
+    __tablename__ = "offline_number_allocations"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "document_type",
+            "range_start",
+            name="uq_offline_number_allocation_start",
+        ),
+        CheckConstraint(
+            "range_start > 0 AND range_end >= range_start",
+            name="ck_offline_number_allocation_range",
+        ),
+        Index(
+            "ix_offline_number_allocations_device",
+            "tenant_id",
+            "device_id",
+            "document_type",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id"), nullable=False)
+    device_id = Column(UUID(as_uuid=True), nullable=False)
+    financial_year_id = Column(UUID(as_uuid=True), nullable=False)
+    numbering_series_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("numbering_series.id"),
+        nullable=False,
+    )
+    document_type = Column(String(50), nullable=False)
+    series = Column(String(50), nullable=False)
+    prefix = Column(String(50), nullable=False, default="")
+    suffix = Column(String(50))
+    padding_digits = Column(Integer, nullable=False, default=4)
+    range_start = Column(Integer, nullable=False)
+    range_end = Column(Integer, nullable=False)
+    allocated_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    expires_at = Column(DateTime(timezone=True))
+    is_active = Column(Boolean, nullable=False, default=True)
+
+
 # ---------------------------------------------------------------------------
 # MASTER DATA
 # ---------------------------------------------------------------------------
@@ -910,6 +954,87 @@ class PurchaseOrderLine(Base):
 
     purchase_order = relationship("PurchaseOrder", back_populates="lines")
     product = relationship("Product")
+
+
+# ---------------------------------------------------------------------------
+# GOODS RECEIPTS (GRN)
+# ---------------------------------------------------------------------------
+
+class GoodsReceipt(Base):
+    __tablename__ = "goods_receipts"
+    __table_args__ = (
+        Index("ix_goods_receipts_tenant_date", "tenant_id", "receipt_date"),
+        Index("ix_goods_receipts_tenant_status", "tenant_id", "status"),
+        UniqueConstraint(
+            "tenant_id",
+            "receipt_number",
+            name="uq_goods_receipts_tenant_number",
+        ),
+        CheckConstraint(
+            "status IN ('DRAFT', 'CONFIRMED', 'CANCELLED')",
+            name="ck_goods_receipts_status",
+        ),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
+    purchase_order_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("purchase_orders.id"),
+        nullable=True,
+    )
+    contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
+    receipt_number = Column(String(50), nullable=False)
+    receipt_date = Column(Date, nullable=False)
+    status = Column(String(20), nullable=False, default="DRAFT")
+    notes = Column(Text)
+    confirmed_at = Column(DateTime(timezone=True))
+    cancelled_at = Column(DateTime(timezone=True))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=_now,
+        onupdate=_now,
+    )
+    deleted_at = Column(DateTime(timezone=True))
+
+    purchase_order = relationship("PurchaseOrder")
+    contact = relationship("Contact")
+    lines = relationship(
+        "GoodsReceiptLine",
+        back_populates="goods_receipt",
+        cascade="all, delete-orphan",
+    )
+
+
+class GoodsReceiptLine(Base):
+    __tablename__ = "goods_receipt_lines"
+    __table_args__ = (
+        Index("ix_goods_receipt_lines_receipt", "goods_receipt_id"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    goods_receipt_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("goods_receipts.id"),
+        nullable=False,
+    )
+    purchase_order_line_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("purchase_order_lines.id"),
+        nullable=True,
+    )
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    quantity_ordered = Column(Numeric(12, 4), nullable=False)
+    quantity_received = Column(Numeric(12, 4), nullable=False)
+    warehouse_id = Column(UUID(as_uuid=True), ForeignKey("branches.id"), nullable=True)
+    lot_number = Column(String(100))
+    batch_number = Column(String(100))
+
+    goods_receipt = relationship("GoodsReceipt", back_populates="lines")
+    product = relationship("Product")
+    warehouse = relationship("Branch")
 
 
 # ---------------------------------------------------------------------------

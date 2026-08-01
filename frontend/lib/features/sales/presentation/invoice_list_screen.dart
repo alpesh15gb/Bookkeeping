@@ -13,6 +13,7 @@ import 'package:apexbooks/core/tables/table_pagination.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/permissions/permissions.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/invoice.dart';
 import 'invoice_list_provider.dart';
 import 'invoice_detail_screen.dart';
@@ -23,10 +24,9 @@ import 'invoice_table_body.dart';
 /// Lightweight table controller for the invoice list screen.
 // Not autoDispose — the controller must survive navigation away and back
 // so child widgets (ValueListenableBuilder) don't hold stale references.
-final _invoiceTableCtrlProvider =
-    ChangeNotifierProvider<ApexTableController>(
-      (ref) => ApexTableController(),
-    );
+final _invoiceTableCtrlProvider = ChangeNotifierProvider<ApexTableController>(
+  (ref) => ApexTableController(),
+);
 
 class InvoiceListScreen extends ConsumerStatefulWidget {
   const InvoiceListScreen({super.key});
@@ -105,7 +105,9 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 tooltip: 'Export list',
                 onPressed: () {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Export feature coming soon.')),
+                    const SnackBar(
+                      content: Text('Export feature coming soon.'),
+                    ),
                   );
                 },
               ),
@@ -162,7 +164,7 @@ class _InvoiceListScreenState extends ConsumerState<InvoiceListScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(invoiceListProvider),
               ),
               data: (data) {

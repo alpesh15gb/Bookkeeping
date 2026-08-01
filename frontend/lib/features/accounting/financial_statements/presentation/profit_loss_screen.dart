@@ -7,25 +7,24 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/formatting/number_formatting.dart';
+import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/theme/responsive.dart';
+import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
-import 'package:apexbooks/core/widgets/monetary_text.dart';
-import 'package:apexbooks/core/formatting/number_formatting.dart';
-import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/profit_loss.dart';
 import '../services/financial_statement_service.dart';
-
-// ---------------------------------------------------------------------------
-// Riverpod state — date-range filters drive the API call.
-// ---------------------------------------------------------------------------
 
 final pnlDateFromProvider = StateProvider<String?>((ref) => null);
 final pnlDateToProvider = StateProvider<String?>((ref) => null);
 
-final profitLossReportProvider =
-    FutureProvider.autoDispose<ProfitLossReport>((ref) async {
+final profitLossReportProvider = FutureProvider.autoDispose<ProfitLossReport>((
+  ref,
+) async {
   final dateFrom = ref.watch(pnlDateFromProvider);
   final dateTo = ref.watch(pnlDateToProvider);
   final res = await ref
@@ -38,12 +37,9 @@ final profitLossReportProvider =
   };
 });
 
-// ---------------------------------------------------------------------------
-// Screen
-// ---------------------------------------------------------------------------
-
 class ProfitLossScreen extends ConsumerStatefulWidget {
   const ProfitLossScreen({super.key});
+
   @override
   ConsumerState<ProfitLossScreen> createState() => _ProfitLossScreenState();
 }
@@ -58,13 +54,10 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
     final now = DateTime.now();
     _fromDate = DateTime(now.year, now.month, 1);
     _toDate = now;
-    // Push initial dates to providers so the first API call respects them
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(pnlDateFromProvider.notifier).state =
-            _fromDate!.toIso8601String().split('T')[0];
-        ref.read(pnlDateToProvider.notifier).state =
-            _toDate!.toIso8601String().split('T')[0];
+        ref.read(pnlDateFromProvider.notifier).state = _toApiDate(_fromDate!);
+        ref.read(pnlDateToProvider.notifier).state = _toApiDate(_toDate!);
       }
     });
   }
@@ -101,7 +94,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(profitLossReportProvider),
               ),
               data: (report) {
@@ -122,10 +115,6 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
     );
   }
 
-  // -----------------------------------------------------------------------
-  // Date filter
-  // -----------------------------------------------------------------------
-
   Widget _buildDateFilter(ApexColors colors) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -137,8 +126,7 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child:
-              Text('–', style: TextStyle(color: colors.textMuted, fontSize: 13)),
+          child: Text('–', style: TextStyle(color: colors.textMuted)),
         ),
         _dateChip(
           date: _toDate,
@@ -155,30 +143,38 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
     required ApexColors colors,
   }) {
     final label = date != null ? _fmtDate(date) : 'Select';
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ApexRadius.md),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
-          border: Border.all(color: colors.border),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.date_range_rounded, size: 14, color: colors.textSecondary),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12.5,
-                color: colors.textPrimary,
-                fontWeight: FontWeight.w500,
+    return Semantics(
+      button: true,
+      label: 'Select date $label',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(ApexRadius.md),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: colors.surfaceRaised,
+            borderRadius: BorderRadius.circular(ApexRadius.md),
+            border: Border.all(color: colors.border),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.date_range_rounded,
+                size: 14,
+                color: colors.textSecondary,
               ),
-            ),
-          ],
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  color: colors.textPrimary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -211,21 +207,18 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
   static String _toApiDate(DateTime d) =>
       '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
-  // -----------------------------------------------------------------------
-  // Report body
-  // -----------------------------------------------------------------------
-
   Widget _buildReport(
     ProfitLossReport report,
     ApexColors colors,
     NumberFormatter fmt,
   ) {
+    final isMobile = ResponsiveLayout.isMobile(context);
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        ApexSpacing.xl,
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
         ApexSpacing.sm,
-        ApexSpacing.xl,
-        ApexSpacing.xl,
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
+        isMobile ? ApexSpacing.lg : ApexSpacing.xl,
       ),
       child: Column(
         children: [
@@ -280,12 +273,9 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
               ),
             )
           else ...[
-            // Column headers
             Row(
               children: [
-                Expanded(
-                  child: Text('ACCOUNT', style: _th(colors)),
-                ),
+                Expanded(child: Text('ACCOUNT', style: _th(colors))),
                 SizedBox(
                   width: 120,
                   child: Text(
@@ -298,26 +288,42 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
             ),
             const SizedBox(height: ApexSpacing.xs),
             Divider(height: 1, color: colors.border),
-            // Account rows
             for (final item in items)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
+                padding: const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
                 decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: colors.border),
-                  ),
+                  border: Border(bottom: BorderSide(color: colors.border)),
                 ),
                 child: Row(
                   children: [
                     Expanded(
-                      child: Text(
-                        item.accountName,
-                        style: TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w500,
-                          color: colors.textPrimary,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            item.accountName,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                              color: colors.textPrimary,
+                            ),
+                          ),
+                          if (item.accountCode.isNotEmpty) ...[
+                            const SizedBox(height: ApexSpacing.xs),
+                            Text(
+                              item.accountCode,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: colors.textMuted,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ],
                       ),
                     ),
                     SizedBox(
@@ -334,7 +340,6 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
                 ),
               ),
             Divider(height: 1, color: colors.border),
-            // Total row
             Container(
               padding: const EdgeInsets.symmetric(vertical: ApexSpacing.md),
               child: Row(
@@ -376,51 +381,66 @@ class _ProfitLossScreenState extends ConsumerState<ProfitLossScreen> {
     final isProfitable = report.isProfitable;
     final label = isProfitable ? 'Net Profit' : 'Net Loss';
     final color = isProfitable ? colors.success : colors.danger;
-    final icon =
-        isProfitable ? Icons.trending_up_rounded : Icons.trending_down_rounded;
+    final icon = isProfitable
+        ? Icons.trending_up_rounded
+        : Icons.trending_down_rounded;
+    final isMobile = ResponsiveLayout.isMobile(context);
+
+    final summary = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: color,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          'Revenue: ${fmt.currency(report.totalRevenue)} — '
+          'Expenses: ${fmt.currency(report.totalExpenses)}',
+          style: TextStyle(fontSize: 12, color: colors.textMuted),
+        ),
+      ],
+    );
+
+    final amount = MonetaryText(
+      value: fmt.currency(report.netProfit),
+      fontSize: isMobile ? 18 : 20,
+      fontWeight: FontWeight.w800,
+      color: color,
+      textAlign: isMobile ? TextAlign.left : TextAlign.right,
+    );
 
     return ApexCard(
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 28),
-          const SizedBox(width: ApexSpacing.md),
-          Expanded(
-            child: Column(
+      child: isMobile
+          ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: color,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  'Revenue: ${fmt.currency(report.totalRevenue)} — '
-                  'Expenses: ${fmt.currency(report.totalExpenses)}',
-                  style: TextStyle(fontSize: 12, color: colors.textMuted),
-                ),
+                Icon(icon, color: color, size: 28),
+                const SizedBox(height: ApexSpacing.sm),
+                summary,
+                const SizedBox(height: ApexSpacing.md),
+                amount,
+              ],
+            )
+          : Row(
+              children: [
+                Icon(icon, color: color, size: 28),
+                const SizedBox(width: ApexSpacing.md),
+                Expanded(child: summary),
+                amount,
               ],
             ),
-          ),
-          MonetaryText(
-            value: fmt.currency(report.netProfit),  // Negative shown in ( ) per accounting standard
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: color,
-            textAlign: TextAlign.right,
-          ),
-        ],
-      ),
     );
   }
 
   TextStyle _th(ApexColors colors) => TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: colors.textMuted,
-      );
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+  );
 }

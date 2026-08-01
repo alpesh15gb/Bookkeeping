@@ -70,116 +70,118 @@ class _BankingProfileFormScreenState
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Bank Account' : 'New Bank Account'),
-      ),
-      body: ApexForm(
-        controller: _ctrl,
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              _section('Bank Details'),
-              const SizedBox(height: 8),
-              ApexTextField(
-                name: 'bank_name',
-                label: 'Bank Name *',
-                initialValue: widget.profile?.bankName,
-                textCapitalization: TextCapitalization.words,
-                prefixIcon: Icons.account_balance_outlined,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              ApexTextField(
-                name: 'account_number',
-                label: 'Account Number *',
-                initialValue: widget.profile?.accountNumber,
-                keyboardType: TextInputType.number,
-                prefixIcon: Icons.numbers_outlined,
-                hintText: 'e.g. 12345678901',
-                validator: validateAccountNumber,
-              ),
-              const SizedBox(height: 12),
-              ApexTextField(
-                name: 'ifsc_code',
-                label: 'IFSC Code *',
-                initialValue: widget.profile?.ifscCode,
-                textCapitalization: TextCapitalization.characters,
-                maxLength: 11,
-                prefixIcon: Icons.qr_code_outlined,
-                hintText: 'e.g. HDFC0001234',
-                validator: validateIfsc,
-              ),
-              const SizedBox(height: 12),
-              ApexTextField(
-                name: 'branch_name',
-                label: 'Branch Name',
-                initialValue: widget.profile?.branchName,
-                textCapitalization: TextCapitalization.words,
-                prefixIcon: Icons.location_on_outlined,
-                hintText: 'Optional',
-              ),
-              const SizedBox(height: 16),
-              _section('Account Holder'),
-              const SizedBox(height: 8),
-              ApexTextField(
-                name: 'account_holder',
-                label: 'Account Holder Name *',
-                initialValue: widget.profile?.accountHolderName,
-                textCapitalization: TextCapitalization.words,
-                prefixIcon: Icons.person_outline,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 16),
-              _section('UPI & Preferences'),
-              const SizedBox(height: 8),
-              ApexTextField(
-                name: 'upi_id',
-                label: 'UPI ID',
-                initialValue: widget.profile?.upiId,
-                prefixIcon: Icons.payments_outlined,
-                hintText: 'e.g. name@bank',
-              ),
-              const SizedBox(height: 12),
-              SwitchListTile(
-                title: const Text('Set as Primary Account'),
-                subtitle: const Text(
-                  'Primary accounts are used by default for payments/receipts.',
+        appBar: AppBar(
+          title: Text(_isEditing ? 'Edit Bank Account' : 'New Bank Account'),
+        ),
+        body: ApexForm(
+          controller: _ctrl,
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                _section('Bank Details'),
+                const SizedBox(height: 8),
+                ApexTextField(
+                  name: 'bank_name',
+                  label: 'Bank Name *',
+                  initialValue: widget.profile?.bankName,
+                  textCapitalization: TextCapitalization.words,
+                  prefixIcon: Icons.account_balance_outlined,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
-                value: _isPrimary,
-                onChanged: (v) => setState(() => _isPrimary = v),
-              ),
-              const SizedBox(height: 8),
-              if (_isEditing)
+                const SizedBox(height: 12),
+                ApexTextField(
+                  name: 'account_number',
+                  label: 'Account Number *',
+                  initialValue: widget.profile?.accountNumber,
+                  keyboardType: TextInputType.number,
+                  prefixIcon: Icons.numbers_outlined,
+                  hintText: 'e.g. 12345678901',
+                  validator: validateAccountNumber,
+                ),
+                const SizedBox(height: 12),
+                ApexTextField(
+                  name: 'ifsc_code',
+                  label: 'IFSC Code *',
+                  initialValue: widget.profile?.ifscCode,
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 11,
+                  prefixIcon: Icons.qr_code_outlined,
+                  hintText: 'e.g. HDFC0001234',
+                  validator: validateIfsc,
+                ),
+                const SizedBox(height: 12),
+                ApexTextField(
+                  name: 'branch_name',
+                  label: 'Branch Name',
+                  initialValue: widget.profile?.branchName,
+                  textCapitalization: TextCapitalization.words,
+                  prefixIcon: Icons.location_on_outlined,
+                  hintText: 'Optional',
+                ),
+                const SizedBox(height: 16),
+                _section('Account Holder'),
+                const SizedBox(height: 8),
+                ApexTextField(
+                  name: 'account_holder',
+                  label: 'Account Holder Name *',
+                  initialValue: widget.profile?.accountHolderName,
+                  textCapitalization: TextCapitalization.words,
+                  prefixIcon: Icons.person_outline,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
+                ),
+                const SizedBox(height: 16),
+                _section('UPI & Preferences'),
+                const SizedBox(height: 8),
+                ApexTextField(
+                  name: 'upi_id',
+                  label: 'UPI ID',
+                  initialValue: widget.profile?.upiId,
+                  prefixIcon: Icons.payments_outlined,
+                  hintText: 'e.g. name@bank',
+                ),
+                const SizedBox(height: 12),
                 SwitchListTile(
-                  title: const Text('Active'),
-                  value: _isActive,
-                  onChanged: (v) => setState(() => _isActive = v),
+                  title: const Text('Set as Primary Account'),
+                  subtitle: const Text(
+                    'Primary accounts are used by default for payments/receipts.',
+                  ),
+                  value: _isPrimary,
+                  onChanged: (v) => setState(() => _isPrimary = v),
                 ),
-              const SizedBox(height: 24),
-              PermissionGate(
-                permission: Permissions.tenantUpdate,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          _isEditing ? Icons.save_rounded : Icons.add_rounded,
-                        ),
-                  label: Text(_isEditing ? 'Update Account' : 'Create Account'),
+                const SizedBox(height: 8),
+                if (_isEditing)
+                  SwitchListTile(
+                    title: const Text('Active'),
+                    value: _isActive,
+                    onChanged: (v) => setState(() => _isActive = v),
+                  ),
+                const SizedBox(height: 24),
+                PermissionGate(
+                  permission: Permissions.tenantUpdate,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            _isEditing ? Icons.save_rounded : Icons.add_rounded,
+                          ),
+                    label: Text(
+                      _isEditing ? 'Update Account' : 'Create Account',
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

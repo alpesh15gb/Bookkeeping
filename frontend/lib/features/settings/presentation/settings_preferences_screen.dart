@@ -67,6 +67,7 @@ class _SettingsPreferencesScreenState
         _ => ApexThemeMode.system,
       };
       await ref.read(themeControllerProvider.notifier).set(themeMode);
+      if (!mounted) return;
       ref.invalidate(userPreferencesProvider);
       ref
           .read(notificationServiceProvider)
@@ -163,7 +164,7 @@ class _SettingsPreferencesScreenState
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _currency,
+                  initialValue: _currency,
                   decoration: const InputDecoration(
                     labelText: 'Currency',
                     prefixIcon: Icon(Icons.attach_money_outlined),
@@ -182,7 +183,7 @@ class _SettingsPreferencesScreenState
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _numberFormat,
+                  initialValue: _numberFormat,
                   decoration: const InputDecoration(
                     labelText: 'Number Format',
                     prefixIcon: Icon(Icons.numbers_outlined),
@@ -224,7 +225,7 @@ class _SettingsPreferencesScreenState
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _dateFormat,
+                  initialValue: _dateFormat,
                   decoration: const InputDecoration(
                     labelText: 'Date Format',
                     prefixIcon: Icon(Icons.calendar_today_outlined),

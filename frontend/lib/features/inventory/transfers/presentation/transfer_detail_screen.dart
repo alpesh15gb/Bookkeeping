@@ -9,6 +9,7 @@ import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/transfer_service.dart';
 import 'transfer_list_provider.dart';
 
@@ -35,7 +36,7 @@ class TransferDetailScreen extends ConsumerWidget {
     return async.when(
       loading: () => const Center(child: LoadingSpinner(size: 36)),
       error: (err, _) => ErrorView(
-        message: err.toString(),
+        message: userFacingErrorMessage(err),
         onRetry: () => ref.invalidate(transferDetailProvider(transferId)),
       ),
       data: (t) => ListView(

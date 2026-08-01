@@ -13,6 +13,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/widgets/transaction_detail_layout.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/invoice_line.dart';
 import 'invoice_form_screen.dart';
 import 'proforma_form_screen.dart';
@@ -89,7 +90,7 @@ class _ProformaDetailScreenState extends ConsumerState<ProformaDetailScreen> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Action failed: $error')));
+        ).showSnackBar(SnackBar(content: Text(userFacingErrorMessage(error))));
       }
     } finally {
       if (mounted) setState(() => _operating = false);
@@ -131,7 +132,7 @@ class _ProformaDetailScreenState extends ConsumerState<ProformaDetailScreen> {
     return asyncDocument.when(
       loading: () => const Center(child: LoadingSpinner()),
       error: (error, _) => ErrorView(
-        message: error.toString(),
+        message: userFacingErrorMessage(error),
         onRetry: () =>
             ref.invalidate(proformaDetailProvider(widget.proformaId)),
       ),

@@ -6,7 +6,7 @@ import 'package:apexbooks/features/sales/models/invoice_line.dart';
 
 void main() {
   const calc = InvoiceCalculationService();
-  const _eps = 0.001;
+  const eps = 0.001;
 
   group('calculateLine', () {
     test('CGST+SGST intra-state 18%', () {
@@ -18,11 +18,11 @@ void main() {
         rate: 100,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(1000, _eps));
-      expect(r.cgstAmount, closeTo(90, _eps));
-      expect(r.sgstAmount, closeTo(90, _eps));
-      expect(r.igstAmount, closeTo(0, _eps));
-      expect(r.total, closeTo(1180, _eps));
+      expect(r.subtotal, closeTo(1000, eps));
+      expect(r.cgstAmount, closeTo(90, eps));
+      expect(r.sgstAmount, closeTo(90, eps));
+      expect(r.igstAmount, closeTo(0, eps));
+      expect(r.total, closeTo(1180, eps));
     });
 
     test('zero quantity', () {
@@ -34,8 +34,8 @@ void main() {
         rate: 100,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(0, _eps));
-      expect(r.total, closeTo(0, _eps));
+      expect(r.subtotal, closeTo(0, eps));
+      expect(r.total, closeTo(0, eps));
     });
 
     test('zero price', () {
@@ -47,8 +47,8 @@ void main() {
         rate: 0,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(0, _eps));
-      expect(r.total, closeTo(0, _eps));
+      expect(r.subtotal, closeTo(0, eps));
+      expect(r.total, closeTo(0, eps));
     });
 
     test('fixed 100 currency-unit discount', () {
@@ -61,9 +61,9 @@ void main() {
         discount: 100,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(900, _eps));
-      expect(r.cgstAmount, closeTo(81, _eps));
-      expect(r.total, closeTo(1062, _eps));
+      expect(r.subtotal, closeTo(900, eps));
+      expect(r.cgstAmount, closeTo(81, eps));
+      expect(r.total, closeTo(1062, eps));
     });
 
     test('fixed 10 currency-unit discount', () {
@@ -76,9 +76,9 @@ void main() {
         discount: 10,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(990, _eps));
-      expect(r.cgstAmount, closeTo(89.1, _eps));
-      expect(r.total, closeTo(1168.2, _eps));
+      expect(r.subtotal, closeTo(990, eps));
+      expect(r.cgstAmount, closeTo(89.1, eps));
+      expect(r.total, closeTo(1168.2, eps));
     });
 
     test('6% GST low rate', () {
@@ -90,9 +90,9 @@ void main() {
         rate: 50,
       );
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(5000, _eps));
-      expect(r.cgstAmount, closeTo(150, _eps));
-      expect(r.total, closeTo(5300, _eps));
+      expect(r.subtotal, closeTo(5000, eps));
+      expect(r.cgstAmount, closeTo(150, eps));
+      expect(r.total, closeTo(5300, eps));
     });
 
     test('rounding to 2 places', () {
@@ -105,9 +105,9 @@ void main() {
       );
       // subtotal=149.97, gst=149.97*18%=26.9946, cgst=13.4973→13.50, total=149.97+26.9946→176.96
       final r = calc.calculateLine(line: line);
-      expect(r.subtotal, closeTo(149.97, _eps));
-      expect(r.cgstAmount, closeTo(13.50, _eps));
-      expect(r.total, closeTo(176.96, _eps));
+      expect(r.subtotal, closeTo(149.97, eps));
+      expect(r.cgstAmount, closeTo(13.50, eps));
+      expect(r.total, closeTo(176.96, eps));
     });
   });
 }

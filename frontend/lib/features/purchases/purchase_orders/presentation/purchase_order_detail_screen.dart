@@ -6,8 +6,8 @@ import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
-import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/core/download/download_service.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/purchase_order.dart';
 import '../models/purchase_order_line.dart';
 import '../models/purchase_order_status.dart';
@@ -64,7 +64,7 @@ class _PurchaseOrderDetailScreenState
       body: asyncVal.when(
         loading: () => const Center(child: LoadingSpinner(size: 32)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () =>
               ref.invalidate(purchaseOrderDetailProvider(widget.poId)),
         ),
@@ -149,10 +149,7 @@ class _PurchaseOrderDetailScreenState
                       ),
                     ),
                     const SizedBox(width: 10),
-                    StatusBadge(
-                      label: po.status.value,
-                      tone: _tone(po.status),
-                    ),
+                    StatusBadge(label: po.status.value, tone: _tone(po.status)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -165,8 +162,7 @@ class _PurchaseOrderDetailScreenState
                       icon: const Icon(Icons.print_rounded, size: 18),
                       label: const Text('Print'),
                     ),
-                    if (_operating)
-                      const LoadingSpinner(size: 18),
+                    if (_operating) const LoadingSpinner(size: 18),
                     if (po.status == PurchaseOrderStatus.draft)
                       FilledButton.icon(
                         onPressed: _operating
@@ -504,7 +500,9 @@ class _PurchaseOrderDetailScreenState
         const Spacer(),
         ConstrainedBox(
           constraints: BoxConstraints(
-            maxWidth: ResponsiveLayout.isMobile(context) ? double.infinity : 340,
+            maxWidth: ResponsiveLayout.isMobile(context)
+                ? double.infinity
+                : 340,
           ),
           child: _Panel(
             colors: colors,
@@ -595,11 +593,7 @@ class _PurchaseOrderDetailScreenState
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Panel({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;

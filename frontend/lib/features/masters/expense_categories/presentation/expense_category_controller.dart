@@ -27,8 +27,5 @@ final expenseCategoryControllerProvider =
     });
 
 class ExpenseCategoryController extends BaseCrudController<ExpenseCategory> {
-  ExpenseCategoryController(
-    ExpenseCategoryRepository repo,
-    NotificationService notif,
-  ) : super(repo, notif);
+  ExpenseCategoryController(ExpenseCategoryRepository super.repo, super.notif);
 }

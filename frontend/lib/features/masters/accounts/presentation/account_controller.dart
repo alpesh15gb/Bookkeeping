@@ -38,7 +38,7 @@ class AccountController extends BaseCrudController<Account> {
   /// Shows a success/error notification and reloads the list on success.
   Future<void> seedDefaults(BuildContext context) async {
     final result = await _accountRepo.seedDefaults();
-    if (!mounted) return;
+    if (!mounted || !context.mounted) return;
     switch (result) {
       case Success(:final value):
         _notif.success(

@@ -98,7 +98,7 @@ class PageHeader extends StatelessWidget {
 }
 
 /// A contained card surface used for content panels.
-class ApexCard extends StatelessWidget {
+class ApexCard extends StatefulWidget {
   const ApexCard({
     super.key,
     required this.child,
@@ -111,35 +111,53 @@ class ApexCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   @override
+  State<ApexCard> createState() => _ApexCardState();
+}
+
+class _ApexCardState extends State<ApexCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
     final colors = apexColors(context);
-    final card = Card(
-      color: colors.surfaceRaised,
-      elevation: 0,
-      margin: EdgeInsets.zero,
-      shape: RoundedRectangleBorder(
+    final isInteractive = widget.onTap != null;
+
+    Widget card = AnimatedContainer(
+      duration: const Duration(milliseconds: 150),
+      curve: Curves.easeOutCubic,
+      transform: (isInteractive && _hovered)
+          ? (Matrix4.identity()..translateByDouble(0.0, -2.0, 0.0, 1.0))
+          : Matrix4.identity(),
+      decoration: BoxDecoration(
+        color: colors.surfaceRaised,
         borderRadius: BorderRadius.circular(ApexRadius.lg),
-        side: BorderSide(color: colors.border, width: 1.0),
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.015),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
+        border: Border.all(
+          color: _hovered ? colors.primary.withValues(alpha: 0.5) : colors.border,
+          width: 1.0,
         ),
-        child: Padding(padding: padding, child: child),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: _hovered ? 0.05 : 0.02),
+            blurRadius: _hovered ? 12 : 8,
+            offset: Offset(0, _hovered ? 5 : 3),
+          ),
+        ],
       ),
+      child: Padding(padding: widget.padding, child: widget.child),
     );
-    if (onTap == null) return card;
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(ApexRadius.lg),
-      child: card,
-    );
+
+    if (widget.onTap != null) {
+      card = MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTap: widget.onTap,
+          behavior: HitTestBehavior.opaque,
+          child: card,
+        ),
+      );
+    }
+    return card;
   }
 }

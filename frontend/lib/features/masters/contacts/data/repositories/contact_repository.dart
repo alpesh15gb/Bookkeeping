@@ -1,13 +1,11 @@
 /// Repository for /masters/contacts.
 library;
 
-import 'package:dio/dio.dart';
 import 'package:apexbooks/core/api/base_repository.dart';
-import 'package:apexbooks/core/cache/cache_service.dart';
 import '../models/contact.dart';
 
 class ContactRepository extends BaseRepository<Contact> {
-  ContactRepository(Dio dio, CacheService cache) : super(dio, cache);
+  ContactRepository(super.dio, super.cache);
 
   @override
   String get path => '/masters/contacts';

@@ -18,7 +18,7 @@ void main() {
     });
 
     test('toCreatePayload', () {
-      final a = const PaymentAllocation(invoiceId: 'inv-1', amount: 500);
+      const a = PaymentAllocation(invoiceId: 'inv-1', amount: 500);
       final p = a.toCreatePayload();
       expect(p['invoice_id'], 'inv-1');
       expect(p['amount'], 500);
@@ -108,12 +108,12 @@ void main() {
 
   group('OutstandingInvoice', () {
     test('computes outstanding correctly', () {
-      final inv = OutstandingInvoice(id: 'inv-1', total: 1000, amountPaid: 300);
+      const inv = OutstandingInvoice(id: 'inv-1', total: 1000, amountPaid: 300);
       expect(inv.outstanding, 700);
     });
 
     test('overpaid clamps to zero', () {
-      final inv = OutstandingInvoice(
+      const inv = OutstandingInvoice(
         id: 'inv-1',
         total: 1000,
         amountPaid: 1200,
@@ -123,7 +123,7 @@ void main() {
     });
 
     test('isOverdue for past due date', () {
-      final inv = OutstandingInvoice(
+      const inv = OutstandingInvoice(
         id: 'inv-1',
         total: 1000,
         amountPaid: 0,
@@ -134,7 +134,7 @@ void main() {
     });
 
     test('not overdue for future date', () {
-      final inv = OutstandingInvoice(
+      const inv = OutstandingInvoice(
         id: 'inv-1',
         total: 1000,
         amountPaid: 0,
@@ -144,7 +144,7 @@ void main() {
     });
 
     test('isClosed when fully paid', () {
-      final inv = OutstandingInvoice(
+      const inv = OutstandingInvoice(
         id: 'inv-1',
         total: 1000,
         amountPaid: 1000,

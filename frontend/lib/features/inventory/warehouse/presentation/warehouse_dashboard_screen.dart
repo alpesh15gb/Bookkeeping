@@ -17,6 +17,7 @@ import 'package:apexbooks/features/inventory/transfers/services/transfer_service
 import 'package:apexbooks/features/inventory/transfers/presentation/transfer_list_provider.dart';
 import 'package:apexbooks/features/inventory/adjustment/services/adjustment_service.dart';
 import 'package:apexbooks/features/inventory/adjustment/presentation/adjustment_list_provider.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/warehouse_service.dart';
 import 'warehouse_providers.dart';
 import 'warehouse_detail_screen.dart';
@@ -69,26 +70,9 @@ class _WarehouseDashboardScreenState
           ),
           Expanded(
             child: dashAsync.when(
-              loading: () => ListView(
-                padding: EdgeInsets.all(isMobile ? 12 : 24),
-                children: [
-                  const Row(
-                    children: [
-                      Expanded(child: KpiCardSkeleton()),
-                      SizedBox(width: 12),
-                      Expanded(child: KpiCardSkeleton()),
-                      SizedBox(width: 12),
-                      Expanded(child: KpiCardSkeleton()),
-                      SizedBox(width: 12),
-                      Expanded(child: KpiCardSkeleton()),
-                    ],
-                  ),
-                  const SizedBox(height: 20),
-                  for (int i = 0; i < 3; i++) const ListItemSkeleton(),
-                ],
-              ),
+              loading: () => _loadingState(isMobile),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(warehouseDashboardProvider),
               ),
               data: (dash) => ListView(
@@ -129,6 +113,44 @@ class _WarehouseDashboardScreenState
           ),
         ],
       ),
+    );
+  }
+
+  Widget _loadingState(bool isMobile) {
+    final skeletons = List.generate(4, (_) => const KpiCardSkeleton());
+
+    return ListView(
+      padding: EdgeInsets.all(isMobile ? ApexSpacing.md : ApexSpacing.xl),
+      children: [
+        if (isMobile) ...[
+          Row(
+            children: [
+              Expanded(child: skeletons[0]),
+              const SizedBox(width: ApexSpacing.md),
+              Expanded(child: skeletons[1]),
+            ],
+          ),
+          const SizedBox(height: ApexSpacing.md),
+          Row(
+            children: [
+              Expanded(child: skeletons[2]),
+              const SizedBox(width: ApexSpacing.md),
+              Expanded(child: skeletons[3]),
+            ],
+          ),
+        ] else
+          Row(
+            children: [
+              for (int i = 0; i < skeletons.length; i++) ...[
+                Expanded(child: skeletons[i]),
+                if (i != skeletons.length - 1)
+                  const SizedBox(width: ApexSpacing.md),
+              ],
+            ],
+          ),
+        const SizedBox(height: ApexSpacing.xl),
+        for (int i = 0; i < 3; i++) const ListItemSkeleton(),
+      ],
     );
   }
 
@@ -189,14 +211,12 @@ class _WarehouseDashboardScreenState
           )
         else
           Row(
-            children: kpis
-                .map(
-                  (k) => Padding(
-                    padding: const EdgeInsets.only(right: 12),
-                    child: Expanded(child: _kpiCard(k, c)),
-                  ),
-                )
-                .toList(),
+            children: [
+              for (int i = 0; i < kpis.length; i++) ...[
+                Expanded(child: _kpiCard(kpis[i], c)),
+                if (i != kpis.length - 1) const SizedBox(width: ApexSpacing.md),
+              ],
+            ],
           ),
       ],
     );

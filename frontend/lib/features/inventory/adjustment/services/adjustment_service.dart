@@ -144,7 +144,7 @@ class AdjustmentService {
       final payload = <String, dynamic>{
         'adjustment_number': adjustmentNumber,
         'adjustment_date': adjustmentDate,
-        if (reason != null) 'reason': reason,
+        'reason': ?reason,
         'line_items': [...lines.map((l) => l.toCreatePayload())],
       };
       final res = await _dio.post('/inventory-adjustments', data: payload);

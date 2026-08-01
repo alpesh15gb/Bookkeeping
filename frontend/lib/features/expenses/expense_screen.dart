@@ -15,6 +15,7 @@ import 'package:apexbooks/features/masters/accounts/data/models/account.dart';
 import 'package:apexbooks/features/masters/accounts/presentation/account_controller.dart';
 import 'package:apexbooks/features/masters/expense_categories/data/models/expense_category.dart';
 import 'package:apexbooks/features/masters/expense_categories/presentation/expense_category_controller.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 
 double _amount(dynamic value) => value is num
     ? value.toDouble()
@@ -158,7 +159,7 @@ class ExpenseScreen extends ConsumerWidget {
             child: expenses.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (error, _) => ErrorView(
-                message: error.toString(),
+                message: userFacingErrorMessage(error),
                 onRetry: () => ref.invalidate(expenseListProvider),
               ),
               data: (rows) => rows.isEmpty

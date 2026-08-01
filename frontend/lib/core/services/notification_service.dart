@@ -97,7 +97,9 @@ class NotificationService {
       backgroundColor: bg,
       behavior: SnackBarBehavior.floating,
       duration: data.duration,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(ApexRadius.md)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(ApexRadius.md),
+      ),
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
     );
   }

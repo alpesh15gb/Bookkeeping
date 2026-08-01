@@ -15,6 +15,8 @@ import 'package:apexbooks/core/tables/table_controller.dart';
 import 'package:apexbooks/core/tables/table_pagination.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
 import 'package:apexbooks/core/network/api_client.dart';
+import 'package:apexbooks/features/offline_repository_providers.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import 'delivery_challan_form_screen.dart';
 
 @immutable
@@ -59,28 +61,30 @@ class DeliveryChallanListQuery {
   final String? status;
 }
 
-final deliveryChallanListProvider = FutureProvider.autoDispose
+final deliveryChallanListProvider = StreamProvider.autoDispose
     .family<
       ({List<DeliveryChallanListItem> items, int total}),
       DeliveryChallanListQuery
-    >((ref, query) async {
-      final dio = ref.watch(apiClientProvider);
-      final res = await dio.get(
-        '/delivery-challans',
-        queryParameters: {'page': query.page, 'limit': query.limit},
-      );
-      final rawItems = (res.data as List)
-          .map(
-            (e) => DeliveryChallanListItem.fromJson(e as Map<String, dynamic>),
-          )
-          .toList();
-      final items = query.status == null
-          ? rawItems
-          : rawItems.where((e) => e.status == query.status).toList();
-      final total = rawItems.length < query.limit
-          ? (query.page - 1) * query.limit + items.length
-          : query.page * query.limit + 1;
-      return (items: items, total: total);
+    >((ref, query) {
+      final repo = ref.watch(salesRepositoryProvider);
+      return repo.watchDeliveries().map((list) {
+        final rawItems = list.map((item) {
+          return DeliveryChallanListItem(
+            id: item.localId,
+            challanNumber: item.localId.substring(0, 8).toUpperCase(),
+            challanDate: item.deliveryDate,
+            dueDate: item.deliveryDate,
+            status: item.lifecycleStatus.toUpperCase(),
+            total: 0.0,
+            contactName: item.customerName,
+            createdAt: item.createdAt.toIso8601String(),
+          );
+        }).toList();
+        final items = query.status == null
+            ? rawItems
+            : rawItems.where((e) => e.status == query.status).toList();
+        return (items: items, total: items.length);
+      });
     });
 
 final _dcTableCtrlProvider =
@@ -138,7 +142,7 @@ class _DeliveryChallanListScreenState
           .read(apiClientProvider)
           .post('/delivery-challans/${item.id}/$suffix');
       ref.invalidate(deliveryChallanListProvider);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -148,11 +152,13 @@ class _DeliveryChallanListScreenState
             ),
           ),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Action failed: $error')));
+        ).showSnackBar(SnackBar(content: Text(userFacingErrorMessage(error))));
+      }
     }
   }
 
@@ -202,7 +208,7 @@ class _DeliveryChallanListScreenState
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(deliveryChallanListProvider),
               ),
               data: (data) {
@@ -310,7 +316,7 @@ class _TableBody extends StatelessWidget {
             Expanded(
               child: ListView.separated(
                 padding: EdgeInsets.zero,
-                separatorBuilder: (_, __) =>
+                separatorBuilder: (_, _) =>
                     Divider(height: 1, color: colors.border),
                 itemCount: items.length,
                 itemBuilder: (context, i) {
@@ -447,16 +453,16 @@ class _MobileDeliveryChallanList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (items.isEmpty) {
-      return const EmptyData(message: 'No delivery challans found.');
+      return const Center(child: Text('No delivery challans found.'));
     }
     return ListView.separated(
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
       itemCount: items.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      separatorBuilder: (_, _) => const SizedBox(height: 8),
       itemBuilder: (context, i) {
         final item = items[i];
-        final overdue = DateTime.tryParse(item.dueDate)
-            ?.isBefore(DateTime.now()) == true;
+        final overdue =
+            DateTime.tryParse(item.dueDate)?.isBefore(DateTime.now()) == true;
         return Card(
           margin: EdgeInsets.zero,
           child: InkWell(
@@ -476,24 +482,31 @@ class _MobileDeliveryChallanList extends StatelessWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(item.challanNumber,
+                        child: Text(
+                          item.challanNumber,
                           style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                       ),
                       StatusBadge(
-                        label: item.status.value.replaceAll('_', ' '),
-                        tone: toneForStatus(item.status.value),
+                        label: item.status.replaceAll('_', ' '),
+                        tone: toneForStatus(item.status),
                       ),
                     ],
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      Icon(Icons.person_outline, size: 15, color: colors.textMuted),
+                      Icon(
+                        Icons.person_outline,
+                        size: 15,
+                        color: colors.textMuted,
+                      ),
                       const SizedBox(width: 4),
                       Expanded(
-                        child: Text(item.contactName,
-                          maxLines: 1, overflow: TextOverflow.ellipsis,
+                        child: Text(
+                          item.contactName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: TextStyle(color: colors.textSecondary),
                         ),
                       ),
@@ -502,17 +515,24 @@ class _MobileDeliveryChallanList extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(Icons.event_outlined, size: 15, color: colors.textMuted),
+                      Icon(
+                        Icons.event_outlined,
+                        size: 15,
+                        color: colors.textMuted,
+                      ),
                       const SizedBox(width: 4),
                       Text(
-                        overdue ? 'Overdue ${item.dueDate}' : 'Due ${item.dueDate}',
+                        overdue
+                            ? 'Overdue ${item.dueDate}'
+                            : 'Due ${item.dueDate}',
                         style: TextStyle(
                           fontSize: 12,
                           color: overdue ? colors.warning : colors.textMuted,
                         ),
                       ),
                       const Spacer(),
-                      Text(fmt.currency(item.total),
+                      Text(
+                        fmt.currency(item.total),
                         style: const TextStyle(fontWeight: FontWeight.w800),
                       ),
                     ],

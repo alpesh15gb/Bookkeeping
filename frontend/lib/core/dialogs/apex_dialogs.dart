@@ -79,16 +79,33 @@ class ApexDialogs {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(title, style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700), textAlign: TextAlign.center),
+              Text(
+                title,
+                style: Theme.of(
+                  ctx,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 12),
-              Text(message, style: Theme.of(ctx).textTheme.bodyMedium, textAlign: TextAlign.center),
+              Text(
+                message,
+                style: Theme.of(ctx).textTheme.bodyMedium,
+                textAlign: TextAlign.center,
+              ),
               const SizedBox(height: 24),
               FilledButton(
                 onPressed: () => Navigator.pop(ctx, true),
-                style: (confirmColor != null
-                    ? FilledButton.styleFrom(backgroundColor: confirmColor)
-                    : FilledButton.styleFrom())
-                    .copyWith(padding: WidgetStatePropertyAll(const EdgeInsets.symmetric(vertical: 16))),
+                style:
+                    (confirmColor != null
+                            ? FilledButton.styleFrom(
+                                backgroundColor: confirmColor,
+                              )
+                            : FilledButton.styleFrom())
+                        .copyWith(
+                          padding: const WidgetStatePropertyAll(
+                            EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
                 child: Text(confirmText, style: const TextStyle(fontSize: 16)),
               ),
               const SizedBox(height: 8),
@@ -113,9 +130,12 @@ class ApexDialogs {
     return confirm(
       context,
       title: 'Delete $itemType',
-      message: 'Are you sure you want to delete "$itemName"?\n\nThis action cannot be undone.',
+      message:
+          'Are you sure you want to delete "$itemName"?\n\nThis action cannot be undone.',
       confirmText: 'Delete',
-      confirmColor: Theme.of(context).extension<ApexColors>()?.danger ?? const Color(0xFFDC2626),
+      confirmColor:
+          Theme.of(context).extension<ApexColors>()?.danger ??
+          const Color(0xFFDC2626),
     );
   }
 
@@ -126,7 +146,13 @@ class ApexDialogs {
     String title = 'Success',
   }) {
     final colors = apexColors(context);
-    return _infoDialog(context, title: title, message: message, icon: Icons.check_circle_outline, color: colors.success);
+    return _infoDialog(
+      context,
+      title: title,
+      message: message,
+      icon: Icons.check_circle_outline,
+      color: colors.success,
+    );
   }
 
   /// Shows a simple error dialog.
@@ -136,7 +162,13 @@ class ApexDialogs {
     String title = 'Error',
   }) {
     final colors = apexColors(context);
-    return _infoDialog(context, title: title, message: message, icon: Icons.error_outline, color: colors.danger);
+    return _infoDialog(
+      context,
+      title: title,
+      message: message,
+      icon: Icons.error_outline,
+      color: colors.danger,
+    );
   }
 
   /// Shows a full-screen progress dialog (dismissable only via [dismissProgress]).
@@ -201,9 +233,18 @@ class ApexDialogs {
               children: [
                 Icon(icon, color: color, size: 48),
                 const SizedBox(height: 16),
-                Text(title, style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                Text(
+                  title,
+                  style: Theme.of(
+                    ctx,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700),
+                ),
                 const SizedBox(height: 8),
-                Text(message, style: Theme.of(ctx).textTheme.bodyMedium, textAlign: TextAlign.center),
+                Text(
+                  message,
+                  style: Theme.of(ctx).textTheme.bodyMedium,
+                  textAlign: TextAlign.center,
+                ),
                 const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,

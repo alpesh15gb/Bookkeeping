@@ -100,7 +100,10 @@ class PurchaseTransaction {
 // Party Statement (Customer / Vendor Ledger) — mirrors PartyStatementResponse
 // ---------------------------------------------------------------------------
 
-@immutable
+/// One row in a party ledger.
+///
+/// [createdAt] is an internal field used by [ReportsService] for stable
+/// date-order sorting. It is NOT part of the JSON wire format.
 class PartyStatementRow {
   const PartyStatementRow({
     this.date = '',
@@ -110,6 +113,7 @@ class PartyStatementRow {
     this.debit,
     this.credit,
     this.balance = '',
+    this.createdAt = '',
   });
 
   final String date;
@@ -119,6 +123,9 @@ class PartyStatementRow {
   final double? debit;
   final double? credit;
   final String balance;
+
+  /// Used for stable date-order sorting in [ReportsService]. Not serialised.
+  final String createdAt;
 
   factory PartyStatementRow.fromJson(Map<String, dynamic> json) =>
       PartyStatementRow(
@@ -201,28 +208,26 @@ class PartyStatement {
   final List<PartyStatementRow> ledger;
   final PartyStatementSummary summary;
 
-  factory PartyStatement.fromJson(Map<String, dynamic> json) =>
-      PartyStatement(
-        contactId: (json['contact_id'] ?? '').toString(),
-        contactName: json['contact_name'] as String? ?? '',
-        contactType: json['contact_type'] as String? ?? '',
-        address: json['address'] as String?,
-        gstin: json['gstin'] as String?,
-        phone: json['phone'] as String?,
-        startDate: json['start_date'] as String? ?? '',
-        endDate: json['end_date'] as String? ?? '',
-        ledger: (json['ledger'] as List?)
-                ?.map(
-                  (e) => PartyStatementRow.fromJson(e as Map<String, dynamic>),
-                )
-                .toList() ??
-            [],
-        summary: json['summary'] is Map<String, dynamic>
-            ? PartyStatementSummary.fromJson(
-                json['summary'] as Map<String, dynamic>,
-              )
-            : const PartyStatementSummary(),
-      );
+  factory PartyStatement.fromJson(Map<String, dynamic> json) => PartyStatement(
+    contactId: (json['contact_id'] ?? '').toString(),
+    contactName: json['contact_name'] as String? ?? '',
+    contactType: json['contact_type'] as String? ?? '',
+    address: json['address'] as String?,
+    gstin: json['gstin'] as String?,
+    phone: json['phone'] as String?,
+    startDate: json['start_date'] as String? ?? '',
+    endDate: json['end_date'] as String? ?? '',
+    ledger:
+        (json['ledger'] as List?)
+            ?.map((e) => PartyStatementRow.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [],
+    summary: json['summary'] is Map<String, dynamic>
+        ? PartyStatementSummary.fromJson(
+            json['summary'] as Map<String, dynamic>,
+          )
+        : const PartyStatementSummary(),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -231,20 +236,15 @@ class PartyStatement {
 
 @immutable
 class ContactSummary {
-  const ContactSummary({
-    this.id = '',
-    this.name = '',
-    this.contactType = '',
-  });
+  const ContactSummary({this.id = '', this.name = '', this.contactType = ''});
 
   final String id;
   final String name;
   final String contactType;
 
-  factory ContactSummary.fromJson(Map<String, dynamic> json) =>
-      ContactSummary(
-        id: (json['id'] ?? '').toString(),
-        name: json['name'] as String? ?? '',
-        contactType: json['contact_type'] as String? ?? '',
-      );
+  factory ContactSummary.fromJson(Map<String, dynamic> json) => ContactSummary(
+    id: (json['id'] ?? '').toString(),
+    name: json['name'] as String? ?? '',
+    contactType: json['contact_type'] as String? ?? '',
+  );
 }

@@ -271,7 +271,7 @@ class _VendorPaymentFormScreenState
                 ),
                 colors,
               );
-              if (narrow)
+              if (narrow) {
                 return Column(
                   children: [
                     vendor,
@@ -285,6 +285,7 @@ class _VendorPaymentFormScreenState
                     ),
                   ],
                 );
+              }
               return Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -700,8 +701,9 @@ class _VendorField extends ConsumerWidget {
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
-        if (selectedName.isNotEmpty && ctrl.text.isEmpty)
+        if (selectedName.isNotEmpty && ctrl.text.isEmpty) {
           ctrl.text = selectedName;
+        }
         Future<void> createParty() async {
           final created = await showQuickCreateParty(
             context,

@@ -13,6 +13,7 @@ import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/report_models.dart';
 import '../services/reports_service.dart';
 
@@ -26,20 +27,18 @@ final prContactIdProvider = StateProvider<String?>((ref) => null);
 
 final purchaseRegisterProvider =
     FutureProvider.autoDispose<List<PurchaseTransaction>>((ref) async {
-  final dateFrom = ref.watch(prDateFromProvider);
-  final dateTo = ref.watch(prDateToProvider);
-  final contactId = ref.watch(prContactIdProvider);
-  final res = await ref.watch(reportsServiceProvider).getBills(
-        dateFrom: dateFrom,
-        dateTo: dateTo,
-        contactId: contactId,
-      );
-  return switch (res) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
-});
+      final dateFrom = ref.watch(prDateFromProvider);
+      final dateTo = ref.watch(prDateToProvider);
+      final contactId = ref.watch(prContactIdProvider);
+      final res = await ref
+          .watch(reportsServiceProvider)
+          .getBills(dateFrom: dateFrom, dateTo: dateTo, contactId: contactId);
+      return switch (res) {
+        Success(:final value) => value,
+        Failure(:final error) => throw error,
+        _ => throw Exception(),
+      };
+    });
 
 // ---------------------------------------------------------------------------
 // Vendor search delegate — pops with the selected contact id & name
@@ -57,9 +56,9 @@ class VendorSearchDelegate extends SearchDelegate<ContactSummary?> {
   ThemeData appBarTheme(BuildContext context) {
     return Theme.of(context).copyWith(
       scaffoldBackgroundColor: colors.surface,
-      appBarTheme: Theme.of(context).appBarTheme.copyWith(
-            backgroundColor: colors.surface,
-          ),
+      appBarTheme: Theme.of(
+        context,
+      ).appBarTheme.copyWith(backgroundColor: colors.surface),
     );
   }
 
@@ -99,8 +98,7 @@ class VendorSearchDelegate extends SearchDelegate<ContactSummary?> {
     }
 
     return FutureBuilder<Result<List<ContactSummary>>>(
-      future: reportsService
-          .getContacts(contactType: 'VENDOR', search: query),
+      future: reportsService.getContacts(contactType: 'VENDOR', search: query),
       builder: (context, snapshot) {
         final result = snapshot.data;
         if (snapshot.connectionState != ConnectionState.done) {
@@ -121,8 +119,7 @@ class VendorSearchDelegate extends SearchDelegate<ContactSummary?> {
         return ListView.separated(
           padding: const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
           itemCount: contacts.length,
-          separatorBuilder: (_, _) =>
-              Divider(height: 1, color: colors.border),
+          separatorBuilder: (_, _) => Divider(height: 1, color: colors.border),
           itemBuilder: (context, i) {
             final c = contacts[i];
             return ListTile(
@@ -218,7 +215,7 @@ class _PurchaseRegisterScreenState
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(purchaseRegisterProvider),
               ),
               data: (bills) {
@@ -247,7 +244,10 @@ class _PurchaseRegisterScreenState
       onTap: () async {
         final result = await showSearch<ContactSummary?>(
           context: context,
-          delegate: VendorSearchDelegate(ref.read(reportsServiceProvider), colors),
+          delegate: VendorSearchDelegate(
+            ref.read(reportsServiceProvider),
+            colors,
+          ),
         );
         if (result != null) {
           setState(() => _selectedVendor = result);
@@ -264,11 +264,7 @@ class _PurchaseRegisterScreenState
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.business_rounded,
-              size: 16,
-              color: colors.textSecondary,
-            ),
+            Icon(Icons.business_rounded, size: 16, color: colors.textSecondary),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -295,11 +291,7 @@ class _PurchaseRegisterScreenState
                 ),
               )
             else
-              Icon(
-                Icons.search_rounded,
-                size: 16,
-                color: colors.textMuted,
-              ),
+              Icon(Icons.search_rounded, size: 16, color: colors.textMuted),
           ],
         ),
       ),
@@ -456,14 +448,8 @@ class _PurchaseRegisterScreenState
             child: Row(
               children: [
                 Expanded(flex: 16, child: Text('DATE', style: _th(colors))),
-                Expanded(
-                  flex: 20,
-                  child: Text('BILL #', style: _th(colors)),
-                ),
-                Expanded(
-                  flex: 32,
-                  child: Text('VENDOR', style: _th(colors)),
-                ),
+                Expanded(flex: 20, child: Text('BILL #', style: _th(colors))),
+                Expanded(flex: 32, child: Text('VENDOR', style: _th(colors))),
                 Expanded(
                   flex: 16,
                   child: Text(
@@ -492,9 +478,7 @@ class _PurchaseRegisterScreenState
                 final b = bills[i];
                 return Container(
                   decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: colors.border),
-                    ),
+                    border: Border(bottom: BorderSide(color: colors.border)),
                   ),
                   padding: const EdgeInsets.symmetric(
                     horizontal: ApexSpacing.lg,
@@ -565,9 +549,7 @@ class _PurchaseRegisterScreenState
           Container(
             decoration: BoxDecoration(
               color: colors.surfaceMuted,
-              border: Border(
-                top: BorderSide(color: colors.border, width: 1.5),
-              ),
+              border: Border(top: BorderSide(color: colors.border, width: 1.5)),
             ),
             padding: const EdgeInsets.symmetric(
               horizontal: ApexSpacing.lg,
@@ -607,9 +589,9 @@ class _PurchaseRegisterScreenState
   }
 
   TextStyle _th(ApexColors colors) => TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: colors.textMuted,
-      );
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+  );
 }

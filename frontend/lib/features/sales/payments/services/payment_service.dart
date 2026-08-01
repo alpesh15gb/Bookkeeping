@@ -31,7 +31,7 @@ class PaymentService {
       final q = <String, dynamic>{
         'page': page,
         'limit': limit,
-        if (contactId != null) 'contact_id': contactId,
+        'contact_id': ?contactId,
       };
       final res = await _dio.get('/payments/receipts', queryParameters: q);
       final rows = res.data;

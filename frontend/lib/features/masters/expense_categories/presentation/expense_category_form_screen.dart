@@ -71,72 +71,72 @@ class _ExpenseCategoryFormScreenState
         }
       },
       child: Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Edit Category' : 'New Expense Category'),
-      ),
-      body: ApexForm(
-        controller: _ctrl,
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              ApexTextField(
-                name: 'name',
-                label: 'Category Name *',
-                initialValue: widget.category?.name,
-                textCapitalization: TextCapitalization.sentences,
-                prefixIcon: Icons.category_outlined,
-                validator: (v) =>
-                    v == null || v.trim().isEmpty ? 'Required' : null,
-              ),
-              const SizedBox(height: 12),
-              TextFormField(
-                controller: _descCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.description_outlined),
+        appBar: AppBar(
+          title: Text(_isEditing ? 'Edit Category' : 'New Expense Category'),
+        ),
+        body: ApexForm(
+          controller: _ctrl,
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                ApexTextField(
+                  name: 'name',
+                  label: 'Category Name *',
+                  initialValue: widget.category?.name,
+                  textCapitalization: TextCapitalization.sentences,
+                  prefixIcon: Icons.category_outlined,
+                  validator: (v) =>
+                      v == null || v.trim().isEmpty ? 'Required' : null,
                 ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Linked ledger account is auto-resolved by the system.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _descCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Description',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.description_outlined),
+                  ),
+                  maxLines: 3,
                 ),
-              ),
-              const SizedBox(height: 12),
-              if (_isEditing)
-                SwitchListTile(
-                  title: const Text('Active'),
-                  value: _isActive,
-                  onChanged: (v) => setState(() => _isActive = v),
-                ),
-              const SizedBox(height: 24),
-              PermissionGate(
-                permission: Permissions.ledgerManualPost,
-                child: FilledButton.icon(
-                  onPressed: _saving ? null : _save,
-                  icon: _saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Icon(
-                          _isEditing ? Icons.save_rounded : Icons.add_rounded,
-                        ),
-                  label: Text(
-                    _isEditing ? 'Update Category' : 'Create Category',
+                const SizedBox(height: 8),
+                Text(
+                  'Linked ledger account is auto-resolved by the system.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 12),
+                if (_isEditing)
+                  SwitchListTile(
+                    title: const Text('Active'),
+                    value: _isActive,
+                    onChanged: (v) => setState(() => _isActive = v),
+                  ),
+                const SizedBox(height: 24),
+                PermissionGate(
+                  permission: Permissions.ledgerManualPost,
+                  child: FilledButton.icon(
+                    onPressed: _saving ? null : _save,
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Icon(
+                            _isEditing ? Icons.save_rounded : Icons.add_rounded,
+                          ),
+                    label: Text(
+                      _isEditing ? 'Update Category' : 'Create Category',
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
-      ),
       ),
     );
   }

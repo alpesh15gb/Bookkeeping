@@ -12,11 +12,11 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/services/notification_service.dart';
-import '../../../core/result/result.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/gst_config.dart';
 import '../data/models/tenant_settings.dart';
 import 'settings_providers.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 
 class SettingsGstConfigScreen extends ConsumerStatefulWidget {
   const SettingsGstConfigScreen({super.key});
@@ -108,14 +108,15 @@ class _SettingsGstConfigScreenState
       });
     }
 
+    if (!mounted) return;
     setState(() => _isSaving = false);
 
-    if (!mounted) return;
     if (gstResult is Success) {
       ref.invalidate(gstConfigProvider);
       ref.invalidate(tenantSettingsProvider);
       ref.invalidate(companyProfileProvider(companyId));
       await ref.read(authControllerProvider.notifier).refreshMemberships();
+      if (!mounted) return;
       ref
           .read(notificationServiceProvider)
           .success(context, 'GST configuration updated.', title: 'Saved');
@@ -138,7 +139,7 @@ class _SettingsGstConfigScreenState
       body: gstAsync.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(gstConfigProvider),
         ),
         data: (config) {
@@ -201,7 +202,7 @@ class _SettingsGstConfigScreenState
                 ),
                 const SizedBox(height: 16),
                 DropdownButtonFormField<String>(
-                  value: _taxMode,
+                  initialValue: _taxMode,
                   decoration: const InputDecoration(
                     labelText: 'Tax Mode',
                     prefixIcon: Icon(Icons.receipt_outlined),
@@ -257,7 +258,7 @@ class _SettingsGstConfigScreenState
                   ],
                   // State Code
                   DropdownButtonFormField<String>(
-                    value: _stateCode,
+                    initialValue: _stateCode,
                     decoration: const InputDecoration(
                       labelText: 'State Code *',
                       prefixIcon: Icon(Icons.map_outlined),
@@ -277,7 +278,7 @@ class _SettingsGstConfigScreenState
                   const SizedBox(height: 16),
                   // Registration Type
                   DropdownButtonFormField<String>(
-                    value: _registrationType,
+                    initialValue: _registrationType,
                     decoration: const InputDecoration(
                       labelText: 'Registration Type',
                       prefixIcon: Icon(Icons.assignment_outlined),
@@ -299,7 +300,7 @@ class _SettingsGstConfigScreenState
                   const SizedBox(height: 16),
                   // Filing Frequency
                   DropdownButtonFormField<String>(
-                    value: _filingFrequency,
+                    initialValue: _filingFrequency,
                     decoration: const InputDecoration(
                       labelText: 'Filing Frequency',
                       prefixIcon: Icon(Icons.calendar_month_outlined),
@@ -372,7 +373,8 @@ class _SettingsGstConfigScreenState
                       decoration: const InputDecoration(
                         labelText: 'E-Waybill Username',
                         prefixIcon: Icon(Icons.local_shipping_outlined),
-                        helperText: 'Separate if different from e-invoice username.',
+                        helperText:
+                            'Separate if different from e-invoice username.',
                       ),
                       onChanged: (v) => _eWayBillUsername = v,
                     ),

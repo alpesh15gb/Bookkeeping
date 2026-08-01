@@ -52,12 +52,20 @@ class _ApexSearchBarState extends State<ApexSearchBar> {
       onChanged: _onChanged,
       decoration: InputDecoration(
         hintText: widget.hintText,
-        prefixIcon: Icon(Icons.search_rounded, size: 20, color: colors.textMuted),
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          size: 20,
+          color: colors.textMuted,
+        ),
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(vertical: 10),
         suffixIcon: widget.controller.text.isNotEmpty
             ? IconButton(
-                icon: Icon(Icons.clear_rounded, size: 18, color: colors.textMuted),
+                icon: Icon(
+                  Icons.clear_rounded,
+                  size: 18,
+                  color: colors.textMuted,
+                ),
                 onPressed: () {
                   widget.controller.clear();
                   widget.onChanged?.call('');

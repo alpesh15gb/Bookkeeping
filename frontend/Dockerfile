@@ -4,8 +4,11 @@ FROM ghcr.io/cirruslabs/flutter:stable AS builder
 WORKDIR /app
 COPY . .
 
-# Create .env placeholder (gitignored, needed for flutter assets)
-RUN echo "API_BASE_URL=https://api.apexbooks.in" > .env
+# Build-time API base. The app loads `assets/.env`; the Compose
+# production-like stack uses the same-origin nginx proxy (`/api/v1`) so the
+# active frontend reaches its backend service.
+ARG API_BASE_URL=/api/v1
+RUN echo "API_BASE_URL=${API_BASE_URL}" > assets/.env
 
 # Get dependencies
 RUN flutter pub get

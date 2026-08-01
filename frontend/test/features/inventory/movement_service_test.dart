@@ -15,7 +15,7 @@ void main() {
   group('calculateBalanceFromMovements', () {
     test('sum of movements equals balance', () {
       final movements = [
-        StockMovement(
+        const StockMovement(
           id: 'm1',
           productId: 'p1',
           productName: 'P',
@@ -23,7 +23,7 @@ void main() {
           balanceQuantity: 100,
           referenceType: MovementReferenceType.bill,
         ),
-        StockMovement(
+        const StockMovement(
           id: 'm2',
           productId: 'p1',
           productName: 'P',
@@ -31,7 +31,7 @@ void main() {
           balanceQuantity: 70,
           referenceType: MovementReferenceType.invoice,
         ),
-        StockMovement(
+        const StockMovement(
           id: 'm3',
           productId: 'p1',
           productName: 'P',
@@ -47,7 +47,7 @@ void main() {
     });
     test('negative opening balance', () {
       final movements = [
-        StockMovement(
+        const StockMovement(
           id: 'm1',
           productId: 'p1',
           productName: 'P',
@@ -55,7 +55,7 @@ void main() {
           balanceQuantity: -10,
           referenceType: MovementReferenceType.adjustment,
         ),
-        StockMovement(
+        const StockMovement(
           id: 'm2',
           productId: 'p1',
           productName: 'P',

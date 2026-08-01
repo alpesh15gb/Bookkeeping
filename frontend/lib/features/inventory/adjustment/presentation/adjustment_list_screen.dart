@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/adjustment_service.dart';
 import 'adjustment_list_provider.dart';
 import 'adjustment_form_screen.dart';
@@ -50,6 +52,7 @@ class _AdjustmentListScreenState extends ConsumerState<AdjustmentListScreen> {
   Widget build(BuildContext context) {
     final async = ref.watch(adjustmentListProvider);
     final colors = apexColors(context);
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     final list = Scaffold(
       body: Column(
@@ -79,7 +82,7 @@ class _AdjustmentListScreenState extends ConsumerState<AdjustmentListScreen> {
                 ],
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(adjustmentListProvider),
               ),
               data: (items) {
@@ -172,6 +175,10 @@ class _AdjustmentListScreenState extends ConsumerState<AdjustmentListScreen> {
       ),
     );
 
+    if (_selectedId != null && isMobile) {
+      return Scaffold(body: _detail(_selectedId!, colors));
+    }
+
     if (_selectedId == null) return list;
     return Row(
       children: [
@@ -206,7 +213,7 @@ class _AdjustmentListScreenState extends ConsumerState<AdjustmentListScreen> {
             child: async.when(
               loading: () => const Center(child: LoadingSpinner(size: 30)),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(adjustmentDetailProvider(id)),
               ),
               data: (adj) => ListView(

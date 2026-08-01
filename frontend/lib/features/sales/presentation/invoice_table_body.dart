@@ -64,12 +64,28 @@ class InvoiceTableBody extends StatelessWidget {
                   _sortableHeader(context, 'Customer', 'contactName', nameW),
                   _sortableHeader(context, 'Date', 'issueDate', dateW),
                   _sortableHeader(context, 'Due On', 'dueDate', dueW),
-                  _sortableHeader(context, 'Total', 'total', totalW, alignRight: true),
-                  _sortableHeader(context, 'Outstanding', 'outstanding', outstandingW, alignRight: true),
+                  _sortableHeader(
+                    context,
+                    'Total',
+                    'total',
+                    totalW,
+                    alignRight: true,
+                  ),
+                  _sortableHeader(
+                    context,
+                    'Outstanding',
+                    'outstanding',
+                    outstandingW,
+                    alignRight: true,
+                  ),
                   SizedBox(
                     width: statusW,
-                    child: Text('Status',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    child: const Text(
+                      'Status',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
                     ),
                   ),
                 ],
@@ -91,38 +107,57 @@ class InvoiceTableBody extends StatelessWidget {
               final statusW = (w * 0.14).clamp(90, 160).toDouble();
               return ListView.separated(
                 padding: EdgeInsets.zero,
-                separatorBuilder: (_, __) => Divider(height: 1, color: colors.border),
+                separatorBuilder: (_, _) =>
+                    Divider(height: 1, color: colors.border),
                 itemCount: items.length,
                 itemBuilder: (context, i) {
                   final item = items[i];
                   final isSelected = item.id == selectedId;
-                  final overdue = item.outstanding > 0 && DateTime.tryParse(item.dueDate)?.isBefore(DateTime.now()) == true;
+                  final overdue =
+                      item.outstanding > 0 &&
+                      DateTime.tryParse(
+                            item.dueDate,
+                          )?.isBefore(DateTime.now()) ==
+                          true;
                   return InkWell(
                     onTap: () => onSelect(item),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
                       color: isSelected ? colors.primaryContainer : null,
                       child: Row(
                         children: [
                           SizedBox(
                             width: codeW,
-                            child: Text(item.invoiceNumber,
-                              style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                            child: Text(
+                              item.invoiceNumber,
+                              style: textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           SizedBox(
                             width: nameW,
-                            child: Text(item.contactName, style: textTheme.bodyMedium,
-                              maxLines: 1, overflow: TextOverflow.ellipsis,
+                            child: Text(
+                              item.contactName,
+                              style: textTheme.bodyMedium,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                           SizedBox(
                             width: dateW,
-                            child: Text(item.issueDate, style: textTheme.bodyMedium),
+                            child: Text(
+                              item.issueDate,
+                              style: textTheme.bodyMedium,
+                            ),
                           ),
                           SizedBox(
                             width: dueW,
-                            child: Text(item.dueDate,
+                            child: Text(
+                              item.dueDate,
                               style: textTheme.bodyMedium?.copyWith(
                                 color: overdue ? colors.danger : null,
                                 fontWeight: overdue ? FontWeight.w600 : null,
@@ -131,18 +166,24 @@ class InvoiceTableBody extends StatelessWidget {
                           ),
                           SizedBox(
                             width: totalW,
-                            child: Text(fmt.currency(item.total),
+                            child: Text(
+                              fmt.currency(item.total),
                               textAlign: TextAlign.right,
-                              style: textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                              style: textTheme.bodyMedium?.copyWith(
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                           SizedBox(
                             width: outstandingW,
-                            child: Text(fmt.currency(item.outstanding),
+                            child: Text(
+                              fmt.currency(item.outstanding),
                               textAlign: TextAlign.right,
                               style: textTheme.bodyMedium?.copyWith(
                                 fontWeight: FontWeight.w600,
-                                color: item.outstanding > 0 ? colors.danger : null,
+                                color: item.outstanding > 0
+                                    ? colors.danger
+                                    : null,
                               ),
                             ),
                           ),
@@ -215,6 +256,7 @@ class InvoiceTableBody extends StatelessWidget {
       InvoiceStatus.posted || InvoiceStatus.sent => StatusTone.primary,
       InvoiceStatus.partiallyPaid => StatusTone.warning,
       InvoiceStatus.paid => StatusTone.success,
+      InvoiceStatus.overdue => StatusTone.warning,
       InvoiceStatus.cancelled => StatusTone.danger,
     };
     return StatusBadge(label: status.value.replaceAll('_', ' '), tone: tone);
@@ -240,7 +282,7 @@ class _MobileInvoiceList extends StatelessWidget {
   Widget build(BuildContext context) => ListView.separated(
     padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
     itemCount: items.length,
-    separatorBuilder: (_, __) => const SizedBox(height: 8),
+    separatorBuilder: (_, _) => const SizedBox(height: 8),
     itemBuilder: (context, index) {
       final item = items[index];
       final overdue =

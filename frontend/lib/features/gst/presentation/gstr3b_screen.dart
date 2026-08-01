@@ -9,9 +9,9 @@ import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
-import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/core/download/download_service.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/gst_service.dart';
 import '../models/gst_models.dart';
 
@@ -76,7 +76,7 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
           relativeUrl: kind == ExportKind.pdf
               ? '/gst/gstr3b/pdf'
               : '/gst/gstr3b/export',
-          filename: 'GSTR3B_Working_${period}',
+          filename: 'GSTR3B_Working_$period',
           kind: kind,
           queryParameters: {
             'start_date': '$period-01',
@@ -134,7 +134,7 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
             child: asyncVal.when(
               loading: () => const _Gstr3bLoading(),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(_gstr3bReportProvider),
               ),
               data: (report) => SingleChildScrollView(
@@ -665,7 +665,7 @@ class _Gstr3bLoading extends StatelessWidget {
                           (i) => Expanded(
                             child: Padding(
                               padding: EdgeInsets.only(left: i == 0 ? 0 : 12),
-                              child: SkeletonBox(height: 14),
+                              child: const SkeletonBox(height: 14),
                             ),
                           ),
                         ),

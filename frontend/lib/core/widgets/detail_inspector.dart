@@ -141,7 +141,9 @@ class _InspectorRow extends StatelessWidget {
         children: [
           Text(
             row.label,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(color: colors.textSecondary),
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(width: 12),
           Flexible(

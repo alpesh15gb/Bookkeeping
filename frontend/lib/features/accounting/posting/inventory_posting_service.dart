@@ -36,18 +36,18 @@ class StockMovement {
 
   double get totalValue => quantity * unitValue;
 
-  factory StockMovement.fromJson(Map<String, dynamic> json) =>
-      StockMovement(
-        productId: json['product_id'] as String? ?? json['item_id'] as String? ?? '',
-        quantity: parseDoubleSafe(json['quantity']),
-        unitValue: parseDoubleSafe(json['unit_value']) != 0
-            ? parseDoubleSafe(json['unit_value'])
-            : parseDoubleSafe(json['unit_price']),
-        type: _parseType(json['type'] as String?),
-        warehouseId: json['warehouse_id'] as String?,
-        referenceId: json['reference_id'] as String?,
-        description: json['description'] as String?,
-      );
+  factory StockMovement.fromJson(Map<String, dynamic> json) => StockMovement(
+    productId:
+        json['product_id'] as String? ?? json['item_id'] as String? ?? '',
+    quantity: parseDoubleSafe(json['quantity']),
+    unitValue: parseDoubleSafe(json['unit_value']) != 0
+        ? parseDoubleSafe(json['unit_value'])
+        : parseDoubleSafe(json['unit_price']),
+    type: _parseType(json['type'] as String?),
+    warehouseId: json['warehouse_id'] as String?,
+    referenceId: json['reference_id'] as String?,
+    description: json['description'] as String?,
+  );
 
   static StockMovementType _parseType(String? t) {
     switch (t?.toLowerCase()) {
@@ -86,24 +86,27 @@ class InventoryPostingService {
     String? purchaseOrderId,
   }) {
     return guardDio(() async {
-      final res = await _dio.post('/inventory-adjustments', data: {
-        'type': 'IN',
-        'items': [
-          {
-            'product_id': productId,
-            'quantity': quantity,
-            'unit_value': unitValue,
-            if (warehouseId != null) 'warehouse_id': warehouseId,
-          },
-        ],
-        if (purchaseOrderId != null) 'reference_id': purchaseOrderId,
-        'description': 'Stock in — purchase/receipt',
-      });
+      final res = await _dio.post(
+        '/inventory-adjustments',
+        data: {
+          'type': 'IN',
+          'items': [
+            {
+              'product_id': productId,
+              'quantity': quantity,
+              'unit_value': unitValue,
+              'warehouse_id': ?warehouseId,
+            },
+          ],
+          'reference_id': ?purchaseOrderId,
+          'description': 'Stock in — purchase/receipt',
+        },
+      );
       final data = res.data;
       return (data is Map && data['items'] is List)
           ? (data['items'] as List)
-              .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
-              .toList()
+                .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
+                .toList()
           : <StockMovement>[];
     });
   }
@@ -116,24 +119,27 @@ class InventoryPostingService {
     String? invoiceId,
   }) {
     return guardDio(() async {
-      final res = await _dio.post('/inventory-adjustments', data: {
-        'type': 'OUT',
-        'items': [
-          {
-            'product_id': productId,
-            'quantity': -quantity,
-            'unit_value': unitValue,
-            if (warehouseId != null) 'warehouse_id': warehouseId,
-          },
-        ],
-        if (invoiceId != null) 'reference_id': invoiceId,
-        'description': 'Stock out — sale/consumption',
-      });
+      final res = await _dio.post(
+        '/inventory-adjustments',
+        data: {
+          'type': 'OUT',
+          'items': [
+            {
+              'product_id': productId,
+              'quantity': -quantity,
+              'unit_value': unitValue,
+              'warehouse_id': ?warehouseId,
+            },
+          ],
+          'reference_id': ?invoiceId,
+          'description': 'Stock out — sale/consumption',
+        },
+      );
       final data = res.data;
       return (data is Map && data['items'] is List)
           ? (data['items'] as List)
-              .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
-              .toList()
+                .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
+                .toList()
           : <StockMovement>[];
     });
   }
@@ -146,23 +152,26 @@ class InventoryPostingService {
     String? warehouseId,
   }) {
     return guardDio(() async {
-      final res = await _dio.post('/inventory-adjustments', data: {
-        'type': 'ADJUSTMENT',
-        'items': [
-          {
-            'product_id': productId,
-            'quantity': quantity,
-            'unit_value': unitValue,
-            if (warehouseId != null) 'warehouse_id': warehouseId,
-          },
-        ],
-        'description': reason,
-      });
+      final res = await _dio.post(
+        '/inventory-adjustments',
+        data: {
+          'type': 'ADJUSTMENT',
+          'items': [
+            {
+              'product_id': productId,
+              'quantity': quantity,
+              'unit_value': unitValue,
+              'warehouse_id': ?warehouseId,
+            },
+          ],
+          'description': reason,
+        },
+      );
       final data = res.data;
       return (data is Map && data['items'] is List)
           ? (data['items'] as List)
-              .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
-              .toList()
+                .map((e) => StockMovement.fromJson(e as Map<String, dynamic>))
+                .toList()
           : <StockMovement>[];
     });
   }

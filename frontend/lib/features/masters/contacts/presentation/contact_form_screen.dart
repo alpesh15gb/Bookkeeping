@@ -373,6 +373,7 @@ class _ContactFormScreenState extends ConsumerState<ContactFormScreen> {
 
     if (_isEditing) {
       final result = await repo.update(contact.id, contact.toJson());
+      if (!mounted) return;
       if (result is Success) {
         notif.success(context, 'Contact updated.');
         _pop();
@@ -383,6 +384,7 @@ class _ContactFormScreenState extends ConsumerState<ContactFormScreen> {
       }
     } else {
       final result = await repo.create(contact.toJson());
+      if (!mounted) return;
       if (result is Success) {
         notif.success(context, 'Contact created.');
         _pop();

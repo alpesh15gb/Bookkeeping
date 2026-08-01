@@ -9,9 +9,9 @@ import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
-import 'package:apexbooks/core/result/result.dart';
 import 'package:apexbooks/core/download/download_service.dart';
 import 'package:apexbooks/core/services/notification_service.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/gst_service.dart';
 import '../models/gst_models.dart';
 
@@ -182,7 +182,7 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
             child: reportAsync.when(
               loading: () => const _ReportLoading(),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(_gstr1ReportProvider),
               ),
               data: (report) => _tabContent(report, tab, colors),
@@ -344,8 +344,9 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // ---------------------------------------------------------------------------
 
   Widget _b2bTable(List<Gstr1B2BLine> lines, ApexColors colors) {
-    if (lines.isEmpty)
+    if (lines.isEmpty) {
       return _emptyTable('No B2B invoices for this period.', colors);
+    }
     double totalTaxable = 0,
         totalCgst = 0,
         totalSgst = 0,
@@ -402,8 +403,9 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // ---------------------------------------------------------------------------
 
   Widget _b2clTable(List<Gstr1B2CLLine> lines, ApexColors colors) {
-    if (lines.isEmpty)
+    if (lines.isEmpty) {
       return _emptyTable('No B2C large invoices for this period.', colors);
+    }
     double totalTaxable = 0, totalIgst = 0, totalValue = 0;
     for (final l in lines) {
       totalTaxable += l.taxableValue;
@@ -438,8 +440,9 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // ---------------------------------------------------------------------------
 
   Widget _b2csTable(List<Gstr1B2CSLine> lines, ApexColors colors) {
-    if (lines.isEmpty)
+    if (lines.isEmpty) {
       return _emptyTable('No B2C supplies for this period.', colors);
+    }
     double totalTaxable = 0, totalCgst = 0, totalSgst = 0, totalIgst = 0;
     for (final l in lines) {
       totalTaxable += l.taxableValue;
@@ -480,8 +483,9 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
     ApexColors colors,
   ) {
     final all = [...cdnr, ...cdnur];
-    if (all.isEmpty)
+    if (all.isEmpty) {
       return _emptyTable('No credit/debit notes for this period.', colors);
+    }
     double totalTaxable = 0,
         totalCgst = 0,
         totalSgst = 0,
@@ -538,8 +542,9 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
   // ---------------------------------------------------------------------------
 
   Widget _hsnTable(List<Gstr1HSNLine> lines, ApexColors colors) {
-    if (lines.isEmpty)
+    if (lines.isEmpty) {
       return _emptyTable('No HSN data for this period.', colors);
+    }
     double totalQty = 0, totalValue = 0, totalTaxable = 0;
     double totalCgst = 0, totalSgst = 0, totalIgst = 0;
     for (final l in lines) {
@@ -776,7 +781,7 @@ class _ReportLoading extends StatelessWidget {
                   (i) => Expanded(
                     child: Padding(
                       padding: EdgeInsets.only(left: i == 0 ? 0 : 8),
-                      child: SkeletonBox(height: 14),
+                      child: const SkeletonBox(height: 14),
                     ),
                   ),
                 ),

@@ -124,13 +124,13 @@ void main() {
 
   group('validateCancel', () {
     test('rejects already cancelled', () {
-      final p = Payment(id: 'p1', status: PaymentStatus.cancelled);
+      const p = Payment(id: 'p1', status: PaymentStatus.cancelled);
       final r = validation.validateCancel(p);
       expect(r.$1, false);
     });
 
     test('allows active', () {
-      final p = Payment(id: 'p1', status: PaymentStatus.active);
+      const p = Payment(id: 'p1', status: PaymentStatus.active);
       final r = validation.validateCancel(p);
       expect(r.$1, true);
     });

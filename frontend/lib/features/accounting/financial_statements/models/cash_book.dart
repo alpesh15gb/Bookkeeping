@@ -20,12 +20,12 @@ class CashBookRow {
   final double amount;
 
   factory CashBookRow.fromJson(Map<String, dynamic> json) => CashBookRow(
-        date: json['date'] as String? ?? '',
-        transactionDetails: json['transaction_details'] as String? ?? '',
-        invoiceAmount: _optNum(json['invoice_amount']),
-        taxAmount: _optNum(json['tax_amount']),
-        amount: _num(json['amount']),
-      );
+    date: json['date'] as String? ?? '',
+    transactionDetails: json['transaction_details'] as String? ?? '',
+    invoiceAmount: _optNum(json['invoice_amount']),
+    taxAmount: _optNum(json['tax_amount']),
+    amount: _num(json['amount']),
+  );
 
   static double _num(dynamic v) {
     if (v == null) return 0;
@@ -39,7 +39,7 @@ class CashBookRow {
     if (v is num) return v.toDouble();
     if (v is String) {
       final p = double.tryParse(v);
-      return p == null ? null : p;
+      return p;
     }
     return null;
   }
@@ -68,26 +68,29 @@ class CashBookReport {
   final double closingBalance;
 
   factory CashBookReport.fromJson(Map<String, dynamic> json) => CashBookReport(
-        periodStart: json['period_start'] as String? ?? '',
-        periodEnd: json['period_end'] as String? ?? '',
-        openingBalance: _num(json['opening_balance']),
-        inflows: (json['inflows'] as List?)
-                ?.map(
-                    (e) => CashBookRow.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [],
-        outflows: (json['outflows'] as List?)
-                ?.map(
-                    (e) => CashBookRow.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [],
-        cashInflow: _num(
-            (json['summary'] as Map<String, dynamic>?)?['cash_inflow']),
-        cashOutflow: _num(
-            (json['summary'] as Map<String, dynamic>?)?['cash_outflow']),
-        closingBalance: _num(
-            (json['summary'] as Map<String, dynamic>?)?['closing_balance']),
-      );
+    periodStart: json['period_start'] as String? ?? '',
+    periodEnd: json['period_end'] as String? ?? '',
+    openingBalance: _num(json['opening_balance']),
+    inflows:
+        (json['inflows'] as List?)
+            ?.map((e) => CashBookRow.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [],
+    outflows:
+        (json['outflows'] as List?)
+            ?.map((e) => CashBookRow.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [],
+    cashInflow: _num(
+      (json['summary'] as Map<String, dynamic>?)?['cash_inflow'],
+    ),
+    cashOutflow: _num(
+      (json['summary'] as Map<String, dynamic>?)?['cash_outflow'],
+    ),
+    closingBalance: _num(
+      (json['summary'] as Map<String, dynamic>?)?['closing_balance'],
+    ),
+  );
 
   static double _num(dynamic v) {
     if (v == null) return 0;

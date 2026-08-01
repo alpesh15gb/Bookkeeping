@@ -1,12 +1,12 @@
 {
-    "name": "apexbooks",
-    "short_name": "apexbooks",
+    "name": "ApexBooks",
+    "short_name": "ApexBooks",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
-    "orientation": "portrait-primary",
+    "background_color": "#111827",
+    "theme_color": "#6366F1",
+    "description": "Offline-first accounting and business management.",
+    "orientation": "any",
     "prefer_related_applications": false,
     "icons": [
         {

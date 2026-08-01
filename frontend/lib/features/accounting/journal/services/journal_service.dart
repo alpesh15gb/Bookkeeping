@@ -58,8 +58,8 @@ class JournalService {
         'debit_account_id': debitAccountId,
         'credit_account_id': creditAccountId,
         'amount': amount,
-        if (description != null) 'description': description,
-        if (referenceNumber != null) 'reference_number': referenceNumber,
+        'description': ?description,
+        'reference_number': ?referenceNumber,
       };
       final res = await _dio.post('/accounting/contra', data: data);
       return JournalEntry.fromJson(res.data as Map<String, dynamic>);

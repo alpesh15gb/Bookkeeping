@@ -14,6 +14,7 @@ import '../../../../core/services/notification_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/widgets/page_header.dart';
 import '../../../../core/widgets/states.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 
 class BillScanScreen extends ConsumerStatefulWidget {
   const BillScanScreen({super.key});
@@ -82,10 +83,11 @@ class _BillScanScreenState extends ConsumerState<BillScanScreen> {
           );
           body = Map<String, dynamic>.from(poll.data ?? const {});
           if (poll.statusCode == 200 && body['vendor'] is Map) break;
-          if (mounted)
+          if (mounted) {
             setState(
               () => _progress = body['progress']?.toString() ?? 'Reading bill…',
             );
+          }
         }
       }
       if (!mounted) return;
@@ -177,12 +179,14 @@ class _BillScanScreenState extends ConsumerState<BillScanScreen> {
   String _errorMessage(Object error) {
     if (error is DioException) {
       final data = error.response?.data;
-      if (data is Map && data['detail'] != null)
+      if (data is Map && data['detail'] != null) {
         return data['detail'].toString();
-      if (error.response?.statusCode == 503)
+      }
+      if (error.response?.statusCode == 503) {
         return 'OCR is temporarily unavailable. Please enter the bill manually or try again.';
+      }
     }
-    return error.toString().replaceFirst('Bad state: ', '');
+    return userFacingErrorMessage(error).replaceFirst('Bad state: ', '');
   }
 
   @override
@@ -487,7 +491,7 @@ class _BillScanScreenState extends ConsumerState<BillScanScreen> {
                         child: Image.memory(
                           _sourceBytes!,
                           fit: BoxFit.contain,
-                          errorBuilder: (_, __, ___) => const Text(
+                          errorBuilder: (_, _, _) => const Text(
                             'Preview unavailable. The extracted fields remain editable.',
                           ),
                         ),

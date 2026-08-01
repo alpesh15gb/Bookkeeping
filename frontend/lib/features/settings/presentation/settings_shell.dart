@@ -32,34 +32,78 @@ class _SettingsEntry {
   final Widget screen;
 }
 
-const _COMPANY_GROUP = 'Company';
-const _DOCUMENTS_GROUP = 'Documents';
-const _PREFERENCES_GROUP = 'Preferences';
-const _MASTER_DATA_GROUP = 'Master Data';
+const _companyGroup = 'Company';
+const _documentsGroup = 'Documents';
+const _preferencesGroup = 'Preferences';
+const _masterDataGroup = 'Master Data';
 
 final _entries = [
-  _SettingsEntry('Company Profile', Icons.business_rounded, SettingsCompanyScreen()),
-  _SettingsEntry('Financial Year', Icons.calendar_today_rounded, SettingsFinancialYearScreen()),
-  _SettingsEntry('Team', Icons.group_rounded, SettingsTeamScreen()),
-  _SettingsEntry('Invoice Series', Icons.numbers_rounded, SettingsInvoiceSeriesScreen()),
-  _SettingsEntry('GST Config', Icons.fact_check_rounded, SettingsGstConfigScreen()),
+  const _SettingsEntry(
+    'Company Profile',
+    Icons.business_rounded,
+    SettingsCompanyScreen(),
+  ),
+  const _SettingsEntry(
+    'Financial Year',
+    Icons.calendar_today_rounded,
+    SettingsFinancialYearScreen(),
+  ),
+  const _SettingsEntry('Team', Icons.group_rounded, SettingsTeamScreen()),
+  const _SettingsEntry(
+    'Invoice Series',
+    Icons.numbers_rounded,
+    SettingsInvoiceSeriesScreen(),
+  ),
+  const _SettingsEntry(
+    'GST Config',
+    Icons.fact_check_rounded,
+    SettingsGstConfigScreen(),
+  ),
   // Documents
-  _SettingsEntry('Documents & Printing', Icons.print_rounded, SettingsDocumentScreen()),
+  const _SettingsEntry(
+    'Documents & Printing',
+    Icons.print_rounded,
+    SettingsDocumentScreen(),
+  ),
   // Preferences
-  _SettingsEntry('Regional Preferences', Icons.settings_rounded, SettingsPreferencesScreen()),
-  _SettingsEntry('Backup & Restore', Icons.backup_rounded, SettingsBackupScreen()),
+  const _SettingsEntry(
+    'Regional Preferences',
+    Icons.settings_rounded,
+    SettingsPreferencesScreen(),
+  ),
+  const _SettingsEntry(
+    'Backup & Restore',
+    Icons.backup_rounded,
+    SettingsBackupScreen(),
+  ),
   // Master Data
-  _SettingsEntry('Banking Profiles', Icons.account_balance_rounded, BankingProfileListScreen()),
-  _SettingsEntry('Expense Categories', Icons.category_rounded, ExpenseCategoryListScreen()),
-  _SettingsEntry('Tax Rates', Icons.percent_rounded, TaxTemplateListScreen()),
-  _SettingsEntry('Payment Terms', Icons.payment_rounded, PaymentTermListScreen()),
+  const _SettingsEntry(
+    'Banking Profiles',
+    Icons.account_balance_rounded,
+    BankingProfileListScreen(),
+  ),
+  const _SettingsEntry(
+    'Expense Categories',
+    Icons.category_rounded,
+    ExpenseCategoryListScreen(),
+  ),
+  const _SettingsEntry(
+    'Tax Rates',
+    Icons.percent_rounded,
+    TaxTemplateListScreen(),
+  ),
+  const _SettingsEntry(
+    'Payment Terms',
+    Icons.payment_rounded,
+    PaymentTermListScreen(),
+  ),
 ];
 
 const _groupStart = {
-  _COMPANY_GROUP: 0,
-  _DOCUMENTS_GROUP: 5,
-  _PREFERENCES_GROUP: 6,
-  _MASTER_DATA_GROUP: 8,
+  _companyGroup: 0,
+  _documentsGroup: 5,
+  _preferencesGroup: 6,
+  _masterDataGroup: 8,
 };
 
 // ── Screen ────────────────────────────────────────────────────────────────
@@ -114,9 +158,9 @@ class _SettingsShellState extends ConsumerState<SettingsShell> {
                   const SizedBox(height: 8),
                   Text(
                     'Configure your business',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: colors.textMuted,
-                    ),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: colors.textMuted),
                   ),
                   const SizedBox(height: 16),
                   const Divider(height: 1),
@@ -141,11 +185,6 @@ class _SettingsShellState extends ConsumerState<SettingsShell> {
     final items = <Widget>[];
     String? lastGroup;
     for (int i = 0; i < _entries.length; i++) {
-      final currentGroup = _groupStart.entries.firstWhere(
-        (e) => e.value <= i && (e.value + _entries.where((e2) => _groupStart.keys.any((g) => _groupStart[g]! <= _entries.indexOf(e2))).length) > i,
-        orElse: () => MapEntry('', 0),
-      ).key;
-
       // Determine group header
       String? group;
       for (final g in _groupStart.keys) {
@@ -155,17 +194,19 @@ class _SettingsShellState extends ConsumerState<SettingsShell> {
         }
       }
       if (group != null && group != lastGroup) {
-        items.add(Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
-          child: Text(
-            group,
-            style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              fontSize: 10,
-              color: colors.textMuted,
-              letterSpacing: 1.1,
+        items.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Text(
+              group,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                fontSize: 10,
+                color: colors.textMuted,
+                letterSpacing: 1.1,
+              ),
             ),
           ),
-        ));
+        );
         lastGroup = group;
       }
       final active = i == _selectedIndex;
@@ -178,7 +219,9 @@ class _SettingsShellState extends ConsumerState<SettingsShell> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
-                color: active ? colors.primaryContainer.withValues(alpha: 0.3) : null,
+                color: active
+                    ? colors.primaryContainer.withValues(alpha: 0.3)
+                    : null,
                 borderRadius: BorderRadius.circular(8),
                 border: Border(
                   left: BorderSide(
@@ -189,7 +232,9 @@ class _SettingsShellState extends ConsumerState<SettingsShell> {
               ),
               child: Row(
                 children: [
-                  Icon(_entries[i].icon, size: 18,
+                  Icon(
+                    _entries[i].icon,
+                    size: 18,
                     color: active ? colors.primary : colors.textSecondary,
                   ),
                   const SizedBox(width: 12),
@@ -223,24 +268,33 @@ class _SettingsShellState extends ConsumerState<SettingsShell> {
     );
   }
 
-  List<Widget> _buildMobileSection(String title, List<_SettingsEntry> items, ApexColors colors) {
+  List<Widget> _buildMobileSection(
+    String title,
+    List<_SettingsEntry> items,
+    ApexColors colors,
+  ) {
     return [
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-        child: Text(title,
+        child: Text(
+          title,
           style: Theme.of(context).textTheme.labelSmall?.copyWith(
-            fontSize: 11, color: colors.textMuted, letterSpacing: 1,
+            fontSize: 11,
+            color: colors.textMuted,
+            letterSpacing: 1,
           ),
         ),
       ),
-      ...items.map((entry) => ListTile(
-        leading: Icon(entry.icon, color: colors.primary),
-        title: Text(entry.label, style: const TextStyle(fontSize: 14)),
-        trailing: const Icon(Icons.chevron_right_rounded, size: 18),
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => entry.screen),
+      ...items.map(
+        (entry) => ListTile(
+          leading: Icon(entry.icon, color: colors.primary),
+          title: Text(entry.label, style: const TextStyle(fontSize: 14)),
+          trailing: const Icon(Icons.chevron_right_rounded, size: 18),
+          onTap: () => Navigator.of(
+            context,
+          ).push(MaterialPageRoute(builder: (_) => entry.screen)),
         ),
-      )),
+      ),
     ];
   }
 }

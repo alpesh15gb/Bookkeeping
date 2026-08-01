@@ -4,7 +4,6 @@ import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/inventory/warehouse/presentation/warehouse_providers.dart';
 import '../settings/presentation/settings_shell.dart';
-import '../gst/presentation/gst_shell.dart';
 import '../screens.dart';
 
 Widget selectorWidget(
@@ -132,7 +131,7 @@ List<(String, IconData, String, Widget)> getScreensList({
       'Inventory',
       Icons.inventory_2_outlined,
       'INVENTORY',
-      HubTabWidget(
+      const HubTabWidget(
         tabs: ['Stock', 'Ledger', 'Transfers', 'Adjustments', 'Warehouse'],
         views: [
           InventoryListScreen(),
@@ -148,6 +147,7 @@ List<(String, IconData, String, Widget)> getScreensList({
       Icons.account_tree_outlined,
       'FINANCIALS',
       const HubTabWidget(
+        key: ValueKey<String>('accounting-hub'),
         tabs: ['COA', 'Journals', 'Trial Balance', 'P&L', 'Balance Sheet'],
         views: [
           AccountListScreen(),
@@ -432,7 +432,7 @@ class _WarehouseStockTabViewState
                       height: 36,
                       child: LoadingSpinner(size: 18),
                     ),
-                    error: (_, __) => Text(
+                    error: (_, _) => Text(
                       'Could not load warehouses',
                       style: TextStyle(color: colors.danger, fontSize: 13),
                     ),

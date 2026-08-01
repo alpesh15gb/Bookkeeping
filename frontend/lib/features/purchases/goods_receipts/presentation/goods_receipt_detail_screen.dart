@@ -7,6 +7,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/goods_receipt.dart';
 import '../models/goods_receipt_line.dart';
 import '../models/goods_receipt_status.dart';
@@ -63,7 +64,7 @@ class _GoodsReceiptDetailScreenState
       body: asyncVal.when(
         loading: () => const Center(child: LoadingSpinner(size: 32)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () =>
               ref.invalidate(goodsReceiptDetailProvider(widget.grId)),
         ),
@@ -120,10 +121,7 @@ class _GoodsReceiptDetailScreenState
                       ),
                     ),
                     const SizedBox(width: 10),
-                    StatusBadge(
-                      label: gr.status.value,
-                      tone: _tone(gr.status),
-                    ),
+                    StatusBadge(label: gr.status.value, tone: _tone(gr.status)),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -131,8 +129,7 @@ class _GoodsReceiptDetailScreenState
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    if (_operating)
-                      const LoadingSpinner(size: 18),
+                    if (_operating) const LoadingSpinner(size: 18),
                     if (gr.status == GoodsReceiptStatus.draft)
                       FilledButton.icon(
                         onPressed: _operating
@@ -326,10 +323,7 @@ class _GoodsReceiptDetailScreenState
           child: Row(
             children: [
               Expanded(flex: 42, child: Text('ITEM', style: _th(colors))),
-              Expanded(
-                flex: 20,
-                child: Text('WAREHOUSE', style: _th(colors)),
-              ),
+              Expanded(flex: 20, child: Text('WAREHOUSE', style: _th(colors))),
               Expanded(
                 flex: 19,
                 child: Text(
@@ -448,11 +442,7 @@ class _GoodsReceiptDetailScreenState
 }
 
 class _Panel extends StatelessWidget {
-  const _Panel({
-    required this.colors,
-    required this.child,
-    this.padding,
-  });
+  const _Panel({required this.colors, required this.child, this.padding});
   final ApexColors colors;
   final Widget child;
   final EdgeInsets? padding;

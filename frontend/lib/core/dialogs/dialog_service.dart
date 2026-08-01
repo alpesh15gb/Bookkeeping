@@ -49,10 +49,7 @@ class DialogService {
         ),
         content: Text(
           message,
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            color: colors.textSecondary,
-          ),
+          style: GoogleFonts.inter(fontSize: 14, color: colors.textSecondary),
         ),
         actionsAlignment: MainAxisAlignment.end,
         actions: [
@@ -122,10 +119,7 @@ class DialogService {
         ),
         content: Text(
           message,
-          style: GoogleFonts.inter(
-            fontSize: 14,
-            color: colors.textSecondary,
-          ),
+          style: GoogleFonts.inter(fontSize: 14, color: colors.textSecondary),
         ),
         actionsAlignment: MainAxisAlignment.end,
         actions: [
@@ -145,9 +139,7 @@ class DialogService {
               child: Text(saveLabel),
             ),
           TextButton(
-            style: TextButton.styleFrom(
-              foregroundColor: colors.danger,
-            ),
+            style: TextButton.styleFrom(foregroundColor: colors.danger),
             onPressed: () => Navigator.pop(ctx, DialogResult.discard),
             child: Text(
               'Discard',
@@ -291,7 +283,9 @@ class DialogService {
                           message,
                           style: GoogleFonts.inter(
                             fontSize: 13,
-                            color: Theme.of(ctx).extension<ApexColors>()?.textSecondary,
+                            color: Theme.of(
+                              ctx,
+                            ).extension<ApexColors>()?.textSecondary,
                           ),
                         ),
                       ],

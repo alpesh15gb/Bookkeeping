@@ -24,7 +24,10 @@ class ReconciliationService {
         queryParameters: {'page': page, 'limit': limit},
       );
       return (res.data as List)
-          .map((e) => BankReconciliationListItem.fromJson(e as Map<String, dynamic>))
+          .map(
+            (e) =>
+                BankReconciliationListItem.fromJson(e as Map<String, dynamic>),
+          )
           .toList();
     });
   }
@@ -85,6 +88,17 @@ class ReconciliationService {
         '/bank-reconciliation/reconciliations/$id/undo',
       );
       return BankReconciliation.fromJson(res.data as Map<String, dynamic>);
+    });
+  }
+
+  Future<Result<List<MatchSuggestion>>> getSuggestions(String statementId) {
+    return guardDio(() async {
+      final res = await _dio.get(
+        '/bank-reconciliation/statements/$statementId/suggestions',
+      );
+      return (res.data as List)
+          .map((e) => MatchSuggestion.fromJson(e as Map<String, dynamic>))
+          .toList();
     });
   }
 }

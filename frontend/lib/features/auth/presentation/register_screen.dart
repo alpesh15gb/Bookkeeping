@@ -34,7 +34,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _gstin = TextEditingController();
   final _pan = TextEditingController();
   bool _submitting = false;
-  bool _showCompanyFields = false;
+  bool _showCompanyFields = true;
 
   @override
   void dispose() {
@@ -49,6 +49,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   }
 
   Future<void> _submit() async {
+    if (_companyName.text.trim().isEmpty) {
+      setState(() => _showCompanyFields = true);
+      _showError('Enter your company legal name.');
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
     setState(() => _submitting = true);
     final result = await ref
@@ -146,7 +151,11 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               validator: passwordValidator,
             ),
             const SizedBox(height: ApexSpacing.sm),
-            PasswordStrengthBar(password: _password.text),
+            ValueListenableBuilder<TextEditingValue>(
+              valueListenable: _password,
+              builder: (context, value, _) =>
+                  PasswordStrengthBar(password: value.text),
+            ),
             const SizedBox(height: ApexSpacing.lg),
             CompanyFieldsSection(
               showFields: _showCompanyFields,

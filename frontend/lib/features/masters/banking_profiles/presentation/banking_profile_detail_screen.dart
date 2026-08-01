@@ -18,7 +18,7 @@ class BankingProfileDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fmt = (String? v) => v ?? '\u2014';
+    String fmt(String? v) => v ?? '\u2014';
 
     return EntityDetailPage(
       title: profile.bankName,
@@ -39,11 +39,15 @@ class BankingProfileDetailScreen extends ConsumerWidget {
       chips: [
         DetailChip(
           label: profile.isPrimary ? 'Primary' : 'Not Primary',
-          color: profile.isPrimary ? apexColors(context).accent : apexColors(context).textMuted,
+          color: profile.isPrimary
+              ? apexColors(context).accent
+              : apexColors(context).textMuted,
         ),
         DetailChip(
           label: profile.isActive ? 'Active' : 'Inactive',
-          color: profile.isActive ? apexColors(context).success : apexColors(context).danger,
+          color: profile.isActive
+              ? apexColors(context).success
+              : apexColors(context).danger,
         ),
       ],
       sections: [

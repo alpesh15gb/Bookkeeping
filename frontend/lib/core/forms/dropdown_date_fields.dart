@@ -66,7 +66,7 @@ class _ApexDropdownFieldState<T> extends State<ApexDropdownField<T>> {
   Widget build(BuildContext context) {
     final colors = apexColors(context);
     return DropdownButtonFormField<T>(
-      value: widget._selected,
+      initialValue: widget._selected,
       decoration: InputDecoration(
         labelText: widget.label,
         hintText: widget.hint,

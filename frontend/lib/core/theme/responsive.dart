@@ -91,8 +91,8 @@ class ResponsiveLayout extends StatelessWidget {
   /// Shorthand to read the current responsive info from the widget tree.
   /// Returns a desktop-sized default when called outside [ResponsiveLayout].
   static InheritedResponsive of(BuildContext context) {
-    final inherited =
-        context.dependOnInheritedWidgetOfExactType<InheritedResponsive>();
+    final inherited = context
+        .dependOnInheritedWidgetOfExactType<InheritedResponsive>();
     if (inherited != null) return inherited;
     // Safe fallback when no ResponsiveLayout ancestor is present (e.g. tests).
     return const InheritedResponsive(
@@ -102,7 +102,8 @@ class ResponsiveLayout extends StatelessWidget {
     );
   }
 
-  static ScreenSize screenSizeOf(BuildContext context) => of(context).screenSize;
+  static ScreenSize screenSizeOf(BuildContext context) =>
+      of(context).screenSize;
   static bool isMobile(BuildContext context) => of(context).isMobile;
   static bool isTablet(BuildContext context) => of(context).isTablet;
   static bool isDesktop(BuildContext context) => of(context).isDesktop;

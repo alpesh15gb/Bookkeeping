@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_DB: bookkeeping
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-production_secure_db_pass}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -39,7 +39,7 @@ services:
       - "8000:8000"
     environment:
       - APP_ENV=production
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-production_secure_db_pass}@db:5432/bookkeeping
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/bookkeeping
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
@@ -47,6 +47,13 @@ services:
       - CARTUNEZ_MEDUSA_BASE_URL
       - CARTUNEZ_MEDUSA_API_KEY
       - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn src.main:app --host 0.0.0.0 --port 8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
     depends_on:
       db:
         condition: service_healthy
@@ -62,7 +69,7 @@ services:
     command: celery -A src.workers.tasks worker --loglevel=info
     environment:
       - APP_ENV=production
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-production_secure_db_pass}@db:5432/bookkeeping
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/bookkeeping
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
@@ -70,9 +77,7 @@ services:
       - CARTUNEZ_MEDUSA_API_KEY
       - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
     depends_on:
-      db:
-        condition: service_healthy
-      redis:
+      backend:
         condition: service_healthy
     networks:
       - bookkeeping_net
@@ -84,7 +89,7 @@ services:
     command: celery -A src.workers.tasks beat --loglevel=info
     environment:
       - APP_ENV=production
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:-production_secure_db_pass}@db:5432/bookkeeping
+      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/bookkeeping
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
@@ -92,10 +97,28 @@ services:
       - CARTUNEZ_MEDUSA_API_KEY
       - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
     depends_on:
-      db:
+      backend:
         condition: service_healthy
-      redis:
+    networks:
+      - bookkeeping_net
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        API_BASE_URL: /api/v1
+    container_name: bookkeeping_frontend
+    restart: always
+    ports:
+      - "8080:80"
+    depends_on:
+      backend:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
     networks:
       - bookkeeping_net
 

@@ -2,10 +2,12 @@
 library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/features/offline_repository_providers.dart';
+import 'package:apexbooks/features/purchasing/domain/repositories/purchasing_repository.dart';
+import 'package:apexbooks/features/purchasing/domain/commands/purchasing_commands.dart';
 import '../models/vendor_bill.dart';
 import '../models/bill_line.dart';
-import '../services/vendor_bill_service.dart';
+import '../models/bill_status.dart';
 import 'bill_form_state.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
 
@@ -132,14 +134,14 @@ class _BillValidationService {
 // Notifier
 // ---------------------------------------------------------------------------
 class BillFormNotifier extends StateNotifier<BillFormState> {
-  BillFormNotifier(this._service)
+  BillFormNotifier(this._repository)
     : super(
         const BillFormState(
           lines: [BillLine(productId: '', hsnSac: '', gstRate: 18)],
         ),
       );
 
-  final VendorBillService _service;
+  final PurchasingRepository _repository;
   final _calc = const _BillCalculationService();
   final _validation = const _BillValidationService();
   String _originStateCode = '';
@@ -274,13 +276,48 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
       state = state.copyWith(saving: false, error: err);
       return null;
     }
-    final result = await _service.create(bill);
-    state = state.copyWith(saving: false);
-    if (result is Success<VendorBill>) return result.value;
-    if (result is Failure<VendorBill>) {
-      state = state.copyWith(error: result.error.message);
+
+    try {
+      final pi = await _repository.postSupplierInvoice(
+        PostSupplierInvoiceCommand(
+          companyId: '', // auto-resolved by provider
+          invoiceNumber: bill.billNumber,
+          invoiceDate: bill.issueDate,
+          supplierId: bill.contactId,
+          supplierName: bill.contactName ?? '',
+          referenceNumber: bill.referenceNumber,
+          description: bill.notes,
+          totalBeforeTaxPaise: (state.subtotal * 100).round(),
+          taxPaise: (state.totalTax * 100).round(),
+          totalPaise: (state.total * 100).round(),
+          lines: bill.lines.map((l) {
+            return SupplierInvoiceLineCommand(
+              productName: l.productName ?? '',
+              description: l.description,
+              unit: 'PCS',
+              unitPricePaise: (l.rate * 100).round(),
+              quantity: l.quantity.toString(),
+              totalPaise: (l.total * 100).round(),
+              sortOrder: 0,
+            );
+          }).toList(),
+        ),
+      );
+      state = state.copyWith(saving: false);
+      return VendorBill(
+        id: pi.localId,
+        billNumber: pi.invoiceNumber,
+        contactId: pi.supplierId,
+        contactName: pi.supplierName,
+        issueDate: pi.invoiceDate,
+        dueDate: pi.invoiceDate,
+        status: BillStatus.fromString(pi.lifecycleStatus),
+        total: pi.totalPaise / 100.0,
+      );
+    } catch (e) {
+      state = state.copyWith(saving: false, error: e.toString());
+      return null;
     }
-    return null;
   }
 
   double _round2(double v) => (v * 100).roundToDouble() / 100;
@@ -291,5 +328,5 @@ class BillFormNotifier extends StateNotifier<BillFormState> {
 // ---------------------------------------------------------------------------
 final billFormProvider =
     StateNotifierProvider.autoDispose<BillFormNotifier, BillFormState>((ref) {
-      return BillFormNotifier(ref.watch(vendorBillServiceProvider));
+      return BillFormNotifier(ref.watch(purchasingRepositoryProvider));
     });

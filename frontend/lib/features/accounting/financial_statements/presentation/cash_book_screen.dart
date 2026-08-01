@@ -7,12 +7,14 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/cash_book.dart';
 import '../services/financial_statement_service.dart';
 
@@ -23,8 +25,9 @@ import '../services/financial_statement_service.dart';
 final cashBookDateFromProvider = StateProvider<String?>((ref) => null);
 final cashBookDateToProvider = StateProvider<String?>((ref) => null);
 
-final cashBookReportProvider =
-    FutureProvider.autoDispose<CashBookReport>((ref) async {
+final cashBookReportProvider = FutureProvider.autoDispose<CashBookReport>((
+  ref,
+) async {
   final dateFrom = ref.watch(cashBookDateFromProvider);
   final dateTo = ref.watch(cashBookDateToProvider);
   final res = await ref
@@ -90,7 +93,7 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(cashBookReportProvider),
               ),
               data: (report) {
@@ -158,8 +161,11 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.date_range_rounded,
-                size: 14, color: colors.textSecondary),
+            Icon(
+              Icons.date_range_rounded,
+              size: 14,
+              color: colors.textSecondary,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -211,14 +217,15 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
     ApexColors colors,
     NumberFormatter fmt,
   ) {
+    final isMobile = ResponsiveLayout.isMobile(context);
     final merged = _buildMergedRows(report);
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        ApexSpacing.xl,
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
         ApexSpacing.sm,
-        ApexSpacing.xl,
-        ApexSpacing.xl,
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
+        isMobile ? ApexSpacing.lg : ApexSpacing.xl,
       ),
       child: Column(
         children: [
@@ -226,66 +233,7 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
           _openingBalanceCard(report, colors, fmt),
           const SizedBox(height: ApexSpacing.lg),
           // Register table
-          ApexCard(
-            padding: EdgeInsets.zero,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Sticky header
-                Container(
-                  color: colors.surfaceMuted,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: ApexSpacing.lg,
-                    vertical: ApexSpacing.md,
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(flex: 18,
-                          child: Text('DATE', style: _th(colors))),
-                      Expanded(flex: 32,
-                          child: Text('DESCRIPTION', style: _th(colors))),
-                      Expanded(
-                        flex: 18,
-                        child: Text(
-                          'DEBIT',
-                          textAlign: TextAlign.right,
-                          style: _th(colors),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 18,
-                        child: Text(
-                          'CREDIT',
-                          textAlign: TextAlign.right,
-                          style: _th(colors),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 20,
-                        child: Text(
-                          'BALANCE',
-                          textAlign: TextAlign.right,
-                          style: _th(colors),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (merged.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.all(ApexSpacing.lg),
-                    child: EmptyState(
-                      icon: Icons.search_off_rounded,
-                      title: 'No transactions',
-                    ),
-                  )
-                else
-                  ...merged.map((row) => _rowWidget(row, colors, fmt)),
-                // Totals footer
-                _buildFooter(report, colors, fmt),
-              ],
-            ),
-          ),
+          _registerCard(merged, report, colors, fmt),
         ],
       ),
     );
@@ -299,8 +247,11 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
     return ApexCard(
       child: Row(
         children: [
-          Icon(Icons.account_balance_wallet_rounded,
-              color: colors.primary, size: 24),
+          Icon(
+            Icons.account_balance_wallet_rounded,
+            color: colors.primary,
+            size: 24,
+          ),
           const SizedBox(width: ApexSpacing.md),
           Expanded(
             child: Text(
@@ -324,11 +275,152 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
     );
   }
 
-  Widget _rowWidget(
+  Widget _registerCard(
+    List<_MergedRow> merged,
+    CashBookReport report,
+    ApexColors colors,
+    NumberFormatter fmt,
+  ) {
+    final isMobile = ResponsiveLayout.isMobile(context);
+    return ApexCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (!isMobile)
+            Container(
+              color: colors.surfaceMuted,
+              padding: const EdgeInsets.symmetric(
+                horizontal: ApexSpacing.lg,
+                vertical: ApexSpacing.md,
+              ),
+              child: Row(
+                children: [
+                  Expanded(flex: 18, child: Text('DATE', style: _th(colors))),
+                  Expanded(
+                    flex: 32,
+                    child: Text('DESCRIPTION', style: _th(colors)),
+                  ),
+                  Expanded(
+                    flex: 18,
+                    child: Text(
+                      'DEBIT',
+                      textAlign: TextAlign.right,
+                      style: _th(colors),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 18,
+                    child: Text(
+                      'CREDIT',
+                      textAlign: TextAlign.right,
+                      style: _th(colors),
+                    ),
+                  ),
+                  Expanded(
+                    flex: 20,
+                    child: Text(
+                      'BALANCE',
+                      textAlign: TextAlign.right,
+                      style: _th(colors),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              color: colors.surfaceMuted,
+              padding: const EdgeInsets.symmetric(
+                horizontal: ApexSpacing.md,
+                vertical: ApexSpacing.md,
+              ),
+              child: Text(
+                'Transactions',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textPrimary,
+                ),
+              ),
+            ),
+          if (merged.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(ApexSpacing.lg),
+              child: EmptyState(
+                icon: Icons.search_off_rounded,
+                title: 'No transactions',
+              ),
+            )
+          else if (isMobile)
+            ...merged.map((row) => _mobileRowWidget(row, colors, fmt))
+          else
+            ...merged.map((row) => _rowWidget(row, colors, fmt)),
+          _buildFooter(report, colors, fmt),
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileRowWidget(
     _MergedRow row,
     ApexColors colors,
     NumberFormatter fmt,
   ) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.border)),
+      ),
+      padding: const EdgeInsets.all(ApexSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            row.description,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: ApexSpacing.sm),
+          Text(
+            _shortDate(row.date),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: colors.textMuted,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+          const SizedBox(height: ApexSpacing.md),
+          _mobileAmountRow(
+            'Debit',
+            row.debit > 0 ? fmt.currency(row.debit) : '—',
+            colors,
+          ),
+          const SizedBox(height: ApexSpacing.xs),
+          _mobileAmountRow(
+            'Credit',
+            row.credit > 0 ? fmt.currency(row.credit) : '—',
+            colors,
+          ),
+          const Divider(height: ApexSpacing.lg),
+          _mobileAmountRow(
+            'Balance',
+            fmt.currency(row.balance),
+            colors,
+            strong: true,
+            danger: row.balance < 0,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _rowWidget(_MergedRow row, ApexColors colors, NumberFormatter fmt) {
     return Container(
       decoration: BoxDecoration(
         border: Border(bottom: BorderSide(color: colors.border)),
@@ -403,6 +495,41 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
     ApexColors colors,
     NumberFormatter fmt,
   ) {
+    if (ResponsiveLayout.isMobile(context)) {
+      return Container(
+        decoration: BoxDecoration(
+          color: colors.surfaceMuted,
+          border: Border(top: BorderSide(color: colors.border, width: 1.5)),
+        ),
+        padding: const EdgeInsets.all(ApexSpacing.md),
+        child: Column(
+          children: [
+            _mobileAmountRow(
+              'Cash inflow',
+              fmt.currency(report.cashInflow),
+              colors,
+              strong: true,
+            ),
+            const SizedBox(height: ApexSpacing.xs),
+            _mobileAmountRow(
+              'Cash outflow',
+              fmt.currency(report.cashOutflow),
+              colors,
+              strong: true,
+              danger: true,
+            ),
+            const SizedBox(height: ApexSpacing.xs),
+            _mobileAmountRow(
+              'Closing balance',
+              fmt.currency(report.closingBalance),
+              colors,
+              strong: true,
+            ),
+          ],
+        ),
+      );
+    }
+
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceMuted,
@@ -461,6 +588,41 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
     );
   }
 
+  Widget _mobileAmountRow(
+    String label,
+    String value,
+    ApexColors colors, {
+    bool strong = false,
+    bool danger = false,
+  }) {
+    final muted = value == '—';
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
+              color: colors.textSecondary,
+            ),
+          ),
+        ),
+        MonetaryText(
+          value: value,
+          fontSize: 13,
+          fontWeight: strong ? FontWeight.w800 : FontWeight.w500,
+          color: muted
+              ? colors.textMuted
+              : danger
+              ? colors.danger
+              : colors.textPrimary,
+          textAlign: TextAlign.right,
+        ),
+      ],
+    );
+  }
+
   // -----------------------------------------------------------------------
   // Helpers
   // -----------------------------------------------------------------------
@@ -470,10 +632,22 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
   List<_MergedRow> _buildMergedRows(CashBookReport report) {
     final list = <_MergedRow>[];
     for (final i in report.inflows) {
-      list.add(_MergedRow(date: i.date, description: i.transactionDetails, debit: i.amount));
+      list.add(
+        _MergedRow(
+          date: i.date,
+          description: i.transactionDetails,
+          debit: i.amount,
+        ),
+      );
     }
     for (final o in report.outflows) {
-      list.add(_MergedRow(date: o.date, description: o.transactionDetails, credit: o.amount));
+      list.add(
+        _MergedRow(
+          date: o.date,
+          description: o.transactionDetails,
+          credit: o.amount,
+        ),
+      );
     }
     list.sort((a, b) => a.date.compareTo(b.date));
 
@@ -495,11 +669,11 @@ class _CashBookScreenState extends ConsumerState<CashBookScreen> {
   }
 
   TextStyle _th(ApexColors colors) => TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: colors.textMuted,
-      );
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+  );
 }
 
 // ---------------------------------------------------------------------------

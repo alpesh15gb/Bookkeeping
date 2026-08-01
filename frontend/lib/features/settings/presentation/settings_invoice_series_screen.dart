@@ -15,6 +15,7 @@ import '../../../core/services/notification_service.dart';
 import '../../../core/result/result.dart';
 import '../data/models/series.dart';
 import 'settings_providers.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 
 class SettingsInvoiceSeriesScreen extends ConsumerStatefulWidget {
   const SettingsInvoiceSeriesScreen({super.key});
@@ -115,7 +116,7 @@ class _SettingsInvoiceSeriesScreenState
       body: async.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(invoiceSeriesListProvider),
         ),
         data: (series) => _buildContent(colors, series),
@@ -227,7 +228,7 @@ class _SettingsInvoiceSeriesScreenState
                       ),
                       const SizedBox(width: 8),
                       if (!series.isActive)
-                        StatusBadge(
+                        const StatusBadge(
                           label: 'INACTIVE',
                           tone: StatusTone.neutral,
                         ),
@@ -320,7 +321,7 @@ class _SeriesFormDialogState extends State<_SeriesFormDialog> {
             children: [
               // Document Type
               DropdownButtonFormField<String>(
-                value: _docType.isNotEmpty ? _docType : null,
+                initialValue: _docType.isNotEmpty ? _docType : null,
                 decoration: const InputDecoration(
                   labelText: 'Document Type *',
                   prefixIcon: Icon(Icons.description_outlined),

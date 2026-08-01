@@ -22,12 +22,7 @@ class GstShell extends ConsumerWidget {
       return const Center(child: Text('GST is not enabled for this company.'));
     }
     return const HubTabWidget(
-      tabs: [
-        'Dashboard',
-        'GSTR-1',
-        'GSTR-3B',
-        'Returns',
-      ],
+      tabs: ['Dashboard', 'GSTR-1', 'GSTR-3B', 'Returns'],
       views: [
         GstDashboardScreen(),
         Gstr1Screen(),

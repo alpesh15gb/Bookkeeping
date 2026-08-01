@@ -54,6 +54,7 @@ class PurchaseOrderLine {
   final double quantityReceived;
 
   double get lineSubtotal => rate * quantity;
+
   /// Discount is a flat amount (not a percentage), matching the backend schema.
   double get discountAmount => discount.clamp(0, lineSubtotal);
   double get outstandingQuantity =>

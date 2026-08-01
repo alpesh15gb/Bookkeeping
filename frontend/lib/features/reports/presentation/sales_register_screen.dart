@@ -13,6 +13,7 @@ import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/report_models.dart';
 import '../services/reports_service.dart';
 
@@ -25,17 +26,17 @@ final srDateToProvider = StateProvider<String?>((ref) => null);
 
 final salesRegisterProvider =
     FutureProvider.autoDispose<List<SalesTransaction>>((ref) async {
-  final dateFrom = ref.watch(srDateFromProvider);
-  final dateTo = ref.watch(srDateToProvider);
-  final res = await ref
-      .watch(reportsServiceProvider)
-      .getSalesTransactions(dateFrom: dateFrom, dateTo: dateTo);
-  return switch (res) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
-});
+      final dateFrom = ref.watch(srDateFromProvider);
+      final dateTo = ref.watch(srDateToProvider);
+      final res = await ref
+          .watch(reportsServiceProvider)
+          .getSalesTransactions(dateFrom: dateFrom, dateTo: dateTo);
+      return switch (res) {
+        Success(:final value) => value,
+        Failure(:final error) => throw error,
+        _ => throw Exception(),
+      };
+    });
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -97,7 +98,7 @@ class _SalesRegisterScreenState extends ConsumerState<SalesRegisterScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(salesRegisterProvider),
               ),
               data: (transactions) {
@@ -272,10 +273,7 @@ class _SalesRegisterScreenState extends ConsumerState<SalesRegisterScreen> {
                   flex: 20,
                   child: Text('INVOICE #', style: _th(colors)),
                 ),
-                Expanded(
-                  flex: 28,
-                  child: Text('CUSTOMER', style: _th(colors)),
-                ),
+                Expanded(flex: 28, child: Text('CUSTOMER', style: _th(colors))),
                 Expanded(
                   flex: 14,
                   child: Text(
@@ -312,9 +310,7 @@ class _SalesRegisterScreenState extends ConsumerState<SalesRegisterScreen> {
                 final t = transactions[i];
                 return Container(
                   decoration: BoxDecoration(
-                    border: Border(
-                      bottom: BorderSide(color: colors.border),
-                    ),
+                    border: Border(bottom: BorderSide(color: colors.border)),
                   ),
                   padding: const EdgeInsets.symmetric(
                     horizontal: ApexSpacing.lg,
@@ -394,9 +390,7 @@ class _SalesRegisterScreenState extends ConsumerState<SalesRegisterScreen> {
           Container(
             decoration: BoxDecoration(
               color: colors.surfaceMuted,
-              border: Border(
-                top: BorderSide(color: colors.border, width: 1.5),
-              ),
+              border: Border(top: BorderSide(color: colors.border, width: 1.5)),
             ),
             padding: const EdgeInsets.symmetric(
               horizontal: ApexSpacing.lg,
@@ -446,9 +440,9 @@ class _SalesRegisterScreenState extends ConsumerState<SalesRegisterScreen> {
   }
 
   TextStyle _th(ApexColors colors) => TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: colors.textMuted,
-      );
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+  );
 }

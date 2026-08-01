@@ -25,6 +25,5 @@ final productControllerProvider =
     });
 
 class ProductController extends BaseCrudController<Product> {
-  ProductController(ProductRepository repo, NotificationService notif)
-    : super(repo, notif);
+  ProductController(ProductRepository super.repo, super.notif);
 }

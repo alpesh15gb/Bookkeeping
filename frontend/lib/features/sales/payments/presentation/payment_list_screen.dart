@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import 'payment_form_screen.dart';
 import 'payment_providers.dart';
 
@@ -42,7 +43,7 @@ class PaymentListScreen extends ConsumerWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(error.toString()),
+                    Text(userFacingErrorMessage(error)),
                     TextButton(
                       onPressed: () => ref.invalidate(paymentListProvider),
                       child: const Text('Retry'),

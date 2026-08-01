@@ -10,6 +10,7 @@ import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/gst_service.dart';
 import '../models/gst_models.dart';
 
@@ -20,14 +21,14 @@ import '../models/gst_models.dart';
 final _returnsFilterTypeProvider = StateProvider<String?>((ref) => null);
 final _returnsFilterStatusProvider = StateProvider<String?>((ref) => null);
 
-final _returnsListProvider =
-    FutureProvider.autoDispose<List<GstReturn>>((ref) async {
+final _returnsListProvider = FutureProvider.autoDispose<List<GstReturn>>((
+  ref,
+) async {
   final type = ref.watch(_returnsFilterTypeProvider);
   final status = ref.watch(_returnsFilterStatusProvider);
-  final res = await ref.read(gstServiceProvider).listReturns(
-        returnType: type,
-        status: status,
-      );
+  final res = await ref
+      .read(gstServiceProvider)
+      .listReturns(returnType: type, status: status);
   return switch (res) {
     Success(:final value) => value,
     Failure(:final error) => throw error,
@@ -66,7 +67,10 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
                 icon: const Icon(Icons.add_rounded, size: 18),
                 label: const Text('New Return'),
                 style: FilledButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: ApexSpacing.lg, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: ApexSpacing.lg,
+                    vertical: 12,
+                  ),
                 ),
               ),
             ],
@@ -79,7 +83,7 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
             child: asyncVal.when(
               loading: () => const _ReturnsLoading(),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(_returnsListProvider),
               ),
               data: (returns) {
@@ -103,7 +107,11 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
   // Filter row
   // ---------------------------------------------------------------------------
 
-  Widget _filterRow(String? typeFilter, String? statusFilter, ApexColors colors) {
+  Widget _filterRow(
+    String? typeFilter,
+    String? statusFilter,
+    ApexColors colors,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, 0),
       child: Row(
@@ -111,42 +119,48 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
           _filterChip(
             label: 'All Types',
             selected: typeFilter == null,
-            onTap: () => ref.read(_returnsFilterTypeProvider.notifier).state = null,
+            onTap: () =>
+                ref.read(_returnsFilterTypeProvider.notifier).state = null,
             colors: colors,
           ),
           const SizedBox(width: 6),
           _filterChip(
             label: 'GSTR-1',
             selected: typeFilter == 'GSTR1',
-            onTap: () => ref.read(_returnsFilterTypeProvider.notifier).state = 'GSTR1',
+            onTap: () =>
+                ref.read(_returnsFilterTypeProvider.notifier).state = 'GSTR1',
             colors: colors,
           ),
           const SizedBox(width: 6),
           _filterChip(
             label: 'GSTR-3B',
             selected: typeFilter == 'GSTR3B',
-            onTap: () => ref.read(_returnsFilterTypeProvider.notifier).state = 'GSTR3B',
+            onTap: () =>
+                ref.read(_returnsFilterTypeProvider.notifier).state = 'GSTR3B',
             colors: colors,
           ),
           const Spacer(),
           _filterChip(
             label: 'All Status',
             selected: statusFilter == null,
-            onTap: () => ref.read(_returnsFilterStatusProvider.notifier).state = null,
+            onTap: () =>
+                ref.read(_returnsFilterStatusProvider.notifier).state = null,
             colors: colors,
           ),
           const SizedBox(width: 6),
           _filterChip(
             label: 'Draft',
             selected: statusFilter == 'DRAFT',
-            onTap: () => ref.read(_returnsFilterStatusProvider.notifier).state = 'DRAFT',
+            onTap: () =>
+                ref.read(_returnsFilterStatusProvider.notifier).state = 'DRAFT',
             colors: colors,
           ),
           const SizedBox(width: 6),
           _filterChip(
             label: 'Filed',
             selected: statusFilter == 'FILED',
-            onTap: () => ref.read(_returnsFilterStatusProvider.notifier).state = 'FILED',
+            onTap: () =>
+                ref.read(_returnsFilterStatusProvider.notifier).state = 'FILED',
             colors: colors,
           ),
         ],
@@ -168,9 +182,7 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
         decoration: BoxDecoration(
           color: selected ? colors.primary : colors.surfaceRaised,
           borderRadius: BorderRadius.circular(ApexRadius.pill),
-          border: Border.all(
-            color: selected ? colors.primary : colors.border,
-          ),
+          border: Border.all(color: selected ? colors.primary : colors.border),
         ),
         child: Text(
           label,
@@ -190,7 +202,12 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
 
   Widget _returnsList(List<GstReturn> returns, ApexColors colors) {
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.xxl),
+      padding: const EdgeInsets.fromLTRB(
+        ApexSpacing.xl,
+        0,
+        ApexSpacing.xl,
+        ApexSpacing.xxl,
+      ),
       itemCount: returns.length,
       itemBuilder: (context, i) {
         final r = returns[i];
@@ -237,7 +254,11 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
                   children: [
                     Text(
                       r.returnType,
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: colors.textPrimary),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: colors.textPrimary,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     _badge(r.status, colors),
@@ -270,12 +291,22 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
           PopupMenuButton<String>(
             onSelected: (action) => _handleAction(action, r),
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'update_status', child: Text('Update Status')),
+              const PopupMenuItem(
+                value: 'update_status',
+                child: Text('Update Status'),
+              ),
               if (r.status == 'DRAFT' || r.status == 'READY')
-                const PopupMenuItem(value: 'file', child: Text('Mark as Filed')),
+                const PopupMenuItem(
+                  value: 'file',
+                  child: Text('Mark as Filed'),
+                ),
               const PopupMenuItem(value: 'edit_arn', child: Text('Edit ARN')),
             ],
-            icon: Icon(Icons.more_vert_rounded, size: 18, color: colors.textMuted),
+            icon: Icon(
+              Icons.more_vert_rounded,
+              size: 18,
+              color: colors.textMuted,
+            ),
           ),
         ],
       ),
@@ -309,15 +340,14 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
   }
 
   Future<void> _markFiled(GstReturn r) async {
-    final res = await ref.read(gstServiceProvider).updateReturn(
-      id: r.id,
-      status: 'FILED',
-    );
+    final res = await ref
+        .read(gstServiceProvider)
+        .updateReturn(id: r.id, status: 'FILED');
     if (res is Success && mounted) {
       ref.invalidate(_returnsListProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Return marked as Filed')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Return marked as Filed')));
     }
   }
 
@@ -331,13 +361,15 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
       builder: (context) => const _ReturnCreateDialog(),
     );
     if (result == null || !mounted) return;
-    final res = await ref.read(gstServiceProvider).createReturn(
-      returnType: result['type']!,
-      periodStart: result['periodStart']!,
-      periodEnd: result['periodEnd']!,
-      status: result['status'] ?? 'DRAFT',
-      arn: result['arn'],
-    );
+    final res = await ref
+        .read(gstServiceProvider)
+        .createReturn(
+          returnType: result['type']!,
+          periodStart: result['periodStart']!,
+          periodEnd: result['periodEnd']!,
+          status: result['status'] ?? 'DRAFT',
+          arn: result['arn'],
+        );
     if (res is Success && mounted) {
       ref.invalidate(_returnsListProvider);
       ScaffoldMessenger.of(context).showSnackBar(
@@ -352,16 +384,14 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
       builder: (context) => _ReturnUpdateDialog(currentStatus: r.status),
     );
     if (result == null || !mounted) return;
-    final res = await ref.read(gstServiceProvider).updateReturn(
-      id: r.id,
-      status: result['status']!,
-      arn: result['arn'],
-    );
+    final res = await ref
+        .read(gstServiceProvider)
+        .updateReturn(id: r.id, status: result['status']!, arn: result['arn']);
     if (res is Success && mounted) {
       ref.invalidate(_returnsListProvider);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Return updated')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Return updated')));
     }
   }
 
@@ -373,21 +403,32 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
         title: const Text('Edit ARN'),
         content: TextField(
           controller: ctrl,
-          decoration: const InputDecoration(labelText: 'ARN', hintText: 'Enter ARN'),
+          decoration: const InputDecoration(
+            labelText: 'ARN',
+            hintText: 'Enter ARN',
+          ),
           autofocus: true,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(onPressed: () => Navigator.pop(ctx, ctrl.text.trim()), child: const Text('Save')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Save'),
+          ),
         ],
       ),
     );
     if (arn == null || !mounted) return;
-    final res = await ref.read(gstServiceProvider).updateReturn(
-      id: r.id,
-      status: r.status,
-      arn: arn.isNotEmpty ? arn : null,
-    );
+    final res = await ref
+        .read(gstServiceProvider)
+        .updateReturn(
+          id: r.id,
+          status: r.status,
+          arn: arn.isNotEmpty ? arn : null,
+        );
     if (res is Success && mounted) {
       ref.invalidate(_returnsListProvider);
     }
@@ -476,19 +517,28 @@ class _ReturnCreateDialogState extends State<_ReturnCreateDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: () {
             final days = _daysInMonth(_date.year, _date.month);
-            final periodStart = '${_date.year}-${_date.month.toString().padLeft(2, '0')}-01';
-            final periodEnd = '${_date.year}-${_date.month.toString().padLeft(2, '0')}-$days';
-            Navigator.pop(context, {
-              'type': _type,
-              'periodStart': periodStart,
-              'periodEnd': periodEnd,
-              'status': _status,
-              'arn': _arnCtrl.text.isNotEmpty ? _arnCtrl.text : null,
-            } as Map<String, String>?);
+            final periodStart =
+                '${_date.year}-${_date.month.toString().padLeft(2, '0')}-01';
+            final periodEnd =
+                '${_date.year}-${_date.month.toString().padLeft(2, '0')}-$days';
+            Navigator.pop(
+              context,
+              {
+                    'type': _type,
+                    'periodStart': periodStart,
+                    'periodEnd': periodEnd,
+                    'status': _status,
+                    'arn': _arnCtrl.text.isNotEmpty ? _arnCtrl.text : null,
+                  }
+                  as Map<String, String>?,
+            );
           },
           child: const Text('Create'),
         ),
@@ -560,13 +610,20 @@ class _ReturnUpdateDialogState extends State<_ReturnUpdateDialog> {
         ],
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
           onPressed: () {
-            Navigator.pop(context, {
-              'status': _status,
-              'arn': _arnCtrl.text.isNotEmpty ? _arnCtrl.text : null,
-            } as Map<String, String>?);
+            Navigator.pop(
+              context,
+              {
+                    'status': _status,
+                    'arn': _arnCtrl.text.isNotEmpty ? _arnCtrl.text : null,
+                  }
+                  as Map<String, String>?,
+            );
           },
           child: const Text('Update'),
         ),
@@ -586,7 +643,12 @@ class _ReturnsLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     return ShimmerSkeleton(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(ApexSpacing.xl, 0, ApexSpacing.xl, ApexSpacing.xxl),
+        padding: const EdgeInsets.fromLTRB(
+          ApexSpacing.xl,
+          0,
+          ApexSpacing.xl,
+          ApexSpacing.xxl,
+        ),
         child: Column(
           children: List.generate(
             4,
@@ -599,14 +661,18 @@ class _ReturnsLoading extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  SkeletonBox(width: 40, height: 40, borderRadius: BorderRadius.circular(ApexRadius.sm)),
+                  SkeletonBox(
+                    width: 40,
+                    height: 40,
+                    borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  ),
                   const SizedBox(width: ApexSpacing.md),
-                  Expanded(
+                  const Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         SkeletonBox(width: 120, height: 14),
-                        const SizedBox(height: 6),
+                        SizedBox(height: 6),
                         SkeletonBox(width: 80, height: 11),
                       ],
                     ),

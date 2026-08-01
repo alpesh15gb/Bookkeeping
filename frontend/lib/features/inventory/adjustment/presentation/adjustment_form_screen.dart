@@ -230,7 +230,7 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
             ),
             colors,
           );
-          if (narrow)
+          if (narrow) {
             return Column(
               children: [
                 number,
@@ -240,6 +240,7 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
                 reason,
               ],
             );
+          }
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

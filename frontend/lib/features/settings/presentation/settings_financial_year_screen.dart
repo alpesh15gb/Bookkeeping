@@ -12,11 +12,11 @@ import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/states.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../core/result/result.dart';
 import '../../../core/dialogs/dialog_service.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/financial_year.dart';
 import 'settings_providers.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 
 class SettingsFinancialYearScreen extends ConsumerStatefulWidget {
   const SettingsFinancialYearScreen({super.key});
@@ -224,7 +224,7 @@ class _SettingsFinancialYearScreenState
       body: async.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(financialYearListProvider(companyId)),
         ),
         data: (fys) => _buildContent(colors, fys),

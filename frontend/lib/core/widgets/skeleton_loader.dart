@@ -55,9 +55,10 @@ class _ShimmerSkeletonState extends State<ShimmerSkeleton>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
-    _animation = Tween<double>(begin: 0.5, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
-    );
+    _animation = Tween<double>(
+      begin: 0.5,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
   }
 
   @override
@@ -71,10 +72,7 @@ class _ShimmerSkeletonState extends State<ShimmerSkeleton>
     return AnimatedBuilder(
       animation: _animation,
       builder: (context, child) {
-        return Opacity(
-          opacity: _animation.value,
-          child: child,
-        );
+        return Opacity(opacity: _animation.value, child: child);
       },
       child: widget.child,
     );
@@ -93,18 +91,24 @@ class KpiCardSkeleton extends StatelessWidget {
         decoration: BoxDecoration(
           color: apexColors(context).skeletonBase,
           borderRadius: BorderRadius.circular(ApexRadius.lg),
-          border: Border.all(color: apexColors(context).border.withValues(alpha: 0.3)),
+          border: Border.all(
+            color: apexColors(context).border.withValues(alpha: 0.3),
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SkeletonBox(width: 36, height: 36, borderRadius: BorderRadius.circular(ApexRadius.sm)),
+            SkeletonBox(
+              width: 36,
+              height: 36,
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+            ),
             const SizedBox(height: 14),
-            SkeletonBox(width: 80, height: 12),
+            const SkeletonBox(width: 80, height: 12),
             const SizedBox(height: 6),
-            SkeletonBox(width: 120, height: 24),
+            const SkeletonBox(width: 120, height: 24),
             const SizedBox(height: 8),
-            SkeletonBox(width: 90, height: 11),
+            const SkeletonBox(width: 90, height: 11),
           ],
         ),
       ),
@@ -126,7 +130,11 @@ class TableRowSkeleton extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: apexColors(context).border.withValues(alpha: 0.5))),
+          border: Border(
+            bottom: BorderSide(
+              color: apexColors(context).border.withValues(alpha: 0.5),
+            ),
+          ),
         ),
         child: Row(
           children: [
@@ -159,19 +167,27 @@ class ListItemSkeleton extends StatelessWidget {
         ),
         child: Row(
           children: [
-            SkeletonBox(width: 40, height: 40, borderRadius: BorderRadius.circular(ApexRadius.sm)),
+            SkeletonBox(
+              width: 40,
+              height: 40,
+              borderRadius: BorderRadius.circular(ApexRadius.sm),
+            ),
             const SizedBox(width: 12),
-            Expanded(
+            const Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SkeletonBox(width: 160, height: 14),
-                  const SizedBox(height: 6),
+                  SizedBox(height: 6),
                   SkeletonBox(width: 100, height: 11),
                 ],
               ),
             ),
-            SkeletonBox(width: 60, height: 24, borderRadius: BorderRadius.circular(ApexRadius.pill)),
+            SkeletonBox(
+              width: 60,
+              height: 24,
+              borderRadius: BorderRadius.circular(ApexRadius.pill),
+            ),
           ],
         ),
       ),
@@ -189,17 +205,21 @@ class PageHeaderSkeleton extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(24, 20, 24, 16),
       child: Row(
         children: [
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SkeletonBox(width: 200, height: 26),
-                const SizedBox(height: 6),
+                SizedBox(height: 6),
                 SkeletonBox(width: 300, height: 14),
               ],
             ),
           ),
-          SkeletonBox(width: 120, height: 40, borderRadius: BorderRadius.circular(ApexRadius.md)),
+          SkeletonBox(
+            width: 120,
+            height: 40,
+            borderRadius: BorderRadius.circular(ApexRadius.md),
+          ),
         ],
       ),
     );
@@ -225,13 +245,13 @@ class DetailSectionSkeleton extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            SkeletonBox(width: 120, height: 16),
+            const SkeletonBox(width: 120, height: 16),
             const SizedBox(height: 12),
             for (int i = 0; i < 4; i++) ...[
-              Row(
+              const Row(
                 children: [
                   SkeletonBox(width: 100, height: 13),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   SkeletonBox(width: 150, height: 13),
                 ],
               ),

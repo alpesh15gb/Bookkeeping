@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -24,7 +26,6 @@ import 'invoice_form_state.dart';
 import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 import 'package:apexbooks/features/settings/presentation/settings_providers.dart';
 import 'package:apexbooks/features/settings/data/models/gst_config.dart';
-import 'package:apexbooks/core/result/result.dart';
 
 class InvoiceFormScreen extends ConsumerStatefulWidget {
   const InvoiceFormScreen({super.key, this.editId});
@@ -45,14 +46,18 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     super.initState();
     _loadingEdit = widget.editId != null;
     Future.microtask(() async {
-      ref
-          .read(contactControllerProvider.notifier)
-          .load(
-            const ListQuery(limit: 100, extra: {'contact_type': 'CUSTOMER'}),
-          );
-      ref
-          .read(productControllerProvider.notifier)
-          .load(const ListQuery(limit: 100));
+      unawaited(
+        ref
+            .read(contactControllerProvider.notifier)
+            .load(
+              const ListQuery(limit: 100, extra: {'contact_type': 'CUSTOMER'}),
+            ),
+      );
+      unawaited(
+        ref
+            .read(productControllerProvider.notifier)
+            .load(const ListQuery(limit: 100)),
+      );
       final n = ref.read(invoiceFormProvider.notifier);
       if (widget.editId != null) {
         await n.loadForEdit(widget.editId!);
@@ -63,23 +68,25 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
         n.setIssueDate(_fmtDate(now));
         n.setDueDate(_fmtDate(now.add(const Duration(days: 30))));
       }
-      ref.read(settingsRepositoryProvider).getTenantSettings().then((result) {
-        final settings = result.dataOrNull;
-        if (settings != null && mounted) {
-          n.setOriginStateCode(settings.originStateCode ?? '');
-        }
-        if (widget.editId == null && settings != null && mounted) {
-          if (ref.read(invoiceFormProvider).posStateCode.isEmpty &&
-              (settings.originStateCode ?? '').isNotEmpty) {
-            n.setPosStateCode(settings.originStateCode!);
+      unawaited(
+        ref.read(settingsRepositoryProvider).getTenantSettings().then((result) {
+          final settings = result.dataOrNull;
+          if (settings != null && mounted) {
+            n.setOriginStateCode(settings.originStateCode ?? '');
           }
-          final terms = settings.extraSettings['terms']?.toString() ?? '';
-          if (terms.isNotEmpty &&
-              ref.read(invoiceFormProvider).termsAndConditions == null) {
-            n.setTerms(terms);
+          if (widget.editId == null && settings != null && mounted) {
+            if (ref.read(invoiceFormProvider).posStateCode.isEmpty &&
+                (settings.originStateCode ?? '').isNotEmpty) {
+              n.setPosStateCode(settings.originStateCode!);
+            }
+            final terms = settings.extraSettings['terms']?.toString() ?? '';
+            if (terms.isNotEmpty &&
+                ref.read(invoiceFormProvider).termsAndConditions == null) {
+              n.setTerms(terms);
+            }
           }
-        }
-      });
+        }),
+      );
       if (widget.editId == null) _customerFocus.requestFocus();
     });
   }
@@ -537,12 +544,12 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
             child: Row(
               children: [
                 _HCell('ITEM', flex: gstEnabled ? 34 : 44),
-                _HCell('HSN', flex: 12),
-                _HCell('QTY', flex: 10, right: true),
-                _HCell('RATE', flex: 14, right: true),
-                _HCell('DISC ₹', flex: 10, right: true),
-                if (gstEnabled) _HCell('GST%', flex: 10, right: true),
-                _HCell('AMOUNT', flex: 14, right: true),
+                const _HCell('HSN', flex: 12),
+                const _HCell('QTY', flex: 10, right: true),
+                const _HCell('RATE', flex: 14, right: true),
+                const _HCell('DISC ₹', flex: 10, right: true),
+                if (gstEnabled) const _HCell('GST%', flex: 10, right: true),
+                const _HCell('AMOUNT', flex: 14, right: true),
                 const SizedBox(width: 36),
               ],
             ),
@@ -706,50 +713,50 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           : SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-              children: [
-                Text(
-                  '${state.lines.where((l) => l.productId.isNotEmpty).length} item(s)',
-                  style: TextStyle(color: colors.textMuted, fontSize: 12),
-                ),
-                const SizedBox(width: 24),
-                _tot('Subtotal', fmt.currency(state.subtotal), colors),
-                _sep(colors),
-                _tot('Discount', fmt.currency(state.discountTotal), colors),
-                if (gstEnabled) _sep(colors),
-                if (gstEnabled)
-                  _tot('Tax', fmt.currency(state.totalTax), colors),
-                _sep(colors),
-                _tot(
-                  'Total',
-                  fmt.currency(state.total),
-                  colors,
-                  emphasize: true,
-                ),
-                const SizedBox(width: 24),
-                FilledButton.icon(
-                  onPressed: state.saving ? null : _save,
-                  icon: state.saving
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: LoadingSpinner(size: 16),
-                        )
-                      : const Icon(Icons.check_rounded, size: 18),
-                  label: Text(
-                    widget.editId == null
-                        ? 'Save draft  (Ctrl+S)'
-                        : 'Update  (Ctrl+S)',
+                children: [
+                  Text(
+                    '${state.lines.where((l) => l.productId.isNotEmpty).length} item(s)',
+                    style: TextStyle(color: colors.textMuted, fontSize: 12),
                   ),
-                  style: FilledButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
+                  const SizedBox(width: 24),
+                  _tot('Subtotal', fmt.currency(state.subtotal), colors),
+                  _sep(colors),
+                  _tot('Discount', fmt.currency(state.discountTotal), colors),
+                  if (gstEnabled) _sep(colors),
+                  if (gstEnabled)
+                    _tot('Tax', fmt.currency(state.totalTax), colors),
+                  _sep(colors),
+                  _tot(
+                    'Total',
+                    fmt.currency(state.total),
+                    colors,
+                    emphasize: true,
+                  ),
+                  const SizedBox(width: 24),
+                  FilledButton.icon(
+                    onPressed: state.saving ? null : _save,
+                    icon: state.saving
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: LoadingSpinner(size: 16),
+                          )
+                        : const Icon(Icons.check_rounded, size: 18),
+                    label: Text(
+                      widget.editId == null
+                          ? 'Save draft  (Ctrl+S)'
+                          : 'Update  (Ctrl+S)',
+                    ),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 16,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
     );
   }
 
@@ -894,8 +901,9 @@ class _CustomerField extends ConsumerWidget {
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
-        if (selectedName.isNotEmpty && ctrl.text.isEmpty)
+        if (selectedName.isNotEmpty && ctrl.text.isEmpty) {
           ctrl.text = selectedName;
+        }
         Future<void> createParty() async {
           final created = await showQuickCreateParty(
             context,
@@ -1105,8 +1113,9 @@ class _LineRowState extends State<_LineRow> {
   }
 
   void _syncIfChanged(TextEditingController c, double now, double before) {
-    if (now != before && (double.tryParse(c.text) ?? 0) != now)
+    if (now != before && (double.tryParse(c.text) ?? 0) != now) {
       c.text = _num(now);
+    }
   }
 
   static String _num(double v) =>

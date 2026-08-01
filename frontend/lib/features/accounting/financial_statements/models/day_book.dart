@@ -24,13 +24,13 @@ class DayBookLine {
   bool get isDebit => direction == 'DEBIT';
 
   factory DayBookLine.fromJson(Map<String, dynamic> json) => DayBookLine(
-        accountId: json['account_id'] as String? ?? '',
-        accountName: json['account_name'] as String? ?? '',
-        accountCode: json['account_code'] as String? ?? '',
-        amount: _num(json['amount']),
-        direction: json['direction'] as String? ?? '',
-        narration: json['narration'] as String?,
-      );
+    accountId: json['account_id'] as String? ?? '',
+    accountName: json['account_name'] as String? ?? '',
+    accountCode: json['account_code'] as String? ?? '',
+    amount: _num(json['amount']),
+    direction: json['direction'] as String? ?? '',
+    narration: json['narration'] as String?,
+  );
 
   static double _num(dynamic v) {
     if (v == null) return 0;
@@ -61,18 +61,18 @@ class DayBookEntry {
   final List<DayBookLine> lines;
 
   factory DayBookEntry.fromJson(Map<String, dynamic> json) => DayBookEntry(
-        id: json['id'] as String? ?? '',
-        entryDate: json['entry_date'] as String? ?? '',
-        referenceNumber: json['reference_number'] as String? ?? '',
-        description: json['description'] as String? ?? '',
-        sourceType: json['source_type'] as String? ?? '',
-        sourceId: json['source_id'] as String?,
-        lines: (json['lines'] as List?)
-                ?.map(
-                    (e) => DayBookLine.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [],
-      );
+    id: json['id'] as String? ?? '',
+    entryDate: json['entry_date'] as String? ?? '',
+    referenceNumber: json['reference_number'] as String? ?? '',
+    description: json['description'] as String? ?? '',
+    sourceType: json['source_type'] as String? ?? '',
+    sourceId: json['source_id'] as String?,
+    lines:
+        (json['lines'] as List?)
+            ?.map((e) => DayBookLine.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [],
+  );
 }
 
 @immutable
@@ -94,17 +94,17 @@ class DayBookReport {
   final int totalCount;
 
   factory DayBookReport.fromJson(Map<String, dynamic> json) => DayBookReport(
-        startDate: json['start_date'] as String? ?? '',
-        endDate: json['end_date'] as String? ?? '',
-        totalDebit: _num(json['total_debit']),
-        totalCredit: _num(json['total_credit']),
-        entries: (json['entries'] as List?)
-                ?.map(
-                    (e) => DayBookEntry.fromJson(e as Map<String, dynamic>))
-                .toList() ??
-            [],
-        totalCount: json['total_count'] as int? ?? 0,
-      );
+    startDate: json['start_date'] as String? ?? '',
+    endDate: json['end_date'] as String? ?? '',
+    totalDebit: _num(json['total_debit']),
+    totalCredit: _num(json['total_credit']),
+    entries:
+        (json['entries'] as List?)
+            ?.map((e) => DayBookEntry.fromJson(e as Map<String, dynamic>))
+            .toList() ??
+        [],
+    totalCount: json['total_count'] as int? ?? 0,
+  );
 
   static double _num(dynamic v) {
     if (v == null) return 0;

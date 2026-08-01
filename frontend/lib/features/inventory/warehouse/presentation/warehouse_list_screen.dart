@@ -12,6 +12,7 @@ import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/features/inventory/stock/models/stock_models.dart';
 import 'package:apexbooks/features/inventory/stock/presentation/inventory_list_screen.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/warehouse_service.dart';
 import 'warehouse_providers.dart';
 import 'warehouse_form_screen.dart';
@@ -73,7 +74,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
                 ],
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(warehouseListProvider),
               ),
               data: (items) {

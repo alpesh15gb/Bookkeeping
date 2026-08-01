@@ -63,12 +63,18 @@ class Membership {
   factory Membership.fromJson(Map<String, dynamic> json) {
     // Some backends nest the tenant under `tenant`; others flatten it.
     final tenant = (json['tenant'] as Map<String, dynamic>?) ?? const {};
+    final rawIsActive = json['is_active'];
+    final isActive = rawIsActive == null
+        ? true
+        : rawIsActive is bool
+        ? rawIsActive
+        : rawIsActive.toString().toLowerCase() == 'true' || rawIsActive == 1;
     return Membership(
       id: json['id'] as String,
       tenantId:
           (json['tenant_id'] as String?) ?? (tenant['id'] as String?) ?? '',
       role: MemberRoleX.fromWire(json['role'] as String?),
-      isActive: (json['is_active'] as bool?) ?? true,
+      isActive: isActive,
       legalName:
           (json['legal_name'] as String?) ??
           (tenant['legal_name'] as String?) ??
@@ -91,6 +97,18 @@ class Membership {
   final String? gstin;
   final String? pan;
   final String? taxMode;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'tenant_id': tenantId,
+    'role': role.wire,
+    'is_active': isActive,
+    'legal_name': legalName,
+    'trade_name': tradeName,
+    'gstin': gstin,
+    'pan': pan,
+    'tax_mode': taxMode,
+  };
 
   /// The display name preferred across the UI (trade name falls back to legal).
   String get displayName =>

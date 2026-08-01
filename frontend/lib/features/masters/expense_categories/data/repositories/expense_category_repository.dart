@@ -1,13 +1,11 @@
 /// Repository for /masters/expense-categories.
 library;
 
-import 'package:dio/dio.dart';
 import 'package:apexbooks/core/api/base_repository.dart';
-import 'package:apexbooks/core/cache/cache_service.dart';
 import '../models/expense_category.dart';
 
 class ExpenseCategoryRepository extends BaseRepository<ExpenseCategory> {
-  ExpenseCategoryRepository(Dio dio, CacheService cache) : super(dio, cache);
+  ExpenseCategoryRepository(super.dio, super.cache);
 
   @override
   String get path => '/masters/expense-categories';

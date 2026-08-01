@@ -1108,6 +1108,7 @@ _STANDARD_ACCOUNTS: Dict[str, Dict[str, str]] = {
     "liability.advance":  {"name": "Advance from Customers", "code": "3201", "type": "LIABILITY", "group": "Other Current Liabilities"},
     "liability.salary_payable": {"name": "Salary Payable",   "code": "3202", "type": "LIABILITY", "group": "Other Current Liabilities"},
     "liability.expense_payable": {"name": "Expenses Payable","code": "3203", "type": "LIABILITY", "group": "Other Current Liabilities"},
+    "liability.grir":     {"name": "Goods Received / Invoice Received", "code": "3204", "type": "LIABILITY", "group": "Other Current Liabilities"},
 
     # ── Non-Current Liabilities ──
     "liability.loan":     {"name": "Loan Account",           "code": "3301", "type": "LIABILITY", "group": "Long-term Liabilities"},
@@ -1147,6 +1148,7 @@ _STANDARD_ACCOUNTS: Dict[str, Dict[str, str]] = {
     # ══════════════════════════════════════════════════════════════════════
 
     # ── Cost of Goods Sold ──
+    "cogs":               {"name": "Cost of Goods Sold",     "code": "6000", "type": "EXPENSE", "group": "Cost of Goods Sold"},
     "purchases":          {"name": "Purchases",              "code": "6001", "type": "EXPENSE", "group": "Cost of Goods Sold"},
     "purchase_discount":  {"name": "Purchase Discount",      "code": "6002", "type": "EXPENSE", "group": "Cost of Goods Sold"},
     "freight_in":         {"name": "Freight Inward",         "code": "6003", "type": "EXPENSE", "group": "Cost of Goods Sold"},

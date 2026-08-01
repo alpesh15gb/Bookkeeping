@@ -27,6 +27,25 @@ class JournalLine {
   /// Whether this line has a valid account selected.
   bool get isValid => accountId.isNotEmpty && amount > 0;
 
+  JournalLine copyWith({
+    String? id,
+    String? accountId,
+    String? accountName,
+    String? accountCode,
+    double? amount,
+    Direction? direction,
+    String? narration,
+    bool clearNarration = false,
+  }) => JournalLine(
+    id: id ?? this.id,
+    accountId: accountId ?? this.accountId,
+    accountName: accountName ?? this.accountName,
+    accountCode: accountCode ?? this.accountCode,
+    amount: amount ?? this.amount,
+    direction: direction ?? this.direction,
+    narration: clearNarration ? null : (narration ?? this.narration),
+  );
+
   Map<String, dynamic> toCreatePayload() => {
     'account_id': accountId,
     'amount': amount,

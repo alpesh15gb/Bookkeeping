@@ -4,10 +4,12 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../services/transfer_service.dart';
 import 'transfer_list_provider.dart';
 import 'transfer_detail_screen.dart';
@@ -26,6 +28,7 @@ class _TransferListScreenState extends ConsumerState<TransferListScreen> {
   Widget build(BuildContext context) {
     final async = ref.watch(transferListProvider);
     final colors = apexColors(context);
+    final isMobile = ResponsiveLayout.isMobile(context);
 
     final list = Scaffold(
       body: Column(
@@ -55,7 +58,7 @@ class _TransferListScreenState extends ConsumerState<TransferListScreen> {
                 ],
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(transferListProvider),
               ),
               data: (items) {
@@ -123,37 +126,44 @@ class _TransferListScreenState extends ConsumerState<TransferListScreen> {
       ),
     );
 
+    if (_selected != null && isMobile) {
+      return Scaffold(body: _detailPanel(colors));
+    }
+
     if (_selected == null) return list;
     return Row(
       children: [
         Expanded(flex: 3, child: list),
         const VerticalDivider(width: 1),
-        Container(
-          width: 420,
-          color: colors.surfaceMuted,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              AppBar(
-                title: Text(
-                  _selected!.transferNumber.isNotEmpty
-                      ? _selected!.transferNumber
-                      : 'Transfer',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                leading: IconButton(
-                  icon: const Icon(Icons.close_rounded),
-                  onPressed: () => setState(() => _selected = null),
-                ),
-              ),
-              Expanded(child: TransferDetailScreen(transferId: _selected!.id)),
-            ],
-          ),
-        ),
+        SizedBox(width: 420, child: _detailPanel(colors)),
       ],
+    );
+  }
+
+  Widget _detailPanel(ApexColors colors) {
+    final selected = _selected!;
+    return Container(
+      color: colors.surfaceMuted,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppBar(
+            title: Text(
+              selected.transferNumber.isNotEmpty
+                  ? selected.transferNumber
+                  : 'Transfer',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+            leading: IconButton(
+              icon: const Icon(Icons.close_rounded),
+              onPressed: () => setState(() => _selected = null),
+            ),
+          ),
+          Expanded(child: TransferDetailScreen(transferId: selected.id)),
+        ],
+      ),
     );
   }
 }

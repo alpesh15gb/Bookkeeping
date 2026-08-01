@@ -5,10 +5,10 @@ import 'package:apexbooks/features/sales/payments/models/outstanding_invoice.dar
 
 void main() {
   const alloc = AllocationService();
-  const _eps = 0.001;
+  const eps = 0.001;
 
   final invoices = [
-    OutstandingInvoice(
+    const OutstandingInvoice(
       id: 'i1',
       invoiceNumber: 'INV-001',
       total: 1000,
@@ -16,7 +16,7 @@ void main() {
       dueDate: '2025-03-01',
       contactName: 'A',
     ),
-    OutstandingInvoice(
+    const OutstandingInvoice(
       id: 'i2',
       invoiceNumber: 'INV-002',
       total: 500,
@@ -24,7 +24,7 @@ void main() {
       dueDate: '2025-01-15',
       contactName: 'A',
     ), // oldest
-    OutstandingInvoice(
+    const OutstandingInvoice(
       id: 'i3',
       invoiceNumber: 'INV-003',
       total: 2000,
@@ -42,12 +42,12 @@ void main() {
       );
       expect(r.allocations.length, 3);
       expect(r.allocations[0].invoiceId, 'i2');
-      expect(r.allocations[0].amount, closeTo(500, _eps));
+      expect(r.allocations[0].amount, closeTo(500, eps));
       expect(r.allocations[1].invoiceId, 'i1');
-      expect(r.allocations[1].amount, closeTo(1000, _eps));
+      expect(r.allocations[1].amount, closeTo(1000, eps));
       expect(r.allocations[2].invoiceId, 'i3');
-      expect(r.allocations[2].amount, closeTo(500, _eps));
-      expect(r.surplus, closeTo(0, _eps));
+      expect(r.allocations[2].amount, closeTo(500, eps));
+      expect(r.surplus, closeTo(0, eps));
     });
 
     test('exact cover oldest invoice', () {
@@ -57,8 +57,8 @@ void main() {
       );
       expect(r.allocations.length, 1);
       expect(r.allocations[0].invoiceId, 'i2');
-      expect(r.allocations[0].amount, closeTo(500, _eps));
-      expect(r.surplus, closeTo(0, _eps));
+      expect(r.allocations[0].amount, closeTo(500, eps));
+      expect(r.surplus, closeTo(0, eps));
     });
 
     test('partial payment on oldest', () {
@@ -68,8 +68,8 @@ void main() {
       );
       expect(r.allocations.length, 1);
       expect(r.allocations[0].invoiceId, 'i2');
-      expect(r.allocations[0].amount, closeTo(300, _eps));
-      expect(r.surplus, closeTo(0, _eps));
+      expect(r.allocations[0].amount, closeTo(300, eps));
+      expect(r.surplus, closeTo(0, eps));
     });
 
     test('payment exceeds all outstanding (surplus)', () {
@@ -78,7 +78,7 @@ void main() {
         invoices: invoices,
       );
       expect(r.allocations.length, 3);
-      expect(r.surplus, closeTo(1500, _eps)); // excess credit
+      expect(r.surplus, closeTo(1500, eps)); // excess credit
     });
 
     test('zero payment empty', () {
@@ -92,12 +92,12 @@ void main() {
         invoices: const [],
       );
       expect(r.allocations, isEmpty);
-      expect(r.surplus, closeTo(1000, _eps));
+      expect(r.surplus, closeTo(1000, eps));
     });
 
     test('already-paid invoices skipped', () {
       final paid = [
-        OutstandingInvoice(
+        const OutstandingInvoice(
           id: 'i1',
           invoiceNumber: 'INV-001',
           total: 1000,
@@ -105,7 +105,7 @@ void main() {
           dueDate: '2025-01-01',
           contactName: 'A',
         ),
-        OutstandingInvoice(
+        const OutstandingInvoice(
           id: 'i2',
           invoiceNumber: 'INV-002',
           total: 500,
@@ -117,12 +117,12 @@ void main() {
       final r = alloc.suggestAllocations(paymentAmount: 500, invoices: paid);
       expect(r.allocations.length, 1);
       expect(r.allocations[0].invoiceId, 'i2');
-      expect(r.allocations[0].amount, closeTo(500, _eps));
+      expect(r.allocations[0].amount, closeTo(500, eps));
     });
 
     test('partially paid invoice correct outstanding', () {
       final partial = [
-        OutstandingInvoice(
+        const OutstandingInvoice(
           id: 'i1',
           invoiceNumber: 'INV-001',
           total: 1000,
@@ -136,8 +136,8 @@ void main() {
         invoices: partial,
       );
       expect(r.allocations.length, 1);
-      expect(r.allocations[0].amount, closeTo(600, _eps)); // 1000-400
-      expect(r.surplus, closeTo(400, _eps));
+      expect(r.allocations[0].amount, closeTo(600, eps)); // 1000-400
+      expect(r.surplus, closeTo(400, eps));
     });
   });
 }

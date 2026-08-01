@@ -6,6 +6,7 @@ import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/tables/table_controller.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/goods_receipt.dart';
 import 'goods_receipt_list_provider.dart';
 import 'goods_receipt_detail_screen.dart';
@@ -101,7 +102,7 @@ class _GoodsReceiptListScreenState
                 ],
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(goodsReceiptListProvider),
               ),
               data: (items) {

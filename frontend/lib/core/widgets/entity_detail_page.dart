@@ -76,7 +76,7 @@ class EntityDetailPage extends ConsumerWidget {
         title: Text(title),
         actions: [
           if (actions.isNotEmpty) ActionMenu(actions: actions),
-          if (appBarActions != null) ...appBarActions!,
+          ...?appBarActions,
         ],
       ),
       body: ListView.builder(
@@ -90,7 +90,7 @@ class EntityDetailPage extends ConsumerWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (header != null) header!,
+                    ?header,
                     if (chips != null && chips!.isNotEmpty) ...[
                       const SizedBox(height: 8),
                       Wrap(
@@ -167,25 +167,25 @@ class EntityDetailPage extends ConsumerWidget {
     final isMobile = ResponsiveLayout.isMobile(context);
     final labelColors = apexColors(context);
     return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: isMobile ? 80 : 100,
-          child: Text(
-            r.label,
-            style: TextStyle(color: labelColors.textSecondary, fontSize: 13),
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: isMobile ? 80 : 100,
+            child: Text(
+              r.label,
+              style: TextStyle(color: labelColors.textSecondary, fontSize: 13),
+            ),
           ),
-        ),
-        Expanded(
-          child: Text(
-            r.value ?? '\u2014',
-            style: const TextStyle(fontSize: 13),
+          Expanded(
+            child: Text(
+              r.value ?? '\u2014',
+              style: const TextStyle(fontSize: 13),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
   }
 }

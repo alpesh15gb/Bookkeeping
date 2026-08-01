@@ -12,6 +12,7 @@ import 'package:apexbooks/core/widgets/transaction_detail_layout.dart';
 import 'package:apexbooks/core/permissions/permission_gate.dart';
 import 'package:apexbooks/core/permissions/permissions.dart';
 import 'package:apexbooks/core/dialogs/dialog_service.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/invoice.dart';
 import '../models/invoice_line.dart';
 import '../models/invoice_status.dart';
@@ -72,7 +73,7 @@ class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
         ],
       ),
       error: (err, _) => ErrorView(
-        message: err.toString(),
+        message: userFacingErrorMessage(err),
         onRetry: () => ref.invalidate(invoiceDetailProvider(widget.invoiceId)),
       ),
       data: (inv) => TransactionDetailLayout(

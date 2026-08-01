@@ -9,6 +9,7 @@ import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/api/base_model.dart';
 import 'package:apexbooks/core/tables/table_controller.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/vendor_payment.dart';
 import '../services/vendor_payment_service.dart';
 import 'vendor_payment_list_provider.dart';
@@ -121,7 +122,7 @@ class _VendorPaymentListScreenState
                 ],
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(vendorPaymentListProvider),
               ),
               data: (items) {

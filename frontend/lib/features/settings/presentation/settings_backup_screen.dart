@@ -13,6 +13,7 @@ import 'package:file_picker/file_picker.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/states.dart';
+import '../../../core/errors/user_message.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/dialogs/dialog_service.dart';
@@ -308,7 +309,9 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
         error: (err, _) => Column(
           children: [
             MaterialBanner(
-              content: Text('Could not load export history: $err'),
+              content: Text(
+                'Could not load export history: ${userFacingErrorMessage(err)}',
+              ),
               actions: [
                 TextButton(
                   onPressed: () =>

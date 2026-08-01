@@ -2,6 +2,8 @@
 /// dates, and totals.
 library;
 
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -285,22 +287,26 @@ class ProformaFormNotifier extends StateNotifier<ProformaFormState> {
     }
     final issue = DateTime.tryParse(state.issueDate);
     final due = DateTime.tryParse(state.dueDate);
-    if (issue == null || due == null)
+    if (issue == null || due == null) {
       return 'Issue and validity dates are required.';
-    if (due.isBefore(issue))
+    }
+    if (due.isBefore(issue)) {
       return 'Valid until date cannot be before the issue date.';
+    }
     if (state.lines.isEmpty) return 'Please add at least one line item.';
     for (var index = 0; index < state.lines.length; index++) {
       final line = state.lines[index];
       if (line.productId.isEmpty) return 'Select an item on line ${index + 1}.';
-      if (line.quantity <= 0)
+      if (line.quantity <= 0) {
         return 'Quantity must be greater than zero on line ${index + 1}.';
+      }
       if (line.rate < 0) return 'Rate cannot be negative on line ${index + 1}.';
       if (line.discount < 0 || line.discount > line.quantity * line.rate) {
         return 'Discount cannot exceed the line amount on line ${index + 1}.';
       }
-      if (line.hsnSac.length < 4)
+      if (line.hsnSac.length < 4) {
         return 'Enter a valid HSN/SAC on line ${index + 1}.';
+      }
     }
     return null;
   }
@@ -332,12 +338,16 @@ class _ProformaFormScreenState extends ConsumerState<ProformaFormScreen> {
     super.initState();
     _loadingEdit = widget.editId != null;
     Future.microtask(() async {
-      ref
-          .read(contactControllerProvider.notifier)
-          .load(const ListQuery(limit: 100));
-      ref
-          .read(productControllerProvider.notifier)
-          .load(const ListQuery(limit: 100));
+      unawaited(
+        ref
+            .read(contactControllerProvider.notifier)
+            .load(const ListQuery(limit: 100)),
+      );
+      unawaited(
+        ref
+            .read(productControllerProvider.notifier)
+            .load(const ListQuery(limit: 100)),
+      );
       final now = DateTime.now();
       if (widget.editId != null) {
         await ref

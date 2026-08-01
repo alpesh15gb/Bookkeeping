@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../data/models/payment_term.dart';
 import 'payment_term_provider.dart';
 
@@ -20,7 +21,7 @@ class PaymentTermListScreen extends ConsumerWidget {
       body: async.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(paymentTermListProvider),
         ),
         data: (terms) => terms.isEmpty

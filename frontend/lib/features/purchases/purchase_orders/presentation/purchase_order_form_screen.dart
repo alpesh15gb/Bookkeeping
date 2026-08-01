@@ -228,8 +228,9 @@ class _PurchaseOrderFormScreenState
               colors: colors,
               onSelected: (ct) {
                 notifier.setContact(ct.id, ct.name);
-                if (ct.stateCode != null && ct.stateCode!.isNotEmpty)
+                if (ct.stateCode != null && ct.stateCode!.isNotEmpty) {
                   notifier.setPosStateCode(ct.stateCode!);
+                }
               },
             ),
             colors,
@@ -628,8 +629,9 @@ class _VendorField extends ConsumerWidget {
       },
       onSelected: onSelected,
       fieldViewBuilder: (context, ctrl, fn, onSubmit) {
-        if (selectedName.isNotEmpty && ctrl.text.isEmpty)
+        if (selectedName.isNotEmpty && ctrl.text.isEmpty) {
           ctrl.text = selectedName;
+        }
         Future<void> createParty() async {
           final created = await showQuickCreateParty(
             context,
@@ -767,8 +769,9 @@ class _LineRowState extends State<_LineRow> {
   }
 
   void _syncIfChanged(TextEditingController c, double now, double before) {
-    if (now != before && (double.tryParse(c.text) ?? 0) != now)
+    if (now != before && (double.tryParse(c.text) ?? 0) != now) {
       c.text = _num(now);
+    }
   }
 
   static String _num(double v) =>

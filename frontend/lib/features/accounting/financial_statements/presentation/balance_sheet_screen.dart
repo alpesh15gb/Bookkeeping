@@ -9,12 +9,14 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/balance_sheet.dart';
 import '../services/financial_statement_service.dart';
 
@@ -26,16 +28,16 @@ final bsAsOnDateProvider = StateProvider<String?>((ref) => null);
 
 final balanceSheetReportProvider =
     FutureProvider.autoDispose<BalanceSheetReport>((ref) async {
-  final asOnDate = ref.watch(bsAsOnDateProvider);
-  final res = await ref
-      .watch(financialStatementServiceProvider)
-      .getBalanceSheet(asOnDate: asOnDate);
-  return switch (res) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
-});
+      final asOnDate = ref.watch(bsAsOnDateProvider);
+      final res = await ref
+          .watch(financialStatementServiceProvider)
+          .getBalanceSheet(asOnDate: asOnDate);
+      return switch (res) {
+        Success(:final value) => value,
+        Failure(:final error) => throw error,
+        _ => throw Exception(),
+      };
+    });
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -44,8 +46,7 @@ final balanceSheetReportProvider =
 class BalanceSheetScreen extends ConsumerStatefulWidget {
   const BalanceSheetScreen({super.key});
   @override
-  ConsumerState<BalanceSheetScreen> createState() =>
-      _BalanceSheetScreenState();
+  ConsumerState<BalanceSheetScreen> createState() => _BalanceSheetScreenState();
 }
 
 class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
@@ -58,8 +59,9 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
     // Push initial date to provider so the first API call respects it
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        ref.read(bsAsOnDateProvider.notifier).state =
-            _asOnDate!.toIso8601String().split('T')[0];
+        ref.read(bsAsOnDateProvider.notifier).state = _asOnDate!
+            .toIso8601String()
+            .split('T')[0];
       }
     });
   }
@@ -96,7 +98,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(balanceSheetReportProvider),
               ),
               data: (report) {
@@ -124,11 +126,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
   // -----------------------------------------------------------------------
 
   Widget _buildDateFilter(ApexColors colors) {
-    return _dateChip(
-      date: _asOnDate,
-      onTap: () => _pickDate(),
-      colors: colors,
-    );
+    return _dateChip(date: _asOnDate, onTap: () => _pickDate(), colors: colors);
   }
 
   Widget _dateChip({
@@ -150,7 +148,11 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.date_range_rounded, size: 14, color: colors.textSecondary),
+            Icon(
+              Icons.date_range_rounded,
+              size: 14,
+              color: colors.textSecondary,
+            ),
             const SizedBox(width: 6),
             Text(
               label,
@@ -196,12 +198,13 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
     ApexColors colors,
     NumberFormatter fmt,
   ) {
+    final isMobile = ResponsiveLayout.isMobile(context);
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        ApexSpacing.xl,
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
         ApexSpacing.sm,
-        ApexSpacing.xl,
-        ApexSpacing.xl,
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
+        isMobile ? ApexSpacing.lg : ApexSpacing.xl,
       ),
       child: Column(
         children: [
@@ -262,11 +265,13 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
             size: 20,
           ),
           const SizedBox(width: 10),
-          Text(
-            ok ? 'Balance Sheet is balanced' : 'Balance Sheet out of balance',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: ok ? colors.success : colors.danger,
+          Expanded(
+            child: Text(
+              ok ? 'Balance Sheet is balanced' : 'Balance Sheet out of balance',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                color: ok ? colors.success : colors.danger,
+              ),
             ),
           ),
         ],
@@ -306,9 +311,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
             // Column headers
             Row(
               children: [
-                Expanded(
-                  child: Text('ACCOUNT', style: _th(colors)),
-                ),
+                Expanded(child: Text('ACCOUNT', style: _th(colors))),
                 SizedBox(
                   width: 120,
                   child: Text(
@@ -324,12 +327,9 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
             // Account rows
             for (final item in items)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
+                padding: const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
                 decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: colors.border),
-                  ),
+                  border: Border(bottom: BorderSide(color: colors.border)),
                 ),
                 child: Row(
                   children: [
@@ -425,9 +425,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
             // Column headers
             Row(
               children: [
-                Expanded(
-                  child: Text('ACCOUNT', style: _th(colors)),
-                ),
+                Expanded(child: Text('ACCOUNT', style: _th(colors))),
                 SizedBox(
                   width: 120,
                   child: Text(
@@ -443,12 +441,9 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
             // Equity account rows
             for (final item in report.equity)
               Container(
-                padding:
-                    const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
+                padding: const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
                 decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: colors.border),
-                  ),
+                  border: Border(bottom: BorderSide(color: colors.border)),
                 ),
                 child: Row(
                   children: [
@@ -476,17 +471,14 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
                 ),
               ),
             // Current-period Net Profit line (standout)
-            if (report.equity.isNotEmpty) Divider(height: 1, color: colors.border),
+            if (report.equity.isNotEmpty)
+              Divider(height: 1, color: colors.border),
             Container(
               padding: const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
               decoration: BoxDecoration(
-                color: (report.netProfit >= 0
-                        ? colors.success
-                        : colors.danger)
+                color: (report.netProfit >= 0 ? colors.success : colors.danger)
                     .withValues(alpha: 0.04),
-                border: Border(
-                  bottom: BorderSide(color: colors.border),
-                ),
+                border: Border(bottom: BorderSide(color: colors.border)),
               ),
               child: Row(
                 children: [
@@ -507,7 +499,9 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
                   SizedBox(
                     width: 120,
                     child: MonetaryText(
-                      value: fmt.currency(report.netProfit),  // Negative shown in ( ) per accounting standard
+                      value: fmt.currency(
+                        report.netProfit,
+                      ), // Negative shown in ( ) per accounting standard
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: report.netProfit >= 0
@@ -634,9 +628,9 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
   }
 
   TextStyle _th(ApexColors colors) => TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: colors.textMuted,
-      );
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+  );
 }

@@ -13,11 +13,11 @@ import '../../../core/widgets/states.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/dialogs/dialog_service.dart';
-import '../../../core/result/result.dart';
 import '../../auth/data/models/membership_models.dart';
 import '../../auth/presentation/auth_controller.dart';
 import '../data/models/team_member.dart';
 import 'settings_providers.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 
 class SettingsTeamScreen extends ConsumerStatefulWidget {
   const SettingsTeamScreen({super.key});
@@ -62,7 +62,7 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
               ),
               const SizedBox(height: 16),
               DropdownButtonFormField<MemberRole>(
-                value: selectedRole,
+                initialValue: selectedRole,
                 decoration: const InputDecoration(
                   labelText: 'Role *',
                   prefixIcon: Icon(Icons.shield_outlined),
@@ -140,7 +140,7 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Change Role'),
         content: DropdownButtonFormField<MemberRole>(
-          value: newRole,
+          initialValue: newRole,
           decoration: const InputDecoration(labelText: 'Role'),
           items: MemberRole.values
               .map((r) => DropdownMenuItem(value: r, child: Text(r.label)))
@@ -249,7 +249,7 @@ class _SettingsTeamScreenState extends ConsumerState<SettingsTeamScreen> {
       body: async.when(
         loading: () => const Center(child: LoadingSpinner(size: 36)),
         error: (err, _) => ErrorView(
-          message: err.toString(),
+          message: userFacingErrorMessage(err),
           onRetry: () => ref.invalidate(teamMemberListProvider(companyId)),
         ),
         data: (members) => _buildContent(colors, members),

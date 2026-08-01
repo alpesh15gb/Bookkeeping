@@ -18,14 +18,16 @@ class ExpenseCategoryDetailScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final fmt = (String? v) => v ?? '\u2014';
+    String fmt(String? v) => v ?? '\u2014';
 
     return EntityDetailPage(
       title: category.name,
       chips: [
         DetailChip(
           label: category.isActive ? 'Active' : 'Inactive',
-          color: category.isActive ? apexColors(context).success : apexColors(context).danger,
+          color: category.isActive
+              ? apexColors(context).success
+              : apexColors(context).danger,
         ),
       ],
       sections: [

@@ -69,11 +69,19 @@ class AuthRepository {
       final list = <Membership>[];
       if (data is List) {
         for (final item in data) {
-          if (item is Map<String, dynamic>) list.add(Membership.fromJson(item));
+          if (item is Map) {
+            list.add(Membership.fromJson(item.cast<String, dynamic>()));
+          }
         }
-      } else if (data is Map<String, dynamic> && data['items'] is List) {
-        for (final item in data['items'] as List) {
-          if (item is Map<String, dynamic>) list.add(Membership.fromJson(item));
+      } else if (data is Map<String, dynamic> &&
+          (data['items'] is List || data['value'] is List)) {
+        // Some production responses use a `value` envelope while other
+        // deployments use `items`. Preserve both response contracts.
+        final rawItems = data['items'] is List ? data['items'] : data['value'];
+        for (final item in rawItems as List) {
+          if (item is Map) {
+            list.add(Membership.fromJson(item.cast<String, dynamic>()));
+          }
         }
       }
       return list;

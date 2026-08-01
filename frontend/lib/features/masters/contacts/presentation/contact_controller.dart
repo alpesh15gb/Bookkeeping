@@ -25,6 +25,5 @@ final contactControllerProvider =
     });
 
 class ContactController extends BaseCrudController<Contact> {
-  ContactController(ContactRepository repo, NotificationService notif)
-    : super(repo, notif);
+  ContactController(ContactRepository super.repo, super.notif);
 }

@@ -57,7 +57,8 @@ class GstConfig {
           gstin == other.gstin;
 
   @override
-  int get hashCode => Object.hash(taxMode, stateCode, registrationType, filingFrequency, gstin);
+  int get hashCode =>
+      Object.hash(taxMode, stateCode, registrationType, filingFrequency, gstin);
 }
 
 /// Known GST tax modes.

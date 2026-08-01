@@ -9,6 +9,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/features/inventory/stock/models/stock_models.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import 'stock_movement_list_provider.dart';
 
 class StockMovementListScreen extends ConsumerStatefulWidget {
@@ -61,27 +62,7 @@ class _StockMovementListScreenState
             title: 'Stock Ledger',
             subtitle: 'Complete audit trail of every stock movement.',
           ),
-          Padding(
-            padding: EdgeInsets.fromLTRB(
-              isMobile ? 12 : 24,
-              0,
-              isMobile ? 12 : 24,
-              10,
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ApexSearchBar(
-                    controller: _searchCtrl,
-                    hintText: 'Search product…',
-                    onChanged: (v) => setState(() => _search = v),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                _typeDropdown(colors),
-              ],
-            ),
-          ),
+          _toolbar(colors, isMobile),
           Expanded(
             child: async.when(
               loading: () => ShimmerSkeleton(
@@ -93,7 +74,7 @@ class _StockMovementListScreenState
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(stockMovementsProvider),
               ),
               data: (items) {
@@ -114,12 +95,48 @@ class _StockMovementListScreenState
                         : 'Try a different search or filter.',
                   );
                 }
-                return _table(filtered, colors, fmt);
+                return isMobile
+                    ? _mobileList(filtered, colors, fmt)
+                    : _table(filtered, colors, fmt);
               },
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _toolbar(ApexColors colors, bool isMobile) {
+    final search = ApexSearchBar(
+      controller: _searchCtrl,
+      hintText: 'Search product…',
+      onChanged: (v) => setState(() => _search = v),
+    );
+    final dropdown = _typeDropdown(colors);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
+        0,
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
+        ApexSpacing.md,
+      ),
+      child: isMobile
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                search,
+                const SizedBox(height: ApexSpacing.sm),
+                Align(alignment: Alignment.centerLeft, child: dropdown),
+              ],
+            )
+          : Row(
+              children: [
+                Expanded(child: search),
+                const SizedBox(width: ApexSpacing.md),
+                dropdown,
+              ],
+            ),
     );
   }
 
@@ -154,6 +171,155 @@ class _StockMovementListScreenState
           ],
           onChanged: (v) => setState(() => _typeFilter = v),
         ),
+      ),
+    );
+  }
+
+  Widget _mobileList(
+    List<StockMovement> items,
+    ApexColors colors,
+    NumberFormatter fmt,
+  ) {
+    return ListView.separated(
+      padding: const EdgeInsets.fromLTRB(
+        ApexSpacing.md,
+        0,
+        ApexSpacing.md,
+        ApexSpacing.xl,
+      ),
+      itemCount: items.length,
+      separatorBuilder: (_, _) => const SizedBox(height: ApexSpacing.sm),
+      itemBuilder: (context, i) {
+        final m = items[i];
+        final isIn = m.direction == MovementDirection.in_;
+        final tone = isIn ? colors.success : colors.danger;
+        final direction = isIn ? 'Stock in' : 'Stock out';
+
+        return ApexCard(
+          padding: const EdgeInsets.all(ApexSpacing.lg),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: tone.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    ),
+                    child: Semantics(
+                      label: direction,
+                      child: Icon(
+                        isIn
+                            ? Icons.south_west_rounded
+                            : Icons.north_east_rounded,
+                        size: 18,
+                        color: tone,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: ApexSpacing.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          m.productName,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.titleSmall
+                              ?.copyWith(
+                                color: colors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                        if (m.warehouseName?.isNotEmpty ?? false) ...[
+                          const SizedBox(height: ApexSpacing.xs),
+                          Text(
+                            m.warehouseName!,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: Theme.of(context).textTheme.bodySmall
+                                ?.copyWith(color: colors.textMuted),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: ApexSpacing.sm),
+                  StatusBadge(
+                    label: _typeLabel(m.referenceType),
+                    tone: StatusTone.neutral,
+                  ),
+                ],
+              ),
+              const SizedBox(height: ApexSpacing.lg),
+              Row(
+                children: [
+                  _mobileStat(
+                    context,
+                    label: 'Date',
+                    value: _date(m.createdAt),
+                    colors: colors,
+                  ),
+                  _mobileStat(
+                    context,
+                    label: 'Quantity',
+                    value: '${isIn ? '+' : ''}${fmt.quantity(m.quantity)}',
+                    colors: colors,
+                    valueColor: tone,
+                    emphasize: true,
+                  ),
+                  _mobileStat(
+                    context,
+                    label: 'Balance',
+                    value: fmt.quantity(m.balanceQuantity),
+                    colors: colors,
+                    alignEnd: true,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _mobileStat(
+    BuildContext context, {
+    required String label,
+    required String value,
+    required ApexColors colors,
+    Color? valueColor,
+    bool emphasize = false,
+    bool alignEnd = false,
+  }) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: alignEnd
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: Theme.of(
+              context,
+            ).textTheme.labelSmall?.copyWith(color: colors.textMuted),
+          ),
+          const SizedBox(height: ApexSpacing.xs),
+          Text(
+            value,
+            textAlign: alignEnd ? TextAlign.right : TextAlign.left,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: valueColor ?? colors.textPrimary,
+              fontWeight: emphasize ? FontWeight.w700 : FontWeight.w600,
+            ),
+          ),
+        ],
       ),
     );
   }

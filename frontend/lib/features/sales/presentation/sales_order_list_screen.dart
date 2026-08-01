@@ -3,6 +3,8 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:drift/drift.dart' show Value;
+import 'package:apexbooks/core/database/database_provider.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
@@ -14,8 +16,10 @@ import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/tables/table_controller.dart';
 import 'package:apexbooks/core/tables/table_pagination.dart';
 import 'package:apexbooks/core/network/dio_extensions.dart';
-import 'package:apexbooks/core/network/api_client.dart';
 import 'package:apexbooks/core/download/download_service.dart';
+import 'package:apexbooks/features/offline_repository_providers.dart';
+import 'package:apexbooks/features/sales/domain/commands/sales_commands.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import 'sales_order_form_screen.dart';
 
 // ---------------------------------------------------------------------------
@@ -81,23 +85,28 @@ class SalesOrderListQuery {
 // Provider
 // ---------------------------------------------------------------------------
 
-final salesOrderListProvider = FutureProvider.autoDispose
+final salesOrderListProvider = StreamProvider.autoDispose
     .family<({List<SalesOrderListItem> items, int total}), SalesOrderListQuery>(
-      (ref, query) async {
-        final dio = ref.watch(apiClientProvider);
-        final q = <String, dynamic>{'page': query.page, 'limit': query.limit};
-        final res = await dio.get('/sales-orders', queryParameters: q);
-        final raw = res.data;
-        final rawItems = (raw as List)
-            .map((e) => SalesOrderListItem.fromJson(e as Map<String, dynamic>))
-            .toList();
-        final items = query.status == null
-            ? rawItems
-            : rawItems.where((e) => e.status == query.status).toList();
-        final total = rawItems.length < query.limit
-            ? (query.page - 1) * query.limit + items.length
-            : query.page * query.limit + 1;
-        return (items: items, total: total);
+      (ref, query) {
+        final repo = ref.watch(salesRepositoryProvider);
+        return repo.watchSalesOrders().map((list) {
+          final rawItems = list.map((item) {
+            return SalesOrderListItem(
+              id: item.localId,
+              soNumber: item.localId.substring(0, 8).toUpperCase(),
+              orderDate: item.orderDate,
+              dueDate: item.orderDate,
+              status: item.status,
+              total: item.totalPaise / 100.0,
+              contactName: item.customerName,
+              createdAt: item.createdAt.toIso8601String(),
+            );
+          }).toList();
+          final items = query.status == null
+              ? rawItems
+              : rawItems.where((e) => e.status == query.status).toList();
+          return (items: items, total: items.length);
+        });
       },
     );
 
@@ -168,14 +177,43 @@ class _SalesOrderListScreenState extends ConsumerState<SalesOrderListScreen> {
       return;
     }
     try {
-      final suffix = action == 'confirm'
-          ? 'confirm'
-          : 'create-delivery-challan';
-      await ref
-          .read(apiClientProvider)
-          .post('/sales-orders/${item.id}/$suffix');
-      ref.invalidate(salesOrderListProvider);
-      if (mounted)
+      if (action == 'confirm') {
+        final db = ref.read(databaseProvider);
+        await (db.update(db.salesOrders)
+              ..where((o) => o.localId.equals(item.id)))
+            .write(SalesOrdersCompanion(
+              status: const Value('CONFIRMED'),
+              updatedAt: Value(DateTime.now().toUtc()),
+            ));
+      } else {
+        final repo = ref.read(salesRepositoryProvider);
+        final so = await repo.getSalesOrder(item.id);
+        if (so != null) {
+          await repo.deliverGoods(
+            DeliverGoodsCommand(
+              companyId: so.companyId,
+              salesOrderLocalId: so.localId,
+              deliveryDate: DateTime.now().toUtc().toIso8601String().split('T').first,
+              customerId: so.customerId,
+              customerName: so.customerName,
+              lines: so.lines.map((l) {
+                final ordered = double.tryParse(l.quantityOrdered) ?? 0;
+                final delivered = double.tryParse(l.quantityDelivered) ?? 0;
+                final remaining = (ordered - delivered).clamp(0.0, double.infinity);
+                return SalesDeliveryLineCommand(
+                  salesOrderLineLocalId: l.localId,
+                  productName: l.productName,
+                  unit: l.unit,
+                  quantityDelivered: remaining.toStringAsFixed(3),
+                  unitPricePaise: l.unitPricePaise,
+                  sortOrder: l.sortOrder,
+                );
+              }).toList(),
+            ),
+          );
+        }
+      }
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
@@ -185,11 +223,13 @@ class _SalesOrderListScreenState extends ConsumerState<SalesOrderListScreen> {
             ),
           ),
         );
+      }
     } catch (error) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Action failed: $error')));
+        ).showSnackBar(SnackBar(content: Text(userFacingErrorMessage(error))));
+      }
     }
   }
 
@@ -241,7 +281,7 @@ class _SalesOrderListScreenState extends ConsumerState<SalesOrderListScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(salesOrderListProvider),
               ),
               data: (data) {
@@ -325,7 +365,7 @@ class _TableBody extends StatelessWidget {
       return ListView.separated(
         padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
         itemCount: items.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           final item = items[index];
           return Card(
@@ -434,7 +474,7 @@ class _TableBody extends StatelessWidget {
             Expanded(
               child: ListView.separated(
                 padding: EdgeInsets.zero,
-                separatorBuilder: (_, __) =>
+                separatorBuilder: (_, _) =>
                     Divider(height: 1, color: colors.border),
                 itemCount: items.length,
                 itemBuilder: (context, i) {

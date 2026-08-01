@@ -7,12 +7,14 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/ledger_report.dart';
 import '../models/ledger_line.dart';
 import '../services/ledger_service.dart';
@@ -53,21 +55,22 @@ class _AccountLedgerQuery {
 // triggers a fresh API call.
 // ---------------------------------------------------------------------------
 
-final accountLedgerReportProvider =
-    FutureProvider.autoDispose.family<LedgerReport, _AccountLedgerQuery>(
-        (ref, query) async {
-  final res = await ref.watch(ledgerServiceProvider).getAccountLedger(
-        accountId: query.accountId,
-        fromDate: query.fromDate,
-        toDate: query.toDate,
-        page: query.page,
-      );
-  return switch (res) {
-    Success(:final value) => value,
-    Failure(:final error) => throw error,
-    _ => throw Exception(),
-  };
-});
+final accountLedgerReportProvider = FutureProvider.autoDispose
+    .family<LedgerReport, _AccountLedgerQuery>((ref, query) async {
+      final res = await ref
+          .watch(ledgerServiceProvider)
+          .getAccountLedger(
+            accountId: query.accountId,
+            fromDate: query.fromDate,
+            toDate: query.toDate,
+            page: query.page,
+          );
+      return switch (res) {
+        Success(:final value) => value,
+        Failure(:final error) => throw error,
+        _ => throw Exception(),
+      };
+    });
 
 /// Page size used for server-side pagination — must match the service default.
 const int _pageLimit = 100;
@@ -111,11 +114,11 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
   // ---------------------------------------------------------------------------
 
   _AccountLedgerQuery get _query => _AccountLedgerQuery(
-        accountId: widget.accountId,
-        fromDate: _fromDate != null ? _toApiDate(_fromDate!) : null,
-        toDate: _toDate != null ? _toApiDate(_toDate!) : null,
-        page: _page,
-      );
+    accountId: widget.accountId,
+    fromDate: _fromDate != null ? _toApiDate(_fromDate!) : null,
+    toDate: _toDate != null ? _toApiDate(_toDate!) : null,
+    page: _page,
+  );
 
   static String _fmtDate(DateTime d) =>
       '${d.day.toString().padLeft(2, '0')}/${d.month.toString().padLeft(2, '0')}/${d.year}';
@@ -204,7 +207,7 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () =>
                     ref.invalidate(accountLedgerReportProvider(query)),
               ),
@@ -231,8 +234,10 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          child:
-              Text('–', style: TextStyle(color: colors.textMuted, fontSize: 13)),
+          child: Text(
+            '–',
+            style: TextStyle(color: colors.textMuted, fontSize: 13),
+          ),
         ),
         _dateChip(
           date: _toDate,
@@ -262,8 +267,11 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.date_range_rounded,
-                size: 14, color: colors.textSecondary),
+            Icon(
+              Icons.date_range_rounded,
+              size: 14,
+              color: colors.textSecondary,
+            ),
             const SizedBox(width: 4),
             Text(
               label,
@@ -309,18 +317,20 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
     ApexColors colors,
     NumberFormatter fmt,
   ) {
+    final isMobile = ResponsiveLayout.isMobile(context);
     final lines = report.lines;
-    final totalPages =
-        _pageLimit > 0 ? (report.totalLines + _pageLimit - 1) ~/ _pageLimit : 1;
+    final totalPages = _pageLimit > 0
+        ? (report.totalLines + _pageLimit - 1) ~/ _pageLimit
+        : 1;
     final hasMore = _page * _pageLimit < report.totalLines;
     final hasPrevious = _page > 1;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(
-        ApexSpacing.xl,
+      padding: EdgeInsets.fromLTRB(
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
         ApexSpacing.sm,
-        ApexSpacing.xl,
-        ApexSpacing.xl,
+        isMobile ? ApexSpacing.md : ApexSpacing.xl,
+        isMobile ? ApexSpacing.lg : ApexSpacing.xl,
       ),
       child: Column(
         children: [
@@ -328,8 +338,11 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
           ApexCard(
             child: Row(
               children: [
-                Icon(Icons.play_arrow_rounded,
-                    size: 18, color: colors.textSecondary),
+                Icon(
+                  Icons.play_arrow_rounded,
+                  size: 18,
+                  color: colors.textSecondary,
+                ),
                 const SizedBox(width: ApexSpacing.sm),
                 Text(
                   'Opening Balance',
@@ -393,6 +406,10 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
     ApexColors colors,
     NumberFormatter fmt,
   ) {
+    if (ResponsiveLayout.isMobile(context)) {
+      return _buildMobileLinesCard(lines, report, colors, fmt);
+    }
+
     return ApexCard(
       padding: EdgeInsets.zero,
       child: Column(
@@ -466,8 +483,11 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.receipt_rounded,
-                      size: 14, color: colors.textMuted),
+                  Icon(
+                    Icons.receipt_rounded,
+                    size: 14,
+                    color: colors.textMuted,
+                  ),
                   const SizedBox(width: 6),
                   Text(
                     '${report.totalLines} total entries',
@@ -481,10 +501,7 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
                     const SizedBox(width: 4),
                     Text(
                       '(page $_page)',
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: colors.textMuted,
-                      ),
+                      style: TextStyle(fontSize: 11, color: colors.textMuted),
                     ),
                   ],
                 ],
@@ -492,6 +509,214 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMobileLinesCard(
+    List<LedgerLine> lines,
+    LedgerReport report,
+    ApexColors colors,
+    NumberFormatter fmt,
+  ) {
+    return ApexCard(
+      padding: EdgeInsets.zero,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: colors.surfaceMuted,
+            padding: const EdgeInsets.symmetric(
+              horizontal: ApexSpacing.md,
+              vertical: ApexSpacing.md,
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.receipt_long_rounded, size: 18, color: colors.info),
+                const SizedBox(width: ApexSpacing.sm),
+                Text(
+                  'Transactions',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (lines.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(ApexSpacing.xl),
+              child: EmptyState(
+                icon: Icons.receipt_long_outlined,
+                title: 'No transactions',
+                subtitle: 'No entries found for this period.',
+              ),
+            )
+          else
+            ...lines.map((line) => _mobileLineTile(line, colors, fmt)),
+          if (lines.isNotEmpty)
+            Container(
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: colors.border)),
+                color: colors.surfaceMuted,
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: ApexSpacing.md,
+                vertical: ApexSpacing.sm,
+              ),
+              child: Wrap(
+                spacing: ApexSpacing.xs,
+                runSpacing: ApexSpacing.xs,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  Icon(
+                    Icons.receipt_rounded,
+                    size: 14,
+                    color: colors.textMuted,
+                  ),
+                  Text(
+                    '${report.totalLines} total entries',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: colors.textMuted,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  if (report.totalLines > _pageLimit)
+                    Text(
+                      '(page $_page)',
+                      style: TextStyle(fontSize: 11, color: colors.textMuted),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileLineTile(
+    LedgerLine line,
+    ApexColors colors,
+    NumberFormatter fmt,
+  ) {
+    final hasDebit = line.debitAmount > 0;
+    final hasCredit = line.creditAmount > 0;
+    final title = line.description.isNotEmpty
+        ? line.description
+        : line.referenceNumber.isNotEmpty
+        ? line.referenceNumber
+        : '—';
+
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: colors.border)),
+      ),
+      padding: const EdgeInsets.all(ApexSpacing.md),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    if (line.referenceNumber.isNotEmpty &&
+                        title != line.referenceNumber) ...[
+                      const SizedBox(height: ApexSpacing.xs),
+                      Text(
+                        line.referenceNumber,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(fontSize: 11, color: colors.textMuted),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              const SizedBox(width: ApexSpacing.sm),
+              _voucherBadge(line.voucherType, colors),
+            ],
+          ),
+          const SizedBox(height: ApexSpacing.md),
+          Row(
+            children: [
+              Icon(Icons.event_rounded, size: 14, color: colors.textSecondary),
+              const SizedBox(width: ApexSpacing.xs),
+              Text(
+                _fmtEntryDate(line.entryDate),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: colors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: ApexSpacing.md),
+          _mobileAmountRow(
+            'Debit',
+            hasDebit ? fmt.currency(line.debitAmount) : '—',
+            colors,
+          ),
+          const SizedBox(height: ApexSpacing.xs),
+          _mobileAmountRow(
+            'Credit',
+            hasCredit ? fmt.currency(line.creditAmount) : '—',
+            colors,
+          ),
+          const Divider(height: ApexSpacing.lg),
+          _mobileAmountRow(
+            'Running balance',
+            fmt.currency(line.runningBalance),
+            colors,
+            strong: true,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileAmountRow(
+    String label,
+    String value,
+    ApexColors colors, {
+    bool strong = false,
+  }) {
+    final muted = value == '—';
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: strong ? FontWeight.w700 : FontWeight.w500,
+              color: colors.textSecondary,
+            ),
+          ),
+        ),
+        MonetaryText(
+          value: value,
+          fontSize: 13,
+          fontWeight: strong ? FontWeight.w800 : FontWeight.w500,
+          color: muted ? colors.textMuted : colors.textPrimary,
+          textAlign: TextAlign.right,
+        ),
+      ],
     );
   }
 
@@ -530,8 +755,8 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
                   l.description.isNotEmpty
                       ? l.description
                       : l.referenceNumber.isNotEmpty
-                          ? l.referenceNumber
-                          : '—',
+                      ? l.referenceNumber
+                      : '—',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
@@ -540,25 +765,18 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
                     color: colors.textPrimary,
                   ),
                 ),
-                if (l.description.isNotEmpty &&
-                    l.referenceNumber.isNotEmpty)
+                if (l.description.isNotEmpty && l.referenceNumber.isNotEmpty)
                   Text(
                     l.referenceNumber,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: colors.textMuted,
-                    ),
+                    style: TextStyle(fontSize: 11, color: colors.textMuted),
                   ),
               ],
             ),
           ),
           // Voucher type
-          Expanded(
-            flex: 14,
-            child: _voucherBadge(l.voucherType, colors),
-          ),
+          Expanded(flex: 14, child: _voucherBadge(l.voucherType, colors)),
           // Debit
           Expanded(
             flex: 14,
@@ -571,8 +789,7 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
                 : Text(
                     '—',
                     textAlign: TextAlign.right,
-                    style:
-                        TextStyle(fontSize: 12.5, color: colors.textMuted),
+                    style: TextStyle(fontSize: 12.5, color: colors.textMuted),
                   ),
           ),
           // Credit
@@ -587,8 +804,7 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
                 : Text(
                     '—',
                     textAlign: TextAlign.right,
-                    style:
-                        TextStyle(fontSize: 12.5, color: colors.textMuted),
+                    style: TextStyle(fontSize: 12.5, color: colors.textMuted),
                   ),
           ),
           // Running balance
@@ -609,10 +825,7 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
   Widget _voucherBadge(String type, ApexColors colors) {
     final label = _voucherLabel(type);
     if (label == '—') {
-      return Text(
-        '—',
-        style: TextStyle(fontSize: 12, color: colors.textMuted),
-      );
+      return Text('—', style: TextStyle(fontSize: 12, color: colors.textMuted));
     }
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -711,7 +924,8 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (!isNext) Icon(icon, size: 18, color: _btnColor(enabled, colors)),
+              if (!isNext)
+                Icon(icon, size: 18, color: _btnColor(enabled, colors)),
               Text(
                 label,
                 style: TextStyle(
@@ -720,7 +934,8 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
                   color: _btnColor(enabled, colors),
                 ),
               ),
-              if (isNext) Icon(icon, size: 18, color: _btnColor(enabled, colors)),
+              if (isNext)
+                Icon(icon, size: 18, color: _btnColor(enabled, colors)),
             ],
           ),
         ),
@@ -732,9 +947,9 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
       enabled ? colors.primary : colors.textMuted;
 
   TextStyle _th(ApexColors colors) => TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: colors.textMuted,
-      );
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+  );
 }

@@ -10,7 +10,7 @@ class UserRegister(BaseModel):
     password: str = Field(..., min_length=8, max_length=128)
     full_name: str = Field(..., max_length=150)
     phone_number: Optional[str] = Field(None, max_length=15)
-    company_legal_name: str = Field(..., max_length=150)
+    company_legal_name: str = Field(..., min_length=2, max_length=150)
     company_gstin: Optional[str] = Field(None, pattern="^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$")
     company_pan: Optional[str] = Field(None, pattern="^[A-Z]{5}[0-9]{4}[A-Z]{1}$")
 

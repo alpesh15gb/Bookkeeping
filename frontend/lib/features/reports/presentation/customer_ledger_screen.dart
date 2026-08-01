@@ -13,6 +13,7 @@ import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/result/result.dart';
+import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/report_models.dart';
 import '../services/reports_service.dart';
 
@@ -24,8 +25,9 @@ final clDateFromProvider = StateProvider<String?>((ref) => null);
 final clDateToProvider = StateProvider<String?>((ref) => null);
 final clContactIdProvider = StateProvider<String?>((ref) => null);
 
-final customerLedgerProvider =
-    FutureProvider.autoDispose<PartyStatement?>((ref) async {
+final customerLedgerProvider = FutureProvider.autoDispose<PartyStatement?>((
+  ref,
+) async {
   final contactId = ref.watch(clContactIdProvider);
   final dateFrom = ref.watch(clDateFromProvider);
   final dateTo = ref.watch(clDateToProvider);
@@ -60,9 +62,9 @@ class CustomerSearchDelegate extends SearchDelegate<ContactSummary?> {
   ThemeData appBarTheme(BuildContext context) {
     return Theme.of(context).copyWith(
       scaffoldBackgroundColor: colors.surface,
-      appBarTheme: Theme.of(context).appBarTheme.copyWith(
-            backgroundColor: colors.surface,
-          ),
+      appBarTheme: Theme.of(
+        context,
+      ).appBarTheme.copyWith(backgroundColor: colors.surface),
     );
   }
 
@@ -102,8 +104,10 @@ class CustomerSearchDelegate extends SearchDelegate<ContactSummary?> {
     }
 
     return FutureBuilder<Result<List<ContactSummary>>>(
-      future: reportsService
-          .getContacts(contactType: 'CUSTOMER', search: query),
+      future: reportsService.getContacts(
+        contactType: 'CUSTOMER',
+        search: query,
+      ),
       builder: (context, snapshot) {
         final result = snapshot.data;
         if (snapshot.connectionState != ConnectionState.done) {
@@ -124,8 +128,7 @@ class CustomerSearchDelegate extends SearchDelegate<ContactSummary?> {
         return ListView.separated(
           padding: const EdgeInsets.symmetric(vertical: ApexSpacing.sm),
           itemCount: contacts.length,
-          separatorBuilder: (_, _) =>
-              Divider(height: 1, color: colors.border),
+          separatorBuilder: (_, _) => Divider(height: 1, color: colors.border),
           itemBuilder: (context, i) {
             final c = contacts[i];
             return ListTile(
@@ -220,7 +223,7 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
                 ),
               ),
               error: (err, _) => ErrorView(
-                message: err.toString(),
+                message: userFacingErrorMessage(err),
                 onRetry: () => ref.invalidate(customerLedgerProvider),
               ),
               data: (statement) {
@@ -228,14 +231,16 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
                   return const EmptyState(
                     icon: Icons.person_search_rounded,
                     title: 'Select a customer',
-                    subtitle: 'Search and select a customer to view their ledger.',
+                    subtitle:
+                        'Search and select a customer to view their ledger.',
                   );
                 }
                 if (statement.ledger.isEmpty) {
                   return const EmptyState(
                     icon: Icons.assignment_rounded,
                     title: 'No transactions',
-                    subtitle: 'No entries for this customer in the selected period.',
+                    subtitle:
+                        'No entries for this customer in the selected period.',
                   );
                 }
                 return _buildStatement(statement, colors, fmt);
@@ -256,7 +261,10 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
       onTap: () async {
         final result = await showSearch<ContactSummary?>(
           context: context,
-          delegate: CustomerSearchDelegate(ref.read(reportsServiceProvider), colors),
+          delegate: CustomerSearchDelegate(
+            ref.read(reportsServiceProvider),
+            colors,
+          ),
         );
         if (result != null) {
           setState(() => _selectedCustomer = result);
@@ -273,11 +281,7 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
         ),
         child: Row(
           children: [
-            Icon(
-              Icons.person_rounded,
-              size: 16,
-              color: colors.textSecondary,
-            ),
+            Icon(Icons.person_rounded, size: 16, color: colors.textSecondary),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
@@ -304,11 +308,7 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
                 ),
               )
             else
-              Icon(
-                Icons.search_rounded,
-                size: 16,
-                color: colors.textMuted,
-              ),
+              Icon(Icons.search_rounded, size: 16, color: colors.textMuted),
           ],
         ),
       ),
@@ -514,10 +514,7 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
                   flex: 16,
                   child: Text('VOUCHER #', style: _th(colors)),
                 ),
-                Expanded(
-                  flex: 16,
-                  child: Text('TYPE', style: _th(colors)),
-                ),
+                Expanded(flex: 16, child: Text('TYPE', style: _th(colors))),
                 Expanded(
                   flex: 16,
                   child: Text(
@@ -553,9 +550,7 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
                 vertical: ApexSpacing.sm,
               ),
               decoration: BoxDecoration(
-                border: Border(
-                  bottom: BorderSide(color: colors.border),
-                ),
+                border: Border(bottom: BorderSide(color: colors.border)),
               ),
               child: Row(
                 children: [
@@ -667,8 +662,11 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
             ),
           ),
           const SizedBox(height: ApexSpacing.sm),
-          _summaryRow('Opening Balance', fmt.currency(summary.openingBalance),
-              colors),
+          _summaryRow(
+            'Opening Balance',
+            fmt.currency(summary.openingBalance),
+            colors,
+          ),
           _summaryRow('Total Sales', fmt.currency(summary.totalSales), colors),
           _summaryRow(
             'Total Receipts',
@@ -720,9 +718,9 @@ class _CustomerLedgerScreenState extends ConsumerState<CustomerLedgerScreen> {
   }
 
   TextStyle _th(ApexColors colors) => TextStyle(
-        fontSize: 10.5,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
-        color: colors.textMuted,
-      );
+    fontSize: 10.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: 0.4,
+    color: colors.textMuted,
+  );
 }

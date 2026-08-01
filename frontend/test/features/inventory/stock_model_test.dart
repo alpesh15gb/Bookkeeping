@@ -82,7 +82,7 @@ void main() {
 
   group('StockBalance', () {
     test('stockValue computed', () {
-      final b = StockBalance(
+      const b = StockBalance(
         productId: 'p1',
         productName: 'P',
         currentStock: 50,
@@ -91,7 +91,7 @@ void main() {
       expect(b.stockValue, 1000);
     });
     test('isLowStock below reorder', () {
-      final b = StockBalance(
+      const b = StockBalance(
         productId: 'p1',
         currentStock: 5,
         reorderLevel: 10,
@@ -99,7 +99,7 @@ void main() {
       expect(b.isLowStock, true);
     });
     test('isLowStock false when above reorder', () {
-      final b = StockBalance(
+      const b = StockBalance(
         productId: 'p1',
         currentStock: 20,
         reorderLevel: 10,
@@ -107,11 +107,11 @@ void main() {
       expect(b.isLowStock, false);
     });
     test('isLowStock false when reorder is zero', () {
-      final b = StockBalance(productId: 'p1', currentStock: 5, reorderLevel: 0);
+      const b = StockBalance(productId: 'p1', currentStock: 5, reorderLevel: 0);
       expect(b.isLowStock, false);
     });
     test('isOutOfStock when near zero', () {
-      final b = StockBalance(productId: 'p1', currentStock: 0.001);
+      const b = StockBalance(productId: 'p1', currentStock: 0.001);
       expect(b.isOutOfStock, true);
     });
     test('fromProductJson', () {

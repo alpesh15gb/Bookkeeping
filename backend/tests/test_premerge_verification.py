@@ -35,7 +35,14 @@ from src.domains.accounting.services import AccountResolver
 _TENANT_COUNTER = 9000
 
 
-def _register_and_login(client, email="verify@test.com", company="VerifyCo", gstin=None, tax_mode="NON_GST"):
+def _register_and_login(
+    client,
+    email="verify@test.com",
+    company="VerifyCo",
+    gstin=None,
+    tax_mode="NON_GST",
+    origin_state_code=None,
+):
     """Register, login, set up FY, return (headers, tenant_id).
 
     If tax_mode is GST_REGULAR or GST_COMPOSITION, toggles after registration.
@@ -86,6 +93,8 @@ def _register_and_login(client, email="verify@test.com", company="VerifyCo", gst
             db.add(setting)
         if gstin:
             setting.origin_state_code = gstin[:2]
+        if origin_state_code:
+            setting.origin_state_code = origin_state_code
 
         db.flush()
         db.commit()
@@ -532,7 +541,13 @@ class TestBillCreationBothModes:
     """Bills should work correctly under both GST and NON_GST modes."""
 
     def test_bill_with_gst(self, client: TestClient):
-        h, tid = _register_and_login(client, "billgst@test.com", "BillGstCo", tax_mode="GST_REGULAR")
+        h, tid = _register_and_login(
+            client,
+            "billgst@test.com",
+            "BillGstCo",
+            tax_mode="GST_REGULAR",
+            origin_state_code="27",
+        )
         pid = _create_product_via_api(client, h, "GSTProduct", "998311", 18)
 
         # Bills require VENDOR contact
@@ -554,7 +569,7 @@ class TestBillCreationBothModes:
         assert cid_res.status_code == 201, f"Vendor contact failed: {cid_res.status_code} {cid_res.json()}"
         cid = cid_res.json()["id"]
 
-        bill = _create_bill_via_api(client, h, cid, pid, rate=20000)
+        bill = _create_bill_via_api(client, h, cid, pid, rate=20000, pos_state_code="27")
         assert bill.status_code == 201, f"Bill creation failed: {bill.status_code} {bill.json()}"
         data = bill.json()
         line = data["lines"][0]
@@ -566,7 +581,15 @@ class TestBillCreationBothModes:
         assert abs(float(line["sgst_amount"]) - 1800.0) < 0.01
 
     def test_bill_non_gst(self, client: TestClient):
-        h, tid = _register_and_login(client, "billnongst@test.com", "BillNonGstCo", tax_mode="NON_GST")
+        # Contract: non-GST buyer, registered supplier, and explicitly
+        # configured Maharashtra origin/POS are an intra-state purchase.
+        h, tid = _register_and_login(
+            client,
+            "billnongst@test.com",
+            "BillNonGstCo",
+            tax_mode="NON_GST",
+            origin_state_code="27",
+        )
 
         pid = _create_product_via_api(client, h, "NonGSTProduct", "998311", 18)
 
@@ -589,7 +612,7 @@ class TestBillCreationBothModes:
         assert cid_res.status_code == 201, f"Vendor contact failed: {cid_res.status_code} {cid_res.json()}"
         cid = cid_res.json()["id"]
 
-        bill = _create_bill_via_api(client, h, cid, pid, rate=20000)
+        bill = _create_bill_via_api(client, h, cid, pid, rate=20000, pos_state_code="27")
         assert bill.status_code == 201, f"Bill failed: {bill.status_code} {bill.json()}"
         data = bill.json()
         line = data["lines"][0]
@@ -602,4 +625,47 @@ class TestBillCreationBothModes:
         assert abs(float(line["cgst_amount"]) - 1800.0) < 0.01
         assert abs(float(line["sgst_amount"]) - 1800.0) < 0.01
         assert abs(float(line["igst_amount"])) < 0.01
+        assert data["itc_eligible"] is False
+
+    def test_bill_non_gst_interstate(self, client: TestClient):
+        # Contract: non-GST buyer in Telangana, registered Maharashtra
+        # supplier, and Maharashtra POS are an inter-state purchase.
+        h, tid = _register_and_login(
+            client,
+            "billnongst.interstate@test.com",
+            "BillNonGstInterstateCo",
+            tax_mode="NON_GST",
+            origin_state_code="36",
+        )
+        pid = _create_product_via_api(client, h, "NonGSTInterstateProduct", "998311", 18)
+
+        body = {
+            "name": "Registered Maharashtra Vendor",
+            "contact_type": "VENDOR",
+            "state_code": "27",
+            "gstin": "27AAACT5678A1Z1",
+            "registration_type": "REGULAR",
+            "billing_address": {
+                "street": "100 Maharashtra Vendor St",
+                "city": "Mumbai",
+                "state": "Maharashtra",
+                "state_code": "27",
+                "pincode": "400001",
+            },
+        }
+        cid_res = client.post("/api/v1/masters/contacts", json=body, headers=h)
+        assert cid_res.status_code == 201, f"Vendor contact failed: {cid_res.status_code} {cid_res.json()}"
+        cid = cid_res.json()["id"]
+
+        bill = _create_bill_via_api(client, h, cid, pid, rate=20000, pos_state_code="27")
+        assert bill.status_code == 201, f"Bill failed: {bill.status_code} {bill.json()}"
+        data = bill.json()
+        line = data["lines"][0]
+        assert float(line["gst_rate"]) == 18.0
+        assert float(line["cgst_rate"]) == 0.0
+        assert float(line["sgst_rate"]) == 0.0
+        assert float(line["igst_rate"]) == 18.0
+        assert abs(float(line["cgst_amount"])) < 0.01
+        assert abs(float(line["sgst_amount"])) < 0.01
+        assert abs(float(line["igst_amount"]) - 3600.0) < 0.01
         assert data["itc_eligible"] is False

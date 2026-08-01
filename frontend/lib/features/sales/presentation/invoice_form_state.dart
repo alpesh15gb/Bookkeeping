@@ -55,7 +55,9 @@ class InvoiceFormState {
   final String? error;
 
   bool get isValid =>
-      contactId != null && contactId!.isNotEmpty && lines.any((l) => l.productId.isNotEmpty);
+      contactId != null &&
+      contactId!.isNotEmpty &&
+      lines.any((l) => l.productId.isNotEmpty);
 
   InvoiceFormState copyWith({
     String? contactId,
