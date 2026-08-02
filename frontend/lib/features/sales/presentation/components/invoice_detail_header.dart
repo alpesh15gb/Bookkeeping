@@ -73,19 +73,26 @@ class InvoiceDetailHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                     Text(
                       invoice.customerName ?? '',
-                      style: textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
+                      style: textTheme.bodyLarge?.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ),
               // Action Buttons
-              _ActionButtonGroup(
-                onEdit: onEdit,
-                onPrint: onPrint,
-                onEmail: onEmail,
-                onCancel: onCancel,
-                onDelete: onDelete,
-                onRecordPayment: onRecordPayment,
+              Expanded(
+                child: Align(
+                  alignment: Alignment.centerRight,
+                  child: _ActionButtonGroup(
+                    onEdit: onEdit,
+                    onPrint: onPrint,
+                    onEmail: onEmail,
+                    onCancel: onCancel,
+                    onDelete: onDelete,
+                    onRecordPayment: onRecordPayment,
+                  ),
+                ),
               ),
             ],
           ),
@@ -303,11 +310,17 @@ class _InfoGrid extends StatelessWidget {
     return Wrap(
       spacing: isMobile ? 12 : 24,
       runSpacing: 12,
-      children: items.map((item) => _buildInfoCard(item, colors, textTheme)).toList(),
+      children: items
+          .map((item) => _buildInfoCard(item, colors, textTheme))
+          .toList(),
     );
   }
 
-  Widget _buildInfoCard(_InfoItem item, ApexColors colors, TextTheme textTheme) {
+  Widget _buildInfoCard(
+    _InfoItem item,
+    ApexColors colors,
+    TextTheme textTheme,
+  ) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -324,7 +337,10 @@ class _InfoGrid extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(item.label, style: textTheme.labelSmall?.copyWith(color: colors.textMuted)),
+              Text(
+                item.label,
+                style: textTheme.labelSmall?.copyWith(color: colors.textMuted),
+              ),
               Text(
                 item.value,
                 style: textTheme.bodyMedium?.copyWith(
@@ -340,7 +356,9 @@ class _InfoGrid extends StatelessWidget {
   }
 
   bool _isOverdue(String dueDateStr, InvoiceStatus status) {
-    if (status == InvoiceStatus.paid || status == InvoiceStatus.cancelled) return false;
+    if (status == InvoiceStatus.paid || status == InvoiceStatus.cancelled) {
+      return false;
+    }
     try {
       final dueDate = DateTime.parse(dueDateStr);
       return dueDate.isBefore(DateTime.now());

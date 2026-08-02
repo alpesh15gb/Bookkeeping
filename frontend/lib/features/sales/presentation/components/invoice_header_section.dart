@@ -40,7 +40,13 @@ class InvoiceHeaderSection extends ConsumerWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Section Title
-          Text('Invoice Details', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: colors.textPrimary)),
+          Text(
+            'Invoice Details',
+            style: textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: colors.textPrimary,
+            ),
+          ),
           const SizedBox(height: 20),
 
           // Row 1: Invoice Number & Dates
@@ -64,7 +70,9 @@ class InvoiceHeaderSection extends ConsumerWidget {
                 child: ApexDateField(
                   label: 'Issue Date',
                   value: state.issueDate,
-                  onChanged: (d) { if (d != null) notifier.setIssueDate(d); },
+                  onChanged: (d) {
+                    if (d != null) notifier.setIssueDate(d);
+                  },
                   hint: 'DD/MM/YYYY',
                 ),
               ),
@@ -74,7 +82,9 @@ class InvoiceHeaderSection extends ConsumerWidget {
                 child: ApexDateField(
                   label: 'Due Date',
                   value: state.dueDate,
-                  onChanged: (d) { if (d != null) notifier.setDueDate(d); },
+                  onChanged: (d) {
+                    if (d != null) notifier.setDueDate(d);
+                  },
                   hint: 'DD/MM/YYYY',
                 ),
               ),
@@ -89,10 +99,7 @@ class InvoiceHeaderSection extends ConsumerWidget {
               // Customer
               Expanded(
                 flex: 3,
-                child: _CustomerPicker(
-                  state: state,
-                  notifier: notifier,
-                ),
+                child: _CustomerPicker(state: state, notifier: notifier),
               ),
               const SizedBox(width: 16),
               // POS State
@@ -100,8 +107,17 @@ class InvoiceHeaderSection extends ConsumerWidget {
                 child: ApexDropdownField<String>(
                   label: 'Place of Supply',
                   value: state.posStateCode.isEmpty ? null : state.posStateCode,
-                  items: _indianStates.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                  onChanged: (v) { if (v != null) notifier.setPosStateCode(v); },
+                  items: _indianStates
+                      .map(
+                        (s) => DropdownMenuItem(
+                          value: s.code,
+                          child: Text('${s.code} - ${s.name}'),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (v) {
+                    if (v != null) notifier.setPosStateCode(v);
+                  },
                   hint: 'Select state',
                 ),
               ),
@@ -147,8 +163,14 @@ class InvoiceHeaderSection extends ConsumerWidget {
               Expanded(
                 child: ApexMonetaryField(
                   label: 'Shipping Charges',
-                  controller: TextEditingController(text: state.shippingCharges > 0 ? fmt.quantity(state.shippingCharges) : ''),
-                  onChanged: (v) => notifier.setShippingCharges(double.tryParse(v.replaceAll(',', '')) ?? 0),
+                  controller: TextEditingController(
+                    text: state.shippingCharges > 0
+                        ? fmt.quantity(state.shippingCharges)
+                        : '',
+                  ),
+                  onChanged: (v) => notifier.setShippingCharges(
+                    double.tryParse(v.replaceAll(',', '')) ?? 0,
+                  ),
                   hint: '₹0.00',
                 ),
               ),
@@ -158,7 +180,14 @@ class InvoiceHeaderSection extends ConsumerWidget {
                 child: ApexDropdownField<double>(
                   label: 'TDS Rate (%)',
                   value: state.tdsRate,
-                  items: [0, 1, 2, 5, 10].map((r) => DropdownMenuItem<double>(value: r.toDouble(), child: Text('$r%'))).toList(),
+                  items: [0, 1, 2, 5, 10]
+                      .map(
+                        (r) => DropdownMenuItem<double>(
+                          value: r.toDouble(),
+                          child: Text('$r%'),
+                        ),
+                      )
+                      .toList(),
                   onChanged: (v) => v != null ? notifier.setTdsRate(v) : null,
                 ),
               ),
@@ -168,7 +197,14 @@ class InvoiceHeaderSection extends ConsumerWidget {
                 child: ApexDropdownField<double>(
                   label: 'TCS Rate (%)',
                   value: state.tcsRate,
-                  items: [0.0, 0.1, 0.5, 1.0].map((r) => DropdownMenuItem<double>(value: r, child: Text('$r%'))).toList(),
+                  items: [0.0, 0.1, 0.5, 1.0]
+                      .map(
+                        (r) => DropdownMenuItem<double>(
+                          value: r,
+                          child: Text('$r%'),
+                        ),
+                      )
+                      .toList(),
                   onChanged: (v) => v != null ? notifier.setTcsRate(v) : null,
                 ),
               ),
@@ -197,7 +233,13 @@ class _CustomerPicker extends ConsumerWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Customer', style: textTheme.labelMedium?.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w500)),
+        Text(
+          'Customer',
+          style: textTheme.labelMedium?.copyWith(
+            color: colors.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(height: 6),
         Row(
           children: [
@@ -206,7 +248,10 @@ class _CustomerPicker extends ConsumerWidget {
                 onTap: () => _showCustomerPicker(context, ref),
                 borderRadius: BorderRadius.circular(10),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     color: colors.surface,
                     borderRadius: BorderRadius.circular(10),
@@ -214,20 +259,32 @@ class _CustomerPicker extends ConsumerWidget {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.person_outline, color: colors.textMuted, size: 20),
+                      Icon(
+                        Icons.person_outline,
+                        color: colors.textMuted,
+                        size: 20,
+                      ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          state.contactName.isEmpty ? 'Select customer' : state.contactName,
+                          state.contactName.isEmpty
+                              ? 'Select customer'
+                              : state.contactName,
                           style: textTheme.bodyMedium?.copyWith(
-                            color: state.contactName.isEmpty ? colors.textMuted : colors.textPrimary,
+                            color: state.contactName.isEmpty
+                                ? colors.textMuted
+                                : colors.textPrimary,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       if (state.contactId != null)
                         IconButton(
-                          icon: Icon(Icons.clear, color: colors.textMuted, size: 18),
+                          icon: Icon(
+                            Icons.clear,
+                            color: colors.textMuted,
+                            size: 18,
+                          ),
                           onPressed: () => notifier.clearContact(),
                           tooltip: 'Clear customer',
                           constraints: const BoxConstraints(),
@@ -251,16 +308,24 @@ class _CustomerPicker extends ConsumerWidget {
             ),
           ],
         ),
-        if (state.contactId != null && (state.billingAddress != null || state.contactGstNumber != null)) ...[
+        if (state.contactId != null &&
+            (state.billingAddress != null ||
+                state.contactGstNumber != null)) ...[
           const SizedBox(height: 8),
           Wrap(
             spacing: 16,
             runSpacing: 8,
             children: [
               if (state.contactGstNumber != null)
-                _InfoChip(label: 'GSTIN: ${state.contactGstNumber}', icon: Icons.receipt_long),
+                _InfoChip(
+                  label: 'GSTIN: ${state.contactGstNumber}',
+                  icon: Icons.receipt_long,
+                ),
               if (state.billingAddress != null)
-                _InfoChip(label: 'Billing: ${state.billingAddress!.split('\n').first}', icon: Icons.location_on_outlined),
+                _InfoChip(
+                  label: 'Billing: ${state.billingAddress!.split('\n').first}',
+                  icon: Icons.location_on_outlined,
+                ),
             ],
           ),
         ],
@@ -276,7 +341,9 @@ class _CustomerPicker extends ConsumerWidget {
     };
     final contacts = all
         .where(
-          (c) => c.contactType == ContactType.customer || c.contactType == ContactType.both,
+          (c) =>
+              c.contactType == ContactType.customer ||
+              c.contactType == ContactType.both,
         )
         .toList();
 
@@ -309,9 +376,17 @@ class _CustomerPicker extends ConsumerWidget {
                 padding: const EdgeInsets.all(16),
                 child: Row(
                   children: [
-                    Text('Select Customer', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)),
+                    Text(
+                      'Select Customer',
+                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
                     const Spacer(),
-                    IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(context)),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ],
                 ),
               ),
@@ -320,15 +395,22 @@ class _CustomerPicker extends ConsumerWidget {
                   controller: scrollController,
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   itemCount: contacts.length,
-                  separatorBuilder: (_, _) => Divider(height: 1, color: apexColors(context).border),
+                  separatorBuilder: (_, _) =>
+                      Divider(height: 1, color: apexColors(context).border),
                   itemBuilder: (context, index) {
                     final contact = contacts[index];
                     return ListTile(
                       leading: CircleAvatar(
-                        child: Text(contact.name.isNotEmpty ? contact.name[0].toUpperCase() : '?'),
+                        child: Text(
+                          contact.name.isNotEmpty
+                              ? contact.name[0].toUpperCase()
+                              : '?',
+                        ),
                       ),
                       title: Text(contact.name),
-                      subtitle: Text('${contact.gstin ?? 'No GSTIN'} • ${contact.billingAddress?.city ?? ''}'),
+                      subtitle: Text(
+                        '${contact.gstin ?? 'No GSTIN'} • ${contact.billingAddress?.city ?? ''}',
+                      ),
                       onTap: () {
                         notifier.setContact(contact);
                         Navigator.pop(context);
@@ -345,7 +427,10 @@ class _CustomerPicker extends ConsumerWidget {
   }
 
   Future<void> _quickCreateCustomer(BuildContext context, WidgetRef ref) async {
-    final result = await showQuickCreateParty(context, contactType: ContactType.customer);
+    final result = await showQuickCreateParty(
+      context,
+      contactType: ContactType.customer,
+    );
     if (result != null && context.mounted) {
       ref.invalidate(contactControllerProvider);
       // Auto-select the new contact
@@ -379,7 +464,13 @@ class _GstOptions extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('GST Options', style: textTheme.labelMedium?.copyWith(color: colors.textPrimary, fontWeight: FontWeight.w500)),
+        Text(
+          'GST Options',
+          style: textTheme.labelMedium?.copyWith(
+            color: colors.textPrimary,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
         const SizedBox(height: 8),
         Wrap(
           spacing: 12,
@@ -390,9 +481,14 @@ class _GstOptions extends StatelessWidget {
               onTap: () => onGstInclusiveChanged(!isGstInclusive),
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
-                  color: isGstInclusive ? colors.primaryContainer : colors.surfaceMuted,
+                  color: isGstInclusive
+                      ? colors.primaryContainer
+                      : colors.surfaceMuted,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(
                     color: isGstInclusive ? colors.primary : colors.border,
@@ -403,12 +499,21 @@ class _GstOptions extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
-                      isGstInclusive ? Icons.check_box : Icons.check_box_outline_blank,
+                      isGstInclusive
+                          ? Icons.check_box
+                          : Icons.check_box_outline_blank,
                       size: 18,
                       color: isGstInclusive ? colors.primary : colors.textMuted,
                     ),
                     const SizedBox(width: 8),
-                    Text('GST Inclusive', style: textTheme.labelMedium?.copyWith(color: isGstInclusive ? colors.primary : colors.textSecondary)),
+                    Text(
+                      'GST Inclusive',
+                      style: textTheme.labelMedium?.copyWith(
+                        color: isGstInclusive
+                            ? colors.primary
+                            : colors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -418,7 +523,10 @@ class _GstOptions extends StatelessWidget {
               onTap: () => onRcmChanged(!isRcm),
               borderRadius: BorderRadius.circular(8),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
                 decoration: BoxDecoration(
                   color: isRcm ? colors.warningContainer : colors.surfaceMuted,
                   borderRadius: BorderRadius.circular(8),
@@ -436,7 +544,12 @@ class _GstOptions extends StatelessWidget {
                       color: isRcm ? colors.warning : colors.textMuted,
                     ),
                     const SizedBox(width: 8),
-                    Text('RCM', style: textTheme.labelMedium?.copyWith(color: isRcm ? colors.warning : colors.textSecondary)),
+                    Text(
+                      'RCM',
+                      style: textTheme.labelMedium?.copyWith(
+                        color: isRcm ? colors.warning : colors.textSecondary,
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -452,10 +565,17 @@ class _GstOptions extends StatelessWidget {
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: supplyType,
-                  items: ['DOMESTIC', 'EXPORT', 'SEZ'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                  items: ['DOMESTIC', 'EXPORT', 'SEZ']
+                      .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                      .toList(),
                   onChanged: (v) => v != null ? onSupplyTypeChanged(v) : null,
-                  style: textTheme.labelMedium?.copyWith(color: colors.textPrimary),
-                  icon: Icon(Icons.keyboard_arrow_down, color: colors.textSecondary),
+                  style: textTheme.labelMedium?.copyWith(
+                    color: colors.textPrimary,
+                  ),
+                  icon: Icon(
+                    Icons.keyboard_arrow_down,
+                    color: colors.textSecondary,
+                  ),
                 ),
               ),
             ),
@@ -489,49 +609,58 @@ class _InfoChip extends StatelessWidget {
         children: [
           Icon(icon, size: 12, color: colors.textSecondary),
           const SizedBox(width: 4),
-          Text(label, style: textTheme.labelSmall?.copyWith(color: colors.textSecondary)),
+          Text(
+            label,
+            style: textTheme.labelSmall?.copyWith(color: colors.textSecondary),
+          ),
         ],
       ),
     );
   }
 }
 
-// Indian state codes for POS
-const List<String> _indianStates = [
-  'AN - Andaman and Nicobar Islands',
-  'AP - Andhra Pradesh',
-  'AR - Arunachal Pradesh',
-  'AS - Assam',
-  'BR - Bihar',
-  'CH - Chandigarh',
-  'CG - Chhattisgarh',
-  'DD - Dadra and Nagar Haveli and Daman and Diu',
-  'DL - Delhi',
-  'GA - Goa',
-  'GJ - Gujarat',
-  'HR - Haryana',
-  'HP - Himachal Pradesh',
-  'JH - Jharkhand',
-  'JK - Jammu and Kashmir',
-  'KA - Karnataka',
-  'KL - Kerala',
-  'LA - Ladakh',
-  'LD - Lakshadweep',
-  'MP - Madhya Pradesh',
-  'MH - Maharashtra',
-  'MN - Manipur',
-  'ML - Meghalaya',
-  'MZ - Mizoram',
-  'NL - Nagaland',
-  'OD - Odisha',
-  'PB - Punjab',
-  'PY - Puducherry',
-  'RJ - Rajasthan',
-  'SK - Sikkim',
-  'TN - Tamil Nadu',
-  'TS - Telangana',
-  'TR - Tripura',
-  'UP - Uttar Pradesh',
-  'UK - Uttarakhand',
-  'WB - West Bengal',
+// Indian state/UT GST codes (2-digit numeric) for POS
+class _StateOption {
+  const _StateOption(this.code, this.name);
+  final String code;
+  final String name;
+}
+
+const List<_StateOption> _indianStates = [
+  _StateOption('01', 'Jammu and Kashmir'),
+  _StateOption('02', 'Himachal Pradesh'),
+  _StateOption('03', 'Punjab'),
+  _StateOption('04', 'Chandigarh'),
+  _StateOption('05', 'Uttarakhand'),
+  _StateOption('06', 'Haryana'),
+  _StateOption('07', 'Delhi'),
+  _StateOption('08', 'Rajasthan'),
+  _StateOption('09', 'Uttar Pradesh'),
+  _StateOption('10', 'Bihar'),
+  _StateOption('11', 'Sikkim'),
+  _StateOption('12', 'Arunachal Pradesh'),
+  _StateOption('13', 'Nagaland'),
+  _StateOption('14', 'Manipur'),
+  _StateOption('15', 'Mizoram'),
+  _StateOption('16', 'Tripura'),
+  _StateOption('17', 'Meghalaya'),
+  _StateOption('18', 'Assam'),
+  _StateOption('19', 'West Bengal'),
+  _StateOption('20', 'Jharkhand'),
+  _StateOption('21', 'Odisha'),
+  _StateOption('22', 'Chhattisgarh'),
+  _StateOption('23', 'Madhya Pradesh'),
+  _StateOption('24', 'Gujarat'),
+  _StateOption('25', 'Goa'),
+  _StateOption('26', 'Dadra and Nagar Haveli and Daman and Diu'),
+  _StateOption('27', 'Maharashtra'),
+  _StateOption('28', 'Karnataka'),
+  _StateOption('29', 'Telangana'),
+  _StateOption('30', 'Andhra Pradesh'),
+  _StateOption('31', 'Lakshadweep'),
+  _StateOption('32', 'Kerala'),
+  _StateOption('33', 'Tamil Nadu'),
+  _StateOption('34', 'Puducherry'),
+  _StateOption('35', 'Andaman and Nicobar Islands'),
+  _StateOption('37', 'Ladakh'),
 ];

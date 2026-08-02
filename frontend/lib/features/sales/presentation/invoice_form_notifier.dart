@@ -12,10 +12,8 @@ import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
 import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 
 class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
-  InvoiceFormNotifier(
-    this._service,
-    this._calc,
-  ) : super(
+  InvoiceFormNotifier(this._service, this._calc)
+    : super(
         const InvoiceFormState(
           lines: [InvoiceLine(productId: '', hsnSac: '', gstRate: 0)],
         ),
@@ -57,7 +55,9 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
           contactName: value.contactName ?? '',
           invoiceNumber: value.invoiceNumber,
           issueDate: DateTime.tryParse(value.issueDate) ?? DateTime.now(),
-          dueDate: DateTime.tryParse(value.dueDate) ?? DateTime.now().add(const Duration(days: 30)),
+          dueDate:
+              DateTime.tryParse(value.dueDate) ??
+              DateTime.now().add(const Duration(days: 30)),
           posStateCode: value.posStateCode,
           shippingCharges: value.shippingCharges,
           notes: value.notes,
@@ -76,7 +76,10 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
       case Failure(:final error):
         state = state.copyWith(isLoading: false, error: error.message);
       default:
-        state = state.copyWith(isLoading: false, error: 'Unexpected result type');
+        state = state.copyWith(
+          isLoading: false,
+          error: 'Unexpected result type',
+        );
     }
   }
 
@@ -275,7 +278,10 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
     _recalculate();
   }
 
-  InvoiceLine _createLineFromProduct(Product? product, {InvoiceLine? existingLine}) {
+  InvoiceLine _createLineFromProduct(
+    Product? product, {
+    InvoiceLine? existingLine,
+  }) {
     if (product == null) {
       return InvoiceLine(
         productId: existingLine?.productId ?? '',
@@ -320,8 +326,10 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
     final igstAmount = lines.fold<double>(0, (s, l) => s + l.igstAmount);
     final utgstAmount = lines.fold<double>(0, (s, l) => s + l.utgstAmount);
     final cessAmount = lines.fold<double>(0, (s, l) => s + l.cessAmount);
-    final taxableValue = calc.subtotal - calc.discountTotal + state.shippingCharges;
-    final taxTotal = cgstAmount + sgstAmount + igstAmount + utgstAmount + cessAmount;
+    final taxableValue =
+        calc.subtotal - calc.discountTotal + state.shippingCharges;
+    final taxTotal =
+        cgstAmount + sgstAmount + igstAmount + utgstAmount + cessAmount;
     final roundOff = calc.total - (taxableValue + (state.isRcm ? 0 : taxTotal));
 
     state = state.copyWith(
@@ -337,7 +345,14 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
       calculatedShippingCharges: state.shippingCharges,
       calculatedRoundOff: roundOff,
       calculatedTotal: calc.total,
-      calculatedTaxBreakdown: _buildTaxBreakdown(taxableValue, cgstAmount, sgstAmount, igstAmount, utgstAmount, cessAmount),
+      calculatedTaxBreakdown: _buildTaxBreakdown(
+        taxableValue,
+        cgstAmount,
+        sgstAmount,
+        igstAmount,
+        utgstAmount,
+        cessAmount,
+      ),
       lineCalculations: _buildLineCalculations(lines),
       error: null,
     );
@@ -353,19 +368,54 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
   ) {
     final items = <TaxBreakdownItem>[];
     if (cgst > 0) {
-      items.add(TaxBreakdownItem(label: 'CGST', rate: 0, taxableValue: taxableValue, amount: cgst));
+      items.add(
+        TaxBreakdownItem(
+          label: 'CGST',
+          rate: 0,
+          taxableValue: taxableValue,
+          amount: cgst,
+        ),
+      );
     }
     if (sgst > 0) {
-      items.add(TaxBreakdownItem(label: 'SGST', rate: 0, taxableValue: taxableValue, amount: sgst));
+      items.add(
+        TaxBreakdownItem(
+          label: 'SGST',
+          rate: 0,
+          taxableValue: taxableValue,
+          amount: sgst,
+        ),
+      );
     }
     if (igst > 0) {
-      items.add(TaxBreakdownItem(label: 'IGST', rate: 0, taxableValue: taxableValue, amount: igst));
+      items.add(
+        TaxBreakdownItem(
+          label: 'IGST',
+          rate: 0,
+          taxableValue: taxableValue,
+          amount: igst,
+        ),
+      );
     }
     if (utgst > 0) {
-      items.add(TaxBreakdownItem(label: 'UTGST', rate: 0, taxableValue: taxableValue, amount: utgst));
+      items.add(
+        TaxBreakdownItem(
+          label: 'UTGST',
+          rate: 0,
+          taxableValue: taxableValue,
+          amount: utgst,
+        ),
+      );
     }
     if (cess > 0) {
-      items.add(TaxBreakdownItem(label: 'Cess', rate: 0, taxableValue: taxableValue, amount: cess));
+      items.add(
+        TaxBreakdownItem(
+          label: 'Cess',
+          rate: 0,
+          taxableValue: taxableValue,
+          amount: cess,
+        ),
+      );
     }
     return items;
   }
@@ -450,6 +500,10 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
       'supply_type': state.supplyType,
       'tds_rate': state.tdsRate,
       'tcs_rate': state.tcsRate,
+      // The form saves drafts. Never auto-post from the form; posting is an
+      // explicit workflow step. Keeps the draft out of the ledger/stock until
+      // the user finalizes it.
+      'post_on_create': false,
       'lines': state.lines
           .map(
             (l) => <String, dynamic>{
@@ -502,11 +556,12 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
 
 // ───── Providers ────────────────────────────────────────────────────────────
 
-final invoiceFormNotifierProvider = StateNotifierProvider<InvoiceFormNotifier, InvoiceFormState>((ref) {
-  final notifier = InvoiceFormNotifier(
-    ref.read(invoiceServiceProvider),
-    ref.read(invoiceCalculationServiceProvider),
-  );
-  notifier.ref = ref;
-  return notifier;
-});
+final invoiceFormNotifierProvider =
+    StateNotifierProvider<InvoiceFormNotifier, InvoiceFormState>((ref) {
+      final notifier = InvoiceFormNotifier(
+        ref.read(invoiceServiceProvider),
+        ref.read(invoiceCalculationServiceProvider),
+      );
+      notifier.ref = ref;
+      return notifier;
+    });

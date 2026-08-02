@@ -144,7 +144,9 @@ class Invoice {
     tdsAmount: parseDoubleSafe(json['tds_amount']),
     tcsRate: parseDoubleSafe(json['tcs_rate']),
     tcsAmount: parseDoubleSafe(json['tcs_amount']),
-    contactName: json['contact_name'] as String?,
+    contactName:
+        json['contact_name'] as String? ??
+        _contactNameFromContact(json['contact']),
     lines:
         (json['lines'] as List?)
             ?.map((e) => InvoiceLine.fromResponse(e as Map<String, dynamic>))
@@ -153,6 +155,16 @@ class Invoice {
     createdAt: json['created_at'] as String?,
     updatedAt: json['updated_at'] as String?,
   );
+
+  /// The invoice detail response embeds the customer as `contact: {...}`
+  /// rather than a flat `contact_name` field. Fall back to it so the detail
+  /// view can still display the customer name.
+  static String? _contactNameFromContact(Object? contact) {
+    if (contact is Map && contact['name'] is String) {
+      return contact['name'] as String;
+    }
+    return null;
+  }
 }
 
 /// Lightweight list item — matches backend InvoiceListResponse.

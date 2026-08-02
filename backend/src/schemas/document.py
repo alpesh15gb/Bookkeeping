@@ -31,9 +31,9 @@ class ContactResponse(SchemaBase):
     gstin: Optional[str] = None
     pan: Optional[str] = None
     registration_type: str
-    billing_address: dict
+    billing_address: Optional[dict] = None
     shipping_address: Optional[dict] = None
-    state_code: str
+    state_code: Optional[str] = None
     is_active: bool
     created_at: datetime
 

@@ -40,7 +40,13 @@ class InvoiceTotalsPanel extends ConsumerWidget {
             children: [
               Icon(Icons.receipt_long, size: 20, color: colors.primary),
               const SizedBox(width: 8),
-              Text('Totals', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: colors.textPrimary)),
+              Text(
+                'Totals',
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
+                ),
+              ),
               const Spacer(),
               // GST Status badge
               _GstStatusBadge(
@@ -72,7 +78,9 @@ class InvoiceTotalsPanel extends ConsumerWidget {
             _TotalRow(
               label: 'Discount',
               value: '-${fmt.currency(state.calculatedDiscountTotal)}',
-              style: textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
+              style: textTheme.bodyMedium?.copyWith(
+                color: colors.textSecondary,
+              ),
               valueStyle: textTheme.bodyMedium?.copyWith(
                 color: colors.error,
                 fontFamily: 'JetBrains Mono',
@@ -86,7 +94,9 @@ class InvoiceTotalsPanel extends ConsumerWidget {
             _TotalRow(
               label: 'Shipping Charges',
               value: fmt.currency(state.calculatedShippingCharges),
-              style: textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
+              style: textTheme.bodyMedium?.copyWith(
+                color: colors.textSecondary,
+              ),
               valueStyle: textTheme.bodyMedium?.copyWith(
                 color: colors.textPrimary,
                 fontFamily: 'JetBrains Mono',
@@ -103,7 +113,10 @@ class InvoiceTotalsPanel extends ConsumerWidget {
           _TotalRow(
             label: 'Taxable Value',
             value: fmt.currency(state.calculatedTaxableValue),
-            style: textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600, color: colors.textPrimary),
+            style: textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: colors.textPrimary,
+            ),
             valueStyle: textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.w700,
               color: colors.textPrimary,
@@ -117,9 +130,17 @@ class InvoiceTotalsPanel extends ConsumerWidget {
             const SizedBox(height: 16),
             Divider(color: colors.border, height: 1),
             const SizedBox(height: 16),
-            Text('Tax Breakdown', style: textTheme.labelMedium?.copyWith(color: colors.textSecondary, fontWeight: FontWeight.w600)),
+            Text(
+              'Tax Breakdown',
+              style: textTheme.labelMedium?.copyWith(
+                color: colors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
             const SizedBox(height: 12),
-            ...state.calculatedTaxBreakdown.map((tax) => _TaxBreakdownRow(tax: tax, fmt: fmt)),
+            ...state.calculatedTaxBreakdown.map(
+              (tax) => _TaxBreakdownRow(tax: tax, fmt: fmt),
+            ),
           ],
 
           // Round Off
@@ -132,9 +153,13 @@ class InvoiceTotalsPanel extends ConsumerWidget {
               value: state.calculatedRoundOff > 0
                   ? '+${fmt.currency(state.calculatedRoundOff)}'
                   : fmt.currency(state.calculatedRoundOff),
-              style: textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
+              style: textTheme.bodyMedium?.copyWith(
+                color: colors.textSecondary,
+              ),
               valueStyle: textTheme.bodyMedium?.copyWith(
-                color: state.calculatedRoundOff > 0 ? colors.success : colors.error,
+                color: state.calculatedRoundOff > 0
+                    ? colors.success
+                    : colors.error,
                 fontFamily: 'JetBrains Mono',
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
@@ -149,7 +174,10 @@ class InvoiceTotalsPanel extends ConsumerWidget {
           _TotalRow(
             label: 'Grand Total',
             value: fmt.currency(state.calculatedTotal),
-            style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w700, color: colors.textPrimary),
+            style: textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+              color: colors.textPrimary,
+            ),
             valueStyle: textTheme.headlineSmall?.copyWith(
               fontWeight: FontWeight.w700,
               color: colors.primary,
@@ -170,10 +198,7 @@ class InvoiceTotalsPanel extends ConsumerWidget {
     );
 
     if (isSticky) {
-      return Sticky(
-        bottomOffset: 24,
-        child: panel,
-      );
+      return Sticky(bottomOffset: 24, child: panel);
     }
 
     return panel;
@@ -302,22 +327,19 @@ class _GstStatusBadge extends StatelessWidget {
       gstType = 'EXPORT (Zero Rated)';
     } else if (supplyType == 'SEZ') {
       gstType = 'SEZ (Zero Rated)';
-    } else if (originStateCode.isNotEmpty && posStateCode.isNotEmpty && originStateCode != posStateCode) {
+    } else if (originStateCode.isNotEmpty &&
+        posStateCode.isNotEmpty &&
+        originStateCode != posStateCode) {
       gstType = 'INTER-STATE';
     }
 
     final badges = <Widget>[
-      if (isGstInclusive)
-        _Badge(label: 'GST Inclusive', color: colors.primary),
-      if (isRcm)
-        _Badge(label: 'RCM', color: colors.warning),
+      if (isGstInclusive) _Badge(label: 'GST Inclusive', color: colors.primary),
+      if (isRcm) _Badge(label: 'RCM', color: colors.warning),
       _Badge(label: gstType, color: colors.info),
     ];
 
-    return Wrap(
-      spacing: 6,
-      children: badges,
-    );
+    return Wrap(spacing: 6, children: badges);
   }
 }
 
@@ -398,13 +420,39 @@ class _AmountInWords extends StatelessWidget {
     if (number == 0) return 'Zero';
 
     final ones = [
-      '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine',
-      'Ten', 'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen',
-      'Seventeen', 'Eighteen', 'Nineteen',
+      '',
+      'One',
+      'Two',
+      'Three',
+      'Four',
+      'Five',
+      'Six',
+      'Seven',
+      'Eight',
+      'Nine',
+      'Ten',
+      'Eleven',
+      'Twelve',
+      'Thirteen',
+      'Fourteen',
+      'Fifteen',
+      'Sixteen',
+      'Seventeen',
+      'Eighteen',
+      'Nineteen',
     ];
 
     final tens = [
-      '', '', 'Twenty', 'Thirty', 'Forty', 'Fifty', 'Sixty', 'Seventy', 'Eighty', 'Ninety',
+      '',
+      '',
+      'Twenty',
+      'Thirty',
+      'Forty',
+      'Fifty',
+      'Sixty',
+      'Seventy',
+      'Eighty',
+      'Ninety',
     ];
 
     String convertHundreds(int n) {

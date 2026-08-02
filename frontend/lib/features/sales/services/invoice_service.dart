@@ -15,30 +15,50 @@ class InvoiceService {
 
   // -- Helpers -------------------------------------------------------------
 
+  Invoice _parseInvoiceResponse(Object? data) {
+    final map = data is Map<String, dynamic>
+        ? data
+        : data is Map
+        ? data.cast<String, dynamic>()
+        : null;
+    if (map == null ||
+        !map.containsKey('id') ||
+        !map.containsKey('invoice_number') ||
+        !map.containsKey('status')) {
+      throw const ApiError(
+        message: 'The server returned an invalid invoice response.',
+        type: 'invalid_response',
+      );
+    }
+
+    try {
+      return Invoice.fromJson(map);
+    } catch (_) {
+      throw const ApiError(
+        message: 'The server returned an invalid invoice response.',
+        type: 'invalid_response',
+      );
+    }
+  }
+
   Future<Result<Invoice>> _get(String path) {
     return guardDio(() async {
       final data = (await _dio.get(path)).data;
-      return Invoice.fromJson(
-        data is Map<String, dynamic> ? data : <String, dynamic>{},
-      );
+      return _parseInvoiceResponse(data);
     });
   }
 
   Future<Result<Invoice>> _post(String path, [Map<String, dynamic>? body]) {
     return guardDio(() async {
       final data = (await _dio.post(path, data: body)).data;
-      return Invoice.fromJson(
-        data is Map<String, dynamic> ? data : <String, dynamic>{},
-      );
+      return _parseInvoiceResponse(data);
     });
   }
 
   Future<Result<Invoice>> _put(String path, Map<String, dynamic> body) {
     return guardDio(() async {
       final data = (await _dio.put(path, data: body)).data;
-      return Invoice.fromJson(
-        data is Map<String, dynamic> ? data : <String, dynamic>{},
-      );
+      return _parseInvoiceResponse(data);
     });
   }
 

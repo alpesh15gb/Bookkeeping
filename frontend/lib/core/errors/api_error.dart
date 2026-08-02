@@ -48,8 +48,12 @@ class ApiError implements Exception {
   /// `true` for transient server errors worth retrying.
   bool get isServer => statusCode != null && statusCode! >= 500;
 
+  /// `true` when the server returned a response that did not match the
+  /// invoice/API contract.
+  bool get isInvalidResponse => type == 'invalid_response';
+
   /// `true` for connectivity / timeout / socket errors (no HTTP response).
-  bool get isNetwork => statusCode == null;
+  bool get isNetwork => statusCode == null && !isInvalidResponse;
 
   @override
   String toString() => message;

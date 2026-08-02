@@ -33,10 +33,10 @@ class InvoiceLinesTable extends ConsumerStatefulWidget {
 }
 
 class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
-  late final List<TextEditingController> _qtyControllers;
-  late final List<TextEditingController> _rateControllers;
-  late final List<TextEditingController> _discountControllers;
-  late final List<FocusNode> _focusNodes;
+  List<TextEditingController> _qtyControllers = [];
+  List<TextEditingController> _rateControllers = [];
+  List<TextEditingController> _discountControllers = [];
+  List<FocusNode> _focusNodes = [];
 
   @override
   void initState() {
@@ -49,6 +49,8 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
     super.didUpdateWidget(oldWidget);
     if (widget.state.lines.length != oldWidget.state.lines.length) {
       _initControllers();
+    } else {
+      _syncControllers();
     }
   }
 
@@ -69,7 +71,9 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
 
     _qtyControllers = List.generate(
       widget.state.lines.length,
-      (i) => TextEditingController(text: widget.state.lines[i].quantity.toString()),
+      (i) => TextEditingController(
+        text: widget.state.lines[i].quantity.toString(),
+      ),
     );
     _rateControllers = List.generate(
       widget.state.lines.length,
@@ -77,9 +81,53 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
     );
     _discountControllers = List.generate(
       widget.state.lines.length,
-      (i) => TextEditingController(text: widget.state.lines[i].discount.toString()),
+      (i) => TextEditingController(
+        text: widget.state.lines[i].discount.toString(),
+      ),
     );
     _focusNodes = List.generate(widget.state.lines.length, (_) => FocusNode());
+  }
+
+  void _syncControllers() {
+    if (_qtyControllers.length != widget.state.lines.length ||
+        _rateControllers.length != widget.state.lines.length ||
+        _discountControllers.length != widget.state.lines.length ||
+        _focusNodes.length != widget.state.lines.length) {
+      _initControllers();
+      return;
+    }
+
+    for (var i = 0; i < widget.state.lines.length; i++) {
+      final line = widget.state.lines[i];
+      _syncController(
+        _qtyControllers[i],
+        line.quantity.toString(),
+        _focusNodes[i],
+      );
+      _syncController(
+        _rateControllers[i],
+        line.rate.toString(),
+        _focusNodes[i],
+      );
+      _syncController(
+        _discountControllers[i],
+        line.discount.toString(),
+        _focusNodes[i],
+      );
+    }
+  }
+
+  void _syncController(
+    TextEditingController controller,
+    String value,
+    FocusNode focusNode,
+  ) {
+    if (focusNode.hasFocus || controller.text == value) return;
+    controller.value = controller.value.copyWith(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+      composing: TextRange.empty,
+    );
   }
 
   @override
@@ -109,7 +157,14 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
     final fmt = widget.fmt;
 
     if (isMobile) {
-      return _buildMobileCards(context, state, notifier, fmt, colors, textTheme);
+      return _buildMobileCards(
+        context,
+        state,
+        notifier,
+        fmt,
+        colors,
+        textTheme,
+      );
     }
 
     return ApexCard(
@@ -123,7 +178,13 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Text('Invoice Lines', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600, color: colors.textPrimary)),
+                Text(
+                  'Invoice Lines',
+                  style: textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: colors.textPrimary,
+                  ),
+                ),
                 const Spacer(),
                 PermissionGate(
                   permission: Permissions.productCreate,
@@ -138,191 +199,237 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
             ),
           ),
 
-          // Table
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: constraints.maxWidth),
-                    child: DataTable(
-                      headingRowColor: WidgetStatePropertyAll(colors.surfaceMuted),
-                      headingRowHeight: 48,
-                      dataRowMinHeight: 52,
-                      dataRowMaxHeight: 52,
-                      columnSpacing: 12,
-                      horizontalMargin: 16,
-                      showCheckboxColumn: false,
-                      columns: [
-                        DataColumn(label: _headerCell('#', width: 50)),
-                        DataColumn(label: _headerCell('Product / Description', width: 280)),
-                        DataColumn(label: _headerCell('HSN/SAC', width: 100), numeric: false),
-                        DataColumn(label: _headerCell('Qty', width: 80), numeric: true),
-                        DataColumn(label: _headerCell('Unit', width: 80)),
-                        DataColumn(label: _headerCell('Rate', width: 120), numeric: true),
-                        DataColumn(label: _headerCell('Disc %', width: 100), numeric: true),
-                        DataColumn(label: _headerCell('GST %', width: 90), numeric: true),
-                        DataColumn(label: _headerCell('Amount', width: 140), numeric: true),
-                        DataColumn(label: _headerCell('Actions', width: 100)),
-                      ],
-                      rows: List.generate(state.lines.length, (index) {
-                        final line = state.lines[index];
-                        final lineCalc = index < state.lineCalculations.length ? state.lineCalculations[index] : null;
-                        final isEditing = state.editingLineIndex == index;
-
-                        return DataRow(
-                          color: WidgetStateProperty.resolveWith((states) {
-                            if (isEditing) return colors.primaryContainer.withValues(alpha: 0.2);
-                            if (index.isEven) return colors.surfaceMuted.withValues(alpha: 0.3);
-                            return colors.surface;
-                          }),
-                          cells: [
-                            // Row Number
-                            DataCell(
-                              Center(
-                                child: Text(
-                                  '${index + 1}',
-                                  style: textTheme.bodyMedium?.copyWith(
-                                    color: colors.textSecondary,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Product / Description
-                            DataCell(
-                              _ProductCell(
-                                line: line,
-                                index: index,
-                                isEditing: isEditing,
-                                notifier: notifier,
-                                fmt: fmt,
-                                onTap: () => notifier.startLineEdit(index),
-                              ),
-                            ),
-                            // HSN/SAC
-                            DataCell(
-                              _HsnCell(
-                                line: line,
-                                index: index,
-                                isEditing: isEditing,
-                                notifier: notifier,
-                              ),
-                            ),
-                            // Quantity
-                            DataCell(
-                              _NumericCell(
-                                controller: _qtyControllers[index],
-                                focusNode: _focusNodes[index],
-                                value: line.quantity,
-                                onChanged: (v) => notifier.updateLineField(index, 'quantity', v),
-                                onSubmitted: (_) => _moveFocus(index, 1),
-                                format: (v) => fmt.decimal(v),
-                              ),
-                            ),
-                            // Unit
-                            DataCell(
-                              _UnitCell(
-                                line: line,
-                                index: index,
-                                isEditing: isEditing,
-                                notifier: notifier,
-                              ),
-                            ),
-                            // Rate
-                            DataCell(
-                              _NumericCell(
-                                controller: _rateControllers[index],
-                                focusNode: _focusNodes[index],
-                                value: line.rate,
-                                onChanged: (v) => notifier.updateLineField(index, 'rate', v),
-                                onSubmitted: (_) => _moveFocus(index, 2),
-                                format: (v) => fmt.currency(v),
-                              ),
-                            ),
-                            // Discount %
-                            DataCell(
-                              _NumericCell(
-                                controller: _discountControllers[index],
-                                focusNode: _focusNodes[index],
-                                value: line.discount,
-                                onChanged: (v) => notifier.updateLineField(index, 'discount', v),
-                                onSubmitted: (_) => _moveFocus(index, 3),
-                                format: (v) => '${v.toStringAsFixed(2)}%',
-                              ),
-                            ),
-                            // GST %
-                            DataCell(
-                              _GstRateCell(
-                                line: line,
-                                index: index,
-                                isEditing: isEditing,
-                                notifier: notifier,
-                              ),
-                            ),
-                            // Amount
-                            DataCell(
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: Text(
-                                  lineCalc != null
-                                      ? fmt.currency(lineCalc.total)
-                                      : fmt.currency(line.quantity * line.rate * (1 - line.discount / 100)),
-                                  style: textTheme.bodyMedium?.copyWith(
-                                    color: colors.textPrimary,
-                                    fontWeight: FontWeight.w600,
-                                    fontFamily: 'JetBrains Mono',
-                                    fontFeatures: const [FontFeature.tabularFigures()],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            // Actions
-                            DataCell(
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  if (isEditing)
-                                    ApexIconButton(
-                                      icon: Icons.check,
-                                      onPressed: () => notifier.cancelLineEdit(),
-                                      tooltip: 'Done editing',
-                                      size: 36,
-                                    )
-                                  else
-                                    ApexIconButton(
-                                      icon: Icons.edit,
-                                      onPressed: () => notifier.startLineEdit(index),
-                                      tooltip: 'Edit line',
-                                      size: 36,
-                                    ),
-                                  ApexIconButton(
-                                    icon: Icons.copy,
-                                    onPressed: () => notifier.duplicateLine(index),
-                                    tooltip: 'Duplicate line',
-                                    size: 36,
-                                  ),
-                                  ApexIconButton(
-                                    icon: Icons.delete_outline,
-                                    onPressed: state.lines.length > 1
-                                        ? () => notifier.removeLine(index)
-                                        : null,
-                                    tooltip: 'Remove line',
-                                    size: 36,
-                                    isDestructive: true,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      }),
+          // Table — sized to content; the form's outer scroll view scrolls
+          // vertically, so a flex child here would be unbounded.
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minWidth: constraints.maxWidth),
+                  child: DataTable(
+                    headingRowColor: WidgetStatePropertyAll(
+                      colors.surfaceMuted,
                     ),
+                    headingRowHeight: 48,
+                    dataRowMinHeight: 52,
+                    dataRowMaxHeight: 52,
+                    columnSpacing: 12,
+                    horizontalMargin: 16,
+                    showCheckboxColumn: false,
+                    columns: [
+                      DataColumn(label: _headerCell('#', width: 50)),
+                      DataColumn(
+                        label: _headerCell('Product / Description', width: 280),
+                      ),
+                      DataColumn(
+                        label: _headerCell('HSN/SAC', width: 100),
+                        numeric: false,
+                      ),
+                      DataColumn(
+                        label: _headerCell('Qty', width: 80),
+                        numeric: true,
+                      ),
+                      DataColumn(label: _headerCell('Unit', width: 80)),
+                      DataColumn(
+                        label: _headerCell('Rate', width: 120),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: _headerCell('Disc %', width: 100),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: _headerCell('GST %', width: 90),
+                        numeric: true,
+                      ),
+                      DataColumn(
+                        label: _headerCell('Amount', width: 140),
+                        numeric: true,
+                      ),
+                      DataColumn(label: _headerCell('Actions', width: 100)),
+                    ],
+                    rows: List.generate(state.lines.length, (index) {
+                      final line = state.lines[index];
+                      final lineCalc = index < state.lineCalculations.length
+                          ? state.lineCalculations[index]
+                          : null;
+                      final isEditing = state.editingLineIndex == index;
+
+                      return DataRow(
+                        color: WidgetStateProperty.resolveWith((states) {
+                          if (isEditing) {
+                            return colors.primaryContainer.withValues(
+                              alpha: 0.2,
+                            );
+                          }
+                          if (index.isEven) {
+                            return colors.surfaceMuted.withValues(alpha: 0.3);
+                          }
+                          return colors.surface;
+                        }),
+                        cells: [
+                          // Row Number
+                          DataCell(
+                            Center(
+                              child: Text(
+                                '${index + 1}',
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: colors.textSecondary,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Product / Description
+                          DataCell(
+                            _ProductCell(
+                              line: line,
+                              index: index,
+                              isEditing: isEditing,
+                              notifier: notifier,
+                              fmt: fmt,
+                              onTap: () => notifier.startLineEdit(index),
+                            ),
+                          ),
+                          // HSN/SAC
+                          DataCell(
+                            _HsnCell(
+                              line: line,
+                              index: index,
+                              isEditing: isEditing,
+                              notifier: notifier,
+                            ),
+                          ),
+                          // Quantity
+                          DataCell(
+                            _NumericCell(
+                              controller: _qtyControllers[index],
+                              focusNode: _focusNodes[index],
+                              value: line.quantity,
+                              onChanged: (v) => notifier.updateLineField(
+                                index,
+                                'quantity',
+                                v,
+                              ),
+                              onSubmitted: (_) => _moveFocus(index, 1),
+                              format: (v) => fmt.decimal(v),
+                            ),
+                          ),
+                          // Unit
+                          DataCell(
+                            _UnitCell(
+                              line: line,
+                              index: index,
+                              isEditing: isEditing,
+                              notifier: notifier,
+                            ),
+                          ),
+                          // Rate
+                          DataCell(
+                            _NumericCell(
+                              controller: _rateControllers[index],
+                              focusNode: _focusNodes[index],
+                              value: line.rate,
+                              onChanged: (v) =>
+                                  notifier.updateLineField(index, 'rate', v),
+                              onSubmitted: (_) => _moveFocus(index, 2),
+                              format: (v) => fmt.currency(v),
+                            ),
+                          ),
+                          // Discount %
+                          DataCell(
+                            _NumericCell(
+                              controller: _discountControllers[index],
+                              focusNode: _focusNodes[index],
+                              value: line.discount,
+                              onChanged: (v) => notifier.updateLineField(
+                                index,
+                                'discount',
+                                v,
+                              ),
+                              onSubmitted: (_) => _moveFocus(index, 3),
+                              format: (v) => '${v.toStringAsFixed(2)}%',
+                            ),
+                          ),
+                          // GST %
+                          DataCell(
+                            _GstRateCell(
+                              line: line,
+                              index: index,
+                              isEditing: isEditing,
+                              notifier: notifier,
+                            ),
+                          ),
+                          // Amount
+                          DataCell(
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: Text(
+                                lineCalc != null
+                                    ? fmt.currency(lineCalc.total)
+                                    : fmt.currency(
+                                        line.quantity *
+                                            line.rate *
+                                            (1 - line.discount / 100),
+                                      ),
+                                style: textTheme.bodyMedium?.copyWith(
+                                  color: colors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                  fontFamily: 'JetBrains Mono',
+                                  fontFeatures: const [
+                                    FontFeature.tabularFigures(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                          // Actions
+                          DataCell(
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (isEditing)
+                                  ApexIconButton(
+                                    icon: Icons.check,
+                                    onPressed: () => notifier.cancelLineEdit(),
+                                    tooltip: 'Done editing',
+                                    size: 36,
+                                  )
+                                else
+                                  ApexIconButton(
+                                    icon: Icons.edit,
+                                    onPressed: () =>
+                                        notifier.startLineEdit(index),
+                                    tooltip: 'Edit line',
+                                    size: 36,
+                                  ),
+                                ApexIconButton(
+                                  icon: Icons.copy,
+                                  onPressed: () =>
+                                      notifier.duplicateLine(index),
+                                  tooltip: 'Duplicate line',
+                                  size: 36,
+                                ),
+                                ApexIconButton(
+                                  icon: Icons.delete_outline,
+                                  onPressed: state.lines.length > 1
+                                      ? () => notifier.removeLine(index)
+                                      : null,
+                                  tooltip: 'Remove line',
+                                  size: 36,
+                                  isDestructive: true,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
                   ),
-                );
-              },
-            ),
+                ),
+              );
+            },
           ),
 
           // Empty state message
@@ -332,11 +439,17 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.table_rows_outlined, size: 48, color: colors.textMuted),
+                    Icon(
+                      Icons.table_rows_outlined,
+                      size: 48,
+                      color: colors.textMuted,
+                    ),
                     const SizedBox(height: 12),
                     Text(
                       'No lines added yet',
-                      style: textTheme.bodyLarge?.copyWith(color: colors.textSecondary),
+                      style: textTheme.bodyLarge?.copyWith(
+                        color: colors.textSecondary,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     PermissionGate(
@@ -371,7 +484,12 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
           padding: const EdgeInsets.all(16),
           child: Row(
             children: [
-              Text('Invoice Lines', style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+              Text(
+                'Invoice Lines',
+                style: textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const Spacer(),
               PermissionGate(
                 permission: Permissions.productCreate,
@@ -393,7 +511,9 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
           separatorBuilder: (_, _) => const SizedBox(height: 12),
           itemBuilder: (context, index) {
             final line = state.lines[index];
-            final lineCalc = index < state.lineCalculations.length ? state.lineCalculations[index] : null;
+            final lineCalc = index < state.lineCalculations.length
+                ? state.lineCalculations[index]
+                : null;
             final isEditing = state.editingLineIndex == index;
 
             return ApexCard(
@@ -421,7 +541,8 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
                           controller: _qtyControllers[index],
                           focusNode: _focusNodes[index],
                           value: line.quantity,
-                          onChanged: (v) => notifier.updateLineField(index, 'quantity', v),
+                          onChanged: (v) =>
+                              notifier.updateLineField(index, 'quantity', v),
                           format: (v) => fmt.decimal(v),
                         ),
                       ),
@@ -432,7 +553,8 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
                           controller: _rateControllers[index],
                           focusNode: _focusNodes[index],
                           value: line.rate,
-                          onChanged: (v) => notifier.updateLineField(index, 'rate', v),
+                          onChanged: (v) =>
+                              notifier.updateLineField(index, 'rate', v),
                           format: (v) => fmt.currency(v),
                         ),
                       ),
@@ -443,7 +565,8 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
                           controller: _discountControllers[index],
                           focusNode: _focusNodes[index],
                           value: line.discount,
-                          onChanged: (v) => notifier.updateLineField(index, 'discount', v),
+                          onChanged: (v) =>
+                              notifier.updateLineField(index, 'discount', v),
                           format: (v) => '${v.toStringAsFixed(2)}%',
                         ),
                       ),
@@ -453,11 +576,32 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
                   // HSN, Unit, GST
                   Row(
                     children: [
-                      Expanded(child: _HsnCell(line: line, index: index, isEditing: isEditing, notifier: notifier)),
+                      Expanded(
+                        child: _HsnCell(
+                          line: line,
+                          index: index,
+                          isEditing: isEditing,
+                          notifier: notifier,
+                        ),
+                      ),
                       const SizedBox(width: 12),
-                      Expanded(child: _UnitCell(line: line, index: index, isEditing: isEditing, notifier: notifier)),
+                      Expanded(
+                        child: _UnitCell(
+                          line: line,
+                          index: index,
+                          isEditing: isEditing,
+                          notifier: notifier,
+                        ),
+                      ),
                       const SizedBox(width: 12),
-                      Expanded(child: _GstRateCell(line: line, index: index, isEditing: isEditing, notifier: notifier)),
+                      Expanded(
+                        child: _GstRateCell(
+                          line: line,
+                          index: index,
+                          isEditing: isEditing,
+                          notifier: notifier,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 12),
@@ -478,13 +622,27 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           if (isEditing)
-                            ApexIconButton(icon: Icons.check, onPressed: () => notifier.cancelLineEdit(), size: 36)
+                            ApexIconButton(
+                              icon: Icons.check,
+                              onPressed: () => notifier.cancelLineEdit(),
+                              size: 36,
+                            )
                           else
-                            ApexIconButton(icon: Icons.edit, onPressed: () => notifier.startLineEdit(index), size: 36),
-                          ApexIconButton(icon: Icons.copy, onPressed: () => notifier.duplicateLine(index), size: 36),
+                            ApexIconButton(
+                              icon: Icons.edit,
+                              onPressed: () => notifier.startLineEdit(index),
+                              size: 36,
+                            ),
+                          ApexIconButton(
+                            icon: Icons.copy,
+                            onPressed: () => notifier.duplicateLine(index),
+                            size: 36,
+                          ),
                           ApexIconButton(
                             icon: Icons.delete_outline,
-                            onPressed: state.lines.length > 1 ? () => notifier.removeLine(index) : null,
+                            onPressed: state.lines.length > 1
+                                ? () => notifier.removeLine(index)
+                                : null,
                             isDestructive: true,
                             size: 36,
                           ),
@@ -515,21 +673,38 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: textTheme.labelSmall?.copyWith(color: colors.textSecondary)),
+        Text(
+          label,
+          style: textTheme.labelSmall?.copyWith(color: colors.textSecondary),
+        ),
         const SizedBox(height: 4),
         TextFormField(
           controller: controller,
           focusNode: focusNode,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp(r'[0-9.]')),
+          ],
           onChanged: (v) => onChanged(double.tryParse(v) ?? 0),
           style: textTheme.bodyMedium?.copyWith(fontFamily: 'JetBrains Mono'),
           decoration: InputDecoration(
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: colors.border)),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: colors.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: colors.primary, width: 2)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: colors.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: colors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: colors.primary, width: 2),
+            ),
           ),
         ),
       ],
@@ -543,7 +718,10 @@ class _InvoiceLinesTableState extends ConsumerState<InvoiceLinesTable> {
       width: width,
       child: Text(
         label,
-        style: textTheme.labelMedium?.copyWith(color: colors.textSecondary, fontWeight: FontWeight.w600),
+        style: textTheme.labelMedium?.copyWith(
+          color: colors.textSecondary,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     );
   }
@@ -607,18 +785,27 @@ class _ProductCell extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Text(
-              line.productName?.isNotEmpty == true ? line.productName! : (line.description?.isNotEmpty == true ? line.description! : 'No product selected'),
+              line.productName?.isNotEmpty == true
+                  ? line.productName!
+                  : (line.description?.isNotEmpty == true
+                        ? line.description!
+                        : 'No product selected'),
               style: textTheme.bodyMedium?.copyWith(
-                color: line.productName?.isNotEmpty == true ? colors.textPrimary : colors.textMuted,
+                color: line.productName?.isNotEmpty == true
+                    ? colors.textPrimary
+                    : colors.textMuted,
                 fontWeight: FontWeight.w500,
               ),
               overflow: TextOverflow.ellipsis,
               maxLines: 1,
             ),
-            if (line.description?.isNotEmpty == true && line.productName != line.description)
+            if (line.description?.isNotEmpty == true &&
+                line.productName != line.description)
               Text(
                 line.description!,
-                style: textTheme.bodySmall?.copyWith(color: colors.textSecondary),
+                style: textTheme.bodySmall?.copyWith(
+                  color: colors.textSecondary,
+                ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 1,
               ),
@@ -648,12 +835,16 @@ class _ProductSearchField extends ConsumerWidget {
       label: '',
       suggestions: products,
       value: line.productId.isNotEmpty
-          ? products.firstWhere((p) => p.id == line.productId, orElse: () => products.first)
+          ? products.firstWhere(
+              (p) => p.id == line.productId,
+              orElse: () => products.first,
+            )
           : null,
       hint: 'Search product...',
       prefixIcon: Icons.search,
       getLabel: (p) => p.name,
-      getSubtitle: (p) => '${p.hsnSac} • ${p.salesPrice > 0 ? '₹${p.salesPrice.toStringAsFixed(2)}' : ''}',
+      getSubtitle: (p) =>
+          '${p.hsnSac} • ${p.salesPrice > 0 ? '₹${p.salesPrice.toStringAsFixed(2)}' : ''}',
       onSelected: (product) {
         if (product != null) {
           notifier.applyProductToLine(index, product);
@@ -690,9 +881,18 @@ class _HsnCell extends StatelessWidget {
           style: textTheme.bodyMedium?.copyWith(fontFamily: 'JetBrains Mono'),
           decoration: InputDecoration(
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: colors.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: colors.primary, width: 2)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(color: colors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(color: colors.primary, width: 2),
+            ),
           ),
           onChanged: (v) => notifier.updateLineField(index, 'hsnSac', v),
         ),
@@ -727,20 +927,43 @@ class _UnitCell extends StatelessWidget {
   Widget build(BuildContext context) {
     final colors = apexColors(context);
     final textTheme = Theme.of(context).textTheme;
-    const units = ['PCS', 'KG', 'MTR', 'LTR', 'BOX', 'SET', 'ROLL', 'SQFT', 'CFT', 'NOS'];
+    const units = [
+      'PCS',
+      'KG',
+      'MTR',
+      'LTR',
+      'BOX',
+      'SET',
+      'ROLL',
+      'SQFT',
+      'CFT',
+      'NOS',
+    ];
 
     if (isEditing) {
       return SizedBox(
         width: 80,
         child: DropdownButtonFormField<String>(
           initialValue: line.unit?.isNotEmpty == true ? line.unit : 'PCS',
-          items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
-          onChanged: (v) => v != null ? notifier.updateLineField(index, 'unit', v) : null,
+          items: units
+              .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+              .toList(),
+          onChanged: (v) =>
+              v != null ? notifier.updateLineField(index, 'unit', v) : null,
           decoration: InputDecoration(
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: colors.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: colors.primary, width: 2)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(color: colors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(color: colors.primary, width: 2),
+            ),
           ),
           style: textTheme.bodyMedium,
           isExpanded: true,
@@ -780,13 +1003,28 @@ class _GstRateCell extends StatelessWidget {
         width: 90,
         child: DropdownButtonFormField<double>(
           initialValue: line.gstRate,
-          items: gstRates.map((r) => DropdownMenuItem(value: r.toDouble(), child: Text('$r%'))).toList(),
-          onChanged: (v) => v != null ? notifier.updateLineField(index, 'gstRate', v) : null,
+          items: gstRates
+              .map(
+                (r) =>
+                    DropdownMenuItem(value: r.toDouble(), child: Text('$r%')),
+              )
+              .toList(),
+          onChanged: (v) =>
+              v != null ? notifier.updateLineField(index, 'gstRate', v) : null,
           decoration: InputDecoration(
             isDense: true,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: colors.border)),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: colors.primary, width: 2)),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 8,
+              vertical: 8,
+            ),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(color: colors.border),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(6),
+              borderSide: BorderSide(color: colors.primary, width: 2),
+            ),
           ),
           style: textTheme.bodyMedium?.copyWith(fontFamily: 'JetBrains Mono'),
           isExpanded: true,
@@ -837,13 +1075,25 @@ class _NumericCell extends StatelessWidget {
         inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.]'))],
         onChanged: (v) => onChanged(double.tryParse(v) ?? 0),
         onFieldSubmitted: onSubmitted,
-        style: textTheme.bodyMedium?.copyWith(fontFamily: 'JetBrains Mono', fontFeatures: const [FontFeature.tabularFigures()]),
+        style: textTheme.bodyMedium?.copyWith(
+          fontFamily: 'JetBrains Mono',
+          fontFeatures: const [FontFeature.tabularFigures()],
+        ),
         textAlign: TextAlign.right,
         decoration: InputDecoration(
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: colors.border)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(6), borderSide: BorderSide(color: colors.primary, width: 2)),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 8,
+            vertical: 8,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide(color: colors.border),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide(color: colors.primary, width: 2),
+          ),
         ),
       ),
     );

@@ -44,7 +44,9 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
     _formFocusNode = FocusNode();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (widget.editId != null) {
-        ref.read(invoiceFormNotifierProvider.notifier).loadForEdit(widget.editId!);
+        ref
+            .read(invoiceFormNotifierProvider.notifier)
+            .loadForEdit(widget.editId!);
       } else {
         ref.read(invoiceFormNotifierProvider.notifier).initializeNew();
       }
@@ -101,24 +103,93 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
 
               // Main Content
               Expanded(
-                child: LayoutBuilder(
-                  builder: (context, constraints) {
-                    final isWide = constraints.maxWidth >= 1200;
-                    return SingleChildScrollView(
-                      physics: const ClampingScrollPhysics(),
-                      padding: EdgeInsets.all(isMobile ? 16 : 24),
-                      child: isWide && !isMobile
-                          ? _buildWideLayout(context, state, notifier, fmt, colors)
-                          : _buildNarrowLayout(context, state, notifier, fmt, colors),
-                    );
-                  },
+                child: _buildBody(
+                  state,
+                  notifier,
+                  fmt,
+                  colors,
+                  isMobile,
+                  isTablet,
                 ),
               ),
 
               // Fixed Footer Actions (on mobile/tablet)
-              if (isMobile || isTablet) _buildMobileFooter(state, notifier, colors),
+              if (isMobile || isTablet)
+                _buildMobileFooter(state, notifier, colors),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(
+    InvoiceFormState state,
+    InvoiceFormNotifier notifier,
+    NumberFormatter fmt,
+    ApexColors colors,
+    bool isMobile,
+    bool isTablet,
+  ) {
+    // Explicit loading state while an existing invoice initializes.
+    if (state.isLoading && widget.editId != null) {
+      return const Center(child: ApexSkeletonLoader());
+    }
+
+    // Explicit error state when initialization fails — never a blank panel.
+    if (state.error != null && widget.editId != null) {
+      return _buildInitError(state, notifier, colors);
+    }
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 1200;
+        return SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
+          child: isWide && !isMobile
+              ? _buildWideLayout(context, state, notifier, fmt, colors)
+              : _buildNarrowLayout(context, state, notifier, fmt, colors),
+        );
+      },
+    );
+  }
+
+  Widget _buildInitError(
+    InvoiceFormState state,
+    InvoiceFormNotifier notifier,
+    ApexColors colors,
+  ) {
+    final textTheme = Theme.of(context).textTheme;
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: colors.error),
+            const SizedBox(height: 16),
+            Text(
+              'Failed to load invoice',
+              style: textTheme.headlineSmall?.copyWith(
+                color: colors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              state.error!,
+              style: textTheme.bodyMedium?.copyWith(
+                color: colors.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ApexPrimaryButton(
+              icon: Icons.refresh,
+              label: 'Retry',
+              onPressed: () => notifier.loadForEdit(widget.editId!),
+            ),
+          ],
         ),
       ),
     );
@@ -139,23 +210,11 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
           flex: 3,
           child: Column(
             children: [
-              InvoiceHeaderSection(
-                state: state,
-                notifier: notifier,
-                fmt: fmt,
-              ),
+              InvoiceHeaderSection(state: state, notifier: notifier, fmt: fmt),
               const SizedBox(height: 24),
-              InvoiceLinesTable(
-                state: state,
-                notifier: notifier,
-                fmt: fmt,
-              ),
+              InvoiceLinesTable(state: state, notifier: notifier, fmt: fmt),
               const SizedBox(height: 24),
-              InvoiceFooter(
-                state: state,
-                notifier: notifier,
-                fmt: fmt,
-              ),
+              InvoiceFooter(state: state, notifier: notifier, fmt: fmt),
             ],
           ),
         ),
@@ -183,29 +242,13 @@ class _InvoiceFormScreenState extends ConsumerState<InvoiceFormScreen> {
   ) {
     return Column(
       children: [
-        InvoiceHeaderSection(
-          state: state,
-          notifier: notifier,
-          fmt: fmt,
-        ),
+        InvoiceHeaderSection(state: state, notifier: notifier, fmt: fmt),
         const SizedBox(height: 24),
-        InvoiceLinesTable(
-          state: state,
-          notifier: notifier,
-          fmt: fmt,
-        ),
+        InvoiceLinesTable(state: state, notifier: notifier, fmt: fmt),
         const SizedBox(height: 24),
-        InvoiceTotalsPanel(
-          state: state,
-          notifier: notifier,
-          fmt: fmt,
-        ),
+        InvoiceTotalsPanel(state: state, notifier: notifier, fmt: fmt),
         const SizedBox(height: 24),
-        InvoiceFooter(
-          state: state,
-          notifier: notifier,
-          fmt: fmt,
-        ),
+        InvoiceFooter(state: state, notifier: notifier, fmt: fmt),
       ],
     );
   }
