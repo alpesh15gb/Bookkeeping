@@ -28,7 +28,7 @@ class EmptyState extends StatelessWidget {
     final colors = apexColors(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(ApexSpacing.xxl),
+        padding: const EdgeInsets.all(ApexSpacing_xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -41,14 +41,14 @@ class EmptyState extends StatelessWidget {
               ),
               child: Icon(icon, size: 32, color: colors.textMuted),
             ),
-            const SizedBox(height: ApexSpacing.lg),
+            const SizedBox(height: ApexSpacing_lg),
             Text(
               title,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.titleMedium,
             ),
             if (subtitle != null) ...[
-              const SizedBox(height: ApexSpacing.sm),
+              const SizedBox(height: ApexSpacing_sm),
               Text(
                 subtitle!,
                 textAlign: TextAlign.center,
@@ -58,7 +58,7 @@ class EmptyState extends StatelessWidget {
               ),
             ],
             if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: ApexSpacing.xl),
+              const SizedBox(height: ApexSpacing_xl),
               FilledButton.icon(
                 onPressed: onAction,
                 icon: const Icon(Icons.add_rounded),
@@ -84,7 +84,7 @@ class ErrorView extends StatelessWidget {
     final colors = apexColors(context);
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(ApexSpacing.xxl),
+        padding: const EdgeInsets.all(ApexSpacing_xxl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -101,12 +101,12 @@ class ErrorView extends StatelessWidget {
                 color: colors.danger,
               ),
             ),
-            const SizedBox(height: ApexSpacing.lg),
+            const SizedBox(height: ApexSpacing_lg),
             Text(
               'Something went wrong',
               style: Theme.of(context).textTheme.titleMedium,
             ),
-            const SizedBox(height: ApexSpacing.sm),
+            const SizedBox(height: ApexSpacing_sm),
             Text(
               message,
               textAlign: TextAlign.center,
@@ -115,7 +115,7 @@ class ErrorView extends StatelessWidget {
               ).textTheme.bodyMedium?.copyWith(color: colors.textSecondary),
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: ApexSpacing.xl),
+              const SizedBox(height: ApexSpacing_xl),
               OutlinedButton.icon(
                 onPressed: onRetry,
                 icon: const Icon(Icons.refresh_rounded),
@@ -160,7 +160,7 @@ class LoadingState extends StatelessWidget {
         children: [
           const LoadingSpinner(size: 32),
           if (label != null) ...[
-            const SizedBox(height: ApexSpacing.md),
+            const SizedBox(height: ApexSpacing_md),
             Text(
               label!,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(

@@ -145,7 +145,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
             margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
               color: colors.danger.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(ApexRadius.md),
+              borderRadius: BorderRadius.circular(ApexRadius_md),
             ),
             child: Text(
               state.error!,
@@ -328,7 +328,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
         hintText: hint,
         isDense: true,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(ApexRadius.sm),
+          borderRadius: BorderRadius.circular(ApexRadius_sm),
         ),
       ),
       style: const TextStyle(fontSize: 13),
@@ -353,7 +353,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
         labelStyle: TextStyle(fontSize: 13, color: colors.textMuted),
         isDense: true,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(ApexRadius.sm),
+          borderRadius: BorderRadius.circular(ApexRadius_sm),
         ),
       ),
       items: warehouses
@@ -382,7 +382,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         border: Border.all(color: colors.border),
       ),
       child: Row(
@@ -452,7 +452,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
         hintText: 'Qty',
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(ApexRadius.sm),
+          borderRadius: BorderRadius.circular(ApexRadius_sm),
         ),
       ),
       onChanged: (v) => onChanged(double.tryParse(v) ?? 0),
@@ -499,7 +499,7 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
             vertical: 8,
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(ApexRadius.sm),
+            borderRadius: BorderRadius.circular(ApexRadius_sm),
           ),
         ),
       ),
@@ -509,13 +509,13 @@ class _TransferFormScreenState extends ConsumerState<TransferFormScreen> {
           alignment: Alignment.topLeft,
           child: Material(
             elevation: 6,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
+            borderRadius: BorderRadius.circular(ApexRadius_md),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 300, maxWidth: 380),
               child: Container(
                 decoration: BoxDecoration(
                   color: colors.surfaceRaised,
-                  borderRadius: BorderRadius.circular(ApexRadius.md),
+                  borderRadius: BorderRadius.circular(ApexRadius_md),
                   border: Border.all(color: colors.border),
                 ),
                 child: ListView.builder(

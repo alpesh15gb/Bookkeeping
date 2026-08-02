@@ -265,7 +265,7 @@ class _GoodsReceiptFormScreenState
           decoration: BoxDecoration(
             color: colors.surfaceMuted,
             borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(ApexRadius.lg),
+              top: Radius.circular(ApexRadius_lg),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -409,7 +409,7 @@ class _PoSelectorField extends ConsumerWidget {
           );
         }
         return InkWell(
-          borderRadius: BorderRadius.circular(ApexRadius.sm),
+          borderRadius: BorderRadius.circular(ApexRadius_sm),
           onTap: () async {
             final chosen = await showModalBottomSheet<String>(
               context: context,
@@ -481,7 +481,7 @@ class _PoSelectorField extends ConsumerWidget {
   Widget _box(ApexColors colors, Widget child) => Container(
     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
     decoration: BoxDecoration(
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
       border: Border.all(color: colors.border),
     ),
     child: child,
@@ -502,7 +502,7 @@ class _DateField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
       onTap: () async {
         final init = parse(value) ?? DateTime.now();
         final picked = await showDatePicker(
@@ -516,7 +516,7 @@ class _DateField extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(ApexRadius.sm),
+          borderRadius: BorderRadius.circular(ApexRadius_sm),
           border: Border.all(color: colors.border),
         ),
         child: Row(
@@ -647,11 +647,11 @@ class _ReceiptLineRowState extends State<_ReceiptLineRow> {
                   vertical: 8,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  borderRadius: BorderRadius.circular(ApexRadius_sm),
                 ),
                 enabledBorder: over
                     ? OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(ApexRadius.sm),
+                        borderRadius: BorderRadius.circular(ApexRadius_sm),
                         borderSide: BorderSide(color: c.danger),
                       )
                     : null,
@@ -671,7 +671,7 @@ class _ReceiptLineRowState extends State<_ReceiptLineRow> {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: c.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: c.border),
       ),
       child: Column(
@@ -682,7 +682,7 @@ class _ReceiptLineRowState extends State<_ReceiptLineRow> {
             decoration: BoxDecoration(
               color: c.surfaceMuted,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(ApexRadius.lg),
+                top: Radius.circular(ApexRadius_lg),
               ),
             ),
             child: Text(
@@ -797,11 +797,11 @@ class _ReceiptLineRowState extends State<_ReceiptLineRow> {
               vertical: 12,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
               borderSide: BorderSide(color: c.border),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
               borderSide: BorderSide(color: c.primary, width: 1.5),
             ),
             filled: true,
@@ -825,7 +825,7 @@ class _ReceiptLineRowState extends State<_ReceiptLineRow> {
           vertical: 10,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(ApexRadius.sm),
+          borderRadius: BorderRadius.circular(ApexRadius_sm),
         ),
       ),
       hint: Text(
@@ -855,7 +855,7 @@ class _ReceiptLineRowState extends State<_ReceiptLineRow> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: c.surfaceMuted,
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

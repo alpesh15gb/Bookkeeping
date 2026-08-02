@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/dialogs/dialog_service.dart';
-import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
-import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/masters/contacts/presentation/contact_controller.dart';
 import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
@@ -370,7 +369,7 @@ class _BillFormScreenState extends ConsumerState<BillFormScreen> {
           decoration: BoxDecoration(
             color: colors.surfaceMuted,
             borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(ApexRadius.lg),
+              top: Radius.circular(ApexRadius_lg),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -879,7 +878,7 @@ class _DateField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
       onTap: () async {
         final init = parse(value) ?? DateTime.now();
         final picked = await showDatePicker(
@@ -1078,7 +1077,7 @@ class _BillLineRowState extends State<_BillLineRow> {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: c.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: c.border),
       ),
       child: Column(
@@ -1089,7 +1088,7 @@ class _BillLineRowState extends State<_BillLineRow> {
             decoration: BoxDecoration(
               color: c.surfaceMuted,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(ApexRadius.lg),
+                top: Radius.circular(ApexRadius_lg),
               ),
             ),
             child: Row(
@@ -1236,11 +1235,11 @@ class _BillLineRowState extends State<_BillLineRow> {
               vertical: 12,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
               borderSide: BorderSide(color: c.border),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
               borderSide: BorderSide(color: c.primary, width: 1.5),
             ),
             filled: true,
@@ -1266,7 +1265,7 @@ class _BillLineRowState extends State<_BillLineRow> {
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(ApexRadius.sm),
+          borderRadius: BorderRadius.circular(ApexRadius_sm),
         ),
       ),
       onChanged: onChanged,
@@ -1343,7 +1342,7 @@ class _ProductField extends ConsumerWidget {
                       vertical: 8,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                      borderRadius: BorderRadius.circular(ApexRadius_sm),
                     ),
                   ),
                 ),
@@ -1380,7 +1379,7 @@ InputDecoration _dec(ApexColors colors, {String? hint, IconData? icon}) =>
           : Icon(icon, size: 18, color: colors.textMuted),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
       ),
     );
 
@@ -1397,13 +1396,13 @@ Widget _optionsPanel<T extends Object>(
     alignment: Alignment.topLeft,
     child: Material(
       elevation: 6,
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxHeight: 300, maxWidth: 420),
         child: Container(
           decoration: BoxDecoration(
             color: colors.surfaceRaised,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
+            borderRadius: BorderRadius.circular(ApexRadius_md),
             border: Border.all(color: colors.border),
           ),
           child: ListView.builder(

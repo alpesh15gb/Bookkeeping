@@ -67,6 +67,13 @@ class VendorBillService {
     });
   }
 
+  /// Delete a draft bill.
+  Future<Result<void>> delete(String id) {
+    return guardDio(() async {
+      await _dio.delete('/bills/$id');
+    });
+  }
+
   /// Returns the /print path for downloading PDF from the backend.
   String getPdfUrl(String id) => '/bills/$id/print';
 }

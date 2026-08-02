@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:apexbooks/core/utils/formatters.dart';
 import 'invoice_status.dart';
 import 'invoice_line.dart';
+import '../payments/models/payment_models.dart';
 
 @immutable
 class Invoice {
@@ -47,6 +48,8 @@ class Invoice {
     this.tcsAmount = 0,
     this.contactName,
     this.lines = const [],
+    this.originStateCode,
+    this.payments = const [],
     this.createdAt,
     this.updatedAt,
   });
@@ -89,10 +92,14 @@ class Invoice {
   final double tcsAmount;
   final String? contactName;
   final List<InvoiceLine> lines;
+  final String? originStateCode;
+  final List<Payment> payments;
   final String? createdAt;
   final String? updatedAt;
 
+  double get outstandingAmount => total - amountPaid;
   double get outstanding => total - amountPaid;
+  String? get customerName => contactName;
   double get netAmount => subtotal - discountTotal + shippingCharges;
   double get totalTax =>
       cgstAmount + sgstAmount + igstAmount + utgstAmount + cessAmount;
@@ -178,6 +185,8 @@ class InvoiceListItem {
   final String? createdAt;
 
   double get outstanding => total - amountPaid;
+  double get outstandingAmount => total - amountPaid;
+  String get customerName => contactName;
 
   factory InvoiceListItem.fromJson(Map<String, dynamic> json) =>
       InvoiceListItem(

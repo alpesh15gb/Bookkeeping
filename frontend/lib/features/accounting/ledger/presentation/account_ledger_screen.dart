@@ -6,9 +6,9 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
-import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/page_header.dart' hide ApexCard;
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
@@ -256,12 +256,12 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
     final label = date != null ? _fmtDate(date) : 'Select';
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           border: Border.all(color: colors.border),
         ),
         child: Row(
@@ -831,7 +831,7 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: colors.primary.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
       ),
       child: Text(
         label,
@@ -863,7 +863,7 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
       ),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: colors.border),
       ),
       child: Row(
@@ -914,7 +914,7 @@ class _AccountLedgerScreenState extends ConsumerState<AccountLedgerScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         onTap: enabled ? onTap : null,
         child: Container(
           padding: const EdgeInsets.symmetric(

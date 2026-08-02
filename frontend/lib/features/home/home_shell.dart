@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/features/auth/data/models/membership_models.dart';
@@ -569,7 +570,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
       width: 280,
       child: ListTile(
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           side: BorderSide(color: colors.border),
         ),
         leading: Icon(icon, color: colors.primary),
@@ -661,7 +662,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
           _selectSection(name);
           if (closeDrawer && mounted) Navigator.of(context).pop();
         },
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
         child: Container(
           padding: EdgeInsets.only(
             left: compact ? 10 : 9,
@@ -673,7 +674,7 @@ class _HomeShellState extends ConsumerState<HomeShell> {
             color: active
                 ? colors.primaryContainer.withValues(alpha: 0.30)
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(ApexRadius.sm),
+            borderRadius: BorderRadius.circular(ApexRadius_sm),
             border: Border(
               left: BorderSide(
                 color: active ? colors.primary : Colors.transparent,

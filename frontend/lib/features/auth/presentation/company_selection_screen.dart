@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/design_system/index.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/states.dart';
 import '../data/models/membership_models.dart';
@@ -122,7 +123,7 @@ class _CompanyTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ApexRadius.lg),
+      borderRadius: BorderRadius.circular(ApexRadius_lg),
       child: Card(
         child: Padding(
           padding: const EdgeInsets.all(ApexSpacing.lg),
@@ -133,7 +134,7 @@ class _CompanyTile extends StatelessWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   color: colors.primaryContainer,
-                  borderRadius: BorderRadius.circular(ApexRadius.md),
+                  borderRadius: BorderRadius.circular(ApexRadius_md),
                 ),
                 child: Icon(
                   Icons.business_center_rounded,
@@ -170,7 +171,7 @@ class _CompanyTile extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: colors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(ApexRadius.pill),
+                      borderRadius: BorderRadius.circular(ApexRadius_pill),
                     ),
                     child: Text(
                       membership.role.label,

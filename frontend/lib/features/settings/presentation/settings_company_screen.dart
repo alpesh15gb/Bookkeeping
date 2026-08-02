@@ -249,14 +249,14 @@ class _SettingsCompanyScreenState extends ConsumerState<SettingsCompanyScreen> {
                         height: 80,
                         decoration: BoxDecoration(
                           color: colors.surfaceMuted,
-                          borderRadius: BorderRadius.circular(ApexRadius.md),
+                          borderRadius: BorderRadius.circular(ApexRadius_md),
                           border: Border.all(color: colors.border),
                         ),
                         child: settings.logoUrl == null
                             ? const Icon(Icons.business_rounded, size: 36)
                             : ClipRRect(
                                 borderRadius: BorderRadius.circular(
-                                  ApexRadius.md,
+                                  ApexRadius_md,
                                 ),
                                 child: Image.network(
                                   settings.logoUrl!,

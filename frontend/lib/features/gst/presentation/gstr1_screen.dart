@@ -218,12 +218,12 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
     ];
     return InkWell(
       onTap: _pickPeriod,
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           border: Border.all(color: colors.border),
         ),
         child: Row(
@@ -289,7 +289,7 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
             padding: const EdgeInsets.only(right: 8),
             child: InkWell(
               onTap: () => ref.read(_gstr1TabsProvider.notifier).state = i,
-              borderRadius: BorderRadius.circular(ApexRadius.md),
+              borderRadius: BorderRadius.circular(ApexRadius_md),
               child: Container(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 14,
@@ -297,7 +297,7 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
                 ),
                 decoration: BoxDecoration(
                   color: selected ? colors.surfaceRaised : Colors.transparent,
-                  borderRadius: BorderRadius.circular(ApexRadius.md),
+                  borderRadius: BorderRadius.circular(ApexRadius_md),
                   border: Border.all(
                     color: selected ? colors.border : Colors.transparent,
                   ),
@@ -615,7 +615,7 @@ class _Gstr1ScreenState extends ConsumerState<Gstr1Screen> {
       ),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: colors.border),
       ),
       clipBehavior: Clip.antiAlias,
@@ -768,7 +768,7 @@ class _ReportLoading extends StatelessWidget {
         padding: const EdgeInsets.all(ApexSpacing.lg),
         decoration: BoxDecoration(
           color: apexColors(context).skeletonBase,
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
         ),
         child: Column(
           children: List.generate(

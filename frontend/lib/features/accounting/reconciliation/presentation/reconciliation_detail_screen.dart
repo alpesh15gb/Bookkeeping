@@ -224,7 +224,7 @@ class _ProgressBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(ApexRadius.pill),
+        borderRadius: BorderRadius.circular(ApexRadius_pill),
       ),
       child: Text(
         '$label $value',
@@ -627,7 +627,7 @@ class _TransactionDetailContent extends StatelessWidget {
                         color: transaction.creditAmount > 0
                             ? colors.success.withValues(alpha: 0.1)
                             : colors.surfaceMuted,
-                        borderRadius: BorderRadius.circular(ApexRadius.sm),
+                        borderRadius: BorderRadius.circular(ApexRadius_sm),
                       ),
                       child: Text(
                         transaction.creditAmount > 0 ? 'CREDIT' : 'DEBIT',
@@ -650,7 +650,7 @@ class _TransactionDetailContent extends StatelessWidget {
                         ),
                         decoration: BoxDecoration(
                           color: colors.success.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(ApexRadius.pill),
+                          borderRadius: BorderRadius.circular(ApexRadius_pill),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -860,7 +860,7 @@ class _SuggestionCard extends StatelessWidget {
         color: isSelected
             ? colors.primary.withValues(alpha: 0.06)
             : colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         border: Border.all(
           color: isSelected ? colors.primary : colors.border,
           width: isSelected ? 1.5 : 1,
@@ -868,7 +868,7 @@ class _SuggestionCard extends StatelessWidget {
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         child: Padding(
           padding: const EdgeInsets.all(12),
           child: Row(
@@ -879,7 +879,7 @@ class _SuggestionCard extends StatelessWidget {
                 height: 40,
                 decoration: BoxDecoration(
                   color: confidenceColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  borderRadius: BorderRadius.circular(ApexRadius_sm),
                 ),
                 child: Center(
                   child: Text(
@@ -927,7 +927,7 @@ class _SuggestionCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
                   color: confidenceColor.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(ApexRadius.pill),
+                  borderRadius: BorderRadius.circular(ApexRadius_pill),
                 ),
                 child: Text(
                   match.confidenceLabel,
@@ -1050,7 +1050,7 @@ class _BottomBar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
             decoration: BoxDecoration(
               color: colors.surfaceMuted,
-              borderRadius: BorderRadius.circular(ApexRadius.pill),
+              borderRadius: BorderRadius.circular(ApexRadius_pill),
             ),
             child: Text(
               '${(stats.progress * 100).round()}%',
@@ -1148,7 +1148,7 @@ class _Panel extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: colors.border),
       ),
       padding: const EdgeInsets.all(16),

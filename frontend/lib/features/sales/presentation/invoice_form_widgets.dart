@@ -164,7 +164,7 @@ class DateFieldWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
       onTap: () async {
         final init = parse(value) ?? DateTime.now();
         final picked = await showDatePicker(
@@ -333,7 +333,7 @@ class _LineRowWidgetState extends State<LineRowWidget> {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: c.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: c.border),
       ),
       child: Column(
@@ -344,7 +344,7 @@ class _LineRowWidgetState extends State<LineRowWidget> {
             decoration: BoxDecoration(
               color: c.surfaceMuted,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(ApexRadius.lg),
+                top: Radius.circular(ApexRadius_lg),
               ),
             ),
             child: Row(
@@ -354,7 +354,7 @@ class _LineRowWidgetState extends State<LineRowWidget> {
                   height: 24,
                   decoration: BoxDecoration(
                     color: c.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    borderRadius: BorderRadius.circular(ApexRadius_sm),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -591,7 +591,7 @@ class _LineRowWidgetState extends State<LineRowWidget> {
       isDense: true,
       contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
       ),
     ),
     onChanged: onChanged,
@@ -632,7 +632,7 @@ class _LineRowWidgetState extends State<LineRowWidget> {
             vertical: 12,
           ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(ApexRadius.sm),
+            borderRadius: BorderRadius.circular(ApexRadius_sm),
             borderSide: BorderSide(color: c.border),
           ),
           filled: true,
@@ -647,7 +647,7 @@ class _LineRowWidgetState extends State<LineRowWidget> {
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
     decoration: BoxDecoration(
       color: c.surfaceMuted,
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
     ),
     child: Row(
       mainAxisSize: MainAxisSize.min,
@@ -727,7 +727,7 @@ class _ProductFieldWidget extends ConsumerWidget {
                     vertical: isMobile ? 14 : 8,
                   ),
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    borderRadius: BorderRadius.circular(ApexRadius_sm),
                   ),
                 ),
               ),
@@ -767,7 +767,7 @@ InputDecoration _decoration(
     vertical: isMobile ? 16 : 14,
   ),
   border: OutlineInputBorder(
-    borderRadius: BorderRadius.circular(ApexRadius.sm),
+    borderRadius: BorderRadius.circular(ApexRadius_sm),
   ),
 );
 
@@ -785,7 +785,7 @@ Widget _optionsPanel<T extends Object>(
     alignment: Alignment.topLeft,
     child: Material(
       elevation: 8,
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: isMobile ? 350 : 300,
@@ -794,7 +794,7 @@ Widget _optionsPanel<T extends Object>(
         child: Container(
           decoration: BoxDecoration(
             color: colors.surfaceRaised,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
+            borderRadius: BorderRadius.circular(ApexRadius_md),
             border: Border.all(color: colors.border),
           ),
           child: ListView.builder(

@@ -6,6 +6,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../design_system/index.dart';
 
 /// Debounced search bar with consistent ApexBooks styling.
 /// Replaces ad-hoc search bars across feature screens.

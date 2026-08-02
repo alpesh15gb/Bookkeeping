@@ -4,6 +4,8 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/design_system/index.dart'
+    hide ApexTextField, ApexMonetaryField, ApexDropdownField;
 import '../../../core/utils/formatters.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/widgets/form_fields.dart';
@@ -30,7 +32,7 @@ class PasswordStrengthBar extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ClipRRect(
-          borderRadius: BorderRadius.circular(ApexRadius.pill),
+          borderRadius: BorderRadius.circular(ApexRadius_pill),
           child: LinearProgressIndicator(
             value: score / 100,
             minHeight: 5,
@@ -75,7 +77,7 @@ class CompanyFieldsSection extends StatelessWidget {
       children: [
         InkWell(
           onTap: onToggle,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(

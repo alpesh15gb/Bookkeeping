@@ -162,12 +162,12 @@ class _DayBookScreenState extends ConsumerState<DayBookScreen> {
       label: 'Select date $label',
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: colors.surfaceRaised,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
+            borderRadius: BorderRadius.circular(ApexRadius_md),
             border: Border.all(color: colors.border),
           ),
           child: Row(
@@ -240,7 +240,7 @@ class _DayBookScreenState extends ConsumerState<DayBookScreen> {
       ),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: colors.border),
       ),
       clipBehavior: Clip.antiAlias,

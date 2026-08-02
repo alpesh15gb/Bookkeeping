@@ -60,8 +60,7 @@ class DownloadService {
     required String filename,
     required ExportKind kind,
     Map<String, dynamic>? queryParameters,
-  }) async {
-    try {
+  }) async {    try {
       final response = await _dio.get<List<int>>(
         relativeUrl,
         queryParameters: queryParameters,
@@ -81,6 +80,23 @@ class DownloadService {
       return Failure(_mapError(err));
     }
   }
+
+  // -- Document-specific downloads -----------------------------------------
+
+  Future<Result<DownloadResult>> downloadInvoicePdf(String id) =>
+      download(relativeUrl: '/invoices/$id/print', filename: 'invoice_$id', kind: ExportKind.pdf);
+
+  Future<Result<DownloadResult>> downloadBillPdf(String id) =>
+      download(relativeUrl: '/bills/$id/print', filename: 'bill_$id', kind: ExportKind.pdf);
+
+  Future<Result<DownloadResult>> downloadPOPdf(String id) =>
+      download(relativeUrl: '/purchase-orders/$id/print', filename: 'purchase_order_$id', kind: ExportKind.pdf);
+
+  Future<Result<DownloadResult>> downloadGRPdf(String id) =>
+      download(relativeUrl: '/goods-receipts/$id/print', filename: 'goods_receipt_$id', kind: ExportKind.pdf);
+
+  Future<Result<DownloadResult>> downloadPRPdf(String id) =>
+      download(relativeUrl: '/returns/purchase/$id/print', filename: 'purchase_return_$id', kind: ExportKind.pdf);
 
   Future<Directory> _saveDir() {
     // Desktop → Downloads; mobile → app documents.

@@ -230,7 +230,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
                   vertical: 10,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  borderRadius: BorderRadius.circular(ApexRadius_sm),
                 ),
               ),
               onChanged: (v) => setState(() => _search = v),
@@ -247,7 +247,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
         border: Border.all(color: colors.border),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -255,7 +255,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
         child: DropdownButton<String>(
           value: _statusFilter,
           isDense: true,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           items: const [
             DropdownMenuItem(
               value: 'all',
@@ -349,7 +349,7 @@ class _WarehouseListScreenState extends ConsumerState<WarehouseListScreen> {
                 : colors.surfaceRaised,
             margin: const EdgeInsets.only(bottom: 6),
             child: InkWell(
-              borderRadius: BorderRadius.circular(ApexRadius.md),
+              borderRadius: BorderRadius.circular(ApexRadius_md),
               onTap: () {
                 setState(() => _selected = w);
                 if (ResponsiveLayout.isMobile(context)) {

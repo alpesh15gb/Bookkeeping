@@ -5,9 +5,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/design_system/index.dart';
 import '../../../core/utils/formatters.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/widgets/form_fields.dart';
+import '../../../core/widgets/form_fields.dart' show ApexSubmitButton;
 import 'auth_brand.dart';
 import 'auth_controller.dart';
 import 'auth_routes.dart' as auth_routes;

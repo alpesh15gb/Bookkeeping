@@ -1,6 +1,7 @@
 /// Invoice validation service — business rules for invoice integrity.
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/invoice_line.dart';
 import '../models/invoice_status.dart';
 
@@ -73,3 +74,8 @@ class InvoiceValidationService {
     return (false, 'Cannot transition from ${from.value} to ${to.value}');
   }
 }
+
+/// Provider for invoice validation service.
+final invoiceValidationServiceProvider = Provider<InvoiceValidationService>((ref) {
+  return const InvoiceValidationService();
+});

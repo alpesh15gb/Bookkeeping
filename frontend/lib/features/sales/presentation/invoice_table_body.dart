@@ -20,6 +20,10 @@ class InvoiceTableBody extends StatelessWidget {
     required this.onSelect,
     required this.fmt,
     required this.colors,
+    this.onEdit,
+    this.onPrint,
+    this.onShare,
+    this.onAction,
   });
 
   final List<InvoiceListItem> items;
@@ -29,6 +33,10 @@ class InvoiceTableBody extends StatelessWidget {
   final void Function(InvoiceListItem) onSelect;
   final NumberFormatter fmt;
   final ApexColors colors;
+  final void Function(InvoiceListItem)? onEdit;
+  final void Function(InvoiceListItem)? onPrint;
+  final void Function(InvoiceListItem)? onShare;
+  final void Function(InvoiceListItem, String)? onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -42,165 +50,227 @@ class InvoiceTableBody extends StatelessWidget {
       );
     }
     final textTheme = Theme.of(context).textTheme;
-    return Column(
-      children: [
-        // Sticky header row
-        Container(
-          color: colors.surfaceMuted,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final w = constraints.maxWidth;
-              final codeW = (w * 0.15).clamp(90, 180).toDouble();
-              final nameW = (w * 0.19).clamp(110, 240).toDouble();
-              final dateW = (w * 0.10).clamp(70, 110).toDouble();
-              final dueW = (w * 0.10).clamp(70, 110).toDouble();
-              final totalW = (w * 0.14).clamp(80, 150).toDouble();
-              final outstandingW = (w * 0.14).clamp(80, 150).toDouble();
-              final statusW = (w * 0.14).clamp(90, 160).toDouble();
-              return Row(
-                children: [
-                  _sortableHeader(context, 'Code', 'invoiceNumber', codeW),
-                  _sortableHeader(context, 'Customer', 'contactName', nameW),
-                  _sortableHeader(context, 'Date', 'issueDate', dateW),
-                  _sortableHeader(context, 'Due On', 'dueDate', dueW),
-                  _sortableHeader(
-                    context,
-                    'Total',
-                    'total',
-                    totalW,
-                    alignRight: true,
-                  ),
-                  _sortableHeader(
-                    context,
-                    'Outstanding',
-                    'outstanding',
-                    outstandingW,
-                    alignRight: true,
-                  ),
-                  SizedBox(
-                    width: statusW,
-                    child: const Text(
-                      'Status',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final tableWidth = constraints.maxWidth.clamp(1150.0, double.infinity);
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: tableWidth,
+              minHeight: constraints.maxHeight,
+              maxHeight: constraints.maxHeight,
+            ),
+            child: Column(
+              children: [
+                // Header row with filter funnel icons
+                Container(
+                  color: colors.surfaceMuted,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  child: Row(
+                    children: [
+                      _sortableHeader(context, 'Date', 'issueDate', 120),
+                      _sortableHeader(context, 'Invoice no', 'invoiceNumber', 150),
+                      _sortableHeader(context, 'Party Name', 'contactName', 250),
+                      _sortableHeader(context, 'Transaction', 'transaction', 110),
+                      _sortableHeader(context, 'Payment Type', 'status', 140),
+                      _sortableHeader(
+                        context,
+                        'Amount',
+                        'total',
+                        130,
+                        alignRight: true,
                       ),
-                    ),
+                      _sortableHeader(
+                        context,
+                        'Balance',
+                        'outstanding',
+                        130,
+                        alignRight: true,
+                      ),
+                      const SizedBox(
+                        width: 120,
+                        child: Align(
+                          alignment: Alignment.centerRight,
+                          child: Text(
+                            'Actions',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              );
-            },
+                ),
+                // Data rows
+                Expanded(
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, color: colors.border),
+                    itemCount: items.length,
+                    itemBuilder: (context, i) {
+                      final item = items[i];
+                      final isSelected = item.id == selectedId;
+                      return InkWell(
+                        onTap: () => (onEdit ?? onSelect)(item),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          color: isSelected ? colors.primaryContainer : null,
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 120,
+                                child: Text(
+                                  item.issueDate,
+                                  style: textTheme.bodyMedium,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 150,
+                                child: Text(
+                                  item.invoiceNumber,
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 250,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 12),
+                                  child: Text(
+                                    item.contactName,
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 110,
+                                child: Text(
+                                  'Sale',
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: colors.textSecondary,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 140,
+                                child: Text(
+                                  item.status == InvoiceStatus.paid
+                                      ? 'DCB BANK'
+                                      : item.status.value.replaceAll('_', ' '),
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    color: colors.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 130,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Text(
+                                    fmt.currency(item.total),
+                                    textAlign: TextAlign.right,
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 130,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 8),
+                                  child: Text(
+                                    fmt.currency(item.outstanding),
+                                    textAlign: TextAlign.right,
+                                    style: textTheme.bodyMedium?.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      color: item.outstanding > 0 ? colors.danger : null,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 120,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.print_outlined, size: 16),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                      tooltip: 'Print Invoice',
+                                      onPressed: () => (onPrint ?? onSelect)(item),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.share_outlined, size: 16),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                      tooltip: 'Share Invoice',
+                                      onPressed: () => (onShare ?? onSelect)(item),
+                                    ),
+                                    PopupMenuButton<String>(
+                                      icon: const Icon(Icons.more_vert_rounded, size: 16),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+                                      tooltip: 'More Options',
+                                      onSelected: (action) {
+                                        if (onAction != null) {
+                                          onAction!(item, action);
+                                        } else if (action == 'view_edit') {
+                                          (onEdit ?? onSelect)(item);
+                                        } else if (action == 'print') {
+                                          (onPrint ?? onSelect)(item);
+                                        } else if (action == 'share') {
+                                          (onShare ?? onSelect)(item);
+                                        } else {
+                                          onSelect(item);
+                                        }
+                                      },
+                                      itemBuilder: (_) => const [
+                                        PopupMenuItem(value: 'view_edit', child: Text('View/Edit')),
+                                        PopupMenuItem(value: 'einvoice', child: Text('Generate e-Invoice')),
+                                        PopupMenuItem(value: 'return', child: Text('Convert To Return')),
+                                        PopupMenuItem(value: 'challan', child: Text('Preview Delivery Challan')),
+                                        PopupMenuItem(value: 'cancel', child: Text('Cancel Invoice')),
+                                        PopupMenuItem(value: 'delete', child: Text('Delete')),
+                                        PopupMenuItem(value: 'duplicate', child: Text('Duplicate')),
+                                        PopupMenuItem(value: 'open_pdf', child: Text('Open PDF')),
+                                        PopupMenuItem(value: 'preview', child: Text('Preview')),
+                                        PopupMenuItem(value: 'print', child: Text('Print')),
+                                        PopupMenuItem(value: 'history', child: Text('View History')),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        // Data rows
-        Expanded(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final w = constraints.maxWidth;
-              final codeW = (w * 0.15).clamp(90, 180).toDouble();
-              final nameW = (w * 0.19).clamp(110, 240).toDouble();
-              final dateW = (w * 0.10).clamp(70, 110).toDouble();
-              final dueW = (w * 0.10).clamp(70, 110).toDouble();
-              final totalW = (w * 0.14).clamp(80, 150).toDouble();
-              final outstandingW = (w * 0.14).clamp(80, 150).toDouble();
-              final statusW = (w * 0.14).clamp(90, 160).toDouble();
-              return ListView.separated(
-                padding: EdgeInsets.zero,
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, color: colors.border),
-                itemCount: items.length,
-                itemBuilder: (context, i) {
-                  final item = items[i];
-                  final isSelected = item.id == selectedId;
-                  final overdue =
-                      item.outstanding > 0 &&
-                      DateTime.tryParse(
-                            item.dueDate,
-                          )?.isBefore(DateTime.now()) ==
-                          true;
-                  return InkWell(
-                    onTap: () => onSelect(item),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      color: isSelected ? colors.primaryContainer : null,
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: codeW,
-                            child: Text(
-                              item.invoiceNumber,
-                              style: textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: nameW,
-                            child: Text(
-                              item.contactName,
-                              style: textTheme.bodyMedium,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          SizedBox(
-                            width: dateW,
-                            child: Text(
-                              item.issueDate,
-                              style: textTheme.bodyMedium,
-                            ),
-                          ),
-                          SizedBox(
-                            width: dueW,
-                            child: Text(
-                              item.dueDate,
-                              style: textTheme.bodyMedium?.copyWith(
-                                color: overdue ? colors.danger : null,
-                                fontWeight: overdue ? FontWeight.w600 : null,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: totalW,
-                            child: Text(
-                              fmt.currency(item.total),
-                              textAlign: TextAlign.right,
-                              style: textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: outstandingW,
-                            child: Text(
-                              fmt.currency(item.outstanding),
-                              textAlign: TextAlign.right,
-                              style: textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: item.outstanding > 0
-                                    ? colors.danger
-                                    : null,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: statusW,
-                            child: _statusBadge(item.status),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-      ],
+        );
+      },
     );
   }
 
@@ -230,36 +300,30 @@ class InvoiceTableBody extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
-                  color: isSorted ? colors.primary : null,
+                  color: isSorted ? colors.primary : colors.textPrimary,
                 ),
               ),
             ),
             const SizedBox(width: 4),
             Icon(
-              isSorted
-                  ? (asc
-                        ? Icons.arrow_upward_rounded
-                        : Icons.arrow_downward_rounded)
-                  : Icons.unfold_more_rounded,
-              size: 14,
-              color: isSorted ? colors.primary : colors.textMuted,
+              Icons.filter_list_rounded,
+              size: 13,
+              color: colors.textMuted,
             ),
+            if (isSorted) ...[
+              const SizedBox(width: 2),
+              Icon(
+                asc
+                    ? Icons.arrow_upward_rounded
+                    : Icons.arrow_downward_rounded,
+                size: 13,
+                color: colors.primary,
+              ),
+            ],
           ],
         ),
       ),
     );
-  }
-
-  Widget _statusBadge(InvoiceStatus status) {
-    final tone = switch (status) {
-      InvoiceStatus.draft => StatusTone.neutral,
-      InvoiceStatus.posted || InvoiceStatus.sent => StatusTone.primary,
-      InvoiceStatus.partiallyPaid => StatusTone.warning,
-      InvoiceStatus.paid => StatusTone.success,
-      InvoiceStatus.overdue => StatusTone.warning,
-      InvoiceStatus.cancelled => StatusTone.danger,
-    };
-    return StatusBadge(label: status.value.replaceAll('_', ' '), tone: tone);
   }
 }
 
@@ -292,7 +356,7 @@ class _MobileInvoiceList extends StatelessWidget {
         margin: EdgeInsets.zero,
         color: item.id == selectedId ? colors.primaryContainer : null,
         child: InkWell(
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
           onTap: () => onSelect(item),
           child: Padding(
             padding: const EdgeInsets.all(14),

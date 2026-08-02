@@ -272,7 +272,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
         margin: const EdgeInsets.only(bottom: ApexSpacing.md),
         decoration: BoxDecoration(
           color: colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
           border: Border.all(color: colors.border),
         ),
         child: Column(
@@ -281,7 +281,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
               decoration: BoxDecoration(
                 color: colors.surfaceMuted,
                 borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(ApexRadius.lg),
+                  top: Radius.circular(ApexRadius_lg),
                 ),
               ),
               padding: EdgeInsets.symmetric(
@@ -605,7 +605,7 @@ class _JournalListScreenState extends ConsumerState<JournalListScreen> {
       padding: const EdgeInsets.all(ApexSpacing.sm),
       decoration: BoxDecoration(
         color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         border: Border.all(color: colors.border),
       ),
       child: Column(

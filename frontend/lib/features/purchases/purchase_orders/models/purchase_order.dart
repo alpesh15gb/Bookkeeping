@@ -26,6 +26,7 @@ class PurchaseOrder {
     this.amountReceived = 0,
     this.posStateCode = '',
     this.lines = const [],
+    this.receipts,
     this.createdAt,
     this.updatedAt,
   });
@@ -48,6 +49,7 @@ class PurchaseOrder {
   final double amountReceived;
   final String posStateCode;
   final List<PurchaseOrderLine> lines;
+  final List<PurchaseOrderReceipt>? receipts;
   final String? createdAt;
   final String? updatedAt;
 
@@ -85,6 +87,11 @@ class PurchaseOrder {
               )
               .toList() ??
           [],
+      receipts: (json['receipts'] as List?)
+          ?.map(
+            (e) => PurchaseOrderReceipt.fromJson(e as Map<String, dynamic>),
+          )
+          .toList(),
       createdAt: json['created_at'] as String?,
       updatedAt: json['updated_at'] as String?,
     );
@@ -105,6 +112,30 @@ class PurchaseOrder {
     if (v is String) return double.tryParse(v) ?? 0;
     return 0;
   }
+}
+
+/// Lightweight goods-receipt summary attached to a purchase order.
+@immutable
+class PurchaseOrderReceipt {
+  const PurchaseOrderReceipt({
+    this.receiptDate,
+    this.grnNumber = '',
+    this.referenceNumber,
+    this.lineCount = 0,
+  });
+
+  final String? receiptDate;
+  final String grnNumber;
+  final String? referenceNumber;
+  final int lineCount;
+
+  factory PurchaseOrderReceipt.fromJson(Map<String, dynamic> json) =>
+      PurchaseOrderReceipt(
+        receiptDate: json['receipt_date'] as String?,
+        grnNumber: json['receipt_number'] as String? ?? '',
+        referenceNumber: json['reference_number'] as String?,
+        lineCount: (json['line_count'] as num?)?.toInt() ?? 0,
+      );
 }
 
 /// Lightweight list item for table views.

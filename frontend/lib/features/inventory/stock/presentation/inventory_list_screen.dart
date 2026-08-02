@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/search_bar.dart';
@@ -260,7 +261,7 @@ class _InventoryListScreenState extends ConsumerState<InventoryListScreen> {
           elevation: 0,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(ApexRadius.lg),
+            borderRadius: BorderRadius.circular(ApexRadius_lg),
             side: BorderSide(color: c.border),
           ),
           child: Padding(

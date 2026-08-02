@@ -392,7 +392,7 @@ class _WarehouseFormScreenState extends ConsumerState<WarehouseFormScreen> {
               Container(
                 decoration: BoxDecoration(
                   color: colors.surfaceRaised,
-                  borderRadius: BorderRadius.circular(ApexRadius.lg),
+                  borderRadius: BorderRadius.circular(ApexRadius_lg),
                   border: Border.all(color: colors.border),
                 ),
                 child: SwitchListTile(
@@ -526,7 +526,7 @@ InputDecoration _dec(ApexColors colors, {String? hint, IconData? icon}) =>
           : Icon(icon, size: 18, color: colors.textMuted),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
       ),
       filled: true,
       fillColor: colors.surfaceRaised,

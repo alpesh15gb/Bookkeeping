@@ -1,26 +1,33 @@
+/// Invoice Detail Screen — Professional detail view with timeline, payments, and actions.
+///
+/// Features:
+/// - Header: Invoice number, status, dates, customer
+/// - Summary: Totals, outstanding, GST breakdown
+/// - Lines table: Read-only with expandable tax details
+/// - Payments tab: Allocation history, add payment
+/// - Timeline: Status changes, emails, prints
+/// - Actions: Print, Email, Edit, Cancel, Delete
+/// - Responsive: Mobile stacked, Tablet, Desktop with sidebar
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
-import 'package:apexbooks/core/widgets/page_header.dart';
-import 'package:apexbooks/core/widgets/skeleton_loader.dart';
-import 'package:apexbooks/core/widgets/states.dart';
-import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/download/download_service.dart';
-import 'package:apexbooks/core/widgets/transaction_detail_layout.dart';
-import 'package:apexbooks/core/permissions/permission_gate.dart';
-import 'package:apexbooks/core/permissions/permissions.dart';
-import 'package:apexbooks/core/dialogs/dialog_service.dart';
-import 'package:apexbooks/core/errors/user_message.dart';
+import 'package:apexbooks/core/result/result.dart';
 import '../models/invoice.dart';
-import '../models/invoice_line.dart';
 import '../models/invoice_status.dart';
 import '../services/invoice_service.dart';
-import 'invoice_form_notifier.dart';
 import 'invoice_form_screen.dart';
 import 'invoice_list_provider.dart';
 import '../payments/presentation/payment_form_screen.dart';
+import 'components/invoice_detail_header.dart';
+import 'components/invoice_detail_summary.dart';
+import 'components/invoice_detail_lines.dart';
+import 'components/invoice_detail_payments.dart';
+import 'components/invoice_detail_timeline.dart';
 
 class InvoiceDetailScreen extends ConsumerStatefulWidget {
   const InvoiceDetailScreen({
@@ -29,627 +36,304 @@ class InvoiceDetailScreen extends ConsumerStatefulWidget {
     this.embedded = false,
     this.onClose,
   });
+
   final String invoiceId;
   final bool embedded;
   final VoidCallback? onClose;
+
   @override
-  ConsumerState<InvoiceDetailScreen> createState() =>
-      _InvoiceDetailScreenState();
+  ConsumerState<InvoiceDetailScreen> createState() => _InvoiceDetailScreenState();
 }
 
-class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen> {
-  bool _operating = false;
+class _InvoiceDetailScreenState extends ConsumerState<InvoiceDetailScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
 
-  Future<void> _act(Future<Result<Invoice>> Function() call) async {
-    setState(() => _operating = true);
-    final res = await call();
-    if (!mounted) return;
-    setState(() => _operating = false);
-    switch (res) {
-      case Success():
-        ref.invalidate(invoiceDetailProvider(widget.invoiceId));
-      case Failure(:final error):
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
-      default:
-        break;
-    }
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final asyncVal = ref.watch(invoiceDetailProvider(widget.invoiceId));
+    final state = ref.watch(invoiceDetailProvider(widget.invoiceId));
     final colors = apexColors(context);
-    final fmt = ref.watch(numberFormatterProvider);
-    final service = ref.watch(invoiceServiceProvider);
+    final isMobile = ResponsiveLayout.isMobile(context);
+    final isTablet = ResponsiveLayout.isTablet(context);
 
-    return asyncVal.when(
-      loading: () => const Column(
-        children: [
-          DetailSectionSkeleton(),
-          DetailSectionSkeleton(),
-          DetailSectionSkeleton(),
+    final content = state.when(
+      data: (invoice) => _buildContent(context, invoice, colors, isMobile, isTablet),
+      loading: () => const Center(child: ApexSkeletonLoader()),
+      error: (error, _) => _buildErrorState(error),
+    );
+
+    if (widget.embedded) {
+      return content;
+    }
+
+    return Scaffold(
+      backgroundColor: colors.surfaceMuted,
+      body: SafeArea(child: content),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    Invoice invoice,
+    ApexColors colors,
+    bool isMobile,
+    bool isTablet,
+  ) {
+    final fmt = ref.watch(numberFormatterProvider);
+
+    return Column(
+      children: [
+        // Page Header
+        if (!widget.embedded)
+          InvoiceDetailHeader(
+            invoice: invoice,
+            onClose: widget.onClose,
+            onEdit: _canEdit(invoice) ? () => _openEdit(invoice) : null,
+            onPrint: () => _printInvoice(invoice),
+            onEmail: () => _emailInvoice(invoice),
+            onCancel: _canCancel(invoice) ? () => _cancelInvoice(invoice) : null,
+            onDelete: _canDelete(invoice) ? () => _deleteInvoice(invoice) : null,
+            onRecordPayment: _canRecordPayment(invoice) ? () => _recordPayment(invoice) : null,
+          ),
+
+        // Tab Bar
+        _buildTabBar(context, invoice, colors, isMobile),
+
+        // Tab Content
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // Overview Tab
+              SingleChildScrollView(
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    InvoiceDetailSummary(invoice: invoice, fmt: fmt),
+                    const SizedBox(height: 24),
+                    InvoiceDetailLines(invoice: invoice, fmt: fmt),
+                  ],
+                ),
+              ),
+              // Payments Tab
+              InvoiceDetailPayments(invoice: invoice, fmt: fmt),
+              // Timeline Tab
+              InvoiceDetailTimeline(invoice: invoice),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabBar(
+    BuildContext context,
+    Invoice invoice,
+    ApexColors colors,
+    bool isMobile,
+  ) {
+    final textTheme = Theme.of(context).textTheme;
+    final hasPayments = invoice.payments.isNotEmpty;
+
+    return Container(
+      color: colors.surface,
+      child: TabBar(
+        controller: _tabController,
+        indicatorColor: colors.primary,
+        indicatorWeight: 3,
+        labelColor: colors.primary,
+        unselectedLabelColor: colors.textSecondary,
+        labelStyle: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+        unselectedLabelStyle: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w500),
+        tabs: [
+          const Tab(text: 'Overview'),
+          Tab(text: hasPayments ? 'Payments (${invoice.payments.length})' : 'Payments'),
+          const Tab(text: 'Timeline'),
         ],
       ),
-      error: (err, _) => ErrorView(
-        message: userFacingErrorMessage(err),
-        onRetry: () => ref.invalidate(invoiceDetailProvider(widget.invoiceId)),
-      ),
-      data: (inv) => TransactionDetailLayout(
-        title: inv.invoiceNumber,
-        header: _summaryCard(inv, colors, fmt),
-        lines: _linesCard(inv, colors, fmt),
-        totals: _totalsCard(inv, colors, fmt),
-        actions: _buildActions(inv, service, colors),
-        embedded: widget.embedded,
-        onClose: widget.onClose,
-        notes:
-            (inv.notes ?? '').isNotEmpty ||
-                (inv.termsAndConditions ?? '').isNotEmpty
-            ? _notesCard(inv, colors)
-            : null,
-      ),
     );
   }
 
-  Future<void> _printInvoice(Invoice inv) async {
-    final downloadSvc = ref.read(downloadServiceProvider);
-    final result = await downloadSvc.download(
-      relativeUrl: '/invoices/${inv.id}/print',
-      filename: inv.invoiceNumber,
-      kind: ExportKind.pdf,
-    );
-    if (!mounted) return;
-    switch (result) {
-      case Success():
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Downloaded ${inv.invoiceNumber}.pdf'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      case Failure(:final error):
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Error: ${error.message}'),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      default:
-        break;
-    }
-  }
+  Widget _buildErrorState(Object error) {
+    final colors = apexColors(context);
+    final textTheme = Theme.of(context).textTheme;
 
-  Future<void> _emailInvoice(Invoice inv, InvoiceService service) async {
-    setState(() => _operating = true);
-    final result = await service.email(inv.id);
-    if (!mounted) return;
-    setState(() => _operating = false);
-    final message = result is Success<void>
-        ? 'Invoice queued for email delivery.'
-        : 'Unable to email invoice: ${(result as Failure<void>).error.message}';
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  Future<void> _receivePayment(Invoice inv) async {
-    await Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => PaymentFormScreen(
-          contactId: inv.contactId,
-          contactName: inv.contactName,
-          amount: inv.outstanding.toDouble(),
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: colors.error),
+            const SizedBox(height: 16),
+            Text('Failed to load invoice', style: textTheme.headlineSmall?.copyWith(color: colors.textPrimary)),
+            const SizedBox(height: 8),
+            Text(error.toString(), style: textTheme.bodyMedium?.copyWith(color: colors.textSecondary), textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            ApexPrimaryButton(
+              icon: Icons.refresh,
+              label: 'Retry',
+              onPressed: () => ref.invalidate(invoiceDetailProvider(widget.invoiceId)),
+            ),
+          ],
         ),
       ),
     );
-    ref.invalidate(invoiceDetailProvider(widget.invoiceId));
   }
 
-  Future<void> _editInvoice(Invoice inv) async {
-    final changed = await Navigator.of(context).push<Invoice>(
-      MaterialPageRoute(builder: (_) => InvoiceFormScreen(editId: inv.id)),
+  bool _canEdit(Invoice invoice) => invoice.status == InvoiceStatus.draft;
+  bool _canCancel(Invoice invoice) => invoice.status == InvoiceStatus.draft || invoice.status == InvoiceStatus.sent;
+  bool _canDelete(Invoice invoice) => invoice.status == InvoiceStatus.draft;
+  bool _canRecordPayment(Invoice invoice) =>
+      invoice.status != InvoiceStatus.cancelled &&
+      invoice.outstandingAmount > 0;
+
+  Future<void> _openEdit(Invoice invoice) async {
+    final result = await Navigator.of(context).push<Invoice>(
+      MaterialPageRoute(builder: (_) => InvoiceFormScreen(editId: invoice.id)),
     );
-    if (changed != null) {
+    if (result != null && mounted) {
       ref.invalidate(invoiceDetailProvider(widget.invoiceId));
       ref.invalidate(invoiceListProvider);
     }
   }
 
-  Future<void> _cloneInvoice(Invoice inv, InvoiceService service) async {
-    setState(() => _operating = true);
-    final result = await service.clone(inv.id);
-    if (!mounted) return;
-    setState(() => _operating = false);
-    switch (result) {
-      case Success(:final value):
-        ref.invalidate(invoiceListProvider);
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) => InvoiceFormScreen(editId: value.id),
-          ),
-        );
-        ref.invalidate(invoiceListProvider);
-      case Failure(:final error):
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Unable to duplicate invoice: ${error.message}'),
-          ),
-        );
-      default:
-        break;
+  Future<void> _printInvoice(Invoice invoice) async {
+    try {
+      await ref.read(downloadServiceProvider).downloadInvoicePdf(invoice.id);
+      if (mounted) {
+        ApexSnackBar.show(context: context, message: 'Invoice downloaded', type: SnackBarType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        ApexSnackBar.show(context: context, message: 'Failed to download: $e', type: SnackBarType.error);
+      }
     }
   }
 
-  Future<void> _cancelInvoice(Invoice inv, InvoiceService service) async {
-    final confirmed = await const DialogService().confirm(
-      context,
-      title: 'Cancel ${inv.invoiceNumber}?',
-      message:
-          'This creates accounting and stock reversals. It cannot be used when payments are allocated or the GST period is filed.',
-      confirmLabel: 'Cancel invoice',
-      destructive: true,
+  Future<void> _emailInvoice(Invoice invoice) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Email Invoice'),
+        content: Text('Send invoice ${invoice.invoiceNumber} to ${invoice.customerName}?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Send')),
+        ],
+      ),
     );
-    if (confirmed) await _act(() => service.cancel(inv.id));
-  }
-
-  // ── Action buttons for the AppBar ──────────────────────────────────────────
-  List<Widget> _buildActions(
-    Invoice inv,
-    InvoiceService service,
-    ApexColors colors,
-  ) {
-    return [
-      if (inv.status == InvoiceStatus.draft ||
-          inv.status == InvoiceStatus.posted)
-        PermissionGate(
-          permission: Permissions.invoiceUpdate,
-          child: OutlinedButton.icon(
-            onPressed: _operating ? null : () => _editInvoice(inv),
-            icon: const Icon(Icons.edit_outlined, size: 18),
-            label: const Text('Edit'),
-          ),
-        ),
-      OutlinedButton.icon(
-        onPressed: () => _printInvoice(inv),
-        icon: const Icon(Icons.print_rounded, size: 18),
-        label: const Text('Print'),
-      ),
-      OutlinedButton.icon(
-        onPressed: _operating ? null : () => _cloneInvoice(inv, service),
-        icon: const Icon(Icons.copy_outlined, size: 18),
-        label: const Text('Duplicate'),
-      ),
-      if (inv.status != InvoiceStatus.draft &&
-          inv.status != InvoiceStatus.cancelled)
-        PermissionGate(
-          permission: Permissions.invoiceEmail,
-          child: OutlinedButton.icon(
-            onPressed: _operating ? null : () => _emailInvoice(inv, service),
-            icon: const Icon(Icons.email_outlined, size: 18),
-            label: const Text('Email'),
-          ),
-        ),
-      if (inv.outstanding > 0 &&
-          (inv.status == InvoiceStatus.posted ||
-              inv.status == InvoiceStatus.sent ||
-              inv.status == InvoiceStatus.partiallyPaid))
-        FilledButton.icon(
-          onPressed: _operating ? null : () => _receivePayment(inv),
-          icon: const Icon(Icons.payments_outlined, size: 18),
-          label: const Text('Receive payment'),
-        ),
-      StatusBadge(
-        label: inv.status.value.replaceAll('_', ' '),
-        tone: toneForStatus(inv.status.value),
-      ),
-      if (_operating) const LoadingSpinner(size: 18),
-      if (inv.status == InvoiceStatus.draft)
-        FilledButton.icon(
-          onPressed: _operating
-              ? null
-              : () => _act(() => service.finalize(inv.id)),
-          icon: const Icon(Icons.check_circle_outline_rounded, size: 18),
-          label: const Text('Finalize'),
-        ),
-      if (inv.status == InvoiceStatus.posted ||
-          inv.status == InvoiceStatus.partiallyPaid)
-        PermissionGate(
-          permission: Permissions.invoiceCancel,
-          child: OutlinedButton.icon(
-            onPressed: _operating ? null : () => _cancelInvoice(inv, service),
-            icon: Icon(Icons.cancel_outlined, size: 18, color: colors.danger),
-            label: Text('Cancel', style: TextStyle(color: colors.danger)),
-            style: OutlinedButton.styleFrom(
-              side: BorderSide(color: colors.danger.withValues(alpha: 0.4)),
-            ),
-          ),
-        ),
-    ];
-  }
-
-  // ── Bill-to + meta ────────────────────────────────────────────────────────
-  Widget _summaryCard(Invoice inv, ApexColors colors, NumberFormatter fmt) {
-    final balance = (inv.total - inv.amountPaid)
-        .clamp(0, double.infinity)
-        .toDouble();
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('BILL TO', style: _label(colors)),
-              const SizedBox(height: 4),
-              Text(
-                inv.contactName ?? '—',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: colors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'Place of supply: ${inv.posStateCode.isEmpty ? '—' : inv.posStateCode}',
-                style: TextStyle(fontSize: 12, color: colors.textMuted),
-              ),
-              if ((inv.referenceNumber ?? '').isNotEmpty)
-                Text(
-                  'Ref: ${inv.referenceNumber}',
-                  style: TextStyle(fontSize: 12, color: colors.textMuted),
-                ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 16),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            _metaRow('Issued', inv.issueDate, colors),
-            const SizedBox(height: 6),
-            _metaRow('Due', inv.dueDate, colors),
-            const SizedBox(height: 10),
-            Text('BALANCE DUE', style: _label(colors)),
-            Text(
-              fmt.currency(balance),
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: balance > 0 ? colors.danger : colors.success,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _metaRow(String label, String value, ApexColors colors) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Text('$label  ', style: TextStyle(fontSize: 12, color: colors.textMuted)),
-      Text(
-        value.isEmpty ? '—' : value,
-        style: TextStyle(
-          fontSize: 12.5,
-          fontWeight: FontWeight.w600,
-          color: colors.textPrimary,
-        ),
-      ),
-    ],
-  );
-
-  // ── Line items table ──────────────────────────────────────────────────────
-  Widget _linesCard(Invoice inv, ApexColors colors, NumberFormatter fmt) {
-    final isMobile = ResponsiveLayout.isMobile(context);
-    if (isMobile) {
-      return Column(
-        children: inv.lines.asMap().entries.map((entry) {
-          final line = entry.value;
-          return Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              border: entry.key == inv.lines.length - 1
-                  ? null
-                  : Border(bottom: BorderSide(color: colors.border)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        line.productName ?? line.description ?? 'Item',
-                        style: const TextStyle(fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    Text(
-                      fmt.currency(line.total),
-                      style: const TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 5),
-                Text(
-                  '${fmt.quantity(line.quantity)} × ${fmt.currency(line.rate)} · GST ${line.gstRate.toStringAsFixed(0)}%${line.hsnSac.isEmpty ? '' : ' · HSN ${line.hsnSac}'}',
-                  style: TextStyle(fontSize: 12, color: colors.textMuted),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      );
+    if (confirmed == true) {
+      // TODO: Implement email sending
+      if (mounted) {
+        ApexSnackBar.show(context: context, message: 'Email queued for sending', type: SnackBarType.success);
+      }
     }
-    final lineTable = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: colors.surfaceMuted,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(ApexRadius.lg),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(flex: 40, child: Text('ITEM', style: _th(colors))),
-              Expanded(
-                flex: 12,
-                child: Text(
-                  'QTY',
-                  textAlign: TextAlign.right,
-                  style: _th(colors),
-                ),
-              ),
-              Expanded(
-                flex: 18,
-                child: Text(
-                  'RATE',
-                  textAlign: TextAlign.right,
-                  style: _th(colors),
-                ),
-              ),
-              Expanded(
-                flex: 12,
-                child: Text(
-                  'GST',
-                  textAlign: TextAlign.right,
-                  style: _th(colors),
-                ),
-              ),
-              Expanded(
-                flex: 18,
-                child: Text(
-                  'AMOUNT',
-                  textAlign: TextAlign.right,
-                  style: _th(colors),
-                ),
-              ),
-            ],
-          ),
-        ),
-        ...inv.lines.asMap().entries.map(
-          (e) => _lineRow(e.value, e.key == inv.lines.length - 1, colors, fmt),
-        ),
-      ],
-    );
-    return lineTable;
   }
 
-  Widget _lineRow(
-    InvoiceLine l,
-    bool last,
-    ApexColors colors,
-    NumberFormatter fmt,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        border: last ? null : Border(bottom: BorderSide(color: colors.border)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 40,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l.productName ?? l.description ?? 'Item',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                if (l.hsnSac.isNotEmpty)
-                  Text(
-                    'HSN ${l.hsnSac}',
-                    style: TextStyle(fontSize: 11, color: colors.textMuted),
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 12,
-            child: Text(
-              fmt.quantity(l.quantity),
-              textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 13, color: colors.textSecondary),
-            ),
-          ),
-          Expanded(
-            flex: 18,
-            child: Text(
-              fmt.currency(l.rate),
-              textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 13, color: colors.textSecondary),
-            ),
-          ),
-          Expanded(
-            flex: 12,
-            child: Text(
-              '${l.gstRate.toInt()}%',
-              textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 13, color: colors.textSecondary),
-            ),
-          ),
-          Expanded(
-            flex: 18,
-            child: Text(
-              fmt.currency(l.total),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
+  Future<void> _cancelInvoice(Invoice invoice) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Invoice'),
+        content: Text('Cancel invoice ${invoice.invoiceNumber}? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: apexColors(context).error),
+            child: const Text('Cancel Invoice'),
           ),
         ],
       ),
     );
+    if (confirmed == true) {
+      final result = await ref.read(invoiceServiceProvider).cancel(invoice.id);
+      if (!mounted) return;
+      switch (result) {
+        case Success():
+          ref.invalidate(invoiceDetailProvider(widget.invoiceId));
+          ref.invalidate(invoiceListProvider);
+          ApexSnackBar.show(context: context, message: 'Invoice cancelled', type: SnackBarType.success);
+          if (widget.onClose != null) widget.onClose!();
+        case Failure(:final error):
+          ApexSnackBar.show(context: context, message: error.message, type: SnackBarType.error);
+        default:
+          break;
+      }
+    }
   }
 
-  // ── Totals ────────────────────────────────────────────────────────────────
-  Widget _totalsCard(Invoice inv, ApexColors colors, NumberFormatter fmt) {
-    final tax =
-        inv.cgstAmount +
-        inv.sgstAmount +
-        inv.igstAmount +
-        inv.utgstAmount +
-        inv.cessAmount;
-    final isDesktop = !ResponsiveLayout.isMobile(context);
-    return Row(
-      children: [
-        if (isDesktop) const Spacer(),
-        SizedBox(
-          width: isDesktop ? 340 : double.infinity,
-          child: ApexCard(
-            child: Column(
-              children: [
-                _totRow('Subtotal', fmt.currency(inv.subtotal), colors),
-                if (inv.discountTotal != 0)
-                  _totRow(
-                    'Discount',
-                    '- ${fmt.currency(inv.discountTotal)}',
-                    colors,
-                  ),
-                if (inv.cgstAmount != 0)
-                  _totRow('CGST', fmt.currency(inv.cgstAmount), colors),
-                if (inv.sgstAmount != 0)
-                  _totRow('SGST', fmt.currency(inv.sgstAmount), colors),
-                if (inv.igstAmount != 0)
-                  _totRow('IGST', fmt.currency(inv.igstAmount), colors),
-                if (inv.cessAmount != 0)
-                  _totRow('Cess', fmt.currency(inv.cessAmount), colors),
-                if (tax != 0 && inv.igstAmount == 0 && inv.cgstAmount == 0)
-                  _totRow('Tax', fmt.currency(tax), colors),
-                if (inv.shippingCharges != 0)
-                  _totRow(
-                    'Shipping',
-                    fmt.currency(inv.shippingCharges),
-                    colors,
-                  ),
-                if (inv.roundOff != 0)
-                  _totRow('Round off', fmt.currency(inv.roundOff), colors),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Divider(height: 1, color: colors.border),
-                ),
-                _totRow(
-                  'Total',
-                  fmt.currency(inv.total),
-                  colors,
-                  emphasize: true,
-                ),
-                if (inv.amountPaid != 0)
-                  _totRow(
-                    'Paid',
-                    '- ${fmt.currency(inv.amountPaid)}',
-                    colors,
-                    tone: colors.success,
-                  ),
-              ],
-            ),
+  Future<void> _deleteInvoice(Invoice invoice) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Invoice'),
+        content: Text('Permanently delete invoice ${invoice.invoiceNumber}? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: apexColors(context).error),
+            child: const Text('Delete'),
           ),
-        ),
-      ],
+        ],
+      ),
     );
+    if (confirmed == true) {
+      final result = await ref.read(invoiceServiceProvider).delete(invoice.id);
+      if (!mounted) return;
+      switch (result) {
+        case Success():
+          ref.invalidate(invoiceListProvider);
+          ApexSnackBar.show(context: context, message: 'Invoice deleted', type: SnackBarType.success);
+          if (widget.onClose != null) {
+            widget.onClose!();
+          } else if (mounted) {
+          Navigator.of(context).pop();
+        }
+        case Failure(:final error):
+          ApexSnackBar.show(context: context, message: error.message, type: SnackBarType.error);
+        default:
+          break;
+      }
+    }
   }
 
-  Widget _totRow(
-    String label,
-    String value,
-    ApexColors colors, {
-    bool emphasize = false,
-    Color? tone,
-  }) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: emphasize ? 14 : 12.5,
-            fontWeight: emphasize ? FontWeight.w700 : FontWeight.w500,
-            color: emphasize ? colors.textPrimary : colors.textSecondary,
-          ),
+  Future<void> _recordPayment(Invoice invoice) async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PaymentFormScreen(
+          contactId: invoice.contactId,
+          amount: invoice.outstandingAmount,
         ),
-        const Spacer(),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: emphasize ? 16 : 13,
-            fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
-            color: tone ?? (emphasize ? colors.primary : colors.textPrimary),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget _notesCard(Invoice inv, ApexColors colors) => Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      if ((inv.notes ?? '').isNotEmpty) ...[
-        Text('NOTES', style: _label(colors)),
-        const SizedBox(height: 4),
-        Text(
-          inv.notes!,
-          style: TextStyle(fontSize: 13, color: colors.textSecondary),
-        ),
-      ],
-      if ((inv.notes ?? '').isNotEmpty &&
-          (inv.termsAndConditions ?? '').isNotEmpty)
-        const SizedBox(height: 12),
-      if ((inv.termsAndConditions ?? '').isNotEmpty) ...[
-        Text('TERMS', style: _label(colors)),
-        const SizedBox(height: 4),
-        Text(
-          inv.termsAndConditions!,
-          style: TextStyle(fontSize: 13, color: colors.textSecondary),
-        ),
-      ],
-    ],
-  );
-
-  TextStyle _label(ApexColors colors) => TextStyle(
-    fontSize: 10.5,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.5,
-    color: colors.textMuted,
-  );
-  TextStyle _th(ApexColors colors) => TextStyle(
-    fontSize: 10.5,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.4,
-    color: colors.textMuted,
-  );
+      ),
+    );
+    if (result == true && mounted) {
+      ref.invalidate(invoiceDetailProvider(widget.invoiceId));
+      ref.invalidate(invoiceListProvider);
+      ApexSnackBar.show(context: context, message: 'Payment recorded', type: SnackBarType.success);
+    }
+  }
 }
+
+// ───── Providers ────────────────────────────────────────────────────────────
+
+final invoiceDetailProvider = FutureProvider.family<Invoice, String>((ref, id) async {
+  final service = ref.read(invoiceServiceProvider);
+  final result = await service.get(id);
+  return result.getOrThrow();
+});

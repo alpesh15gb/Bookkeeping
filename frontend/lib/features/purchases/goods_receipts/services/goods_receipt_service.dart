@@ -62,6 +62,13 @@ class GoodsReceiptService {
       return GoodsReceipt.fromJson(res.data as Map<String, dynamic>);
     });
   }
+
+  /// Delete a draft goods receipt.
+  Future<Result<void>> delete(String id) {
+    return guardDio(() async {
+      await _dio.delete('/goods-receipts/$id');
+    });
+  }
 }
 
 final goodsReceiptServiceProvider = Provider<GoodsReceiptService>((ref) {

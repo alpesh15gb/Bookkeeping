@@ -2,6 +2,7 @@
 /// Responsible for live line-item and grand-total calculations.
 library;
 
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/invoice_line.dart';
 
 class InvoiceCalculationService {
@@ -94,3 +95,8 @@ class InvoiceCalculationService {
 
   double round2(double v) => (v * 100).roundToDouble() / 100;
 }
+
+/// Provider for invoice calculation service.
+final invoiceCalculationServiceProvider = Provider<InvoiceCalculationService>((ref) {
+  return const InvoiceCalculationService();
+});

@@ -46,6 +46,8 @@ class Permissions {
   static const expenseEdit = 'expense:edit';
   static const expenseDelete = 'expense:delete';
   static const expenseFinalize = 'expense:finalize';
+  static const productCreate = 'product:create';
+  static const goodsReceiptCreate = 'goods_receipt:create';
   static const billCreate = 'bill:create';
   static const billView = 'bill:view';
   static const billUpdate = 'bill:update';
@@ -92,6 +94,8 @@ const Map<MemberRole, Set<String>> rolePermissions = {
     Permissions.expenseEdit,
     Permissions.expenseDelete,
     Permissions.expenseFinalize,
+    Permissions.productCreate,
+    Permissions.goodsReceiptCreate,
     Permissions.billCreate,
     Permissions.billView,
     Permissions.billUpdate,
@@ -144,6 +148,7 @@ const Map<MemberRole, Set<String>> rolePermissions = {
     Permissions.salesConvert,
     Permissions.paymentCreate,
     Permissions.paymentView,
+    Permissions.productCreate,
   },
   MemberRole.auditor: {
     Permissions.tenantView,

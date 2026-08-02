@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/result/result.dart';
 import '../models/invoice.dart';
 import '../services/invoice_service.dart';
+import 'components/invoice_filter_bar.dart' show InvoiceFilter;
 
 class InvoiceListQuery {
   const InvoiceListQuery({
@@ -38,24 +39,50 @@ class InvoiceListQuery {
   );
 }
 
-final invoiceListProvider = FutureProvider.autoDispose
-    .family<({List<InvoiceListItem> items, int total}), InvoiceListQuery>((
-      ref,
-      query,
-    ) async {
-      final service = ref.watch(invoiceServiceProvider);
-      final result = await service.list(
-        page: query.page,
-        limit: query.limit,
-        search: query.search,
-        status: query.status,
-        contactId: query.contactId,
-        dateFrom: query.dateFrom,
-        dateTo: query.dateTo,
-      );
-      return switch (result) {
-        Success(:final value) => value,
-        Failure(:final error) => throw error,
-        _ => throw Exception('Unexpected result type'),
-      };
-    });
+class InvoiceListNotifier extends AutoDisposeAsyncNotifier<({List<InvoiceListItem> items, int total})> {
+  InvoiceListQuery _query = const InvoiceListQuery();
+
+  @override
+  Future<({List<InvoiceListItem> items, int total})> build() async {
+    final service = ref.watch(invoiceServiceProvider);
+    final result = await service.list(
+      page: _query.page,
+      limit: _query.limit,
+      search: _query.search,
+      status: _query.status,
+      contactId: _query.contactId,
+      dateFrom: _query.dateFrom,
+      dateTo: _query.dateTo,
+    );
+    return switch (result) {
+      Success(:final value) => value,
+      Failure(:final error) => throw error,
+      _ => throw Exception('Unexpected result type'),
+    };
+  }
+
+  Future<void> refresh() {
+    _query = const InvoiceListQuery();
+    ref.invalidateSelf();
+    return Future.value();
+  }
+
+  void goToPage(int page) {
+    _query = _query.copyWith(page: page);
+    ref.invalidateSelf();
+  }
+
+  void setFilters(InvoiceFilter filter) {
+    _query = _query.copyWith(
+      page: 1,
+      search: filter.searchQuery,
+      status: filter.status?.value,
+      contactId: filter.customerQuery,
+      dateFrom: filter.dateFrom?.toIso8601String(),
+      dateTo: filter.dateTo?.toIso8601String(),
+    );
+    ref.invalidateSelf();
+  }
+}
+
+final invoiceListProvider = AutoDisposeAsyncNotifierProvider<InvoiceListNotifier, ({List<InvoiceListItem> items, int total})>(InvoiceListNotifier.new);

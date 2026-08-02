@@ -57,7 +57,7 @@ class ApexTableBody<T extends BaseModel> extends StatelessWidget {
             margin: EdgeInsets.zero,
             color: selected ? colors.primaryContainer : colors.surfaceRaised,
             child: InkWell(
-              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              borderRadius: BorderRadius.circular(ApexRadius_lg),
               onTap: onRowTap == null ? null : () => onRowTap!(row),
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(10, 10, 14, 12),

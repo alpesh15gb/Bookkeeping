@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/features/inventory/warehouse/presentation/warehouse_providers.dart';
@@ -18,7 +19,7 @@ Widget selectorWidget(
       padding: const EdgeInsets.all(ApexSpacing.sm),
       decoration: BoxDecoration(
         color: colors.surface,
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         border: Border.all(color: colors.border),
       ),
       child: Row(
@@ -279,7 +280,7 @@ Widget buildToolbar(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 460),
               child: InkWell(
-                borderRadius: BorderRadius.circular(ApexRadius.md),
+                borderRadius: BorderRadius.circular(ApexRadius_md),
                 onTap: onSearch,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
@@ -288,7 +289,7 @@ Widget buildToolbar(
                   ),
                   decoration: BoxDecoration(
                     color: colors.surfaceMuted,
-                    borderRadius: BorderRadius.circular(ApexRadius.md),
+                    borderRadius: BorderRadius.circular(ApexRadius_md),
                     border: Border.all(color: colors.border),
                   ),
                   child: Row(
@@ -342,7 +343,7 @@ Widget buildToolbar(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: colors.surfaceMuted,
-            borderRadius: BorderRadius.circular(ApexRadius.pill),
+            borderRadius: BorderRadius.circular(ApexRadius_pill),
             border: Border.all(color: colors.border),
           ),
           child: Row(
@@ -368,7 +369,7 @@ Widget _keycap(String label, ApexColors colors) => Container(
   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
   decoration: BoxDecoration(
     color: colors.surface,
-    borderRadius: BorderRadius.circular(ApexRadius.sm),
+    borderRadius: BorderRadius.circular(ApexRadius_sm),
     border: Border.all(color: colors.border),
   ),
   child: Text(
@@ -439,7 +440,7 @@ class _WarehouseStockTabViewState
                     data: (warehouses) => Container(
                       decoration: BoxDecoration(
                         color: colors.surfaceRaised,
-                        borderRadius: BorderRadius.circular(ApexRadius.sm),
+                        borderRadius: BorderRadius.circular(ApexRadius_sm),
                         border: Border.all(color: colors.border),
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -454,7 +455,7 @@ class _WarehouseStockTabViewState
                             ),
                           ),
                           isDense: true,
-                          borderRadius: BorderRadius.circular(ApexRadius.md),
+                          borderRadius: BorderRadius.circular(ApexRadius_md),
                           items: warehouses
                               .map(
                                 (w) => DropdownMenuItem(

@@ -4,6 +4,12 @@ library;
 
 import 'package:flutter/material.dart';
 
+/// Re-export spacing/radius tokens
+export 'spacing.dart' show ApexSpacing, ApexRadius;
+
+/// Re-export design-system top-level spacing/radius constants
+export '../design_system/tokens/spacing.dart';
+
 /// Semantic color roles shared across light + dark themes.
 ///
 /// Exposed on the theme via `Theme.of(context).extension<ApexColors>()!`.
@@ -93,11 +99,7 @@ class ApexColors extends ThemeExtension<ApexColors> {
     if (other is! ApexColors) return this;
     return ApexColors(
       primary: Color.lerp(primary, other.primary, t)!,
-      primaryContainer: Color.lerp(
-        primaryContainer,
-        other.primaryContainer,
-        t,
-      )!,
+      primaryContainer: Color.lerp(primaryContainer, other.primaryContainer, t)!,
       onPrimary: Color.lerp(onPrimary, other.onPrimary, t)!,
       accent: Color.lerp(accent, other.accent, t)!,
       success: Color.lerp(success, other.success, t)!,
@@ -112,79 +114,61 @@ class ApexColors extends ThemeExtension<ApexColors> {
       textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
       textMuted: Color.lerp(textMuted, other.textMuted, t)!,
       skeletonBase: Color.lerp(skeletonBase, other.skeletonBase, t)!,
-      skeletonHighlight: Color.lerp(
-        skeletonHighlight,
-        other.skeletonHighlight,
-        t,
-      )!,
+      skeletonHighlight: Color.lerp(skeletonHighlight, other.skeletonHighlight, t)!,
     );
   }
+
+  /// Material 3–style container roles for convenience.
+  Color get successContainer => success.withValues(alpha: 0.12);
+  Color get warningContainer => warning.withValues(alpha: 0.12);
+  Color get dangerContainer => danger.withValues(alpha: 0.12);
+  Color get infoContainer => info.withValues(alpha: 0.12);
+  Color get errorContainer => danger.withValues(alpha: 0.12);
+  Color get error => danger;
+
+  /// Light theme palette.
+  static const light = ApexColors(
+    primary: Color(0xFF1A5D3E),
+    primaryContainer: Color(0xFFE8F5ED),
+    onPrimary: Color(0xFFFFFFFF),
+    accent: Color(0xFF1A5D3E),
+    success: Color(0xFF1E8A49),
+    warning: Color(0xFFB45309),
+    danger: Color(0xFFC62828),
+    info: Color(0xFF0288D1),
+    surface: Color(0xFFFFFFFF),
+    surfaceRaised: Color(0xFFF5F5F5),
+    surfaceMuted: Color(0xFFF5F5F5),
+    border: Color(0xFFE0E0E0),
+    textPrimary: Color(0xFF1A1A1A),
+    textSecondary: Color(0xFF5F5F5F),
+    textMuted: Color(0xFF9E9E9E),
+    skeletonBase: Color(0xFFE0E0E0),
+    skeletonHighlight: Color(0xFFF5F5F5),
+  );
+
+  /// Dark theme palette.
+  static const dark = ApexColors(
+    primary: Color(0xFF4ADE80),
+    primaryContainer: Color(0xFF1B3A2E),
+    onPrimary: Color(0xFF000000),
+    accent: Color(0xFF4ADE80),
+    success: Color(0xFF66BB6A),
+    warning: Color(0xFFF59E0B),
+    danger: Color(0xFFEF5350),
+    info: Color(0xFF29B6F6),
+    surface: Color(0xFF1E1E1E),
+    surfaceRaised: Color(0xFF2D2D2D),
+    surfaceMuted: Color(0xFF2D2D2D),
+    border: Color(0xFF3D3D3D),
+    textPrimary: Color(0xFFFFFFFF),
+    textSecondary: Color(0xFFB0B0B0),
+    textMuted: Color(0xFF757575),
+    skeletonBase: Color(0xFF3D3D3D),
+    skeletonHighlight: Color(0xFF4D4D4D),
+  );
 }
 
-/// Spacing scale based on an 8px grid.
-class ApexSpacing {
-  ApexSpacing._();
-  static const double xs = 4;
-  static const double sm = 8;
-  static const double md = 12;
-  static const double lg = 16;
-  static const double xl = 24;
-  static const double xxl = 32;
-  static const double xxxl = 48;
-}
-
-/// Radius tokens.
-class ApexRadius {
-  ApexRadius._();
-  static const double sm = 6;
-  static const double md = 10;
-  static const double lg = 14;
-  static const double xl = 20;
-  static const double pill = 999;
-}
-
-/// Light theme semantic colors.
-const lightApexColors = ApexColors(
-  primary: Color(0xFF4F46E5),
-  primaryContainer: Color(0xFFE0E7FF),
-  onPrimary: Color(0xFFFFFFFF),
-  accent: Color(0xFF7C3AED),
-  success: Color(0xFF16A34A),
-  warning: Color(0xFFD97706),
-  danger: Color(0xFFDC2626),
-  info: Color(0xFF0EA5E9),
-  surface: Color(0xFFFFFFFF),
-  surfaceRaised: Color(0xFFFFFFFF),
-  surfaceMuted: Color(0xFFF5F6FA),
-  border: Color(0xFFE5E7EB),
-  textPrimary: Color(0xFF111827),
-  textSecondary: Color(0xFF4B5563),
-  textMuted: Color(0xFF9CA3AF),
-  skeletonBase: Color(0xFFECEFF3),
-  skeletonHighlight: Color(0xFFF7F8FB),
-);
-
-/// Dark theme semantic colors.
-const darkApexColors = ApexColors(
-  primary: Color(0xFF818CF8),
-  primaryContainer: Color(0xFF3730A3),
-  onPrimary: Color(0xFF1E1B4B),
-  accent: Color(0xFFA78BFA),
-  success: Color(0xFF4ADE80),
-  warning: Color(0xFFFBBF24),
-  danger: Color(0xFFF87171),
-  info: Color(0xFF38BDF8),
-  surface: Color(0xFF0F1117),
-  surfaceRaised: Color(0xFF1A1D27),
-  surfaceMuted: Color(0xFF232734),
-  border: Color(0xFF2C313F),
-  textPrimary: Color(0xFFF3F4F6),
-  textSecondary: Color(0xFFCBD5E1),
-  textMuted: Color(0xFF8590A2),
-  skeletonBase: Color(0xFF232734),
-  skeletonHighlight: Color(0xFF2C313F),
-);
-
-/// Convenience accessor for the [ApexColors] extension of the current theme.
+/// Convenience accessor for the color extension.
 ApexColors apexColors(BuildContext context) =>
     Theme.of(context).extension<ApexColors>()!;

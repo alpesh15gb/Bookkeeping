@@ -46,12 +46,18 @@ class BillTableBody extends StatelessWidget {
       );
     }
     final textTheme = Theme.of(context).textTheme;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: 760,
-        child: Column(
-          children: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 760,
+              minHeight: constraints.maxHeight,
+              maxHeight: constraints.maxHeight,
+            ),
+            child: Column(
+              children: [
             // Sticky header row
             Container(
               color: colors.surfaceMuted,
@@ -158,7 +164,9 @@ class BillTableBody extends StatelessWidget {
         ),
       ),
     );
-  }
+  },
+);
+}
 
   Widget _sortableHeader(
     BuildContext context,
@@ -296,7 +304,7 @@ class _MobileBillList extends StatelessWidget {
           margin: EdgeInsets.zero,
           color: isSelected ? colors.primaryContainer : null,
           child: InkWell(
-            borderRadius: BorderRadius.circular(ApexRadius.lg),
+            borderRadius: BorderRadius.circular(ApexRadius_lg),
             onTap: () => onSelect(item),
             child: Padding(
               padding: const EdgeInsets.all(14),

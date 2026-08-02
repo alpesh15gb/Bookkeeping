@@ -2,12 +2,11 @@ import 'dart:async';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
-import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import '../../sales/presentation/invoice_form_screen.dart';
 import 'dashboard_controller.dart';
@@ -380,7 +379,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             height: 240,
             decoration: BoxDecoration(
               color: colors.skeletonBase,
-              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              borderRadius: BorderRadius.circular(ApexRadius_lg),
             ),
           ),
         ),
@@ -635,7 +634,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             height: 240,
             decoration: BoxDecoration(
               color: colors.skeletonBase,
-              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              borderRadius: BorderRadius.circular(ApexRadius_lg),
             ),
           ),
         ),
@@ -664,7 +663,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: colors.danger.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(ApexRadius.pill),
+                        borderRadius: BorderRadius.circular(ApexRadius_pill),
                       ),
                       child: Text(
                         '${res.count}',
@@ -735,7 +734,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             height: 34,
             decoration: BoxDecoration(
               color: tone,
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
             ),
           ),
           const SizedBox(width: 12),
@@ -789,7 +788,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
             height: 100,
             decoration: BoxDecoration(
               color: colors.skeletonBase,
-              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              borderRadius: BorderRadius.circular(ApexRadius_lg),
             ),
           ),
         ),
@@ -901,7 +900,7 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: colors.surfaceMuted,
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         border: emphasize
             ? Border.all(color: colors.primary.withValues(alpha: 0.3))
             : null,
@@ -1004,7 +1003,7 @@ class _KpiCardState extends State<_KpiCard> {
         transformAlignment: Alignment.center,
         decoration: BoxDecoration(
           color: widget.colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
           border: Border.all(
             color: _hovered
                 ? widget.tone.withValues(alpha: 0.5)

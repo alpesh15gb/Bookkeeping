@@ -218,7 +218,7 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
                   vertical: 10,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  borderRadius: BorderRadius.circular(ApexRadius_sm),
                 ),
               ),
               onChanged: (v) => setState(() => _search = v),
@@ -277,7 +277,7 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
           elevation: 0,
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(ApexRadius.lg),
+            borderRadius: BorderRadius.circular(ApexRadius_lg),
             side: BorderSide(color: c.border),
           ),
           child: Padding(
@@ -346,7 +346,7 @@ class _WarehouseStockScreenState extends ConsumerState<WarehouseStockScreen> {
       margin: const EdgeInsets.fromLTRB(24, 0, 24, 20),
       decoration: BoxDecoration(
         color: c.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: c.border),
       ),
       clipBehavior: Clip.antiAlias,

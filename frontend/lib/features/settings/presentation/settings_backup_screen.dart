@@ -426,7 +426,7 @@ class _SettingsBackupScreenState extends ConsumerState<SettingsBackupScreen> {
             // Danger Zone
             Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(ApexRadius.lg),
+                borderRadius: BorderRadius.circular(ApexRadius_lg),
                 border: Border.all(color: colors.danger.withValues(alpha: 0.3)),
               ),
               child: ApexCard(

@@ -318,7 +318,7 @@ class _SettingsPreferencesScreenState
   }) {
     final selected = _themeMode == value;
     return InkWell(
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       onTap: () async {
         setState(() => _themeMode = value);
         final mode = switch (value) {
@@ -336,7 +336,7 @@ class _SettingsPreferencesScreenState
           color: selected
               ? colors.primary.withValues(alpha: 0.06)
               : colors.surfaceMuted,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           border: Border.all(color: selected ? colors.primary : colors.border),
         ),
         child: Row(

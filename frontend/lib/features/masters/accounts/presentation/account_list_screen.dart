@@ -281,7 +281,7 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
                   children: [
                     if (hasChildren)
                       InkWell(
-                        borderRadius: BorderRadius.circular(ApexRadius.xl),
+                        borderRadius: BorderRadius.circular(ApexRadius_xl),
                         onTap: () => setState(() {
                           if (isExpanded) {
                             _expanded.remove(a.id);
@@ -368,7 +368,7 @@ class _AccountListScreenState extends ConsumerState<AccountListScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: tone.withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(ApexRadius.pill),
+        borderRadius: BorderRadius.circular(ApexRadius_pill),
       ),
       child: Text(
         t.displayLabel,

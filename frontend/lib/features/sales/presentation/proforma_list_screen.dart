@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
@@ -388,7 +389,7 @@ class _TableBody extends StatelessWidget {
             margin: EdgeInsets.zero,
             color: item.id == selectedId ? colors.primaryContainer : null,
             child: InkWell(
-              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              borderRadius: BorderRadius.circular(ApexRadius_lg),
               onTap: () => onSelect(item),
               child: Padding(
                 padding: const EdgeInsets.all(14),
@@ -589,7 +590,7 @@ class _StatusFilterBar extends StatelessWidget {
           child: Container(
             decoration: BoxDecoration(
               color: colors.surfaceMuted,
-              borderRadius: BorderRadius.circular(ApexRadius.md),
+              borderRadius: BorderRadius.circular(ApexRadius_md),
               border: Border.all(color: colors.border),
             ),
             padding: const EdgeInsets.all(3),
@@ -609,7 +610,7 @@ class _StatusFilterBar extends StatelessWidget {
                       color: selected
                           ? colors.surfaceRaised
                           : Colors.transparent,
-                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                      borderRadius: BorderRadius.circular(ApexRadius_sm),
                       boxShadow: selected
                           ? [
                               BoxShadow(

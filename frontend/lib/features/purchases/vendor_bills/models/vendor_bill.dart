@@ -4,6 +4,7 @@ library;
 import 'package:flutter/foundation.dart';
 import 'bill_status.dart';
 import 'bill_line.dart';
+import 'package:apexbooks/features/sales/payments/models/payment_models.dart';
 
 @immutable
 class VendorBill {
@@ -36,6 +37,7 @@ class VendorBill {
     this.lines = const [],
     this.purchaseOrderId,
     this.goodsReceiptId,
+    this.payments = const [],
     this.createdAt,
   });
 
@@ -67,6 +69,7 @@ class VendorBill {
   final List<BillLine> lines;
   final String? purchaseOrderId;
   final String? goodsReceiptId;
+  final List<Payment> payments;
   final String? createdAt;
 
   double get totalTax =>

@@ -61,6 +61,13 @@ class PurchaseReturnService {
       return PurchaseReturn.fromJson(res.data as Map<String, dynamic>);
     });
   }
+
+  /// Delete a draft purchase return.
+  Future<Result<void>> delete(String id) {
+    return guardDio(() async {
+      await _dio.delete('/returns/purchase/$id');
+    });
+  }
 }
 
 final purchaseReturnServiceProvider = Provider<PurchaseReturnService>((ref) {

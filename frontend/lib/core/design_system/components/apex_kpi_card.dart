@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/responsive.dart';
 import '../../widgets/monetary_text.dart';
+import '../index.dart';
 
 /// Visual emphasis level for the KPI card.
 enum KpiEmphasis { normal, high }

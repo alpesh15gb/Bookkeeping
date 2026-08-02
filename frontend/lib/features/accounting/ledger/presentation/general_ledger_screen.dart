@@ -150,12 +150,12 @@ class _GeneralLedgerScreenState extends ConsumerState<GeneralLedgerScreen> {
       label: 'Select General Ledger as-of date',
       child: InkWell(
         onTap: _pickDate,
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
           decoration: BoxDecoration(
             color: colors.surfaceRaised,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
+            borderRadius: BorderRadius.circular(ApexRadius_md),
             border: Border.all(color: colors.border),
           ),
           child: Row(
@@ -224,7 +224,7 @@ class _GeneralLedgerScreenState extends ConsumerState<GeneralLedgerScreen> {
       ),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: colors.border),
       ),
       clipBehavior: Clip.antiAlias,

@@ -13,6 +13,7 @@ class PurchaseOrderLine {
     this.quantity = 1,
     this.rate = 0,
     this.discount = 0,
+    this.unit = 'PCS',
     this.hsnSac = '',
     this.gstRate = 0,
     this.subtotal = 0,
@@ -37,6 +38,7 @@ class PurchaseOrderLine {
   final double quantity;
   final double rate;
   final double discount;
+  final String unit;
   final String hsnSac;
   final double gstRate;
   final double subtotal;
@@ -71,6 +73,7 @@ class PurchaseOrderLine {
     double? quantity,
     double? rate,
     double? discount,
+    String? unit,
     String? hsnSac,
     double? gstRate,
     double? subtotal,
@@ -94,6 +97,7 @@ class PurchaseOrderLine {
     quantity: quantity ?? this.quantity,
     rate: rate ?? this.rate,
     discount: discount ?? this.discount,
+    unit: unit ?? this.unit,
     hsnSac: hsnSac ?? this.hsnSac,
     gstRate: gstRate ?? this.gstRate,
     subtotal: subtotal ?? this.subtotal,
@@ -116,6 +120,7 @@ class PurchaseOrderLine {
     'quantity': quantity,
     'rate': rate,
     'discount': discount,
+    'unit': unit,
     'hsn_sac': hsnSac,
     'gst_rate': gstRate,
   };
@@ -129,6 +134,7 @@ class PurchaseOrderLine {
         quantity: _num(json['quantity']),
         rate: _num(json['rate']),
         discount: _num(json['discount']),
+        unit: json['unit'] as String? ?? 'PCS',
         hsnSac: json['hsn_sac'] as String? ?? '',
         gstRate: _num(json['gst_rate']),
         subtotal: _num(json['subtotal']),

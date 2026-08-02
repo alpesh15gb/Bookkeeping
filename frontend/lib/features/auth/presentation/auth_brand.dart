@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/design_system/index.dart';
 import '../../../core/theme/app_colors.dart';
 
 class AuthBrandHeader extends StatelessWidget {
@@ -19,7 +20,7 @@ class AuthBrandHeader extends StatelessWidget {
           height: 56,
           decoration: BoxDecoration(
             color: colors.primary,
-            borderRadius: BorderRadius.circular(ApexRadius.lg),
+            borderRadius: BorderRadius.circular(ApexRadius_lg),
           ),
           child: const Icon(
             Icons.menu_book_rounded,
@@ -71,7 +72,7 @@ class AuthScaffold extends StatelessWidget {
             padding: const EdgeInsets.all(ApexSpacing.xxl),
             decoration: BoxDecoration(
               color: colors.surfaceRaised,
-              borderRadius: BorderRadius.circular(ApexRadius.xl),
+              borderRadius: BorderRadius.circular(ApexRadius_xl),
               border: Border.all(color: colors.border),
               boxShadow: [
                 BoxShadow(
@@ -152,7 +153,7 @@ class _BrandPanel extends StatelessWidget {
                 height: 48,
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(ApexRadius.md),
+                  borderRadius: BorderRadius.circular(ApexRadius_md),
                 ),
                 child: const Icon(
                   Icons.menu_book_rounded,

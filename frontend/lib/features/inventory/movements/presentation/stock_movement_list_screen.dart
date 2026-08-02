@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
-import 'package:apexbooks/core/widgets/page_header.dart';
+import 'package:apexbooks/core/widgets/page_header.dart' hide ApexCard;
 import 'package:apexbooks/core/widgets/search_bar.dart';
 import 'package:apexbooks/core/widgets/skeleton_loader.dart';
 import 'package:apexbooks/core/widgets/states.dart';
@@ -144,7 +144,7 @@ class _StockMovementListScreenState
     return Container(
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
         border: Border.all(color: colors.border),
       ),
       padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -153,7 +153,7 @@ class _StockMovementListScreenState
           value: _typeFilter,
           hint: const Text('All types', style: TextStyle(fontSize: 13)),
           isDense: true,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           items: [
             const DropdownMenuItem(
               value: null,
@@ -208,7 +208,7 @@ class _StockMovementListScreenState
                     height: 32,
                     decoration: BoxDecoration(
                       color: tone.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                      borderRadius: BorderRadius.circular(ApexRadius_sm),
                     ),
                     child: Semantics(
                       label: direction,
@@ -339,7 +339,7 @@ class _StockMovementListScreenState
       ),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: colors.border),
       ),
       clipBehavior: Clip.antiAlias,

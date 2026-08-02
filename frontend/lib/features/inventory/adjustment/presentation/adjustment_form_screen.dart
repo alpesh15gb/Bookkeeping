@@ -270,7 +270,7 @@ class _AdjustmentFormScreenState extends ConsumerState<AdjustmentFormScreen> {
           decoration: BoxDecoration(
             color: colors.surfaceMuted,
             borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(ApexRadius.lg),
+              top: Radius.circular(ApexRadius_lg),
             ),
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -536,7 +536,7 @@ class _DateField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
       onTap: () async {
         final init = parse(value) ?? DateTime.now();
         final picked = await showDatePicker(
@@ -670,7 +670,7 @@ class _AdjLineRowState extends State<_AdjLineRow> {
                   vertical: 8,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  borderRadius: BorderRadius.circular(ApexRadius_sm),
                 ),
               ),
               onChanged: (v) => widget.onChanged(
@@ -699,7 +699,7 @@ class _AdjLineRowState extends State<_AdjLineRow> {
                   vertical: 8,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  borderRadius: BorderRadius.circular(ApexRadius_sm),
                 ),
               ),
               onChanged: (v) => widget.onChanged(
@@ -773,7 +773,7 @@ class _ProductField extends StatelessWidget {
               vertical: 8,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
             ),
           ),
         );
@@ -784,13 +784,13 @@ class _ProductField extends StatelessWidget {
           alignment: Alignment.topLeft,
           child: Material(
             elevation: 6,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
+            borderRadius: BorderRadius.circular(ApexRadius_md),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 300, maxWidth: 380),
               child: Container(
                 decoration: BoxDecoration(
                   color: colors.surfaceRaised,
-                  borderRadius: BorderRadius.circular(ApexRadius.md),
+                  borderRadius: BorderRadius.circular(ApexRadius_md),
                   border: Border.all(color: colors.border),
                 ),
                 child: ListView.builder(
@@ -849,6 +849,6 @@ InputDecoration _dec(ApexColors colors, {String? hint, IconData? icon}) =>
           : Icon(icon, size: 18, color: colors.textMuted),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
       ),
     );

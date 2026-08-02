@@ -351,7 +351,7 @@ class _ErrorBanner extends StatelessWidget {
         padding: const EdgeInsets.all(ApexSpacing.md),
         decoration: BoxDecoration(
           color: colors.danger.withValues(alpha: .1),
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           border: Border.all(color: colors.danger.withValues(alpha: .25)),
         ),
         child: Row(
@@ -462,7 +462,7 @@ class _JournalLineEditor extends StatelessWidget {
         padding: const EdgeInsets.all(ApexSpacing.md),
         decoration: BoxDecoration(
           color: colors.surfaceMuted,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           border: Border.all(color: colors.border),
         ),
         child: Column(

@@ -3,9 +3,13 @@ library;
 
 /// Status values for purchase orders.
 ///
-/// Lifecycle: Draft → Confirmed → Received → Cancelled
+/// Lifecycle: Draft → Pending → Approved → Partial → Completed → Cancelled
 enum PurchaseOrderStatus {
   draft('DRAFT'),
+  pending('PENDING'),
+  approved('APPROVED'),
+  partial('PARTIAL'),
+  completed('COMPLETED'),
   confirmed('CONFIRMED'),
   received('RECEIVED'),
   cancelled('CANCELLED');
@@ -17,9 +21,9 @@ enum PurchaseOrderStatus {
       .firstWhere((e) => e.value == s, orElse: () => draft);
 
   bool get isEditable => this == draft;
-  bool get isConfirmed => this == confirmed;
-  bool get isReceived => this == received;
+  bool get isConfirmed => this == confirmed || this == approved;
+  bool get isReceived => this == received || this == completed || this == partial;
   bool get isCancelled => this == cancelled;
-  bool get isFinalized => this == confirmed || this == received;
-  bool get isCancellable => this == draft || this == confirmed;
+  bool get isFinalized => this == confirmed || this == received || this == approved || this == completed || this == partial;
+  bool get isCancellable => this == draft || this == confirmed || this == approved;
 }

@@ -6,6 +6,7 @@ library;
 
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
+import '../index.dart';
 
 /// Result of a confirm dialog.
 enum ConfirmResult { confirmed, cancelled }

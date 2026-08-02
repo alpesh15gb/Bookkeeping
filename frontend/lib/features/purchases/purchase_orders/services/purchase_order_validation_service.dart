@@ -43,15 +43,41 @@ class PurchaseOrderValidationService {
   }) {
     switch (current) {
       case PurchaseOrderStatus.draft:
-        if (target == PurchaseOrderStatus.confirmed) return null;
+        if (target == PurchaseOrderStatus.pending ||
+            target == PurchaseOrderStatus.approved ||
+            target == PurchaseOrderStatus.confirmed) {
+          return null;
+        }
         if (target == PurchaseOrderStatus.cancelled) return null;
-        return 'Draft can only transition to Confirmed or Cancelled';
+        return 'Draft can only transition to Pending, Approved, Confirmed or Cancelled';
+      case PurchaseOrderStatus.pending:
+        if (target == PurchaseOrderStatus.approved ||
+            target == PurchaseOrderStatus.cancelled) {
+          return null;
+        }
+        return 'Pending can only transition to Approved or Cancelled';
+      case PurchaseOrderStatus.approved:
+        if (target == PurchaseOrderStatus.confirmed ||
+            target == PurchaseOrderStatus.partial ||
+            target == PurchaseOrderStatus.completed) {
+          return null;
+        }
+        return 'Approved can only transition to Confirmed, Partial or Completed';
       case PurchaseOrderStatus.confirmed:
-        if (target == PurchaseOrderStatus.received) return null;
-        if (target == PurchaseOrderStatus.cancelled) return null;
-        return 'Confirmed can only transition to Received or Cancelled';
+        if (target == PurchaseOrderStatus.received ||
+            target == PurchaseOrderStatus.partial ||
+            target == PurchaseOrderStatus.completed ||
+            target == PurchaseOrderStatus.cancelled) {
+          return null;
+        }
+        return 'Confirmed can only transition to Received, Partial, Completed or Cancelled';
+      case PurchaseOrderStatus.partial:
+        if (target == PurchaseOrderStatus.completed) return null;
+        return 'Partial can only transition to Completed';
       case PurchaseOrderStatus.received:
         return 'Received is a terminal state — no further transitions allowed';
+      case PurchaseOrderStatus.completed:
+        return 'Completed is a terminal state — no further transitions allowed';
       case PurchaseOrderStatus.cancelled:
         return 'Cancelled is a terminal state — no further transitions allowed';
     }

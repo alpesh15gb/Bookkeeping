@@ -1,23 +1,20 @@
-/// Invoice form notifier — orchestrates create/edit with live calculations.
+/// Invoice Form Notifier — Orchestrates create/edit with live calculations.
 library;
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/invoice.dart';
 import '../models/invoice_line.dart';
 import '../services/invoice_service.dart';
 import '../services/invoice_calculation_service.dart';
-import '../services/invoice_validation_service.dart';
 import 'invoice_form_state.dart';
 import 'package:apexbooks/features/masters/products/data/models/product.dart';
+import 'package:apexbooks/features/masters/contacts/data/models/contact.dart';
 import 'package:apexbooks/features/auth/presentation/auth_controller.dart';
 
 class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
   InvoiceFormNotifier(
     this._service,
     this._calc,
-    this._validation,
-    this._collectGst,
   ) : super(
         const InvoiceFormState(
           lines: [InvoiceLine(productId: '', hsnSac: '', gstRate: 0)],
@@ -26,20 +23,41 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
 
   final InvoiceService _service;
   final InvoiceCalculationService _calc;
-  final InvoiceValidationService _validation;
-  final bool _collectGst;
   String _originStateCode = '';
 
+  // ───── Initialization ────────────────────────────────────────────────────
+
+  Future<void> initializeNew() async {
+    // Load origin state code for GST determination
+    final authState = ref.read(authControllerProvider);
+    _originStateCode = _stateCodeFromGstin(authState.activeMembership?.gstin);
+    state = state.copyWith(
+      issueDate: DateTime.now(),
+      dueDate: DateTime.now().add(const Duration(days: 30)),
+      posStateCode: _originStateCode,
+      isGstInclusive: false,
+      supplyType: 'DOMESTIC',
+    );
+    _recalculate();
+  }
+
+  String _stateCodeFromGstin(String? gstin) {
+    if (gstin == null || gstin.length < 2) return '';
+    return gstin.substring(0, 2);
+  }
+
   Future<void> loadForEdit(String id) async {
+    state = state.copyWith(isLoading: true);
     final result = await _service.get(id);
     switch (result) {
       case Success(:final value):
+        _originStateCode = value.originStateCode ?? '';
         state = InvoiceFormState(
           contactId: value.contactId,
           contactName: value.contactName ?? '',
           invoiceNumber: value.invoiceNumber,
-          issueDate: value.issueDate,
-          dueDate: value.dueDate,
+          issueDate: DateTime.tryParse(value.issueDate) ?? DateTime.now(),
+          dueDate: DateTime.tryParse(value.dueDate) ?? DateTime.now().add(const Duration(days: 30)),
           posStateCode: value.posStateCode,
           shippingCharges: value.shippingCharges,
           notes: value.notes,
@@ -51,200 +69,444 @@ class InvoiceFormNotifier extends StateNotifier<InvoiceFormState> {
           tdsRate: value.tdsRate,
           tcsRate: value.tcsRate,
           lines: value.lines,
-          subtotal: value.subtotal,
-          discountTotal: value.discountTotal,
-          totalTax: value.totalTax,
-          total: value.total,
+          originalId: value.id,
+          originalStatus: value.status,
         );
+        _recalculate();
       case Failure(:final error):
-        state = state.copyWith(error: error.message);
+        state = state.copyWith(isLoading: false, error: error.message);
       default:
-        break;
+        state = state.copyWith(isLoading: false, error: 'Unexpected result type');
     }
   }
 
-  void setContact(String id, String name) =>
-      state = state.copyWith(contactId: id, contactName: name);
-  void setIssueDate(String d) => state = state.copyWith(issueDate: d);
-  void setDueDate(String d) => state = state.copyWith(dueDate: d);
-  void setOriginStateCode(String c) {
-    _originStateCode = c;
-    _recalc(state);
-  }
+  // ───── Header Fields ──────────────────────────────────────────────────────
 
-  void setPosStateCode(String c) => _recalc(state.copyWith(posStateCode: c));
-  void setDiscountRate(double r) => _recalc(state.copyWith(discountRate: r));
-  void setShipping(double s) => _recalc(state.copyWith(shippingCharges: s));
-  void setIsGstInclusive(bool value) =>
-      _recalc(state.copyWith(isGstInclusive: value));
-  void setIsRcm(bool value) => _recalc(state.copyWith(isRcm: value));
-  void setSupplyType(String value) => state = state.copyWith(supplyType: value);
-  void setNotes(String n) => state = state.copyWith(notes: n);
-  void setTerms(String t) => state = state.copyWith(termsAndConditions: t);
-  void setRefNo(String r) => state = state.copyWith(referenceNumber: r);
-
-  void updateLine(int index, InvoiceLine line) {
-    final lines = [...state.lines]..[index] = line;
-    _recalc(state.copyWith(lines: lines));
-  }
-
-  void addLine() {
-    _recalc(
-      state.copyWith(
-        lines: [
-          ...state.lines,
-          const InvoiceLine(productId: '', hsnSac: '', gstRate: 0),
-        ],
-      ),
+  void setContact(Contact contact) {
+    state = state.copyWith(
+      contactId: contact.id,
+      contactName: contact.name,
+      posStateCode: contact.stateCode ?? _originStateCode,
+      billingAddress: _formatAddress(contact.billingAddress),
+      shippingAddress: _formatAddress(contact.shippingAddress),
+      contactGstNumber: contact.gstin,
+      contactEmail: contact.email,
+      contactPhone: contact.phone,
     );
+    _recalculate();
   }
 
-  void addScannedProduct(Product product) {
-    final lines = [...state.lines];
-    final existing = lines.indexWhere((line) => line.productId == product.id);
-    if (existing >= 0) {
-      lines[existing] = lines[existing].copyWith(
-        quantity: lines[existing].quantity + 1,
-      );
-    } else {
-      final scanned = InvoiceLine(
-        productId: product.id,
-        productName: product.name,
-        description: product.name,
-        quantity: 1,
-        rate: product.salesPrice,
-        gstRate: _collectGst ? product.gstRate : 0,
-        hsnSac: product.hsnSac,
-      );
-      final empty = lines.indexWhere((line) => line.productId.isEmpty);
-      if (empty >= 0) {
-        lines[empty] = scanned;
-      } else {
-        lines.add(scanned);
-      }
+  String? _formatAddress(Address? address) {
+    if (address == null) return null;
+    return [
+      address.street,
+      address.city,
+      address.state,
+      address.stateCode,
+      address.pincode,
+    ].where((e) => e?.isNotEmpty == true).join(', ');
+  }
+
+  void clearContact() {
+    state = state.copyWith(
+      contactId: null,
+      contactName: '',
+      posStateCode: _originStateCode,
+      billingAddress: null,
+      shippingAddress: null,
+      contactGstNumber: null,
+      contactEmail: null,
+      contactPhone: null,
+    );
+    _recalculate();
+  }
+
+  void setIssueDate(DateTime date) {
+    state = state.copyWith(issueDate: date);
+    // Auto-adjust due date if it's before issue date
+    if (state.dueDate != null && date.isAfter(state.dueDate!)) {
+      state = state.copyWith(dueDate: date.add(const Duration(days: 30)));
     }
-    _recalc(state.copyWith(lines: lines, clearError: true));
+  }
+
+  void setDueDate(DateTime date) {
+    state = state.copyWith(dueDate: date);
+  }
+
+  void setPosStateCode(String code) {
+    state = state.copyWith(posStateCode: code);
+    _recalculate();
+  }
+
+  void setShippingCharges(double amount) {
+    state = state.copyWith(shippingCharges: amount);
+    _recalculate();
+  }
+
+  void setReferenceNumber(String? ref) {
+    state = state.copyWith(referenceNumber: ref);
+  }
+
+  void setNotes(String? notes) {
+    state = state.copyWith(notes: notes);
+  }
+
+  void setTermsAndConditions(String? terms) {
+    state = state.copyWith(termsAndConditions: terms);
+  }
+
+  void setIsGstInclusive(bool value) {
+    state = state.copyWith(isGstInclusive: value);
+    _recalculate();
+  }
+
+  void setIsRcm(bool value) {
+    state = state.copyWith(isRcm: value);
+    _recalculate();
+  }
+
+  void setSupplyType(String type) {
+    state = state.copyWith(supplyType: type);
+    _recalculate();
+  }
+
+  void setTdsRate(double rate) {
+    state = state.copyWith(tdsRate: rate);
+    _recalculate();
+  }
+
+  void setTcsRate(double rate) {
+    state = state.copyWith(tcsRate: rate);
+    _recalculate();
+  }
+
+  // ───── Line Management ────────────────────────────────────────────────────
+
+  void addLine({int? index, Product? product}) {
+    final newLine = _createLineFromProduct(product);
+    final lines = List<InvoiceLine>.from(state.lines);
+    if (index != null && index <= lines.length) {
+      lines.insert(index, newLine);
+    } else {
+      lines.add(newLine);
+    }
+    state = state.copyWith(lines: lines);
+    _recalculate();
   }
 
   void removeLine(int index) {
-    if (state.lines.length <= 1) return;
-    _recalc(state.copyWith(lines: [...state.lines]..removeAt(index)));
+    if (state.lines.length <= 1) return; // Keep at least one line
+    final lines = List<InvoiceLine>.from(state.lines);
+    lines.removeAt(index);
+    state = state.copyWith(lines: lines);
+    _recalculate();
   }
 
-  void _recalc(InvoiceFormState s) {
-    final r = _calc.calculateAll(
-      lines: s.lines,
-      discountRate: s.discountRate,
-      shippingCharges: s.shippingCharges,
-      isInterState:
-          _originStateCode.isNotEmpty &&
-          s.posStateCode.isNotEmpty &&
-          _originStateCode != s.posStateCode,
-      isGstInclusive: s.isGstInclusive,
-      isRcm: s.isRcm,
-    );
-    state = s.copyWith(
-      lines: r.lines,
-      subtotal: r.subtotal,
-      discountTotal: r.discountTotal,
-      totalTax: r.totalTax,
-      total: r.total,
-    );
+  void duplicateLine(int index) {
+    final lines = List<InvoiceLine>.from(state.lines);
+    final line = lines[index];
+    lines.insert(index + 1, line.copyWith(id: null));
+    state = state.copyWith(lines: lines);
+    _recalculate();
   }
 
-  Future<Invoice?> create() async {
-    state = state.copyWith(saving: true, error: null, clearError: true);
-    final check = _validation.validateForSave(
-      contactId: state.contactId,
-      lines: state.lines,
-      posStateCode: state.posStateCode,
-      issueDate: state.issueDate,
-      dueDate: state.dueDate,
-    );
-    if (!check.$1) {
-      state = state.copyWith(saving: false, error: check.$2);
-      return null;
+  void moveLine(int oldIndex, int newIndex) {
+    final lines = List<InvoiceLine>.from(state.lines);
+    final line = lines.removeAt(oldIndex);
+    lines.insert(newIndex, line);
+    state = state.copyWith(lines: lines);
+    // No recalc needed for reorder
+  }
+
+  void startLineEdit(int index) {
+    state = state.copyWith(editingLineIndex: index);
+  }
+
+  void cancelLineEdit() {
+    state = state.copyWith(editingLineIndex: null);
+  }
+
+  void updateLineField(int index, String field, dynamic value) {
+    final lines = List<InvoiceLine>.from(state.lines);
+    final line = lines[index];
+    InvoiceLine updatedLine;
+
+    switch (field) {
+      case 'productId':
+        updatedLine = line.copyWith(productId: value as String);
+        break;
+      case 'productName':
+        updatedLine = line.copyWith(productName: value as String?);
+        break;
+      case 'description':
+        updatedLine = line.copyWith(description: value as String?);
+        break;
+      case 'quantity':
+        updatedLine = line.copyWith(quantity: (value as num).toDouble());
+        break;
+      case 'rate':
+        updatedLine = line.copyWith(rate: (value as num).toDouble());
+        break;
+      case 'discount':
+        updatedLine = line.copyWith(discount: (value as num).toDouble());
+        break;
+      case 'hsnSac':
+        updatedLine = line.copyWith(hsnSac: value as String);
+        break;
+      case 'gstRate':
+        updatedLine = line.copyWith(gstRate: (value as num).toDouble());
+        break;
+      case 'unit':
+        updatedLine = line.copyWith(unit: value as String?);
+        break;
+      default:
+        return;
     }
-    final result = await _service.create(_buildPayload());
-    state = state.copyWith(saving: false);
-    if (result is Success<Invoice>) return result.value;
-    if (result is Failure<Invoice>) {
-      debugPrint(
-        'InvoiceFormNotifier.create failed (HTTP ${result.error.statusCode})'
-        ' — ${result.error.message}',
+
+    lines[index] = updatedLine;
+    state = state.copyWith(lines: lines);
+    _recalculate();
+  }
+
+  void applyProductToLine(int index, Product product) {
+    final lines = List<InvoiceLine>.from(state.lines);
+    lines[index] = _createLineFromProduct(product, existingLine: lines[index]);
+    state = state.copyWith(lines: lines, editingLineIndex: null);
+    _recalculate();
+  }
+
+  InvoiceLine _createLineFromProduct(Product? product, {InvoiceLine? existingLine}) {
+    if (product == null) {
+      return InvoiceLine(
+        productId: existingLine?.productId ?? '',
+        hsnSac: existingLine?.hsnSac ?? '',
+        gstRate: existingLine?.gstRate ?? 0,
+        quantity: existingLine?.quantity ?? 1,
+        rate: existingLine?.rate ?? 0,
+        discount: existingLine?.discount ?? 0,
+        unit: existingLine?.unit ?? 'PCS',
       );
-      state = state.copyWith(error: result.error.message);
     }
-    return null;
-  }
 
-  Future<Invoice?> update(String id) async {
-    state = state.copyWith(saving: true, error: null, clearError: true);
-    final check = _validation.validateForSave(
-      contactId: state.contactId,
-      lines: state.lines,
-      posStateCode: state.posStateCode,
-      issueDate: state.issueDate,
-      dueDate: state.dueDate,
+    return InvoiceLine(
+      productId: product.id,
+      productName: product.name,
+      description: product.sku,
+      quantity: 1,
+      rate: product.salesPrice,
+      discount: 0,
+      hsnSac: product.hsnSac,
+      gstRate: product.gstRate,
+      unit: product.uom,
     );
-    if (!check.$1) {
-      state = state.copyWith(saving: false, error: check.$2);
-      return null;
-    }
-    final result = await _service.update(id, _buildPayload());
-    state = state.copyWith(saving: false);
-    if (result is Success<Invoice>) return result.value;
-    if (result is Failure<Invoice>) {
-      debugPrint(
-        'InvoiceFormNotifier.update failed (HTTP ${result.error.statusCode})'
-        ' — ${result.error.message}',
-      );
-      state = state.copyWith(error: result.error.message);
-    }
-    return null;
   }
 
-  Map<String, dynamic> _buildPayload() => {
-    'contact_id': state.contactId,
-    'issue_date': state.issueDate,
-    'due_date': state.dueDate,
-    'pos_state_code': state.posStateCode,
-    'line_items': state.lines.map((l) => l.toCreatePayload()).toList(),
-    'discount_rate': state.discountRate,
-    'shipping_charges': state.shippingCharges,
-    if (state.notes != null) 'notes': state.notes,
-    if (state.termsAndConditions != null)
+  // ───── Calculations ───────────────────────────────────────────────────────
+
+  void _recalculate() {
+    if (state.lines.isEmpty) return;
+
+    final calc = _calc.calculateAll(
+      lines: state.lines,
+      shippingCharges: state.shippingCharges,
+      isInterState: _originStateCode != state.posStateCode,
+      isGstInclusive: state.isGstInclusive,
+      isRcm: state.isRcm,
+    );
+
+    final lines = calc.lines;
+    final cgstAmount = lines.fold<double>(0, (s, l) => s + l.cgstAmount);
+    final sgstAmount = lines.fold<double>(0, (s, l) => s + l.sgstAmount);
+    final igstAmount = lines.fold<double>(0, (s, l) => s + l.igstAmount);
+    final utgstAmount = lines.fold<double>(0, (s, l) => s + l.utgstAmount);
+    final cessAmount = lines.fold<double>(0, (s, l) => s + l.cessAmount);
+    final taxableValue = calc.subtotal - calc.discountTotal + state.shippingCharges;
+    final taxTotal = cgstAmount + sgstAmount + igstAmount + utgstAmount + cessAmount;
+    final roundOff = calc.total - (taxableValue + (state.isRcm ? 0 : taxTotal));
+
+    state = state.copyWith(
+      lines: lines,
+      calculatedSubtotal: calc.subtotal,
+      calculatedDiscountTotal: calc.discountTotal,
+      calculatedTaxableValue: taxableValue,
+      calculatedCgstAmount: cgstAmount,
+      calculatedSgstAmount: sgstAmount,
+      calculatedIgstAmount: igstAmount,
+      calculatedUtgstAmount: utgstAmount,
+      calculatedCessAmount: cessAmount,
+      calculatedShippingCharges: state.shippingCharges,
+      calculatedRoundOff: roundOff,
+      calculatedTotal: calc.total,
+      calculatedTaxBreakdown: _buildTaxBreakdown(taxableValue, cgstAmount, sgstAmount, igstAmount, utgstAmount, cessAmount),
+      lineCalculations: _buildLineCalculations(lines),
+      error: null,
+    );
+  }
+
+  List<TaxBreakdownItem> _buildTaxBreakdown(
+    double taxableValue,
+    double cgst,
+    double sgst,
+    double igst,
+    double utgst,
+    double cess,
+  ) {
+    final items = <TaxBreakdownItem>[];
+    if (cgst > 0) {
+      items.add(TaxBreakdownItem(label: 'CGST', rate: 0, taxableValue: taxableValue, amount: cgst));
+    }
+    if (sgst > 0) {
+      items.add(TaxBreakdownItem(label: 'SGST', rate: 0, taxableValue: taxableValue, amount: sgst));
+    }
+    if (igst > 0) {
+      items.add(TaxBreakdownItem(label: 'IGST', rate: 0, taxableValue: taxableValue, amount: igst));
+    }
+    if (utgst > 0) {
+      items.add(TaxBreakdownItem(label: 'UTGST', rate: 0, taxableValue: taxableValue, amount: utgst));
+    }
+    if (cess > 0) {
+      items.add(TaxBreakdownItem(label: 'Cess', rate: 0, taxableValue: taxableValue, amount: cess));
+    }
+    return items;
+  }
+
+  List<LineCalculation> _buildLineCalculations(List<InvoiceLine> lines) {
+    return [
+      for (int i = 0; i < lines.length; i++)
+        LineCalculation(
+          lineIndex: i,
+          subtotal: lines[i].subtotal,
+          discountAmount: lines[i].discountAmount,
+          taxableValue: lines[i].subtotal - lines[i].discountAmount,
+          cgstAmount: lines[i].cgstAmount,
+          sgstAmount: lines[i].sgstAmount,
+          igstAmount: lines[i].igstAmount,
+          utgstAmount: lines[i].utgstAmount,
+          cessAmount: lines[i].cessAmount,
+          total: lines[i].total,
+        ),
+    ];
+  }
+
+  // ───── Validation & Save ──────────────────────────────────────────────────
+
+  bool validate() {
+    final errors = <String, String>{};
+
+    if (state.contactId == null || state.contactId!.isEmpty) {
+      errors['contact'] = 'Customer is required';
+    }
+
+    if (state.issueDate == null) {
+      errors['issueDate'] = 'Issue date is required';
+    }
+
+    if (state.dueDate == null) {
+      errors['dueDate'] = 'Due date is required';
+    }
+
+    // Validate lines
+    for (int i = 0; i < state.lines.length; i++) {
+      final line = state.lines[i];
+      if (line.productId.isEmpty && (line.productName?.isEmpty ?? true)) {
+        errors['line_${i}_product'] = 'Product/description required';
+      }
+      if (line.quantity <= 0) {
+        errors['line_${i}_qty'] = 'Quantity must be > 0';
+      }
+      if (line.rate < 0) {
+        errors['line_${i}_rate'] = 'Rate cannot be negative';
+      }
+    }
+
+    if (errors.isNotEmpty) {
+      state = state.copyWith(validationErrors: errors);
+      return false;
+    }
+
+    state = state.copyWith(validationErrors: {});
+    return true;
+  }
+
+  Future<Result<Invoice>> save() async {
+    if (!validate()) {
+      return const Failure(ApiError(message: 'Validation failed'));
+    }
+
+    state = state.copyWith(isSaving: true);
+
+    final request = <String, dynamic>{
+      'contact_id': state.contactId!,
+      'invoice_number': state.invoiceNumber,
+      'issue_date': state.issueDate!.toIso8601String().split('T').first,
+      'due_date': state.dueDate!.toIso8601String().split('T').first,
+      'pos_state_code': state.posStateCode,
+      'shipping_charges': state.shippingCharges,
+      'notes': state.notes,
       'terms_and_conditions': state.termsAndConditions,
-    if (state.referenceNumber != null)
       'reference_number': state.referenceNumber,
-    'is_gst_inclusive': state.isGstInclusive,
-    'is_rcm': state.isRcm,
-    'supply_type': state.supplyType,
-    'tds_rate': state.tdsRate,
-    'tcs_rate': state.tcsRate,
-    'post_on_create': false,
-  };
+      'is_gst_inclusive': state.isGstInclusive,
+      'is_rcm': state.isRcm,
+      'supply_type': state.supplyType,
+      'tds_rate': state.tdsRate,
+      'tcs_rate': state.tcsRate,
+      'lines': state.lines
+          .map(
+            (l) => <String, dynamic>{
+              'product_id': l.productId,
+              'product_name': l.productName,
+              'description': l.description,
+              'quantity': l.quantity,
+              'rate': l.rate,
+              'discount': l.discount,
+              'hsn_sac': l.hsnSac,
+              'gst_rate': l.gstRate,
+              'unit': l.unit,
+            },
+          )
+          .toList(),
+    };
+
+    try {
+      Result<Invoice> result;
+      if (state.originalId != null) {
+        result = await _service.update(state.originalId!, request);
+      } else {
+        result = await _service.create(request);
+      }
+
+      state = state.copyWith(isSaving: false);
+      return result;
+    } catch (e) {
+      state = state.copyWith(isSaving: false, error: e.toString());
+      return Failure(ApiError(message: 'Unknown error: ${e.toString()}'));
+    }
+  }
+
+  // ───── Actions ────────────────────────────────────────────────────────────
+
+  void duplicate() {
+    // Keep all fields except ID and invoice number
+    state = state.copyWith(
+      originalId: null,
+      originalStatus: null,
+      invoiceNumber: '', // Will be auto-generated
+      issueDate: DateTime.now(),
+      dueDate: DateTime.now().add(const Duration(days: 30)),
+    );
+  }
+
+  // Riverpod ref for accessing other providers
+  late final Ref ref;
 }
 
-final invoiceFormProvider =
-    StateNotifierProvider.autoDispose<InvoiceFormNotifier, InvoiceFormState>((
-      ref,
-    ) {
-      return InvoiceFormNotifier(
-        ref.watch(invoiceServiceProvider),
-        const InvoiceCalculationService(),
-        const InvoiceValidationService(),
-        ref.watch(gstCollectionEnabledProvider),
-      );
-    });
+// ───── Providers ────────────────────────────────────────────────────────────
 
-final invoiceDetailProvider = FutureProvider.autoDispose
-    .family<Invoice, String>((ref, id) async {
-      final service = ref.watch(invoiceServiceProvider);
-      final result = await service.get(id);
-      return switch (result) {
-        Success(:final value) => value,
-        Failure(:final error) => throw error,
-        _ => throw Exception('Unexpected result type'),
-      };
-    });
+final invoiceFormNotifierProvider = StateNotifierProvider<InvoiceFormNotifier, InvoiceFormState>((ref) {
+  final notifier = InvoiceFormNotifier(
+    ref.read(invoiceServiceProvider),
+    ref.read(invoiceCalculationServiceProvider),
+  );
+  notifier.ref = ref;
+  return notifier;
+});

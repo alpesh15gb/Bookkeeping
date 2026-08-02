@@ -130,9 +130,10 @@ class _QuickPartyDialogState extends ConsumerState<_QuickPartyDialog> {
           width: 440,
           child: Form(
             key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
                 if (_error != null) ...[
                   _InlineError(_error!),
                   const SizedBox(height: 12),
@@ -204,6 +205,7 @@ class _QuickPartyDialogState extends ConsumerState<_QuickPartyDialog> {
             ),
           ),
         ),
+      ),
         actions: [
           TextButton(
             onPressed: _saving ? null : () => Navigator.of(context).pop(),

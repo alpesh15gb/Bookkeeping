@@ -16,6 +16,7 @@ class InvoiceLine {
     this.discount = 0,
     this.hsnSac = '',
     this.gstRate = 0,
+    this.unit,
     this.subtotal = 0,
     this.cgstRate = 0,
     this.cgstAmount = 0,
@@ -39,6 +40,7 @@ class InvoiceLine {
   final double discount;
   final String hsnSac;
   final double gstRate;
+  final String? unit;
   final double subtotal;
   final double cgstRate;
   final double cgstAmount;
@@ -67,6 +69,7 @@ class InvoiceLine {
     double? discount,
     String? hsnSac,
     double? gstRate,
+    String? unit,
     double? subtotal,
     double? cgstRate,
     double? cgstAmount,
@@ -89,6 +92,7 @@ class InvoiceLine {
     discount: discount ?? this.discount,
     hsnSac: hsnSac ?? this.hsnSac,
     gstRate: gstRate ?? this.gstRate,
+    unit: unit ?? this.unit,
     subtotal: subtotal ?? this.subtotal,
     cgstRate: cgstRate ?? this.cgstRate,
     cgstAmount: cgstAmount ?? this.cgstAmount,
@@ -111,6 +115,7 @@ class InvoiceLine {
     'discount': discount,
     'hsn_sac': hsnSac,
     'gst_rate': gstRate,
+    'unit': unit,
   };
 
   factory InvoiceLine.fromResponse(Map<String, dynamic> json) => InvoiceLine(
@@ -123,6 +128,7 @@ class InvoiceLine {
     discount: parseDoubleSafe(json['discount']),
     hsnSac: json['hsn_sac'] as String? ?? '',
     gstRate: parseDoubleSafe(json['gst_rate']),
+    unit: json['unit'] as String?,
     subtotal: parseDoubleSafe(json['subtotal']),
     cgstRate: parseDoubleSafe(json['cgst_rate']),
     cgstAmount: parseDoubleSafe(json['cgst_amount']),

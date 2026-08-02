@@ -51,6 +51,13 @@ extension ResultX<T> on Result<T> {
     Failure<T>(:final error) => error,
     _ => null,
   };
+
+  /// Returns the value on success, or throws the error on failure.
+  T getOrThrow() => switch (this) {
+    Success<T>(:final value) => value,
+    Failure<T>(:final error) => throw error,
+    Loading<T>() => throw StateError('Result is still loading'),
+  };
 }
 
 /// Generic alias for an async provider that emits a [Result].

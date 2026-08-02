@@ -190,7 +190,7 @@ class _Gstr2ScreenState extends ConsumerState<Gstr2Screen> {
               decoration: BoxDecoration(
                 color: colors.info.withValues(alpha: .08),
                 border: Border.all(color: colors.info.withValues(alpha: .25)),
-                borderRadius: BorderRadius.circular(ApexRadius.md),
+                borderRadius: BorderRadius.circular(ApexRadius_md),
               ),
               child: Row(
                 children: [

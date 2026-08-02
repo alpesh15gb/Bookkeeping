@@ -64,6 +64,13 @@ class PurchaseOrderService {
     });
   }
 
+  /// Delete a draft PO.
+  Future<Result<void>> delete(String id) {
+    return guardDio(() async {
+      await _dio.delete('/purchase-orders/$id');
+    });
+  }
+
   /// Returns the /print path for downloading PDF from the backend.
   String getPdfUrl(String id) => '/purchase-orders/$id/print';
 }

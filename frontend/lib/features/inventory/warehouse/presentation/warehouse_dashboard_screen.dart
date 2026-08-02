@@ -227,7 +227,7 @@ class _WarehouseDashboardScreenState
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: c.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: c.border),
       ),
       child: Column(
@@ -238,7 +238,7 @@ class _WarehouseDashboardScreenState
             height: 36,
             decoration: BoxDecoration(
               color: kpi.color.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
             ),
             child: Icon(kpi.icon, size: 18, color: kpi.color),
           ),
@@ -276,7 +276,7 @@ class _WarehouseDashboardScreenState
         padding: const EdgeInsets.all(32),
         decoration: BoxDecoration(
           color: c.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
           border: Border.all(color: c.border),
         ),
         child: Center(
@@ -324,7 +324,7 @@ class _WarehouseDashboardScreenState
         final lowCount = whStock.where((s) => s.isLowStock).length;
 
         return InkWell(
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
           onTap: () {
             Navigator.of(context).push(
               MaterialPageRoute(
@@ -336,7 +336,7 @@ class _WarehouseDashboardScreenState
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: c.surfaceRaised,
-              borderRadius: BorderRadius.circular(ApexRadius.lg),
+              borderRadius: BorderRadius.circular(ApexRadius_lg),
               border: Border.all(color: c.border),
             ),
             child: Column(
@@ -434,7 +434,7 @@ class _WarehouseDashboardScreenState
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: c.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
           border: Border.all(color: c.border),
         ),
         child: Center(
@@ -449,7 +449,7 @@ class _WarehouseDashboardScreenState
     return Container(
       decoration: BoxDecoration(
         color: c.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: c.border),
       ),
       clipBehavior: Clip.antiAlias,
@@ -515,7 +515,7 @@ class _WarehouseDashboardScreenState
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
           color: c.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
           border: Border.all(color: c.border),
         ),
         child: Center(
@@ -530,7 +530,7 @@ class _WarehouseDashboardScreenState
     return Container(
       decoration: BoxDecoration(
         color: c.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: c.border),
       ),
       clipBehavior: Clip.antiAlias,

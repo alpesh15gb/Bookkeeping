@@ -46,6 +46,12 @@ class NumberFormatter {
   /// Formats a GSTIN or tax rate — same as percent but with specific label.
   String gst(double? value) => percent(value);
 
+  /// Formats a plain decimal number with [decimalDigits] precision, e.g. `1,234.56`.
+  String decimal(double? value, {int? digits}) {
+    if (value == null) return '—';
+    return _format(value, digits ?? decimalDigits);
+  }
+
   /// Formats a number with sign for negative values.
   String signed(double? value, {int digits = 2}) {
     if (value == null) return '—';

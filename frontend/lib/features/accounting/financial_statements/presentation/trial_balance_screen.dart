@@ -124,7 +124,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
       ),
       decoration: BoxDecoration(
         color: (ok ? colors.success : colors.danger).withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         border: Border.all(
           color: (ok ? colors.success : colors.danger).withValues(alpha: 0.3),
         ),
@@ -168,7 +168,7 @@ class _TrialBalanceScreenState extends ConsumerState<TrialBalanceScreen> {
       ),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: colors.border),
       ),
       clipBehavior: Clip.antiAlias,

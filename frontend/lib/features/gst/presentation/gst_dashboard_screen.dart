@@ -188,12 +188,12 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
     ];
     return InkWell(
       onTap: () => _pickPeriod(),
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           border: Border.all(color: colors.border),
         ),
         child: Row(
@@ -290,7 +290,7 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
               margin: const EdgeInsets.only(right: ApexSpacing.md),
               decoration: BoxDecoration(
                 color: colors.skeletonBase,
-                borderRadius: BorderRadius.circular(ApexRadius.lg),
+                borderRadius: BorderRadius.circular(ApexRadius_lg),
               ),
             ),
           ),
@@ -312,7 +312,7 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
         padding: const EdgeInsets.all(ApexSpacing.lg),
         decoration: BoxDecoration(
           color: colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.lg),
+          borderRadius: BorderRadius.circular(ApexRadius_lg),
           border: Border.all(
             color: emphasize ? color.withValues(alpha: 0.4) : colors.border,
           ),
@@ -323,7 +323,7 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: color.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(ApexRadius.sm),
+                borderRadius: BorderRadius.circular(ApexRadius_sm),
               ),
               child: Icon(icon, size: 18, color: color),
             ),
@@ -480,7 +480,7 @@ class _GstDashboardScreenState extends ConsumerState<GstDashboardScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: colors.surfaceMuted,
-                      borderRadius: BorderRadius.circular(ApexRadius.pill),
+                      borderRadius: BorderRadius.circular(ApexRadius_pill),
                     ),
                     child: Text(
                       count,

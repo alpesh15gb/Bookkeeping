@@ -269,7 +269,7 @@ class _SettingsFinancialYearScreenState
     return ApexCard(
       padding: const EdgeInsets.all(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         onTap: isCurrent || _isSwitching ? null : () => _setCurrent(fy),
         child: Row(
           children: [
@@ -280,7 +280,7 @@ class _SettingsFinancialYearScreenState
                 color: isCurrent
                     ? colors.primary.withValues(alpha: 0.1)
                     : colors.surfaceMuted,
-                borderRadius: BorderRadius.circular(ApexRadius.md),
+                borderRadius: BorderRadius.circular(ApexRadius_md),
               ),
               child: Icon(
                 isCurrent
@@ -313,7 +313,7 @@ class _SettingsFinancialYearScreenState
                           decoration: BoxDecoration(
                             color: colors.primary.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(
-                              ApexRadius.pill,
+                              ApexRadius_pill,
                             ),
                           ),
                           child: Text(
@@ -335,7 +335,7 @@ class _SettingsFinancialYearScreenState
                         ),
                         decoration: BoxDecoration(
                           color: colors.surfaceMuted,
-                          borderRadius: BorderRadius.circular(ApexRadius.pill),
+                          borderRadius: BorderRadius.circular(ApexRadius_pill),
                         ),
                         child: Text(
                           fy.status.replaceAll('_', ' '),

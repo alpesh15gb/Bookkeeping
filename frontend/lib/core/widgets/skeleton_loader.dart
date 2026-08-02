@@ -6,6 +6,38 @@ library;
 import 'package:flutter/material.dart';
 import 'package:apexbooks/core/theme/app_colors.dart';
 
+/// A full-page or content-area skeleton loader.
+class ApexSkeletonLoader extends StatelessWidget {
+  const ApexSkeletonLoader({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const ShimmerSkeleton(
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SkeletonBox(width: 200, height: 18),
+              SizedBox(height: 16),
+              SkeletonBox(width: 280, height: 14),
+              SizedBox(height: 8),
+              SkeletonBox(width: 240, height: 14),
+              SizedBox(height: 24),
+              SkeletonBox(width: double.infinity, height: 48),
+              SizedBox(height: 12),
+              SkeletonBox(width: double.infinity, height: 48),
+              SizedBox(height: 12),
+              SkeletonBox(width: double.infinity, height: 48),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// A single shimmer-animated skeleton rectangle.
 class SkeletonBox extends StatelessWidget {
   const SkeletonBox({

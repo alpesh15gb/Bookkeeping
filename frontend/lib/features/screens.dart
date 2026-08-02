@@ -1,6 +1,6 @@
 export 'dashboard/presentation/dashboard_screen.dart';
-export 'invoices/presentation/screens/invoice_list_screen.dart';
-export 'invoices/presentation/screens/invoice_form_screen.dart';
+export 'sales/presentation/invoice_list_screen.dart';
+export 'sales/presentation/invoice_form_screen.dart';
 export 'sales/presentation/proforma_list_screen.dart';
 export 'sales/presentation/proforma_form_screen.dart';
 export 'sales/presentation/sales_order_list_screen.dart';

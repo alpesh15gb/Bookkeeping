@@ -6,4 +6,4 @@
 library;
 
 export '../../theme/app_colors.dart'
-    show apexColors, ApexColors, ApexSpacing, ApexRadius;
+    show apexColors, ApexColors;

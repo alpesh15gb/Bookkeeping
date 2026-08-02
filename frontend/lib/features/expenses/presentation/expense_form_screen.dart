@@ -75,7 +75,7 @@ class _ExpenseFormScreenState extends ConsumerState<ExpenseFormScreen> {
               color: colors.surfaceRaised,
               elevation: 0,
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(ApexRadius.lg),
+                borderRadius: BorderRadius.circular(ApexRadius_lg),
                 side: BorderSide(color: colors.border),
               ),
               child: Padding(
@@ -357,7 +357,7 @@ class _DateField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
       onTap: () async {
         final init = _parse(date) ?? DateTime.now();
         final picked = await showDatePicker(

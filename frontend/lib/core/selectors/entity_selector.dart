@@ -13,6 +13,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../theme/app_colors.dart';
+import '../design_system/index.dart';
 
 // ---------------------------------------------------------------------------
 // Generic reusable searchable bottom sheet

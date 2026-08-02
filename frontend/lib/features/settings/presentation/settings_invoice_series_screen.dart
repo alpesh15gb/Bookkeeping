@@ -193,7 +193,7 @@ class _SettingsInvoiceSeriesScreenState
     return ApexCard(
       padding: const EdgeInsets.all(16),
       child: InkWell(
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         onTap: () => _showSeriesDialog(existing: series),
         child: Row(
           children: [
@@ -204,7 +204,7 @@ class _SettingsInvoiceSeriesScreenState
                 color: series.isActive
                     ? colors.primary.withValues(alpha: 0.1)
                     : colors.surfaceMuted,
-                borderRadius: BorderRadius.circular(ApexRadius.md),
+                borderRadius: BorderRadius.circular(ApexRadius_md),
               ),
               child: Icon(
                 Icons.tag_rounded,

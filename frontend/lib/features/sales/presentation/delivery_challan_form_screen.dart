@@ -6,10 +6,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:apexbooks/core/dialogs/dialog_service.dart';
-import 'package:apexbooks/core/theme/app_colors.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
-import 'package:apexbooks/core/widgets/page_header.dart';
 import 'package:apexbooks/core/widgets/states.dart';
 import 'package:apexbooks/core/widgets/monetary_text.dart';
 import 'package:apexbooks/core/network/api_client.dart';
@@ -600,7 +599,7 @@ class _DeliveryChallanFormScreenState
             decoration: BoxDecoration(
               color: colors.surfaceMuted,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(ApexRadius.lg),
+                top: Radius.circular(ApexRadius_lg),
               ),
             ),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -1001,7 +1000,7 @@ class _DateField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
       onTap: () async {
         final init = parse(value) ?? DateTime.now();
         final picked = await showDatePicker(
@@ -1106,7 +1105,7 @@ class _LineRowState extends State<_LineRow> {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: c.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: c.border),
         boxShadow: [
           BoxShadow(
@@ -1124,7 +1123,7 @@ class _LineRowState extends State<_LineRow> {
             decoration: BoxDecoration(
               color: c.surfaceMuted,
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(ApexRadius.lg),
+                top: Radius.circular(ApexRadius_lg),
               ),
             ),
             child: Row(
@@ -1134,7 +1133,7 @@ class _LineRowState extends State<_LineRow> {
                   height: 24,
                   decoration: BoxDecoration(
                     color: c.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    borderRadius: BorderRadius.circular(ApexRadius_sm),
                   ),
                   alignment: Alignment.center,
                   child: Text(
@@ -1364,7 +1363,7 @@ class _LineRowState extends State<_LineRow> {
         isDense: true,
         contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(ApexRadius.sm),
+          borderRadius: BorderRadius.circular(ApexRadius_sm),
         ),
       ),
       onChanged: onChanged,
@@ -1409,15 +1408,15 @@ class _LineRowState extends State<_LineRow> {
               vertical: 12,
             ),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
               borderSide: BorderSide(color: c.border),
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
               borderSide: BorderSide(color: c.border),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
               borderSide: BorderSide(color: c.primary, width: 1.5),
             ),
             filled: true,
@@ -1434,7 +1433,7 @@ class _LineRowState extends State<_LineRow> {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
         color: c.surfaceMuted,
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1534,7 +1533,7 @@ class _ProductField extends StatelessWidget {
                       vertical: isMobile ? 14 : 8,
                     ),
                     border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(ApexRadius.sm),
+                      borderRadius: BorderRadius.circular(ApexRadius_sm),
                     ),
                   ),
                 ),
@@ -1578,7 +1577,7 @@ InputDecoration _dec(
     vertical: isMobile ? 16 : 14,
   ),
   border: OutlineInputBorder(
-    borderRadius: BorderRadius.circular(ApexRadius.sm),
+    borderRadius: BorderRadius.circular(ApexRadius_sm),
   ),
 );
 
@@ -1596,7 +1595,7 @@ Widget _optionsPanel<T extends Object>(
     alignment: Alignment.topLeft,
     child: Material(
       elevation: 8,
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxHeight: isMobile ? 350 : 300,
@@ -1605,7 +1604,7 @@ Widget _optionsPanel<T extends Object>(
         child: Container(
           decoration: BoxDecoration(
             color: colors.surfaceRaised,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
+            borderRadius: BorderRadius.circular(ApexRadius_md),
             border: Border.all(color: colors.border),
           ),
           child: ListView.builder(

@@ -176,12 +176,12 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ApexRadius.pill),
+      borderRadius: BorderRadius.circular(ApexRadius_pill),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: selected ? colors.primary : colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.pill),
+          borderRadius: BorderRadius.circular(ApexRadius_pill),
           border: Border.all(color: selected ? colors.primary : colors.border),
         ),
         child: Text(
@@ -222,7 +222,7 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
       padding: const EdgeInsets.all(ApexSpacing.lg),
       decoration: BoxDecoration(
         color: colors.surfaceRaised,
-        borderRadius: BorderRadius.circular(ApexRadius.lg),
+        borderRadius: BorderRadius.circular(ApexRadius_lg),
         border: Border.all(color: colors.border),
       ),
       child: Row(
@@ -232,7 +232,7 @@ class _GstReturnsScreenState extends ConsumerState<GstReturnsScreen> {
             height: 40,
             decoration: BoxDecoration(
               color: colors.surfaceMuted,
-              borderRadius: BorderRadius.circular(ApexRadius.sm),
+              borderRadius: BorderRadius.circular(ApexRadius_sm),
             ),
             child: Center(
               child: Text(
@@ -657,14 +657,14 @@ class _ReturnsLoading extends StatelessWidget {
               padding: const EdgeInsets.all(ApexSpacing.lg),
               decoration: BoxDecoration(
                 color: apexColors(context).skeletonBase,
-                borderRadius: BorderRadius.circular(ApexRadius.lg),
+                borderRadius: BorderRadius.circular(ApexRadius_lg),
               ),
               child: Row(
                 children: [
                   SkeletonBox(
                     width: 40,
                     height: 40,
-                    borderRadius: BorderRadius.circular(ApexRadius.sm),
+                    borderRadius: BorderRadius.circular(ApexRadius_sm),
                   ),
                   const SizedBox(width: ApexSpacing.md),
                   const Expanded(

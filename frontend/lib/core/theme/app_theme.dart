@@ -11,12 +11,13 @@ import 'package:flutter/foundation.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'app_colors.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 
 /// Builds the ApexBooks light [ThemeData].
-ThemeData apexLightTheme() => _buildTheme(lightApexColors, Brightness.light);
+ThemeData apexLightTheme() => _buildTheme(ApexColors.light, Brightness.light);
 
 /// Builds the ApexBooks dark [ThemeData].
-ThemeData apexDarkTheme() => _buildTheme(darkApexColors, Brightness.dark);
+ThemeData apexDarkTheme() => _buildTheme(ApexColors.dark, Brightness.dark);
 
 ThemeData _buildTheme(ApexColors colors, Brightness brightness) {
   final isDesktop =

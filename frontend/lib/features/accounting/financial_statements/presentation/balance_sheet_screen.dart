@@ -137,12 +137,12 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
     final label = date != null ? _fmtDate(date) : 'Select date';
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           border: Border.all(color: colors.border),
         ),
         child: Row(
@@ -252,7 +252,7 @@ class _BalanceSheetScreenState extends ConsumerState<BalanceSheetScreen> {
       ),
       decoration: BoxDecoration(
         color: (ok ? colors.success : colors.danger).withValues(alpha: 0.10),
-        borderRadius: BorderRadius.circular(ApexRadius.md),
+        borderRadius: BorderRadius.circular(ApexRadius_md),
         border: Border.all(
           color: (ok ? colors.success : colors.danger).withValues(alpha: 0.3),
         ),

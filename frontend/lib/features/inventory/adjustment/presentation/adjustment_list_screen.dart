@@ -113,7 +113,7 @@ class _AdjustmentListScreenState extends ConsumerState<AdjustmentListScreen> {
                     final a = items[i];
                     final selected = a.id == _selectedId;
                     return InkWell(
-                      borderRadius: BorderRadius.circular(ApexRadius.md),
+                      borderRadius: BorderRadius.circular(ApexRadius_md),
                       onTap: () => setState(() => _selectedId = a.id),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -124,7 +124,7 @@ class _AdjustmentListScreenState extends ConsumerState<AdjustmentListScreen> {
                           color: selected
                               ? colors.primaryContainer.withValues(alpha: 0.3)
                               : colors.surfaceRaised,
-                          borderRadius: BorderRadius.circular(ApexRadius.md),
+                          borderRadius: BorderRadius.circular(ApexRadius_md),
                           border: Border.all(
                             color: selected ? colors.primary : colors.border,
                           ),

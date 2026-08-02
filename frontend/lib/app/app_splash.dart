@@ -3,6 +3,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../core/design_system/index.dart';
 import '../core/theme/app_colors.dart';
 
 class AppSplash extends StatelessWidget {

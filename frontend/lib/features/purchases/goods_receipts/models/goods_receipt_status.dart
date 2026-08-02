@@ -3,6 +3,7 @@ library;
 
 enum GoodsReceiptStatus {
   draft('DRAFT'),
+  pending('PENDING'),
   confirmed('CONFIRMED'),
   cancelled('CANCELLED');
 

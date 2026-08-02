@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../theme/responsive.dart';
+import '../index.dart';
 
 /// A single filter chip option.
 class FilterChipOption {

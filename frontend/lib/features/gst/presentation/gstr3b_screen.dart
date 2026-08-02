@@ -188,12 +188,12 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
     ];
     return InkWell(
       onTap: _pickPeriod,
-      borderRadius: BorderRadius.circular(ApexRadius.md),
+      borderRadius: BorderRadius.circular(ApexRadius_md),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: colors.surfaceRaised,
-          borderRadius: BorderRadius.circular(ApexRadius.md),
+          borderRadius: BorderRadius.circular(ApexRadius_md),
           border: Border.all(color: colors.border),
         ),
         child: Row(
@@ -507,7 +507,7 @@ class _Gstr3bScreenState extends ConsumerState<Gstr3bScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: colors.surfaceMuted,
-              borderRadius: BorderRadius.circular(ApexRadius.md),
+              borderRadius: BorderRadius.circular(ApexRadius_md),
               border: Border.all(color: colors.border),
             ),
             child: Text(
@@ -652,7 +652,7 @@ class _Gstr3bLoading extends StatelessWidget {
                 padding: const EdgeInsets.all(ApexSpacing.lg),
                 decoration: BoxDecoration(
                   color: colors.skeletonBase,
-                  borderRadius: BorderRadius.circular(ApexRadius.lg),
+                  borderRadius: BorderRadius.circular(ApexRadius_lg),
                 ),
                 child: Column(
                   children: List.generate(

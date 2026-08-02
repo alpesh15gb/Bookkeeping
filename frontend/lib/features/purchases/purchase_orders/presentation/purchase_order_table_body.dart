@@ -34,12 +34,18 @@ class PurchaseOrderTableBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: 820,
-        child: Column(
-          children: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 820,
+              minHeight: constraints.maxHeight,
+              maxHeight: constraints.maxHeight,
+            ),
+            child: Column(
+              children: [
             Container(
               color: colors.surfaceMuted,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -154,7 +160,9 @@ class PurchaseOrderTableBody extends StatelessWidget {
         ),
       ),
     );
-  }
+  },
+);
+}
 
   Widget _sortableHeader(
     BuildContext context,
@@ -204,15 +212,23 @@ class PurchaseOrderTableBody extends StatelessWidget {
 
   String _label(PurchaseOrderStatus s) => switch (s) {
     PurchaseOrderStatus.draft => 'DRAFT',
+    PurchaseOrderStatus.pending => 'PENDING',
+    PurchaseOrderStatus.approved => 'APPROVED',
     PurchaseOrderStatus.confirmed => 'CONFIRMED',
+    PurchaseOrderStatus.partial => 'PARTIAL',
     PurchaseOrderStatus.received => 'RECEIVED',
+    PurchaseOrderStatus.completed => 'COMPLETED',
     PurchaseOrderStatus.cancelled => 'CANCELLED',
   };
 
   StatusTone _tone(PurchaseOrderStatus s) => switch (s) {
     PurchaseOrderStatus.draft => StatusTone.neutral,
+    PurchaseOrderStatus.pending => StatusTone.info,
+    PurchaseOrderStatus.approved => StatusTone.success,
     PurchaseOrderStatus.confirmed => StatusTone.primary,
+    PurchaseOrderStatus.partial => StatusTone.warning,
     PurchaseOrderStatus.received => StatusTone.success,
+    PurchaseOrderStatus.completed => StatusTone.success,
     PurchaseOrderStatus.cancelled => StatusTone.danger,
   };
 }

@@ -750,13 +750,13 @@ class _VendorField extends ConsumerWidget {
           alignment: Alignment.topLeft,
           child: Material(
             elevation: 6,
-            borderRadius: BorderRadius.circular(ApexRadius.md),
+            borderRadius: BorderRadius.circular(ApexRadius_md),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 300, maxWidth: 420),
               child: Container(
                 decoration: BoxDecoration(
                   color: colors.surfaceRaised,
-                  borderRadius: BorderRadius.circular(ApexRadius.md),
+                  borderRadius: BorderRadius.circular(ApexRadius_md),
                   border: Border.all(color: colors.border),
                 ),
                 child: ListView.builder(
@@ -820,7 +820,7 @@ class _DateField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(ApexRadius.sm),
+      borderRadius: BorderRadius.circular(ApexRadius_sm),
       onTap: () async {
         final init = parse(value) ?? DateTime.now();
         final picked = await showDatePicker(
@@ -968,11 +968,11 @@ class _AllocRowState extends State<_AllocRow> {
                   vertical: 8,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(ApexRadius.sm),
+                  borderRadius: BorderRadius.circular(ApexRadius_sm),
                 ),
                 enabledBorder: over
                     ? OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(ApexRadius.sm),
+                        borderRadius: BorderRadius.circular(ApexRadius_sm),
                         borderSide: BorderSide(color: c.danger),
                       )
                     : null,
@@ -995,6 +995,6 @@ InputDecoration _dec(ApexColors colors, {String? hint, IconData? icon}) =>
           : Icon(icon, size: 18, color: colors.textMuted),
       contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(ApexRadius.sm),
+        borderRadius: BorderRadius.circular(ApexRadius_sm),
       ),
     );

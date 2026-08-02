@@ -28,12 +28,18 @@ class GoodsReceiptTableBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: 760,
-        child: Column(
-          children: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 760,
+              minHeight: constraints.maxHeight,
+              maxHeight: constraints.maxHeight,
+            ),
+            child: Column(
+              children: [
             Container(
               color: colors.surfaceMuted,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -131,7 +137,9 @@ class GoodsReceiptTableBody extends StatelessWidget {
         ),
       ),
     );
-  }
+  },
+);
+}
 
   Widget _sortableHeader(
     BuildContext context,
@@ -177,6 +185,7 @@ class GoodsReceiptTableBody extends StatelessWidget {
 
   StatusTone _tone(GoodsReceiptStatus s) => switch (s) {
     GoodsReceiptStatus.draft => StatusTone.neutral,
+    GoodsReceiptStatus.pending => StatusTone.info,
     GoodsReceiptStatus.confirmed => StatusTone.success,
     GoodsReceiptStatus.cancelled => StatusTone.danger,
   };

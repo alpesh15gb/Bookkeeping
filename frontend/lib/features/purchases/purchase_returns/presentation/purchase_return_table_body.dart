@@ -42,111 +42,119 @@ class PurchaseReturnTableBody extends StatelessWidget {
       );
     }
     final textTheme = Theme.of(context).textTheme;
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: 720,
-        child: Column(
-          children: [
-            Container(
-              color: colors.surfaceMuted,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              child: Row(
-                children: [
-                  _hd(context, 'Return No.', 'returnNumber', 180),
-                  _hd(context, 'Vendor', 'contactName', 220),
-                  _hd(context, 'Return Date', 'returnDate', 120),
-                  _hd(context, 'Total', 'total', 110, right: true),
-                  const SizedBox(
-                    width: 110,
-                    child: Text(
-                      'Status',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        return SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minWidth: 720,
+              minHeight: constraints.maxHeight,
+              maxHeight: constraints.maxHeight,
+            ),
+            child: Column(
+              children: [
+                Container(
+                  color: colors.surfaceMuted,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      _hd(context, 'Return No.', 'returnNumber', 180),
+                      _hd(context, 'Vendor', 'contactName', 220),
+                      _hd(context, 'Return Date', 'returnDate', 120),
+                      _hd(context, 'Total', 'total', 110, right: true),
+                      const SizedBox(
+                        width: 110,
+                        child: Text(
+                          'Status',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    padding: EdgeInsets.zero,
+                    separatorBuilder: (_, _) =>
+                        Divider(height: 1, color: colors.border),
+                    itemCount: items.length,
+                    itemBuilder: (context, i) {
+                      final item = items[i];
+                      final selected = item.id == selectedId;
+                      final numText = item.returnNumber.isNotEmpty
+                          ? item.returnNumber
+                          : 'DN #${item.id.length >= 6 ? item.id.substring(0, 6) : item.id}';
+                      return InkWell(
+                        onTap: () => onSelect(item),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          color: selected ? colors.primaryContainer : null,
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 180,
+                                child: Text(
+                                  numText,
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 220,
+                                child: Text(
+                                  item.contactName,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: textTheme.bodyMedium,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 120,
+                                child: Text(
+                                  item.returnDate,
+                                  style: textTheme.bodyMedium,
+                                ),
+                              ),
+                              SizedBox(
+                                width: 110,
+                                child: Text(
+                                  fmt.currency(item.total),
+                                  textAlign: TextAlign.right,
+                                  style: textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              SizedBox(
+                                width: 110,
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: StatusBadge(
+                                    label: item.status.value,
+                                    tone: _tone(item.status),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
             ),
-            Expanded(
-              child: ListView.separated(
-                padding: EdgeInsets.zero,
-                separatorBuilder: (_, _) =>
-                    Divider(height: 1, color: colors.border),
-                itemCount: items.length,
-                itemBuilder: (context, i) {
-                  final item = items[i];
-                  final selected = item.id == selectedId;
-                  final numText = item.returnNumber.isNotEmpty
-                      ? item.returnNumber
-                      : 'DN #${item.id.length >= 6 ? item.id.substring(0, 6) : item.id}';
-                  return InkWell(
-                    onTap: () => onSelect(item),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      color: selected ? colors.primaryContainer : null,
-                      child: Row(
-                        children: [
-                          SizedBox(
-                            width: 180,
-                            child: Text(
-                              numText,
-                              style: textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 220,
-                            child: Text(
-                              item.contactName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: textTheme.bodyMedium,
-                            ),
-                          ),
-                          SizedBox(
-                            width: 120,
-                            child: Text(
-                              item.returnDate,
-                              style: textTheme.bodyMedium,
-                            ),
-                          ),
-                          SizedBox(
-                            width: 110,
-                            child: Text(
-                              fmt.currency(item.total),
-                              textAlign: TextAlign.right,
-                              style: textTheme.bodyMedium?.copyWith(
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ),
-                          SizedBox(
-                            width: 110,
-                            child: Align(
-                              alignment: Alignment.centerLeft,
-                              child: StatusBadge(
-                                label: item.status.value,
-                                tone: _tone(item.status),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -198,6 +206,7 @@ class PurchaseReturnTableBody extends StatelessWidget {
 
   StatusTone _tone(PurchaseReturnStatus s) => switch (s) {
     PurchaseReturnStatus.draft => StatusTone.neutral,
+    PurchaseReturnStatus.pending => StatusTone.info,
     PurchaseReturnStatus.posted => StatusTone.success,
     PurchaseReturnStatus.cancelled => StatusTone.danger,
   };
@@ -270,7 +279,7 @@ class _MobilePurchaseReturnList extends StatelessWidget {
                 margin: EdgeInsets.zero,
                 color: isSelected ? colors.primaryContainer : null,
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(ApexRadius.lg),
+                  borderRadius: BorderRadius.circular(ApexRadius_lg),
                   onTap: () => onSelect(item),
                   child: Padding(
                     padding: const EdgeInsets.all(14),
@@ -342,6 +351,7 @@ class _MobilePurchaseReturnList extends StatelessWidget {
 
   StatusTone _tone(PurchaseReturnStatus s) => switch (s) {
     PurchaseReturnStatus.draft => StatusTone.neutral,
+    PurchaseReturnStatus.pending => StatusTone.info,
     PurchaseReturnStatus.posted => StatusTone.success,
     PurchaseReturnStatus.cancelled => StatusTone.danger,
   };

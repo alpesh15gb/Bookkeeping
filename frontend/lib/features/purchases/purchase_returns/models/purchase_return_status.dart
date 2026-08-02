@@ -3,6 +3,7 @@ library;
 
 enum PurchaseReturnStatus {
   draft('DRAFT'),
+  pending('PENDING'),
   posted('POSTED'),
   cancelled('CANCELLED');
 

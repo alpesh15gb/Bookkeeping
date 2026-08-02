@@ -1,110 +1,175 @@
+/// Purchase Return Detail Screen — Professional detail view with summary, lines, timeline.
+library;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:apexbooks/core/theme/app_colors.dart';
+import 'package:apexbooks/core/design_system/index.dart';
 import 'package:apexbooks/core/theme/responsive.dart';
-import 'package:apexbooks/core/widgets/page_header.dart';
-import 'package:apexbooks/core/widgets/states.dart';
-import 'package:apexbooks/core/widgets/status_badge.dart';
 import 'package:apexbooks/core/formatting/number_formatting.dart';
+import 'package:apexbooks/core/download/download_service.dart';
 import 'package:apexbooks/core/result/result.dart';
-import 'package:apexbooks/features/offline_repository_providers.dart';
-import 'package:apexbooks/core/errors/user_message.dart';
 import '../models/purchase_return.dart';
-import '../models/purchase_return_line.dart';
 import '../models/purchase_return_status.dart';
 import '../services/purchase_return_service.dart';
-
-final purchaseReturnDetailProvider = FutureProvider.autoDispose
-    .family<PurchaseReturn, String>((ref, id) async {
-      final repo = ref.watch(returnsRepositoryProvider);
-      final pr = await repo.getPurchaseReturn(id);
-      if (pr == null) throw Exception('Purchase return not found locally');
-      return PurchaseReturn(
-        id: pr.localId,
-        billId: pr.sourceReceiptLocalId ?? '',
-        billNumber: pr.referenceNumber ?? '',
-        contactId: pr.supplierId,
-        contactName: pr.supplierName,
-        returnDate: pr.returnDate,
-        total: pr.totalPaise / 100.0,
-        status: PurchaseReturnStatus.fromString(pr.lifecycleStatus),
-        notes: pr.description,
-        lines: pr.lines.map((l) {
-          return PurchaseReturnLine(
-            billLineId: l.sourceReceiptLineLocalId ?? '',
-            productId: '',
-            productName: l.productName,
-            quantityReturned: double.tryParse(l.quantity) ?? 0,
-            maximumQuantity: double.tryParse(l.quantity) ?? 0,
-            rate: l.unitCostPaise / 100.0,
-            gstRate: 0,
-            hsnSac: '',
-          );
-        }).toList(),
-      );
-    });
+import 'purchase_return_form_screen.dart';
+import 'purchase_return_list_provider.dart';
+import 'components/pr_detail_header.dart';
+import 'components/pr_detail_summary.dart';
+import 'components/pr_detail_lines.dart';
+import 'components/pr_detail_timeline.dart';
 
 class PurchaseReturnDetailScreen extends ConsumerStatefulWidget {
-  const PurchaseReturnDetailScreen({super.key, required this.returnId});
+  const PurchaseReturnDetailScreen({
+    super.key,
+    required this.returnId,
+    this.embedded = false,
+    this.onClose,
+  });
+
   final String returnId;
+  final bool embedded;
+  final VoidCallback? onClose;
+
   @override
-  ConsumerState<PurchaseReturnDetailScreen> createState() =>
-      _PurchaseReturnDetailScreenState();
+  ConsumerState<PurchaseReturnDetailScreen> createState() => _PurchaseReturnDetailScreenState();
 }
 
-class _PurchaseReturnDetailScreenState
-    extends ConsumerState<PurchaseReturnDetailScreen> {
-  bool _operating = false;
+class _PurchaseReturnDetailScreenState extends ConsumerState<PurchaseReturnDetailScreen>
+    with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
 
-  Future<void> _act(Future<Result<PurchaseReturn>> Function() call) async {
-    setState(() => _operating = true);
-    final res = await call();
-    if (!mounted) return;
-    setState(() => _operating = false);
-    switch (res) {
-      case Success():
-        ref.invalidate(purchaseReturnDetailProvider(widget.returnId));
-      case Failure(:final error):
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: ${error.message}')));
-      default:
-        break;
-    }
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this);
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final asyncVal = ref.watch(purchaseReturnDetailProvider(widget.returnId));
+    final state = ref.watch(purchaseReturnDetailProvider(widget.returnId));
     final colors = apexColors(context);
-    final fmt = ref.watch(numberFormatterProvider);
-    final service = ref.watch(purchaseReturnServiceProvider);
+    final isMobile = ResponsiveLayout.isMobile(context);
+    final isTablet = ResponsiveLayout.isTablet(context);
+
+    final content = state.when(
+      data: (pr) => _buildContent(context, pr, colors, isMobile, isTablet),
+      loading: () => const Center(child: ApexSkeletonLoader()),
+      error: (error, _) => _buildErrorState(error),
+    );
+
+    if (widget.embedded) {
+      return content;
+    }
 
     return Scaffold(
       backgroundColor: colors.surfaceMuted,
-      body: asyncVal.when(
-        loading: () => const Center(child: LoadingSpinner(size: 32)),
-        error: (err, _) => ErrorView(
-          message: userFacingErrorMessage(err),
-          onRetry: () =>
-              ref.invalidate(purchaseReturnDetailProvider(widget.returnId)),
-        ),
-        data: (ret) => Column(
-          children: [
-            _actionBar(ret, service, colors),
-            Expanded(
-              child: Scrollbar(
-                child: ListView(
-                  padding: const EdgeInsets.all(20),
+      body: SafeArea(child: content),
+    );
+  }
+
+  Widget _buildContent(
+    BuildContext context,
+    PurchaseReturn pr,
+    ApexColors colors,
+    bool isMobile,
+    bool isTablet,
+  ) {
+    final fmt = ref.watch(numberFormatterProvider);
+
+    return Column(
+      children: [
+        // Page Header
+        if (!widget.embedded)
+          PRDetailHeader(
+            pr: pr,
+            onClose: widget.onClose,
+            onEdit: _canEdit(pr) ? () => _openEdit(pr) : null,
+            onPrint: () => _printPR(pr),
+            onCancel: _canCancel(pr) ? () => _cancelPR(pr) : null,
+            onDelete: _canDelete(pr) ? () => _deletePR(pr) : null,
+          ),
+
+        // Tab Bar
+        _buildTabBar(context, pr, colors, isMobile),
+
+        // Tab Content
+        Expanded(
+          child: TabBarView(
+            controller: _tabController,
+            children: [
+              // Overview Tab
+              SingleChildScrollView(
+                padding: EdgeInsets.all(isMobile ? 16 : 24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _summaryCard(ret, colors, fmt),
-                    const SizedBox(height: 16),
-                    _linesCard(ret, colors, fmt),
-                    const SizedBox(height: 16),
-                    _totalsCard(ret, colors, fmt),
+                    PRDetailSummary(pr: pr, fmt: fmt),
+                    const SizedBox(height: 24),
+                    PRDetailLines(pr: pr, fmt: fmt),
                   ],
                 ),
               ),
+              // Timeline Tab
+              PRDetailTimeline(pr: pr),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTabBar(
+    BuildContext context,
+    PurchaseReturn pr,
+    ApexColors colors,
+    bool isMobile,
+  ) {
+    final textTheme = Theme.of(context).textTheme;
+
+    return Container(
+      color: colors.surface,
+      child: TabBar(
+        controller: _tabController,
+        indicatorColor: colors.primary,
+        indicatorWeight: 3,
+        labelColor: colors.primary,
+        unselectedLabelColor: colors.textSecondary,
+        labelStyle: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w600),
+        unselectedLabelStyle: textTheme.labelMedium?.copyWith(fontWeight: FontWeight.w500),
+        tabs: [
+          const Tab(text: 'Overview'),
+          const Tab(text: 'Timeline'),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorState(Object error) {
+    final colors = apexColors(context);
+    final textTheme = Theme.of(context).textTheme;
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.error_outline, size: 64, color: colors.error),
+            const SizedBox(height: 16),
+            Text('Failed to load purchase return', style: textTheme.headlineSmall?.copyWith(color: colors.textPrimary)),
+            const SizedBox(height: 8),
+            Text(error.toString(), style: textTheme.bodyMedium?.copyWith(color: colors.textSecondary), textAlign: TextAlign.center),
+            const SizedBox(height: 24),
+            ApexPrimaryButton(
+              icon: Icons.refresh,
+              label: 'Retry',
+              onPressed: () => ref.invalidate(purchaseReturnDetailProvider(widget.returnId)),
             ),
           ],
         ),
@@ -112,438 +177,107 @@ class _PurchaseReturnDetailScreenState
     );
   }
 
-  Widget _actionBar(
-    PurchaseReturn ret,
-    PurchaseReturnService service,
-    ApexColors colors,
-  ) {
-    final title = ret.returnNumber.isNotEmpty
-        ? ret.returnNumber
-        : 'Purchase Return';
-    return Container(
-      decoration: BoxDecoration(
-        color: colors.surfaceRaised,
-        border: Border(bottom: BorderSide(color: colors.border)),
-      ),
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
-      child: ResponsiveLayout.isMobile(context)
-          ? Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        title,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          color: colors.textPrimary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    StatusBadge(
-                      label: ret.status.value,
-                      tone: _tone(ret.status),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    if (_operating) const LoadingSpinner(size: 18),
-                    if (ret.status.isCancellable)
-                      OutlinedButton.icon(
-                        onPressed: _operating
-                            ? null
-                            : () => _act(() => service.cancel(ret.id)),
-                        icon: Icon(
-                          Icons.cancel_outlined,
-                          size: 18,
-                          color: colors.danger,
-                        ),
-                        label: Text(
-                          'Cancel',
-                          style: TextStyle(color: colors.danger),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(
-                            color: colors.danger.withValues(alpha: 0.4),
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            )
-          : Row(
-              children: [
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          title,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textPrimary,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      StatusBadge(
-                        label: ret.status.value,
-                        tone: _tone(ret.status),
-                      ),
-                    ],
-                  ),
-                ),
-                if (_operating)
-                  const Padding(
-                    padding: EdgeInsets.only(right: 12),
-                    child: LoadingSpinner(size: 18),
-                  ),
-                if (ret.status.isCancellable) ...[
-                  const SizedBox(width: 8),
-                  OutlinedButton.icon(
-                    onPressed: _operating
-                        ? null
-                        : () => _act(() => service.cancel(ret.id)),
-                    icon: Icon(
-                      Icons.cancel_outlined,
-                      size: 18,
-                      color: colors.danger,
-                    ),
-                    label: Text(
-                      'Cancel',
-                      style: TextStyle(color: colors.danger),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(
-                        color: colors.danger.withValues(alpha: 0.4),
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+  bool _canEdit(PurchaseReturn pr) => pr.status == PurchaseReturnStatus.draft;
+  bool _canCancel(PurchaseReturn pr) => pr.status == PurchaseReturnStatus.draft || pr.status == PurchaseReturnStatus.pending;
+  bool _canDelete(PurchaseReturn pr) => pr.status == PurchaseReturnStatus.draft;
+
+  Future<void> _openEdit(PurchaseReturn pr) async {
+    final result = await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const PurchaseReturnFormScreen()),
     );
+    if (result != null && mounted) {
+      ref.invalidate(purchaseReturnDetailProvider(widget.returnId));
+      ref.invalidate(purchaseReturnListProvider);
+    }
   }
 
-  Widget _summaryCard(
-    PurchaseReturn ret,
-    ApexColors colors,
-    NumberFormatter fmt,
-  ) {
-    return _Panel(
-      colors: colors,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('VENDOR', style: _label(colors)),
-                const SizedBox(height: 4),
-                Text(
-                  ret.contactName ?? '—',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w700,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Against bill: ${ret.billNumber.isEmpty ? '—' : ret.billNumber}',
-                  style: TextStyle(fontSize: 12, color: colors.textMuted),
-                ),
-                if ((ret.notes ?? '').isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      ret.notes!,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: colors.textSecondary,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Returned  ',
-                    style: TextStyle(fontSize: 12, color: colors.textMuted),
-                  ),
-                  Text(
-                    ret.returnDate.isEmpty ? '—' : ret.returnDate,
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 10),
-              Text('RETURN TOTAL', style: _label(colors)),
-              Text(
-                fmt.currency(ret.total),
-                style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.w800,
-                  color: colors.warning,
-                ),
-              ),
-            ],
+  Future<void> _printPR(PurchaseReturn pr) async {
+    try {
+      await ref.read(downloadServiceProvider).downloadPRPdf(pr.id);
+      if (mounted) {
+        ApexSnackBar.show(context: context, message: 'Return downloaded', type: SnackBarType.success);
+      }
+    } catch (e) {
+      if (mounted) {
+        ApexSnackBar.show(context: context, message: 'Failed to download: $e', type: SnackBarType.error);
+      }
+    }
+  }
+
+  Future<void> _cancelPR(PurchaseReturn pr) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel Purchase Return'),
+        content: Text('Cancel return ${pr.returnNumber}? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: apexColors(context).error),
+            child: const Text('Cancel Return'),
           ),
         ],
       ),
     );
+    if (confirmed == true) {
+      final result = await ref.read(purchaseReturnServiceProvider).cancel(pr.id);
+      if (!mounted) return;
+      switch (result) {
+        case Success():
+          ref.invalidate(purchaseReturnDetailProvider(widget.returnId));
+          ref.invalidate(purchaseReturnListProvider);
+          ApexSnackBar.show(context: context, message: 'Return cancelled', type: SnackBarType.success);
+          if (widget.onClose != null) widget.onClose!();
+        case Failure(:final error):
+          ApexSnackBar.show(context: context, message: error.message, type: SnackBarType.error);
+        default:
+          break;
+      }
+    }
   }
 
-  Widget _linesCard(
-    PurchaseReturn ret,
-    ApexColors colors,
-    NumberFormatter fmt,
-  ) {
-    final table = Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Container(
-          decoration: BoxDecoration(
-            color: colors.surfaceMuted,
-            borderRadius: const BorderRadius.vertical(
-              top: Radius.circular(ApexRadius.lg),
-            ),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(flex: 44, child: Text('ITEM', style: _th(colors))),
-              Expanded(
-                flex: 14,
-                child: Text(
-                  'QTY',
-                  textAlign: TextAlign.right,
-                  style: _th(colors),
-                ),
-              ),
-              Expanded(
-                flex: 20,
-                child: Text(
-                  'RATE',
-                  textAlign: TextAlign.right,
-                  style: _th(colors),
-                ),
-              ),
-              Expanded(
-                flex: 22,
-                child: Text(
-                  'AMOUNT',
-                  textAlign: TextAlign.right,
-                  style: _th(colors),
-                ),
-              ),
-            ],
-          ),
-        ),
-        ...ret.lines.asMap().entries.map(
-          (e) => _lineRow(e.value, e.key == ret.lines.length - 1, colors, fmt),
-        ),
-      ],
-    );
-
-    return _Panel(
-      colors: colors,
-      padding: EdgeInsets.zero,
-      child: ResponsiveLayout.isMobile(context)
-          ? SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: table,
-            )
-          : table,
-    );
-  }
-
-  Widget _lineRow(
-    PurchaseReturnLine l,
-    bool last,
-    ApexColors colors,
-    NumberFormatter fmt,
-  ) {
-    return Container(
-      decoration: BoxDecoration(
-        border: last ? null : Border(bottom: BorderSide(color: colors.border)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 44,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  l.productName ?? 'Item',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w600,
-                    color: colors.textPrimary,
-                  ),
-                ),
-                if ((l.reason ?? '').isNotEmpty)
-                  Text(
-                    'Reason: ${l.reason}',
-                    style: TextStyle(fontSize: 11, color: colors.textMuted),
-                  ),
-              ],
-            ),
-          ),
-          Expanded(
-            flex: 14,
-            child: Text(
-              fmt.quantity(l.quantityReturned),
-              textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 13, color: colors.textSecondary),
-            ),
-          ),
-          Expanded(
-            flex: 20,
-            child: Text(
-              fmt.currency(l.rate),
-              textAlign: TextAlign.right,
-              style: TextStyle(fontSize: 13, color: colors.textSecondary),
-            ),
-          ),
-          Expanded(
-            flex: 22,
-            child: Text(
-              fmt.currency(l.total),
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w700,
-                color: colors.textPrimary,
-              ),
-            ),
+  Future<void> _deletePR(PurchaseReturn pr) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Purchase Return'),
+        content: Text('Permanently delete return ${pr.returnNumber}? This cannot be undone.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: FilledButton.styleFrom(backgroundColor: apexColors(context).error),
+            child: const Text('Delete'),
           ),
         ],
       ),
     );
+    if (confirmed == true) {
+      final result = await ref.read(purchaseReturnServiceProvider).delete(pr.id);
+      if (!mounted) return;
+      switch (result) {
+        case Success():
+          ref.invalidate(purchaseReturnListProvider);
+          ApexSnackBar.show(context: context, message: 'Return deleted', type: SnackBarType.success);
+          if (widget.onClose != null) {
+            widget.onClose!();
+          } else if (mounted) {
+          Navigator.of(context).pop();
+        }
+        case Failure(:final error):
+          ApexSnackBar.show(context: context, message: error.message, type: SnackBarType.error);
+        default:
+          break;
+      }
+    }
   }
-
-  Widget _totalsCard(
-    PurchaseReturn ret,
-    ApexColors colors,
-    NumberFormatter fmt,
-  ) {
-    return Row(
-      children: [
-        const Spacer(),
-        ConstrainedBox(
-          constraints: BoxConstraints(
-            maxWidth: ResponsiveLayout.isMobile(context)
-                ? double.infinity
-                : 320,
-          ),
-          child: _Panel(
-            colors: colors,
-            child: Column(
-              children: [
-                _totRow('Subtotal', fmt.currency(ret.subtotal), colors),
-                if (ret.totalTax != 0)
-                  _totRow('Tax', fmt.currency(ret.totalTax), colors),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Divider(height: 1, color: colors.border),
-                ),
-                _totRow(
-                  'Total',
-                  fmt.currency(ret.total),
-                  colors,
-                  emphasize: true,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _totRow(
-    String label,
-    String value,
-    ApexColors colors, {
-    bool emphasize = false,
-  }) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: emphasize ? 14 : 12.5,
-            fontWeight: emphasize ? FontWeight.w700 : FontWeight.w500,
-            color: emphasize ? colors.textPrimary : colors.textSecondary,
-          ),
-        ),
-        const Spacer(),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: emphasize ? 16 : 13,
-            fontWeight: emphasize ? FontWeight.w800 : FontWeight.w600,
-            color: emphasize ? colors.warning : colors.textPrimary,
-          ),
-        ),
-      ],
-    ),
-  );
-
-  StatusTone _tone(PurchaseReturnStatus s) => switch (s) {
-    PurchaseReturnStatus.draft => StatusTone.neutral,
-    PurchaseReturnStatus.posted => StatusTone.success,
-    PurchaseReturnStatus.cancelled => StatusTone.danger,
-  };
-
-  TextStyle _label(ApexColors colors) => TextStyle(
-    fontSize: 10.5,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.5,
-    color: colors.textMuted,
-  );
-  TextStyle _th(ApexColors colors) => TextStyle(
-    fontSize: 10.5,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 0.4,
-    color: colors.textMuted,
-  );
 }
 
-class _Panel extends StatelessWidget {
-  const _Panel({required this.colors, required this.child, this.padding});
-  final ApexColors colors;
-  final Widget child;
-  final EdgeInsets? padding;
-  @override
-  Widget build(BuildContext context) =>
-      ApexCard(padding: padding ?? const EdgeInsets.all(18), child: child);
-}
+// ───── Providers ────────────────────────────────────────────────────────────
+
+final purchaseReturnDetailProvider = FutureProvider.family<PurchaseReturn, String>((ref, id) async {
+  final service = ref.read(purchaseReturnServiceProvider);
+  final result = await service.get(id);
+  return result.getOrThrow();
+});
