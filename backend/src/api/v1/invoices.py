@@ -327,6 +327,12 @@ def invoice_stats(
         Invoice.status.in_(["POSTED", "SENT", "PARTIALLY_PAID"]),
         Invoice.due_date < func.current_date(),
     ).scalar() or 0
+    overdue_count = db.query(func.count(Invoice.id)).filter(
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None,
+        Invoice.status.in_(["POSTED", "SENT", "PARTIALLY_PAID"]),
+        Invoice.due_date < func.current_date(),
+    ).scalar() or 0
 
     return {
         "total": stats.total,
@@ -339,6 +345,7 @@ def invoice_stats(
         "collected": float(stats.collected),
         "outstanding": float(outstanding),
         "overdue": float(overdue),
+        "overdue_count": int(overdue_count),
     }
 
 
@@ -403,6 +410,9 @@ def list_invoices(
             status=inv.status,
             total=inv.total,
             amount_paid=inv.amount_paid,
+            gst_amount=(inv.cgst_amount or 0) + (inv.sgst_amount or 0) +
+            (inv.igst_amount or 0) + (inv.utgst_amount or 0) +
+            (inv.cess_amount or 0),
             contact_name=contact_name,
             created_at=inv.created_at
         ))

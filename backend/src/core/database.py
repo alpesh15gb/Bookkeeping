@@ -16,6 +16,22 @@ from src.core.config import settings
 # ContextVar to hold tenant_id across request contexts
 tenant_context: contextvars.ContextVar = contextvars.ContextVar("tenant_context", default=None)
 
+
+def set_db_tenant_context(db: Session, tenant_id) -> None:
+    """Bind a tenant to both the current context and an active DB transaction.
+
+    The session event handles transactions that begin after the context is set.
+    This explicit statement also covers signup/bootstrap flows where the tenant
+    row is created after the session has already started a transaction.
+    """
+    tenant_context.set(tenant_id)
+    bind = db.get_bind()
+    if bind.dialect.name != "sqlite":
+        db.connection().execute(
+            text("SET LOCAL app.current_tenant_id = :tid"),
+            {"tid": str(tenant_id)},
+        )
+
 # ---------------------------------------------------------------------------
 # Engine — PostgreSQL in production, SQLite fallback for tests
 # ---------------------------------------------------------------------------
@@ -78,6 +94,7 @@ def get_db_session():
         yield db
     finally:
         db.close()
+        tenant_context.set(None)
 
 
 def ensure_vyapar_import_columns():

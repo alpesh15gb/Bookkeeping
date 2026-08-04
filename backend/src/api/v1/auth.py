@@ -3,11 +3,12 @@ from sqlalchemy.orm import Session, joinedload
 import uuid
 import re
 import logging
+import threading
 from typing import List, Optional, Union
 from datetime import datetime, timedelta, timezone
 import redis
 
-from src.core.database import get_db_session
+from src.core.database import get_db_session, set_db_tenant_context
 from src.infrastructure.database.models import User, Tenant, TenantMembership, PasswordResetToken, AuditLog
 from src.schemas.auth_schemas import UserRegister, UserLogin, TokenResponse, UserResponse, SchemaBase, Login2FAResponse, TwoFactorChallengeRequest
 from src.core.security import (
@@ -26,7 +27,10 @@ from src.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
-_USED_2FA_CHALLENGE_TOKENS = set()
+# Development/test fallback for replay protection when Redis is unavailable.
+# Values expire so a long-running process cannot accumulate hashes forever.
+_USED_2FA_CHALLENGE_TOKENS = {}
+_USED_2FA_CHALLENGE_TOKENS_LOCK = threading.Lock()
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -135,6 +139,7 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
     )
     db.add(tenant)
     db.flush() # Flushes to allocate tenant ID
+    set_db_tenant_context(db, tenant.id)
 
     # 4. Set User as Owner of Tenant
     membership = TenantMembership(
@@ -599,11 +604,22 @@ def verify_2fa_challenge(
         try:
             if r.get(redis_key):
                 raise HTTPException(status_code=401, detail="Challenge token has already been used.")
+        except HTTPException:
+            raise
         except Exception:
-            pass
+            logger.warning("Unable to check 2FA challenge replay key")
 
-    if token_hash in _USED_2FA_CHALLENGE_TOKENS:
-        raise HTTPException(status_code=401, detail="Challenge token has already been used.")
+    now = datetime.now(timezone.utc)
+    with _USED_2FA_CHALLENGE_TOKENS_LOCK:
+        expired_hashes = [
+            used_hash for used_hash, expires_at in _USED_2FA_CHALLENGE_TOKENS.items()
+            if expires_at <= now
+        ]
+        for used_hash in expired_hashes:
+            _USED_2FA_CHALLENGE_TOKENS.pop(used_hash, None)
+
+        if token_hash in _USED_2FA_CHALLENGE_TOKENS:
+            raise HTTPException(status_code=401, detail="Challenge token has already been used.")
 
     # 2. Decode the challenge token
     try:
@@ -633,13 +649,19 @@ def verify_2fa_challenge(
         db.commit()
         raise HTTPException(status_code=401, detail="Invalid 2FA code.")
 
-    # 5. Mark token as used to prevent replay
+    # 5. Mark token as used atomically to prevent two concurrent replays.
     if r:
         try:
-            r.setex(redis_key, 300, "1")
+            if not r.set(redis_key, "1", ex=300, nx=True):
+                raise HTTPException(status_code=401, detail="Challenge token has already been used.")
+        except HTTPException:
+            raise
         except Exception:
-            pass
-    _USED_2FA_CHALLENGE_TOKENS.add(token_hash)
+            logger.warning("Unable to record 2FA challenge replay key")
+    with _USED_2FA_CHALLENGE_TOKENS_LOCK:
+        if not r and token_hash in _USED_2FA_CHALLENGE_TOKENS:
+            raise HTTPException(status_code=401, detail="Challenge token has already been used.")
+        _USED_2FA_CHALLENGE_TOKENS[token_hash] = now + timedelta(minutes=5)
 
     # 6. Retrieve scopes/memberships
     memberships = db.query(TenantMembership).filter(

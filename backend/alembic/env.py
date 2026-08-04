@@ -22,6 +22,7 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from src.core.database import Base
+from src.core.postgres_hardening import apply_postgres_hardening
 # Register every table with Base.metadata for the guarded fresh-database bootstrap.
 from src.infrastructure.database import models as _models  # noqa: F401
 from src.infrastructure.database.idempotency import IdempotencyRecord as _IdempotencyRecord  # noqa: F401
@@ -87,6 +88,7 @@ def run_migrations_online() -> None:
         connection.commit()
         if not existing_tables:
             target_metadata.create_all(connection)
+            apply_postgres_hardening(connection)
             MigrationContext.configure(connection).stamp(
                 ScriptDirectory.from_config(config), "head"
             )

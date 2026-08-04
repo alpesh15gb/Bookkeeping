@@ -7,7 +7,7 @@ from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response as StarletteResponse
 from sqlalchemy import text
-from src.core.database import SessionLocal
+from src.core.database import SessionLocal, tenant_context
 
 logger = logging.getLogger("bookkeeping.idempotency")
 
@@ -39,6 +39,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         request_body = await request.body()
         request_hash = hashlib.sha256(request_body).hexdigest()
+        tenant_token = tenant_context.set(uuid.UUID(tenant_id))
         db = SessionLocal()
         owns_record = False
         try:
@@ -113,6 +114,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             logger.exception("Idempotency check failed, allowing request to proceed")
         finally:
             db.close()
+            tenant_context.reset(tenant_token)
 
         try:
             response = await call_next(request)

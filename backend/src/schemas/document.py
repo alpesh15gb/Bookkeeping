@@ -178,6 +178,7 @@ class InvoiceResponse(InvoiceBase):
     round_off: Decimal
     total: Decimal
     amount_paid: Decimal
+    gst_amount: Decimal = Decimal("0.0000")
     irn: Optional[str] = None
     qr_code: Optional[str] = None
     e_invoice_status: str

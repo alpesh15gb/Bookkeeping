@@ -14,6 +14,7 @@ Bill, JournalEntry, etc.) using the existing service layer.
 
 import uuid
 import logging
+import hmac
 from datetime import date, datetime, timezone, timedelta
 from decimal import Decimal
 from typing import Any, Literal
@@ -26,13 +27,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from src.core.config import settings
-from src.core.database import get_db_session, Base, engine
+from src.core.rate_limiter import limiter
+from src.core.database import get_db_session, Base, engine, set_db_tenant_context, tenant_context
 from src.core.security import (
     verify_password,
     get_password_hash,
     create_access_token,
     decode_token,
     Permissions,
+    ROLE_PERMISSIONS,
 )
 from src.infrastructure.database.models import (
     Account,
@@ -208,10 +211,12 @@ class NumberAllocationResponse(BaseModel):
 _APEXBOOKS_ISS = "apexbooks"
 
 
-def _tenant_context(tenant_id: uuid.UUID) -> None:
-    """Import and set the tenant context variable for PostgreSQL RLS."""
-    from src.core.database import tenant_context
-    tenant_context.set(tenant_id)
+def _tenant_context(tenant_id: uuid.UUID, db: Session | None = None) -> None:
+    """Set tenant context for PostgreSQL RLS, including active transactions."""
+    if db is not None:
+        set_db_tenant_context(db, tenant_id)
+    else:
+        tenant_context.set(tenant_id)
 
 
 def _micros_to_decimal(micros: int | None) -> Decimal:
@@ -358,6 +363,8 @@ def get_legacy_principal(
             detail="User not found or inactive",
         )
 
+    _tenant_context(tenant_id, db)
+
     # Verify tenant membership
     membership = db.query(TenantMembership).filter(
         TenantMembership.tenant_id == tenant_id,
@@ -369,9 +376,6 @@ def get_legacy_principal(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="No active membership for this tenant",
         )
-
-    # Set tenant context for RLS
-    _tenant_context(tenant_id)
 
     return ApexBooksPrincipal(
         user_id=user_id,
@@ -392,12 +396,15 @@ def bootstrap(
 
     This replicates the ApexBooks /v1/bootstrap endpoint semantics.
     """
-    if x_bootstrap_key != settings.JWT_SECRET_KEY:
-        if not settings.JWT_SECRET_KEY or len(settings.JWT_SECRET_KEY) < 24:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Invalid bootstrap key",
-            )
+    if (
+        not settings.JWT_SECRET_KEY
+        or len(settings.JWT_SECRET_KEY) < 24
+        or not hmac.compare_digest(x_bootstrap_key, settings.JWT_SECRET_KEY)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid bootstrap key",
+        )
 
     from src.core.database import SessionLocal
     db = SessionLocal()
@@ -420,6 +427,7 @@ def bootstrap(
         )
         db.add(tenant)
         db.flush()
+        _tenant_context(tenant.id, db)
 
         # Admin user
         user = User(
@@ -504,14 +512,17 @@ def bootstrap(
         )
     finally:
         db.close()
+        tenant_context.set(None)
 
 # ---------------------------------------------------------------------------
 # Auth / Token
 # ---------------------------------------------------------------------------
 
 @router.post("/auth/token", response_model=TokenResponse)
+@limiter.limit(settings.RATE_LIMIT_LOGIN)
 def auth_token(
-    request: LoginRequest,
+    request: Request,
+    payload: LoginRequest,
     db: Session = Depends(get_db_session),
 ) -> TokenResponse:
     """Simplified JWT login matching ApexBooks /v1/auth/token.
@@ -519,19 +530,30 @@ def auth_token(
     The returned token carries tenant_id and permissions claims so the
     ApexBooks client Principal can be reconstructed from the token alone.
     """
+    now = datetime.now(timezone.utc)
     user = db.query(User).filter(
-        User.email == request.email.casefold(),
+        User.email == payload.email.casefold(),
         User.is_active == True,
     ).first()
     if user is None:
         # Timing-safe comparison
-        verify_password(request.password, "$2b$12$" + "x" * 53)
+        verify_password(payload.password, "$2b$12$" + "x" * 53)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect tenant, email, or password",
         )
 
-    if not verify_password(request.password, user.password_hash):
+    if user.locked_until and user.locked_until > now:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account is temporarily locked due to too many failed login attempts. Try again later.",
+        )
+
+    if not verify_password(payload.password, user.password_hash):
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= 5:
+            user.locked_until = now + timedelta(minutes=15)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect tenant, email, or password",
@@ -539,7 +561,7 @@ def auth_token(
 
     # Verify tenant membership
     membership = db.query(TenantMembership).filter(
-        TenantMembership.tenant_id == request.tenant_id,
+        TenantMembership.tenant_id == payload.tenant_id,
         TenantMembership.user_id == user.id,
         TenantMembership.is_active == True,
     ).first()
@@ -549,14 +571,29 @@ def auth_token(
             detail="User does not belong to this tenant",
         )
 
-    # Build an ApexBooks-compatible token
-    now = datetime.now(timezone.utc)
+    permissions = list(ROLE_PERMISSIONS.get(membership.role.lower(), []))
+    if Permissions.SYNC_AUTH not in permissions:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This role is not authorized for offline sync authentication.",
+        )
+    if user.totp_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Two-factor authentication is enabled. Use the primary auth login flow.",
+        )
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    db.commit()
+
+    # Build an ApexBooks-compatible token with the membership's actual scopes.
     lifetime = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     import jwt as pyjwt
     token_payload = {
         "sub": str(user.id),
-        "tenant_id": str(request.tenant_id),
-        "permissions": ["*"],
+        "tenant_id": str(payload.tenant_id),
+        "permissions": permissions,
         "iss": _APEXBOOKS_ISS,
         "iat": now,
         "exp": now + lifetime,
@@ -859,7 +896,7 @@ def sync_push(
     """Accept ApexBooks client events, store them idempotently, and process
     each against the Bookkeeping-master domain."""
     principal.require(Permissions.SYNC_WRITE)
-    _tenant_context(principal.tenant_id)
+    _tenant_context(principal.tenant_id, db)
 
     acknowledgements: list[SyncAcknowledgement] = []
 

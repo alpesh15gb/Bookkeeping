@@ -185,6 +185,15 @@ class TaxTemplateResponse(SchemaBase):
     rate: Decimal
     is_active: bool
 
+class TaxTemplateCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    rate: Decimal = Field(..., ge=0, le=100)
+
+class TaxTemplateUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    rate: Optional[Decimal] = Field(None, ge=0, le=100)
+    is_active: Optional[bool] = None
+
 class PaymentTermResponse(SchemaBase):
     id: uuid.UUID
     tenant_id: Optional[uuid.UUID]

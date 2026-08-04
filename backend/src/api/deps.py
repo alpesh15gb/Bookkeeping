@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 import uuid
 from sqlalchemy.orm import Session
 
-from src.core.database import get_db_session, tenant_context
+from src.core.database import get_db_session, set_db_tenant_context, tenant_context
 from src.infrastructure.database.models import User, TenantMembership
 from src.core.security import decode_token, ROLE_PERMISSIONS
 from src.common.audit_log import clear_audit_context, set_audit_context, set_session_audit_context
@@ -11,13 +11,10 @@ from src.common.audit_log import clear_audit_context, set_audit_context, set_ses
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login", auto_error=False)
 
 def get_current_user(
-    request: Request,
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db_session)
 ) -> User:
     """Validates JWT auth token and returns active User model."""
-    if not token:
-        token = request.query_params.get("token")
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -75,7 +72,7 @@ def get_tenant_context(
             detail="X-Tenant-ID or tenant_id must be a valid UUID."
         )
 
-    tenant_context.set(tenant_uuid)
+    set_db_tenant_context(db, tenant_uuid)
     audit_token = None
     try:
         membership = db.query(TenantMembership).filter(
@@ -136,7 +133,7 @@ def enforce_permission(required_permission: str):
                 detail="X-Tenant-ID or tenant_id must be a valid UUID."
             )
 
-        tenant_context.set(tenant_uuid)
+        set_db_tenant_context(db, tenant_uuid)
         audit_token = None
         try:
             membership = db.query(TenantMembership).filter(

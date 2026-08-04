@@ -16,7 +16,7 @@ from src.schemas.master_schemas import (
     AccountCreate, AccountUpdate, AccountResponse,
     BankingProfileCreate, BankingProfileUpdate, BankingProfileResponse,
     ExpenseCategoryCreate, ExpenseCategoryUpdate, ExpenseCategoryResponse,
-    TaxTemplateResponse, PaymentTermResponse
+    TaxTemplateResponse, TaxTemplateCreate, TaxTemplateUpdate, PaymentTermResponse
 )
 from src.api.deps import enforce_permission
 from src.domains.accounting.services import LedgerValidationError
@@ -1011,6 +1011,70 @@ def list_tax_templates(
         TaxTemplate.is_active == True,
         (TaxTemplate.tenant_id == None) | (TaxTemplate.tenant_id == tenant_id)
     ).all()
+
+@router.post("/tax-templates", response_model=TaxTemplateResponse, status_code=status.HTTP_201_CREATED)
+def create_tax_template(
+    payload: TaxTemplateCreate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("settings:update")),
+):
+    duplicate = db.query(TaxTemplate).filter(
+        TaxTemplate.tenant_id == tenant_id,
+        TaxTemplate.rate == payload.rate,
+        TaxTemplate.is_active == True,
+    ).first()
+    if duplicate:
+        raise HTTPException(status_code=409, detail="A tax rate with this percentage already exists.")
+    template = TaxTemplate(
+        tenant_id=tenant_id,
+        name=payload.name.strip(),
+        rate=payload.rate,
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return template
+
+@router.put("/tax-templates/{id}", response_model=TaxTemplateResponse)
+def update_tax_template(
+    id: uuid.UUID,
+    payload: TaxTemplateUpdate,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("settings:update")),
+):
+    template = db.query(TaxTemplate).filter(
+        TaxTemplate.id == id,
+        TaxTemplate.tenant_id == tenant_id,
+        TaxTemplate.is_active == True,
+    ).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Tax template not found.")
+    if payload.name is not None:
+        template.name = payload.name.strip()
+    if payload.rate is not None:
+        template.rate = payload.rate
+    if payload.is_active is not None:
+        template.is_active = payload.is_active
+    db.commit()
+    db.refresh(template)
+    return template
+
+@router.delete("/tax-templates/{id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_tax_template(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("settings:update")),
+):
+    template = db.query(TaxTemplate).filter(
+        TaxTemplate.id == id,
+        TaxTemplate.tenant_id == tenant_id,
+        TaxTemplate.is_active == True,
+    ).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Tax template not found.")
+    template.is_active = False
+    db.commit()
+    return None
 
 @router.get("/payment-terms", response_model=List[PaymentTermResponse])
 def list_payment_terms(

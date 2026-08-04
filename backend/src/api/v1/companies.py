@@ -7,7 +7,7 @@ import json, os, uuid
 from datetime import datetime, date, timezone, timedelta
 
 from src.core.config import settings
-from src.core.database import get_db_session
+from src.core.database import get_db_session, set_db_tenant_context
 from src.core.rate_limiter import limiter
 from src.infrastructure.database.models import User, Tenant, TenantMembership, Branch, StockLedger, TenantSetting, NumberingSeries, ExpenseCategory, TenantInvitation
 from src.schemas.company_schemas import (
@@ -52,6 +52,7 @@ def create_company(
     )
     db.add(tenant)
     db.flush()
+    set_db_tenant_context(db, tenant.id)
 
     membership = TenantMembership(
         tenant_id=tenant.id,
@@ -558,6 +559,7 @@ def update_series(
 
 # ── Purge Company Data endpoints ──────────────────────────────────────────────
 import secrets
+import hmac
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -651,7 +653,7 @@ def verify_and_execute_purge(
                 valid_otp = otp_val
             del _PURGE_OTP_CACHE[cache_key]
 
-    if not valid_otp or valid_otp != payload.otp.strip():
+    if not valid_otp or not hmac.compare_digest(str(valid_otp), payload.otp.strip()):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid or expired verification OTP."

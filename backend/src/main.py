@@ -64,7 +64,7 @@ logger = logging.getLogger("bookkeeping")
 # Keep this in sync with the single Alembic head. The ORM is allowed to start
 # so operators can still reach /health, but readiness becomes degraded until
 # migrations are applied. `create_all()` cannot add columns to existing tables.
-REQUIRED_SCHEMA_REVISION = "20260731_0002"
+REQUIRED_SCHEMA_REVISION = "20260804_0001"
 
 
 def _database_schema_revision(connection) -> Optional[str]:
@@ -180,14 +180,17 @@ def _seed_demo_data():
     try:
         DEMO_TENANT = uuid.UUID("0aa85f64-5717-4562-b3fc-2c963f66b110")
 
-        if db.query(TaxTemplate).filter(TaxTemplate.tenant_id.is_(None)).count() == 0:
-            db.add_all([
-                TaxTemplate(name="GST 0%",  rate=Decimal("0.00")),
-                TaxTemplate(name="GST 5%",  rate=Decimal("5.00")),
-                TaxTemplate(name="GST 12%", rate=Decimal("12.00")),
-                TaxTemplate(name="GST 18%", rate=Decimal("18.00")),
-                TaxTemplate(name="GST 28%", rate=Decimal("28.00")),
-            ])
+        standard_tax_rates = (Decimal("0.00"), Decimal("2.50"), Decimal("5.00"), Decimal("12.00"), Decimal("18.00"), Decimal("28.00"))
+        existing_tax_rates = {
+            row.rate for row in db.query(TaxTemplate).filter(TaxTemplate.tenant_id.is_(None)).all()
+        }
+        missing_tax_rates = [
+            TaxTemplate(name=f"GST {rate:g}%", rate=rate)
+            for rate in standard_tax_rates
+            if rate not in existing_tax_rates
+        ]
+        if missing_tax_rates:
+            db.add_all(missing_tax_rates)
             db.commit()
             logger.info("Seeded global GST tax templates.")
 

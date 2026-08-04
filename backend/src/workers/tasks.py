@@ -1,13 +1,16 @@
 import os
 import uuid
 import logging
+from contextlib import contextmanager
 from typing import Dict, Any
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
+from sqlalchemy import text
 from celery.schedules import crontab
 
 from src.core.config import settings
 from src.core.celery import celery_app
+from src.core.database import SessionLocal, set_db_tenant_context, tenant_context
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +45,47 @@ celery_app.conf.beat_schedule.update({
 })
 
 
+def _find_without_rls(db, model, *filters):
+    """Resolve a row when the tenant is not yet known (task entry point).
+
+    Temporarily disables row-level security for the current transaction so an
+    object can be located by ID alone, then re-enables it under the object's
+    tenant so the remainder of the task runs with RLS enforced.
+    ``SET LOCAL row_security = off`` requires table ownership — the migration
+    user owns the schema. No-op on SQLite.
+    """
+    if db.get_bind().dialect.name == "sqlite":
+        return db.query(model).filter(*filters).first()
+    db.connection().execute(text("SET LOCAL row_security = off"))
+    obj = db.query(model).filter(*filters).first()
+    if obj is not None:
+        db.connection().execute(text("SET LOCAL row_security = on"))
+        set_db_tenant_context(db, obj.tenant_id)
+    return obj
+
+
+@contextmanager
+def _tenant_scope(db, tenant_id):
+    set_db_tenant_context(db, tenant_id)
+    try:
+        yield
+    finally:
+        tenant_context.set(None)
+
+
 @celery_app.task(name="tasks.deliver_cartunez_master_data")
 def deliver_cartunez_master_data() -> Dict[str, Any]:
     """Deliver pending Contract v1 ApexBooks-owned master-data events."""
-    from src.core.database import SessionLocal
     from src.integrations.cartunez.outbound import CartunezOutboundDispatcher
 
     db = SessionLocal()
     try:
+        # Cross-tenant webhook queue — dispatch regardless of tenant isolation.
+        if db.get_bind().dialect.name != "sqlite":
+            db.connection().execute(text("SET LOCAL row_security = off"))
         return CartunezOutboundDispatcher().dispatch_pending(db)
     finally:
+        tenant_context.set(None)
         db.close()
 
 
@@ -60,7 +94,6 @@ def submit_e_invoice_to_irp(self, invoice_id: str) -> Dict[str, Any]:
     """Submits a finalized Invoice payload to the NIC IRP gateway."""
     logger.info(f"Starting e-invoice generation task for Invoice ID: {invoice_id}")
     try:
-        from src.core.database import SessionLocal
         from src.infrastructure.database.models import Invoice
         from src.domains.taxation.einvoice_service import EInvoiceService
 
@@ -69,7 +102,7 @@ def submit_e_invoice_to_irp(self, invoice_id: str) -> Dict[str, Any]:
 
         db = SessionLocal()
         try:
-            invoice = db.query(Invoice).filter(Invoice.id == invoice_uuid).first()
+            invoice = _find_without_rls(db, Invoice, Invoice.id == invoice_uuid)
             if not invoice:
                 logger.error(f"Invoice {invoice_id} not found for e-invoice submission.")
                 return {"invoice_id": invoice_id, "status": "FAILED", "error": "Invoice not found"}
@@ -94,12 +127,11 @@ def generate_invoice_pdf(invoice_id: str) -> str:
     """Generates a PDF copy of the invoice and uploads to S3-compatible storage."""
     logger.info(f"Generating PDF invoice for Invoice ID: {invoice_id}")
     try:
-        from src.core.database import SessionLocal
         from src.infrastructure.database.models import Invoice
         from src.domains.printing.invoice_pdf import generate_invoice_pdf as _gen_pdf
         db = SessionLocal()
         try:
-            invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
+            invoice = _find_without_rls(db, Invoice, Invoice.id == invoice_id)
             if not invoice:
                 return ""
             pdf_bytes = _gen_pdf(
@@ -123,11 +155,14 @@ def generate_invoice_pdf(invoice_id: str) -> str:
             )
             # Upload to S3 if configured
             if settings.S3_BUCKET:
-                import boto3
-                s3 = boto3.client("s3", region_name=settings.S3_REGION)
-                key = f"invoices/{invoice_id}.pdf"
-                s3.put_object(Bucket=settings.S3_BUCKET, Key=key, Body=pdf_bytes, ContentType="application/pdf")
-                return f"s3://{settings.S3_BUCKET}/{key}"
+                try:
+                    import boto3
+                    s3 = boto3.client("s3", region_name=settings.S3_REGION)
+                    key = f"invoices/{invoice_id}.pdf"
+                    s3.put_object(Bucket=settings.S3_BUCKET, Key=key, Body=pdf_bytes, ContentType="application/pdf")
+                    return f"s3://{settings.S3_BUCKET}/{key}"
+                except ImportError:
+                    logger.warning(f"boto3 not installed; skipping S3 upload for invoice {invoice_id}")
             return f"invoices/{invoice_id}.pdf"
         finally:
             db.close()
@@ -143,18 +178,28 @@ def send_invoice_email(self, invoice_id: str, recipient_email: str) -> bool:
     try:
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
+        from src.infrastructure.database.models import Invoice
         from src.common.email_helper import invoice_email, send_email_smtp
 
-        subject, html_body = invoice_email(invoice_id)
-        msg = MIMEMultipart()
-        msg["From"] = settings.EMAIL_FROM
-        msg["To"] = recipient_email
-        msg["Subject"] = subject
-        msg.attach(MIMEText(html_body, "html"))
+        db = SessionLocal()
+        try:
+            invoice = _find_without_rls(db, Invoice, Invoice.id == invoice_id)
+            if not invoice:
+                logger.error(f"Invoice {invoice_id} not found for email notification.")
+                return False
+            company_name = invoice.tenant.legal_name if invoice.tenant else "ApexBooks"
+            subject, html_body = invoice_email(invoice.invoice_number, company_name)
+            msg = MIMEMultipart()
+            msg["From"] = settings.EMAIL_FROM
+            msg["To"] = recipient_email
+            msg["Subject"] = subject
+            msg.attach(MIMEText(html_body, "html"))
 
-        send_email_smtp(msg)
-        logger.info(f"Invoice email dispatched to {recipient_email}")
-        return True
+            send_email_smtp(msg)
+            logger.info(f"Invoice email dispatched to {recipient_email}")
+            return True
+        finally:
+            db.close()
     except Exception as exc:
         logger.error(f"Failed to send invoice email: {exc}")
         try:
@@ -173,49 +218,48 @@ def send_overdue_invoice_reminders():
     """Sends overdue invoice reminders to customers daily at 9 AM IST."""
     logger.info("Sending overdue invoice reminders...")
     try:
-        from src.core.database import SessionLocal
-        from src.infrastructure.database.models import Invoice, Contact, Tenant, TenantSetting
-        from src.common.email_helper import invoice_email
-        import smtplib
+        from src.infrastructure.database.models import Invoice, Contact, Tenant
+        from src.common.email_helper import send_email_smtp
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
 
         db = SessionLocal()
         try:
             today = date.today()
-            overdue_invoices = db.query(Invoice, Contact, Tenant).join(
-                Contact, Invoice.contact_id == Contact.id
-            ).join(
-                Tenant, Invoice.tenant_id == Tenant.id
-            ).filter(
-                Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
-                Invoice.due_date < today,
-                Invoice.deleted_at == None,
-            ).all()
+            tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
+            for tenant in tenants:
+                with _tenant_scope(db, tenant.id):
+                    overdue_invoices = db.query(Invoice).filter(
+                        Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
+                        Invoice.due_date < today,
+                        Invoice.deleted_at == None,
+                    ).all()
 
-            for invoice, contact, tenant in overdue_invoices:
-                if not contact.email:
-                    continue
-                days_overdue = (today - invoice.due_date).days
-                subject = f"Payment Reminder: Invoice {invoice.invoice_number} is {days_overdue} days overdue"
-                body = f"""
-                <p>Dear {contact.name},</p>
-                <p>This is a friendly reminder that Invoice <strong>{invoice.invoice_number}</strong>
-                for <strong>₹{invoice.total}</strong> is <strong>{days_overdue} days overdue</strong>.</p>
-                <p>Please arrange payment at your earliest convenience.</p>
-                <p>Regards,<br>{tenant.legal_name}</p>
-                """
-                msg = MIMEMultipart()
-                msg["From"] = settings.EMAIL_FROM
-                msg["To"] = contact.email
-                msg["Subject"] = subject
-                msg.attach(MIMEText(body, "html"))
-                try:
-                    send_email_smtp(msg)
-                    logger.info(f"Overdue reminder sent to {contact.email} for invoice {invoice.invoice_number}")
-                except Exception as e:
-                    logger.error(f"Failed to send reminder to {contact.email}: {e}")
+                for invoice in overdue_invoices:
+                    contact = invoice.contact
+                    if not contact or not contact.email:
+                        continue
+                    days_overdue = (today - invoice.due_date).days
+                    subject = f"Payment Reminder: Invoice {invoice.invoice_number} is {days_overdue} days overdue"
+                    body = f"""
+                    <p>Dear {contact.name},</p>
+                    <p>This is a friendly reminder that Invoice <strong>{invoice.invoice_number}</strong>
+                    for <strong>₹{invoice.total}</strong> is <strong>{days_overdue} days overdue</strong>.</p>
+                    <p>Please arrange payment at your earliest convenience.</p>
+                    <p>Regards,<br>{tenant.legal_name}</p>
+                    """
+                    msg = MIMEMultipart()
+                    msg["From"] = settings.EMAIL_FROM
+                    msg["To"] = contact.email
+                    msg["Subject"] = subject
+                    msg.attach(MIMEText(body, "html"))
+                    try:
+                        send_email_smtp(msg)
+                        logger.info(f"Overdue reminder sent to {contact.email} for invoice {invoice.invoice_number}")
+                    except Exception as e:
+                        logger.error(f"Failed to send reminder to {contact.email}: {e}")
         finally:
+            tenant_context.set(None)
             db.close()
     except Exception as e:
         logger.error(f"Overdue reminder task failed: {e}")
@@ -226,9 +270,8 @@ def send_gst_filing_alerts():
     """Sends GST filing deadline alerts to company owners."""
     logger.info("Sending GST filing alerts...")
     try:
-        from src.core.database import SessionLocal
-        from src.infrastructure.database.models import Tenant, TenantSetting, User, TenantMembership
-        import smtplib
+        from src.infrastructure.database.models import Tenant, User, TenantMembership
+        from src.common.email_helper import send_email_smtp
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
 
@@ -241,12 +284,13 @@ def send_gst_filing_alerts():
             alert_days = {5: "GST filing approaching", 10: "GSTR-1 due soon", 15: "Mid-month reminder", 18: "GSTR-3B due in 2 days", 20: "GSTR-3B due today"}
             if today.day in alert_days:
                 message = alert_days[today.day]
-                tenants = db.query(Tenant).filter(Tenant.is_active == True).all()
+                tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
                 for tenant in tenants:
-                    owner = db.query(User).join(TenantMembership).filter(
-                        TenantMembership.tenant_id == tenant.id,
-                        TenantMembership.role == "owner"
-                    ).first()
+                    with _tenant_scope(db, tenant.id):
+                        owner = db.query(User).join(TenantMembership).filter(
+                            TenantMembership.tenant_id == tenant.id,
+                            TenantMembership.role == "owner"
+                        ).first()
                     if owner and owner.email:
                         body = f"""
                         <p>Hi {owner.full_name},</p>
@@ -263,6 +307,7 @@ def send_gst_filing_alerts():
                         except Exception as e:
                             logger.error(f"Failed to send GST alert to {owner.email}: {e}")
         finally:
+            tenant_context.set(None)
             db.close()
     except Exception as e:
         logger.error(f"GST filing alert task failed: {e}")
@@ -273,47 +318,59 @@ def generate_monthly_aging_report():
     """Generates and emails monthly aging reports to company owners."""
     logger.info("Generating monthly aging reports...")
     try:
-        from src.core.database import SessionLocal
-        from src.infrastructure.database.models import Invoice, Contact, Tenant, TenantMembership, User
+        from src.infrastructure.database.models import Tenant, User, TenantMembership
         from src.domains.accounting.report_services import AgingService
-        import smtplib
+        from src.common.email_helper import send_email_smtp
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
 
         db = SessionLocal()
         try:
-            tenants = db.query(Tenant).filter(Tenant.is_active == True).all()
+            today = date.today()
+            tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
             for tenant in tenants:
-                report = AgingService(db, tenant.id).generate_receivables_aging()
-                owner = db.query(User).join(TenantMembership).filter(
-                    TenantMembership.tenant_id == tenant.id,
-                    TenantMembership.role == "owner"
-                ).first()
-                if owner and owner.email and report:
-                    total_outstanding = sum(bucket.get("total", Decimal("0")) for bucket in report.values())
-                    body = f"""
-                    <p>Hi {owner.full_name},</p>
-                    <p>Your monthly aging report for <strong>{tenant.legal_name}</strong>:</p>
-                    <table border="1" cellpadding="8">
-                    <tr><th>Bucket</th><th>Amount</th></tr>
-                    """
-                    for bucket, data in report.items():
-                        body += f"<tr><td>{bucket}</td><td>₹{data.get('total', 0)}</td></tr>"
-                    body += f"""
-                    </table>
-                    <p><strong>Total Outstanding: ₹{total_outstanding}</strong></p>
-                    """
-                    msg = MIMEMultipart()
-                    msg["From"] = settings.EMAIL_FROM
-                    msg["To"] = owner.email
-                    msg["Subject"] = f"Monthly Aging Report — {tenant.legal_name}"
-                    msg.attach(MIMEText(body, "html"))
-                    try:
-                        send_email_smtp(msg)
-                        logger.info(f"Aging report sent to {owner.email}")
-                    except Exception as e:
-                        logger.error(f"Failed to send aging report to {owner.email}: {e}")
+                with _tenant_scope(db, tenant.id):
+                    receivables = AgingService.get_receivables(db, tenant.id, today)
+                    payables = AgingService.get_payables(db, tenant.id, today)
+                    owner = db.query(User).join(TenantMembership).filter(
+                        TenantMembership.tenant_id == tenant.id,
+                        TenantMembership.role == "owner"
+                    ).first()
+
+                if not owner or not owner.email:
+                    continue
+
+                def _table(section_title, report):
+                    rows = "".join(
+                        f"<tr><td>{bucket.label}</td><td>₹{bucket.amount:,.2f}</td></tr>"
+                        for bucket in report.bucket_totals
+                    )
+                    return (
+                        f"<p><strong>{section_title}</strong></p>"
+                        f"<table border=\"1\" cellpadding=\"8\">"
+                        f"<tr><th>Bucket</th><th>Amount</th></tr>{rows}"
+                        f"<tr><td><strong>Total Outstanding</strong></td>"
+                        f"<td><strong>₹{report.total_outstanding:,.2f}</strong></td></tr></table>"
+                    )
+
+                body = f"""
+                <p>Hi {owner.full_name},</p>
+                <p>Your monthly aging report for <strong>{tenant.legal_name}</strong> as of {today.strftime('%d-%b-%Y')}:</p>
+                {_table("Receivables (Customers)", receivables)}
+                {_table("Payables (Vendors)", payables)}
+                """
+                msg = MIMEMultipart()
+                msg["From"] = settings.EMAIL_FROM
+                msg["To"] = owner.email
+                msg["Subject"] = f"Monthly Aging Report — {tenant.legal_name}"
+                msg.attach(MIMEText(body, "html"))
+                try:
+                    send_email_smtp(msg)
+                    logger.info(f"Aging report sent to {owner.email}")
+                except Exception as e:
+                    logger.error(f"Failed to send aging report to {owner.email}: {e}")
         finally:
+            tenant_context.set(None)
             db.close()
     except Exception as e:
         logger.error(f"Monthly aging report task failed: {e}")
@@ -324,20 +381,26 @@ def cleanup_expired_invitations():
     """Marks expired tenant invitations as EXPIRED."""
     logger.info("Cleaning up expired invitations...")
     try:
-        from src.core.database import SessionLocal
-        from src.infrastructure.database.models import TenantInvitation
+        from src.infrastructure.database.models import Tenant, TenantInvitation
 
         db = SessionLocal()
         try:
-            expired = db.query(TenantInvitation).filter(
-                TenantInvitation.status == "PENDING",
-                TenantInvitation.expires_at < datetime.now(timezone.utc)
-            ).all()
-            for inv in expired:
-                inv.status = "EXPIRED"
-            db.commit()
-            logger.info(f"Expired {len(expired)} invitations")
+            tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
+            expired_count = 0
+            for tenant in tenants:
+                with _tenant_scope(db, tenant.id):
+                    expired = db.query(TenantInvitation).filter(
+                        TenantInvitation.status == "PENDING",
+                        TenantInvitation.expires_at < datetime.now(timezone.utc)
+                    ).all()
+                    for inv in expired:
+                        inv.status = "EXPIRED"
+                    if expired:
+                        db.commit()  # RLS WITH CHECK re-evaluates per tenant — commit in scope
+                        expired_count += len(expired)
+            logger.info(f"Expired {expired_count} invitations")
         finally:
+            tenant_context.set(None)
             db.close()
     except Exception as e:
         logger.error(f"Cleanup invitations task failed: {e}")
@@ -349,47 +412,48 @@ def send_daily_business_summary():
     logger.info("Generating daily business summaries...")
     try:
         from sqlalchemy import func
-        from src.core.database import SessionLocal
         from src.infrastructure.database.models import Tenant, TenantMembership, User, Invoice, Payment, Bill
-        import smtplib
+        from src.common.email_helper import send_email_smtp
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
 
         db = SessionLocal()
         try:
             today = date.today()
-            tenants = db.query(Tenant).filter(Tenant.is_active == True).all()
+            tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
             for tenant in tenants:
-                owner = db.query(User).join(TenantMembership).filter(
-                    TenantMembership.tenant_id == tenant.id,
-                    TenantMembership.role == "owner"
-                ).first()
+                with _tenant_scope(db, tenant.id):
+                    owner = db.query(User).join(TenantMembership).filter(
+                        TenantMembership.tenant_id == tenant.id,
+                        TenantMembership.role == "owner"
+                    ).first()
+
+                    # Sales today
+                    sales_today = db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(
+                        Invoice.tenant_id == tenant.id,
+                        Invoice.issue_date == today,
+                        Invoice.status.notin_(["DRAFT", "CANCELLED"]),
+                        Invoice.deleted_at == None
+                    ).scalar()
+
+                    # Receipts today
+                    receipts_today = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
+                        Payment.tenant_id == tenant.id,
+                        Payment.payment_date == today,
+                        Payment.status == "ACTIVE",
+                        Payment.deleted_at == None
+                    ).scalar()
+
+                    # Expenses today
+                    expenses_today = db.query(func.coalesce(func.sum(Bill.total), 0)).filter(
+                        Bill.tenant_id == tenant.id,
+                        Bill.issue_date == today,
+                        Bill.status.notin_(["DRAFT", "CANCELLED"]),
+                        Bill.deleted_at == None
+                    ).scalar()
+
                 if not owner or not owner.email:
                     continue
-
-                # Sales today
-                sales_today = db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(
-                    Invoice.tenant_id == tenant.id,
-                    Invoice.issue_date == today,
-                    Invoice.status.notin_(["DRAFT", "CANCELLED"]),
-                    Invoice.deleted_at == None
-                ).scalar()
-
-                # Receipts today
-                receipts_today = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
-                    Payment.tenant_id == tenant.id,
-                    Payment.payment_date == today,
-                    Payment.status == "ACTIVE",
-                    Payment.deleted_at == None
-                ).scalar()
-
-                # Expenses today
-                expenses_today = db.query(func.coalesce(func.sum(Bill.total), 0)).filter(
-                    Bill.tenant_id == tenant.id,
-                    Bill.issue_date == today,
-                    Bill.status.notin_(["DRAFT", "CANCELLED"]),
-                    Bill.deleted_at == None
-                ).scalar()
 
                 body = f"""
                 <p>Hi {owner.full_name},</p>
@@ -413,6 +477,7 @@ def send_daily_business_summary():
                 except Exception as e:
                     logger.error(f"Failed to send daily summary to {owner.email}: {e}")
         finally:
+            tenant_context.set(None)
             db.close()
     except Exception as e:
         logger.error(f"Daily summary task failed: {e}")
@@ -425,7 +490,7 @@ def send_daily_business_summary():
 @celery_app.task(name="tasks.run_ocr_scan", time_limit=120, soft_time_limit=110)
 def run_ocr_scan(job_id: str, file_bytes_b64: str, filename: str, confidence: float) -> dict:
     """Run OCR in a Celery worker — completely async, never blocks the API server.
-    
+
     Stores result in Redis for the API to poll.
     """
     import base64
@@ -483,7 +548,8 @@ def _run_google_vision(file_bytes: bytes, filename: str, confidence: float) -> d
     """Use Google Cloud Vision API for fast (1-3s) OCR."""
     import requests
 
-    url = f"https://vision.googleapis.com/v1/images:annotate?key={settings.GOOGLE_VISION_API_KEY}"
+    # Keep the credential out of URLs, which are commonly logged and cached.
+    url = "https://vision.googleapis.com/v1/images:annotate"
     img_b64 = base64.b64encode(file_bytes).decode("utf-8")
 
     payload = {
@@ -495,7 +561,12 @@ def _run_google_vision(file_bytes: bytes, filename: str, confidence: float) -> d
         }]
     }
 
-    resp = requests.post(url, json=payload, timeout=30)
+    resp = requests.post(
+        url,
+        headers={"x-goog-api-key": settings.GOOGLE_VISION_API_KEY},
+        json=payload,
+        timeout=30,
+    )
     resp.raise_for_status()
     data = resp.json()
 
@@ -545,4 +616,3 @@ def _run_google_vision(file_bytes: bytes, filename: str, confidence: float) -> d
     result_data["overall_confidence"] = 0.95
 
     return result_data
-
