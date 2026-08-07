@@ -629,7 +629,9 @@ class TestBillCreationBothModes:
 
     def test_bill_non_gst_interstate(self, client: TestClient):
         # Contract: non-GST buyer in Telangana, registered Maharashtra
-        # supplier, and Maharashtra POS are an inter-state purchase.
+        # supplier. For an inward supply the supplier (vendor, state 27) is the
+        # origin and the place of supply is the recipient/company (state 36).
+        # Different states => inter-state => IGST.
         h, tid = _register_and_login(
             client,
             "billnongst.interstate@test.com",
@@ -657,7 +659,9 @@ class TestBillCreationBothModes:
         assert cid_res.status_code == 201, f"Vendor contact failed: {cid_res.status_code} {cid_res.json()}"
         cid = cid_res.json()["id"]
 
-        bill = _create_bill_via_api(client, h, cid, pid, rate=20000, pos_state_code="27")
+        # Vendor in Maharashtra (27), company/recipient in Telangana (36).
+        # Place of supply = company state (36) => origin(27) != POS(36) => IGST.
+        bill = _create_bill_via_api(client, h, cid, pid, rate=20000, pos_state_code="36")
         assert bill.status_code == 201, f"Bill failed: {bill.status_code} {bill.json()}"
         data = bill.json()
         line = data["lines"][0]

@@ -1028,9 +1028,19 @@ def export_gstr2(
 
         for rate, taxable_val in rate_groups.items():
             tax_multiplier = rate / Decimal("100")
-            cgst_val = taxable_val * tax_multiplier / Decimal("2") if b.pos_state_code == origin_state_code else Decimal("0")
-            sgst_val = taxable_val * tax_multiplier / Decimal("2") if b.pos_state_code == origin_state_code else Decimal("0")
-            igst_val = taxable_val * tax_multiplier if b.pos_state_code != origin_state_code else Decimal("0")
+            # Inward supplies are classified intra/inter by the SUPPLIER's
+            # state vs the place of supply — mirroring bill creation
+            # (bills.py origin = contact.state_code) and the JSON /gstr2
+            # report. Comparing against the company origin misclassifies any
+            # interstate purchase whose POS defaults to the company state.
+            supplier_state = (
+                contact.state_code if contact and contact.state_code
+                else origin_state_code
+            )
+            is_intra = b.pos_state_code == supplier_state
+            cgst_val = taxable_val * tax_multiplier / Decimal("2") if is_intra else Decimal("0")
+            sgst_val = taxable_val * tax_multiplier / Decimal("2") if is_intra else Decimal("0")
+            igst_val = taxable_val * tax_multiplier if not is_intra else Decimal("0")
 
             if is_registered:
                 ws_b2b.append([
@@ -1112,9 +1122,15 @@ def export_gstr2(
 
         for rate, taxable_val in rate_groups.items():
             tax_multiplier = rate / Decimal("100")
-            cgst_val = taxable_val * tax_multiplier / Decimal("2") if pr.pos_state_code == origin_state_code else Decimal("0")
-            sgst_val = taxable_val * tax_multiplier / Decimal("2") if pr.pos_state_code == origin_state_code else Decimal("0")
-            igst_val = taxable_val * tax_multiplier if pr.pos_state_code != origin_state_code else Decimal("0")
+            # Same supplier-state basis as bills (see above).
+            supplier_state = (
+                contact.state_code if contact and contact.state_code
+                else origin_state_code
+            )
+            is_intra = pr.pos_state_code == supplier_state
+            cgst_val = taxable_val * tax_multiplier / Decimal("2") if is_intra else Decimal("0")
+            sgst_val = taxable_val * tax_multiplier / Decimal("2") if is_intra else Decimal("0")
+            igst_val = taxable_val * tax_multiplier if not is_intra else Decimal("0")
 
             if is_registered:
                 ws_cdnr.append([

@@ -778,6 +778,110 @@ def test_sync_purchase_invoice_posted(client, db_session):
     assert journal.is_locked is True
 
 
+def test_sync_purchase_invoice_tax_split_by_supplier_state(client, db_session):
+    """Regression: an offline-synced purchase invoice must split CGST/SGST vs
+    IGST by comparing the supplier's state to the company's origin state, not by
+    assuming interstate (IGST) for every import (the pre-fix behaviour when the
+    client omitted place_of_supply_state_code, which defaulted to "00").
+
+    Seeded tenant origin state is "27" (Maharashtra, from GSTIN prefix).
+    """
+    tenant, user, cash, revenue = _seed_sync_tenant(db_session)
+    # Give the tenant a valid Maharashtra GSTIN so resolve_origin_state_code
+    # resolves its origin state to "27" (the seeded random-hex GSTIN is invalid,
+    # which would fall back to "36").
+    tenant.gstin = "27AAPFU0939F1ZV"
+    db_session.commit()
+    subtotal_micros = 1_000_000  # 100.00 (₹1 = 10_000 micros)
+    tax_micros = 180_000         # 18.00
+
+    cases = [
+        ("27", 9, 9, 0),   # intra-state  -> CGST + SGST (18/2)
+        ("29", 0, 0, 18),  # inter-state  -> IGST (18)
+    ]
+
+    for supplier_state, exp_cgst, exp_sgst, exp_igst in cases:
+        supplier = Contact(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            name=f"Supplier {supplier_state}",
+            contact_type="VENDOR",
+            registration_type="CONSUMER",
+            state_code=supplier_state,
+            is_active=True,
+        )
+        product = Product(
+            id=uuid.uuid4(),
+            tenant_id=tenant.id,
+            name=f"Purchased Item {supplier_state}",
+            sku=f"PI-{supplier_state}",
+            hsn_sac="84713010",
+            product_type="GOODS",
+            uom="PCS",
+            sales_price=Decimal("150"),
+            purchase_price=Decimal("120"),
+            gst_rate=Decimal("18"),
+            opening_stock=Decimal("10"),
+            current_stock=Decimal("10"),
+            is_active=True,
+        )
+        db_session.add_all([supplier, product])
+        db_session.commit()
+
+        bill_id = uuid.uuid4()
+        event = _sync_event(
+            tenant,
+            "purchase_invoice.posted",
+            "purchase_invoice",
+            {
+                "invoice_number": f"BILL-SYNC-{supplier_state}",
+                "invoice_date": "2026-07-27",
+                "supplier_id": str(supplier.id),
+                "party_id": str(supplier.id),
+                "supplier_name": supplier.name,
+                "total_paise": (subtotal_micros + tax_micros) // 100,
+                "subtotal_micros": subtotal_micros,
+                "tax_micros": tax_micros,
+                "total_micros": subtotal_micros + tax_micros,
+                "lines": [
+                    {
+                        "item_id": str(product.id),
+                        "product_name": product.name,
+                        "quantity": "100",
+                        "quantity_micros": 1_000_000,
+                        "unit_price_paise": 120,
+                        "rate_micros": 12_000,
+                        "line_total_micros": 1_200_000,
+                    }
+                ],
+            },
+            aggregate_id=bill_id,
+        )
+
+        response = client.post(
+            "/api/v1/apexbooks/sync/push",
+            json={"events": [event]},
+            headers=_sync_headers(user, tenant),
+        )
+
+        assert response.status_code == 200, response.text
+        assert response.json()["acknowledgements"][0]["error"] is None
+
+        bill = db_session.query(Bill).filter_by(id=bill_id).one()
+        assert bill.cgst_amount == Decimal(exp_cgst), (
+            supplier_state,
+            f"cgst={bill.cgst_amount}",
+        )
+        assert bill.sgst_amount == Decimal(exp_sgst), (
+            supplier_state,
+            f"sgst={bill.sgst_amount}",
+        )
+        assert bill.igst_amount == Decimal(exp_igst), (
+            supplier_state,
+            f"igst={bill.igst_amount}",
+        )
+
+
 def test_sync_sales_delivery_posted(client, db_session):
     tenant, user, cash, revenue = _seed_sync_tenant(db_session)
     customer = Contact(

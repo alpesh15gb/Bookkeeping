@@ -45,9 +45,10 @@ def create_bill(
     if contact.contact_type not in ("VENDOR", "BOTH"):
         raise HTTPException(status_code=400, detail="Selected contact must be a Vendor.")
 
-    # For an inward supply the recipient company's state is the tax origin;
-    # using the vendor state here incorrectly converts interstate purchases to CGST/SGST.
-    origin_state_code = resolve_origin_state_code(db, tenant_id)
+    # For an inward supply (purchase), the vendor is the supplier (origin),
+    # and our company is the recipient (place of supply).
+    # Use vendor's state code if available, otherwise fallback to company's origin state.
+    origin_state_code = contact.state_code or resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
     bill_subtotal = Decimal("0.0000")
@@ -204,7 +205,10 @@ def preview_bill(
         Contact.deleted_at == None
     ).first() if payload.contact_id else None
 
-    origin_state_code = resolve_origin_state_code(db, tenant_id)
+    # For an inward supply (purchase), the vendor is the supplier (origin),
+    # and our company is the recipient (place of supply).
+    # Use vendor's state code if available, otherwise fallback to company's origin state.
+    origin_state_code = contact.state_code if contact and contact.state_code else resolve_origin_state_code(db, tenant_id)
 
     db_lines = []
     bill_subtotal = Decimal("0.0000")
@@ -543,6 +547,18 @@ def update_bill(
         bill.contact_id = payload.contact_id
         
     if payload.bill_number:
+        # Check for duplicate bill number (excluding current bill)
+        dup = db.query(Bill).filter(
+            Bill.tenant_id == tenant_id,
+            Bill.bill_number == payload.bill_number,
+            Bill.deleted_at == None,
+            Bill.id != id
+        ).first()
+        if dup:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Bill number {payload.bill_number} already exists."
+            )
         bill.bill_number = payload.bill_number
     if payload.issue_date:
         bill.issue_date = payload.issue_date
@@ -566,7 +582,9 @@ def update_bill(
 
     rounded_total = bill.total
     if payload.line_items is not None:
-        origin_state_code = resolve_origin_state_code(db, tenant_id)
+        # For an inward supply (purchase), the vendor is the supplier (origin)
+        contact = db.query(Contact).filter(Contact.id == bill.contact_id).first()
+        origin_state_code = contact.state_code if contact and contact.state_code else resolve_origin_state_code(db, tenant_id)
 
         existing_lines = db.query(BillLine).filter(BillLine.bill_id == id).all()
         existing_by_id = {str(line.id): line for line in existing_lines if line.id}

@@ -1566,6 +1566,18 @@ def update_invoice(
         invoice.contact_id = payload.contact_id
 
     if payload.invoice_number:
+        # Check for duplicate invoice number (excluding current invoice)
+        dup = db.query(Invoice).filter(
+            Invoice.tenant_id == tenant_id,
+            Invoice.invoice_number == payload.invoice_number,
+            Invoice.deleted_at == None,
+            Invoice.id != id
+        ).first()
+        if dup:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invoice number {payload.invoice_number} already exists."
+            )
         invoice.invoice_number = payload.invoice_number
     if payload.issue_date:
         invoice.issue_date = payload.issue_date

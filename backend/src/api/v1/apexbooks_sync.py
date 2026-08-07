@@ -88,6 +88,7 @@ from src.domains.company.services import (
     NumberingSeriesService,
     detect_tax_mode,
     derive_origin_state_code,
+    resolve_origin_state_code,
 )
 from src.domains.accounting.services import (
     AccountResolver,
@@ -1427,8 +1428,28 @@ def _handle_purchase_invoice(
     subtotal = _micros_to_decimal(p.get("subtotal_micros"))
     tax = _micros_to_decimal(p.get("tax_micros"))
     total = _micros_to_decimal(p.get("total_micros"))
-    state_code = p.get("place_of_supply_state_code") or "00"
+    state_code = p.get("place_of_supply_state_code") or ""
     due_date_str = p.get("due_date")
+
+    # For an inward supply (purchase), intra vs inter is determined by whether
+    # the supplier's state differs from the company's origin state — the same
+    # rule GSTEngine applies (origin = supplier, place of supply = recipient,
+    # i.e. the company). The offline client does not yet send
+    # place_of_supply_state_code, so derive it from the supplier contact when
+    # available; fall back to the payload POS heuristic; then assume
+    # interstate (IGST) as a safe default.
+    resolved_origin = resolve_origin_state_code(db, tenant_id)
+    supplier_state = (contact.state_code or "").strip() if contact else ""
+    if supplier_state:
+        is_intra_state = resolved_origin == supplier_state
+    elif state_code and state_code[:2] != "00":
+        is_intra_state = True
+    else:
+        is_intra_state = False
+
+    cgst_amt = tax / 2 if is_intra_state else Decimal("0")
+    sgst_amt = tax / 2 if is_intra_state else Decimal("0")
+    igst_amt = tax if not is_intra_state else Decimal("0")
 
     issue_date = event.occurred_at.date()
     due_date = issue_date
@@ -1448,10 +1469,10 @@ def _handle_purchase_invoice(
         status="POSTED",
         subtotal=subtotal,
         total=total,
-        cgst_amount=tax / 2 if state_code[:2] != "00" else Decimal("0"),
-        sgst_amount=tax / 2 if state_code[:2] != "00" else Decimal("0"),
-        igst_amount=tax if state_code[:2] == "00" else Decimal("0"),
-        pos_state_code=state_code,
+        cgst_amount=cgst_amt,
+        sgst_amount=sgst_amt,
+        igst_amount=igst_amt,
+        pos_state_code=state_code or (resolved_origin if is_intra_state else ""),
         notes=p.get("notes", ""),
         reference_number=(p.get("reference_number") or ""),
         itc_eligible=True,

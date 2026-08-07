@@ -6,8 +6,8 @@ from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
-    GoodsReceipt, GoodsReceiptLine, PurchaseOrder, Contact, Product, Branch,
-    StockLedger,
+    GoodsReceipt, GoodsReceiptLine, PurchaseOrder, PurchaseOrderLine,
+    Contact, Product, Branch, StockLedger,
 )
 from src.schemas.goods_receipt_schemas import (
     GoodsReceiptCreate, GoodsReceiptResponse, GoodsReceiptListResponse,
@@ -229,6 +229,17 @@ def confirm_goods_receipt(
                 status_code=409,
                 detail=f"Product {line.product_id} is no longer available.",
             )
+
+        # Use the rate from the linked purchase order line if available,
+        # otherwise fall back to product master purchase price
+        rate = product.purchase_price
+        if line.purchase_order_line_id:
+            po_line = db.query(PurchaseOrderLine).filter(
+                PurchaseOrderLine.id == line.purchase_order_line_id
+            ).first()
+            if po_line:
+                rate = po_line.rate
+
         product.current_stock += line.quantity_received
         db.add(StockLedger(
             tenant_id=tenant_id,
@@ -238,7 +249,7 @@ def confirm_goods_receipt(
             balance_quantity=product.current_stock,
             reference_type="GOODS_RECEIPT",
             reference_id=gr.id,
-            rate=product.purchase_price,
+            rate=rate,
         ))
 
     gr.status = "CONFIRMED"
@@ -296,6 +307,17 @@ def cancel_goods_receipt(
                     ),
                 )
             product.current_stock -= line.quantity_received
+
+            # Use the rate from the linked purchase order line if available,
+            # otherwise fall back to product master purchase price
+            rate = product.purchase_price
+            if line.purchase_order_line_id:
+                po_line = db.query(PurchaseOrderLine).filter(
+                    PurchaseOrderLine.id == line.purchase_order_line_id
+                ).first()
+                if po_line:
+                    rate = po_line.rate
+
             db.add(StockLedger(
                 tenant_id=tenant_id,
                 product_id=product.id,
@@ -304,7 +326,7 @@ def cancel_goods_receipt(
                 balance_quantity=product.current_stock,
                 reference_type="GOODS_RECEIPT_CANCEL",
                 reference_id=gr.id,
-                rate=product.purchase_price,
+                rate=rate,
             ))
 
     gr.status = "CANCELLED"

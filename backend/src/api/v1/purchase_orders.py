@@ -283,6 +283,18 @@ def update_purchase_order(
         po.contact_id = payload.contact_id
         
     if payload.po_number:
+        # Check for duplicate PO number (excluding current PO)
+        dup = db.query(PurchaseOrder).filter(
+            PurchaseOrder.tenant_id == tenant_id,
+            PurchaseOrder.po_number == payload.po_number,
+            PurchaseOrder.deleted_at == None,
+            PurchaseOrder.id != id
+        ).first()
+        if dup:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Purchase order number {payload.po_number} already exists."
+            )
         po.po_number = payload.po_number
     if payload.order_date:
         po.order_date = payload.order_date

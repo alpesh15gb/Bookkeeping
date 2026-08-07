@@ -5,6 +5,7 @@ import unittest
 from datetime import date
 from decimal import Decimal
 from fastapi.testclient import TestClient
+from sqlalchemy.orm import joinedload
 
 # Adjust path to import from src
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -376,6 +377,105 @@ class TestInvoicingFlow(unittest.TestCase):
         self.assertEqual(data["invoice"]["invoice_number"], inv["invoice_number"])
         self.assertEqual(len(data["lines"]), 1)
         self.assertEqual(data["lines"][0]["product_name"], "MacBook Pro M3 Max")
+
+    def test_invoice_preview_save_finalize_integration(self):
+        """
+        Integration test: form input → backend preview → save → post → ledger/tax records
+        Assert exact values at every stage.
+        """
+        # 1. Create invoice payload
+        payload = {
+            "contact_id": str(self.customer_id),
+            "issue_date": str(date.today()),
+            "due_date": str(date.today()),
+            "pos_state_code": "27",  # Same state as company (Maharashtra) -> CGST+SGST
+            "line_items": [
+                {
+                    "product_id": str(self.product_id),
+                    "quantity": 2,
+                    "rate": 10000.00,
+                    "discount": 0.00,
+                    "hsn_sac": "84713010",
+                    "gst_rate": 18.0
+                }
+            ]
+        }
+
+        # 2. Call preview endpoint
+        preview_res = self.client.post("/api/v1/invoices/preview", json=payload, headers=self.headers)
+        self.assertEqual(preview_res.status_code, 200)
+        preview = preview_res.json()
+
+        # Verify preview totals (authoritative)
+        # 2 * 10000 = 20000 subtotal
+        # 18% GST = 3600 -> CGST 1800 + SGST 1800
+        # Total = 23600
+        self.assertEqual(float(preview["subtotal"]), 20000.0)
+        self.assertEqual(float(preview["cgst_amount"]), 1800.0)
+        self.assertEqual(float(preview["sgst_amount"]), 1800.0)
+        self.assertEqual(float(preview["igst_amount"]), 0.0)
+        self.assertEqual(float(preview["total"]), 23600.0)
+
+        # 3. Save invoice as draft (POST to /invoices)
+        save_res = self.client.post("/api/v1/invoices", json=payload, headers=self.headers)
+        self.assertEqual(save_res.status_code, 201)
+        saved = save_res.json()
+        invoice_id = saved["id"]
+
+        # Verify saved totals match preview exactly
+        self.assertEqual(float(saved["subtotal"]), float(preview["subtotal"]))
+        self.assertEqual(float(saved["cgst_amount"]), float(preview["cgst_amount"]))
+        self.assertEqual(float(saved["sgst_amount"]), float(preview["sgst_amount"]))
+        self.assertEqual(float(preview["igst_amount"]), float(saved["igst_amount"]))
+        self.assertEqual(float(saved["total"]), float(preview["total"]))
+
+        # 4. Finalize/post the invoice
+        finalize_res = self.client.post(f"/api/v1/invoices/{invoice_id}/finalize", headers=self.headers)
+        self.assertEqual(finalize_res.status_code, 200)
+        posted = finalize_res.json()
+        self.assertEqual(posted["status"], "POSTED")
+
+        # 5. Verify ledger journal entry matches preview exactly
+        db = SessionLocal()
+        try:
+            entry = db.query(JournalEntry).options(
+                joinedload(JournalEntry.lines).joinedload(JournalLine.account)
+            ).filter(
+                JournalEntry.tenant_id == self.tenant_id,
+                JournalEntry.source_id == uuid.UUID(invoice_id)
+            ).first()
+            self.assertIsNotNone(entry)
+
+            # Verify journal entry balances
+            debits = sum(line.amount for line in entry.lines if line.direction == "DEBIT")
+            credits = sum(line.amount for line in entry.lines if line.direction == "CREDIT")
+            self.assertEqual(debits, credits)
+            self.assertEqual(debits, Decimal("23600.00"))  # Match preview total
+
+            # Verify tax components in ledger
+            cgst_credit = sum(line.amount for line in entry.lines
+                             if line.direction == "CREDIT" and line.narration == "CGST Output")
+            sgst_credit = sum(line.amount for line in entry.lines
+                             if line.direction == "CREDIT" and line.narration == "SGST Output")
+
+            self.assertEqual(cgst_credit, Decimal("1800.00"))
+            self.assertEqual(sgst_credit, Decimal("1800.00"))
+
+            # 6. Verify tax records match preview
+            # Check that tax liability was recorded correctly
+            # TaxLiability model doesn't exist; verified via ledger entries instead
+            # from src.infrastructure.database.models import TaxLiability
+            # tax_liability = db.query(TaxLiability).filter(
+            #     TaxLiability.tenant_id == self.tenant_id,
+            #     TaxLiability.reference_id == uuid.UUID(invoice_id)
+            # ).first()
+            # self.assertIsNotNone(tax_liability)
+            # self.assertEqual(tax_liability.cgst_amount, Decimal("1800.00"))
+            # self.assertEqual(tax_liability.sgst_amount, Decimal("1800.00"))
+            # self.assertEqual(tax_liability.igst_amount, Decimal("0.00"))
+
+        finally:
+            db.close()
 
 if __name__ == "__main__":
     unittest.main()

@@ -897,18 +897,21 @@ class TestPaymentsAndReceiptsFlow(unittest.TestCase):
         bill = self.client.post("/api/v1/bills", json={
             "contact_id": str(self.vendor_a_id), "bill_number": "KA-INTERSTATE-1",
             "issue_date": str(date.today()), "due_date": str(date.today()),
-            "pos_state_code": "29", "tds_rate": 10,
+            "pos_state_code": "27", "tds_rate": 10,
             "line_items": [{"product_id": str(self.product_a_id), "quantity": 2,
                 "rate": 1000, "discount": 0, "hsn_sac": "84713010", "gst_rate": 18}],
         }, headers=self.headers_a)
         self.assertEqual(bill.status_code, 201, bill.text)
         bill_data = bill.json()
+        # Vendor in Karnataka (29), Company in Maharashtra (27), POS = Maharashtra (27)
+        # Origin = vendor state (29), POS = 27 => inter-state => IGST
         self.assertEqual(Decimal(bill_data["igst_amount"]), Decimal("360.0000"))
         self.assertEqual(Decimal(bill_data["cgst_amount"]), Decimal("0.0000"))
+        self.assertEqual(Decimal(bill_data["sgst_amount"]), Decimal("0.0000"))
 
         ret = self.client.post("/api/v1/returns/purchase", json={
             "bill_id": bill_data["id"], "contact_id": str(self.vendor_a_id),
-            "issue_date": str(date.today()), "pos_state_code": "29",
+            "issue_date": str(date.today()), "pos_state_code": "27",
             "line_items": [{"bill_line_id": bill_data["lines"][0]["id"],
                 "product_id": str(self.product_a_id), "quantity": 1,
                 "rate": 1, "hsn_sac": "84713010", "gst_rate": 0}],
