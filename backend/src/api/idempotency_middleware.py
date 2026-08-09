@@ -35,16 +35,16 @@ _REQUIRED_POST_PATHS = {
     "/api/v1/returns/purchase",
 }
 
-# Every correction below can create a reversal/replacement journal and/or stock
-# movement and is therefore just as retry-sensitive as a create.
+# A correction creates reversal/replacement journal and/or stock facts and is
+# therefore just as retry-sensitive as a create.
 _REQUIRED_MUTATION_PATTERNS = (
     re.compile(r"^/api/v1/(?:invoices|bills|expenses|inventory-adjustments)/[^/]+$"),
     re.compile(r"^/api/v1/invoices/(?:credit-notes|debit-notes)/[^/]+$"),
     re.compile(r"^/api/v1/payments/(?:receipts|disbursements)/[^/]+$"),
     re.compile(r"^/api/v1/returns/(?:sales|purchase)/[^/]+$"),
     re.compile(r"^/api/v1/accounting/journals/[^/]+$"),
-    # Transitional endpoints remain protected until the router bootstrap removes
-    # them from the public app. Keeping them here also protects direct unit use.
+    # Transitional handlers remain protected even though the router bootstrap
+    # removes them from the public app.
     re.compile(r"^/api/v1/payments/(?:receipts|disbursements)/[^/]+/cancel$"),
     re.compile(r"^/api/v1/accounting/journals/[^/]+/reverse$"),
     re.compile(r"^/api/v1/invoices/(?:credit-notes|debit-notes)/[^/]+/(?:finalize|cancel)$"),
@@ -83,17 +83,27 @@ def _committed_replay_response(existing=None) -> JSONResponse:
 
 def _stored_response(existing) -> StarletteResponse:
     stored_body = existing["response_body"] or ""
+    status_code = existing["response_status"]
     content_type = existing["response_content_type"] or "application/json"
     headers = {"Idempotency-Replayed": "true"}
+
+    # DELETE commonly stores a 204 with an empty body. Never attempt
+    # json.loads("") when replaying it.
+    if status_code == 204 or not stored_body:
+        return StarletteResponse(
+            content=b"",
+            status_code=status_code,
+            headers=headers,
+        )
     if "application/json" in content_type:
         return JSONResponse(
             content=json.loads(stored_body),
-            status_code=existing["response_status"],
+            status_code=status_code,
             headers=headers,
         )
     return StarletteResponse(
         content=stored_body,
-        status_code=existing["response_status"],
+        status_code=status_code,
         media_type=content_type,
         headers=headers,
     )
