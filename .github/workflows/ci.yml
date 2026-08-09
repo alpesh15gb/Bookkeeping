@@ -13,6 +13,11 @@ env:
   # PostgreSQL integration tests are MANDATORY in CI.  If the suite cannot
   # connect to PostgreSQL it fails instead of skipping (see pg_tests/conftest.py).
   REQUIRE_POSTGRES_TESTS: "1"
+  # Test-only secrets satisfy the application's intentional fail-fast secret
+  # validation when integration tests import the full route composition. They
+  # are fixed non-production values and are never used outside CI.
+  SECRET_KEY: "ci-test-only-secret-key-0123456789abcdef"
+  JWT_SECRET_KEY: "ci-test-only-jwt-key-0123456789abcdef"
   # Never touch real external services during CI.
   IRP_BASE_URL: ""
   SMTP_HOST: ""
