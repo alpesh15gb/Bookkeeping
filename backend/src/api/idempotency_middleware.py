@@ -1,39 +1,66 @@
-import logging
-import uuid
+import datetime as dt
+import gzip
 import hashlib
 import json
-import gzip
-import datetime as dt
+import logging
+import re
+import uuid
+
 from fastapi import Request
+from sqlalchemy import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response as StarletteResponse
-from sqlalchemy import text
+
 from src.core.database import SessionLocal, tenant_context
-from src.core.idempotency import (
-    clear_inflight_claim,
-    set_inflight_claim,
-)
+from src.core.idempotency import clear_inflight_claim, set_inflight_claim
 
 logger = logging.getLogger("bookkeeping.idempotency")
 
 IDEMPOTENT_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-# POST endpoints that CREATE financial records.  These are mandatory
-# idempotency endpoints: a client retry (network drop, process crash) must
-# never be able to create a duplicate invoice / bill / payment / journal.
-_REQUIRED_KEY_PATH_PREFIXES = (
+# Exact create endpoints that can create accounting/stock facts. Preview and
+# other read-like POST endpoints are deliberately absent.
+_REQUIRED_POST_PATHS = {
     "/api/v1/invoices",
     "/api/v1/bills",
-    "/api/v1/payments",
+    "/api/v1/expenses",
+    "/api/v1/inventory-adjustments",
+    "/api/v1/payments/receipts",
+    "/api/v1/payments/disbursements",
     "/api/v1/accounting/journals",
+    "/api/v1/accounting/contra",
+    "/api/v1/invoices/credit-notes",
+    "/api/v1/invoices/debit-notes",
+    "/api/v1/returns/sales",
+    "/api/v1/returns/purchase",
+}
+
+# Mutations that create reversal/replacement ledger or stock facts. These are
+# just as retry-sensitive as POST creates and therefore require the same key.
+_REQUIRED_MUTATION_PATTERNS = (
+    re.compile(r"^/api/v1/(?:invoices|bills|expenses|inventory-adjustments)/[^/]+$"),
+    re.compile(r"^/api/v1/payments/(?:receipts|disbursements)/[^/]+/cancel$"),
+    re.compile(r"^/api/v1/accounting/journals/[^/]+/reverse$"),
+    # Transitional endpoints remain protected until their public Draft/Finalize
+    # workflow is fully retired.
+    re.compile(r"^/api/v1/invoices/(?:credit-notes|debit-notes)/[^/]+/(?:finalize|cancel)$"),
+    re.compile(r"^/api/v1/returns/(?:sales|purchase)/[^/]+/cancel$"),
+    re.compile(r"^/api/v1/inventory-adjustments/[^/]+/(?:confirm|cancel)$"),
 )
 
 
+def _requires_mandatory_key(method: str, path: str) -> bool:
+    method = method.upper()
+    if method == "POST" and path in _REQUIRED_POST_PATHS:
+        return True
+    if method in {"PUT", "PATCH", "DELETE"}:
+        return any(pattern.match(path) for pattern in _REQUIRED_MUTATION_PATTERNS)
+    if method == "POST":
+        return any(pattern.match(path) for pattern in _REQUIRED_MUTATION_PATTERNS)
+    return False
+
+
 def _committed_replay_response(existing=None) -> JSONResponse:
-    """Replay for a request whose financial transaction committed but whose
-    response was never stored (the process died in between).  Returns the
-    original resource identity when the commit marker captured it, so clients
-    can recover the invoice/payment/bill id instead of a generic message."""
     content = {
         "detail": "Request already completed; replaying idempotent result.",
         "code": "IDEMPOTENT_REPLAY",
@@ -57,25 +84,18 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if request.method not in IDEMPOTENT_METHODS:
             return await call_next(request)
 
+        path = str(request.url.path)
         idempotency_key = request.headers.get("Idempotency-Key")
         if not idempotency_key:
             from src.core.config import settings
-            path = str(request.url.path)
-            if (
-                settings.REQUIRE_IDEMPOTENCY_KEY
-                and request.method == "POST"
-                and path.startswith(_REQUIRED_KEY_PATH_PREFIXES)
-            ):
-                # Financial mutations are mandatory-idempotency: refuse to
-                # execute the mutation without a key rather than run it
-                # unprotected (a retry could double-post money movements).
+
+            if settings.REQUIRE_IDEMPOTENCY_KEY and _requires_mandatory_key(request.method, path):
                 return JSONResponse(
                     status_code=428,
                     content={
                         "detail": (
                             "An Idempotency-Key header is required for this "
-                            "financial mutation so retries can never create a "
-                            "duplicate."
+                            "financial mutation so retries can never create a duplicate."
                         ),
                         "code": "IDEMPOTENCY_KEY_REQUIRED",
                     },
@@ -86,7 +106,10 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         if not tenant_id:
             return await call_next(request)
         if len(idempotency_key) > 255:
-            return JSONResponse(status_code=400, content={"detail": "Idempotency-Key is too long."})
+            return JSONResponse(
+                status_code=400,
+                content={"detail": "Idempotency-Key is too long."},
+            )
 
         try:
             uuid.UUID(tenant_id)
@@ -102,8 +125,9 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             "key": idempotency_key,
             "tenant": tenant_id,
             "method": request.method,
-            "path": str(request.url.path),
+            "path": path,
         }
+
         tenant_token = tenant_context.set(uuid.UUID(tenant_id))
         db = SessionLocal()
         owns_record = False
@@ -112,8 +136,10 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             result = db.execute(
                 text(
                     "INSERT INTO idempotency_keys "
-                    "(id, idempotency_key, tenant_id, method, path, request_hash, status, is_processed, created_at) "
-                    "VALUES (:id, :key, :tenant, :method, :path, :request_hash, 'PROCESSING', false, CURRENT_TIMESTAMP) "
+                    "(id, idempotency_key, tenant_id, method, path, request_hash, "
+                    " status, is_processed, created_at) "
+                    "VALUES (:id, :key, :tenant, :method, :path, :request_hash, "
+                    " 'PROCESSING', false, CURRENT_TIMESTAMP) "
                     "ON CONFLICT (idempotency_key, tenant_id, method, path) DO NOTHING"
                 ),
                 {
@@ -121,56 +147,80 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     "key": idempotency_key,
                     "tenant": tenant_id,
                     "method": request.method,
-                    "path": str(request.url.path),
+                    "path": path,
                     "request_hash": request_hash,
                 },
             )
             db.commit()
 
             if result.rowcount == 0:
-                existing = db.execute(text(
-                    "SELECT request_hash, status, response_status, response_body, response_content_type, created_at, "
-                    "resource_type, resource_id "
-                    "FROM idempotency_keys WHERE idempotency_key=:key AND tenant_id=:tenant "
-                    "AND method=:method AND path=:path"
-                ), {"key": idempotency_key, "tenant": tenant_id, "method": request.method, "path": str(request.url.path)}).mappings().first()
+                existing = db.execute(
+                    text(
+                        "SELECT request_hash, status, response_status, response_body, "
+                        "response_content_type, created_at, resource_type, resource_id "
+                        "FROM idempotency_keys "
+                        "WHERE idempotency_key=:key AND tenant_id=:tenant "
+                        "AND method=:method AND path=:path"
+                    ),
+                    {
+                        "key": idempotency_key,
+                        "tenant": tenant_id,
+                        "method": request.method,
+                        "path": path,
+                    },
+                ).mappings().first()
+
                 if existing and existing["status"] == "PROCESSING":
-                    # A PROCESSING claim older than the stale threshold was
-                    # abandoned before its business transaction committed (a
-                    # committed financial transaction atomically flips the row
-                    # to COMMITTED — see src/core/idempotency.py).  Claiming
-                    # again is therefore safe; a still-running original would
-                    # be aborted by the claim-lost guard instead of
-                    # double-executing.
                     from src.core.config import settings
+
                     now = dt.datetime.now(dt.timezone.utc)
                     age = now - existing["created_at"]
                     if age > dt.timedelta(seconds=settings.IDEMPOTENCY_STALE_SECONDS):
                         db.execute(
-                            text("DELETE FROM idempotency_keys WHERE idempotency_key=:key AND tenant_id=:tenant "
-                                 "AND method=:method AND path=:path AND status='PROCESSING'"),
-                            {"key": idempotency_key, "tenant": tenant_id, "method": request.method, "path": str(request.url.path)},
+                            text(
+                                "DELETE FROM idempotency_keys "
+                                "WHERE idempotency_key=:key AND tenant_id=:tenant "
+                                "AND method=:method AND path=:path AND status='PROCESSING'"
+                            ),
+                            {
+                                "key": idempotency_key,
+                                "tenant": tenant_id,
+                                "method": request.method,
+                                "path": path,
+                            },
                         )
                         db.commit()
-                        return await self.dispatch(request, call_next)  # Retry with fresh record
-                    return JSONResponse(status_code=409, content={
-                        "detail": "A request with this idempotency key is still processing.",
-                        "code": "REQUEST_IN_PROGRESS",
-                    })
-                if existing and existing["request_hash"] and existing["request_hash"] != request_hash:
-                    return JSONResponse(status_code=422, content={
-                        "detail": "Idempotency-Key was already used with a different request payload.",
-                        "code": "IDEMPOTENCY_PAYLOAD_MISMATCH",
-                    })
+                        return await self.dispatch(request, call_next)
+                    return JSONResponse(
+                        status_code=409,
+                        content={
+                            "detail": "A request with this idempotency key is still processing.",
+                            "code": "REQUEST_IN_PROGRESS",
+                        },
+                    )
+
+                if (
+                    existing
+                    and existing["request_hash"]
+                    and existing["request_hash"] != request_hash
+                ):
+                    return JSONResponse(
+                        status_code=422,
+                        content={
+                            "detail": (
+                                "Idempotency-Key was already used with a different "
+                                "request payload."
+                            ),
+                            "code": "IDEMPOTENCY_PAYLOAD_MISMATCH",
+                        },
+                    )
+
                 if existing and existing["status"] == "COMMITTED":
-                    # The financial transaction committed but the process died
-                    # before the response could be stored.  Replay the stored
-                    # response when available; otherwise return the synthetic
-                    # replay marker (with the captured resource identity when
-                    # known) — never re-execute.
                     if existing["response_status"] is not None:
                         stored_body = existing["response_body"] or ""
-                        content_type = existing["response_content_type"] or "application/json"
+                        content_type = (
+                            existing["response_content_type"] or "application/json"
+                        )
                         if "application/json" in content_type:
                             return JSONResponse(
                                 content=json.loads(stored_body),
@@ -184,9 +234,16 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                             headers={"Idempotency-Replayed": "true"},
                         )
                     return _committed_replay_response(existing)
-                if existing and existing["status"] == "COMPLETED" and existing["response_status"] is not None:
+
+                if (
+                    existing
+                    and existing["status"] == "COMPLETED"
+                    and existing["response_status"] is not None
+                ):
                     stored_body = existing["response_body"] or ""
-                    content_type = existing["response_content_type"] or "application/json"
+                    content_type = (
+                        existing["response_content_type"] or "application/json"
+                    )
                     if "application/json" in content_type:
                         return JSONResponse(
                             content=json.loads(stored_body),
@@ -199,40 +256,38 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                         media_type=content_type,
                         headers={"Idempotency-Replayed": "true"},
                     )
-                return JSONResponse(status_code=409, content={
-                    "detail": "A request with this idempotency key is still processing.",
-                    "code": "REQUEST_IN_PROGRESS",
-                })
+
+                return JSONResponse(
+                    status_code=409,
+                    content={
+                        "detail": "A request with this idempotency key is still processing.",
+                        "code": "REQUEST_IN_PROGRESS",
+                    },
+                )
+
             owns_record = True
-            # Register the claim so the endpoint's first commit flips it to
-            # COMMITTED atomically with the financial mutation.
             inflight_token = set_inflight_claim(claim)
         except Exception:
             db.rollback()
-            # Fail CLOSED: a caller that supplied an Idempotency-Key gets a
-            # 503 instead of an unprotected financial execution.  Running the
-            # mutation without deduplication could double-post money movements
-            # on retry, so the infrastructure failure must not silently
-            # downgrade to no protection.
             logger.exception(
                 "Idempotency infrastructure failure; refusing to execute the "
                 "request unprotected (key=%s path=%s)",
                 idempotency_key,
-                str(request.url.path),
+                path,
             )
+            tenant_context.reset(tenant_token)
             return JSONResponse(
                 status_code=503,
                 content={
-                    "detail": "Idempotency infrastructure is unavailable. The request was NOT executed; retry later with the same Idempotency-Key.",
+                    "detail": (
+                        "Idempotency infrastructure is unavailable. The request "
+                        "was NOT executed; retry later with the same Idempotency-Key."
+                    ),
                     "code": "IDEMPOTENCY_UNAVAILABLE",
                 },
             )
         finally:
             db.close()
-            # tenant_context is intentionally left set here: ``call_next``
-            # below runs the endpoint, whose sessions must open under this
-            # tenant's RLS context (the after_begin listener applies SET
-            # LOCAL from the ContextVar).  It is reset after the response.
 
         try:
             response = await call_next(request)
@@ -241,10 +296,19 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 cleanup_token = tenant_context.set(uuid.UUID(tenant_id))
                 cleanup = SessionLocal()
                 try:
-                    cleanup.execute(text(
-                        "DELETE FROM idempotency_keys WHERE idempotency_key=:key AND tenant_id=:tenant "
-                        "AND method=:method AND path=:path AND status='PROCESSING'"
-                    ), {"key": idempotency_key, "tenant": tenant_id, "method": request.method, "path": str(request.url.path)})
+                    cleanup.execute(
+                        text(
+                            "DELETE FROM idempotency_keys "
+                            "WHERE idempotency_key=:key AND tenant_id=:tenant "
+                            "AND method=:method AND path=:path AND status='PROCESSING'"
+                        ),
+                        {
+                            "key": idempotency_key,
+                            "tenant": tenant_id,
+                            "method": request.method,
+                            "path": path,
+                        },
+                    )
                     cleanup.commit()
                 finally:
                     cleanup.close()
@@ -259,31 +323,55 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         storage_body = body
         if response.headers.get("content-encoding", "").lower() == "gzip":
             storage_body = gzip.decompress(body)
+
         if owns_record:
             storage_token = tenant_context.set(uuid.UUID(tenant_id))
             store = SessionLocal()
             try:
                 if response.status_code >= 500:
-                    store.execute(text(
-                        "DELETE FROM idempotency_keys WHERE idempotency_key=:key AND tenant_id=:tenant "
-                        "AND method=:method AND path=:path"
-                    ), {"key": idempotency_key, "tenant": tenant_id, "method": request.method, "path": str(request.url.path)})
+                    store.execute(
+                        text(
+                            "DELETE FROM idempotency_keys "
+                            "WHERE idempotency_key=:key AND tenant_id=:tenant "
+                            "AND method=:method AND path=:path"
+                        ),
+                        {
+                            "key": idempotency_key,
+                            "tenant": tenant_id,
+                            "method": request.method,
+                            "path": path,
+                        },
+                    )
                 else:
-                    store.execute(text(
-                        "UPDATE idempotency_keys SET status='COMPLETED', is_processed=true, "
-                        "response_status=:response_status, response_body=:response_body, "
-                        "response_content_type=:content_type WHERE idempotency_key=:key "
-                        "AND tenant_id=:tenant AND method=:method AND path=:path"
-                    ), {
-                        "key": idempotency_key, "tenant": tenant_id, "method": request.method,
-                        "path": str(request.url.path), "response_status": response.status_code,
-                        "response_body": storage_body.decode("utf-8", errors="strict"),
-                        "content_type": response.media_type or response.headers.get("content-type"),
-                    })
+                    store.execute(
+                        text(
+                            "UPDATE idempotency_keys "
+                            "SET status='COMPLETED', is_processed=true, "
+                            "response_status=:response_status, response_body=:response_body, "
+                            "response_content_type=:content_type "
+                            "WHERE idempotency_key=:key AND tenant_id=:tenant "
+                            "AND method=:method AND path=:path"
+                        ),
+                        {
+                            "key": idempotency_key,
+                            "tenant": tenant_id,
+                            "method": request.method,
+                            "path": path,
+                            "response_status": response.status_code,
+                            "response_body": storage_body.decode(
+                                "utf-8", errors="strict"
+                            ),
+                            "content_type": (
+                                response.media_type
+                                or response.headers.get("content-type")
+                            ),
+                        },
+                    )
                 store.commit()
             finally:
                 store.close()
                 tenant_context.reset(storage_token)
+
         tenant_context.reset(tenant_token)
         headers = dict(response.headers)
         headers.pop("content-length", None)
@@ -293,3 +381,10 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             headers=headers,
             media_type=response.media_type,
         )
+
+
+# Install the public direct-posting mutation contract after the legacy routers
+# have been imported but before main.py includes them into the application.
+from src.api.v1.direct_posting_contract import install_direct_posting_contract
+
+install_direct_posting_contract()
