@@ -223,6 +223,10 @@ def cancel_invoice_for_direct_correction(
 def install_direct_invoice_reversal() -> None:
     from src.api.v1 import invoices as invoice_api
     from src.api.v1.direct_bill_reversal import install_direct_bill_reversal
+    from src.api.v1.direct_posting_runtime_repairs import (
+        install_direct_posting_runtime_repairs,
+    )
 
     invoice_api.cancel_invoice = cancel_invoice_for_direct_correction
     install_direct_bill_reversal()
+    install_direct_posting_runtime_repairs()
