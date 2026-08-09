@@ -119,16 +119,21 @@ def test_crash_after_commit_before_response_no_duplicate(app_env, db_admin):
     """Simulate: business transaction commits, process dies before storing the
     response.  A retry must replay, never re-execute."""
     import hashlib
-    import json as _json
+
+    import httpx
 
     client = app_env["client"]
     session_factory = app_env["session_factory"]
     key = str(uuid.uuid4())
     number = f"IDEM-CRASH-{app_env['token']}"
-    # httpx/TestClient serializes JSON with compact separators — the stored
-    # hash must match the bytes the middleware will hash on the retry.
+    # The stored hash must match the exact bytes the middleware will hash on
+    # the retry (sha256 of the raw request body).  Rather than hardcoding one
+    # serialization format, derive the bytes from httpx's own encoding via a
+    # throwaway Request — httpx changed its json= separators between 0.27
+    # (spaces) and 0.28 (compact), so a manually precomputed hash only matches
+    # one of them.
     body_hash = hashlib.sha256(
-        _json.dumps({"number": number}, separators=(",", ":")).encode()
+        httpx.Request("POST", "/tx", json={"number": number}).content
     ).hexdigest()
 
     # --- Phase 1: claim the idempotency record like the middleware does ---
