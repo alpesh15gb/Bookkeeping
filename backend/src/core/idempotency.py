@@ -1,24 +1,9 @@
 """
-src/core/idempotency.py
-Crash-safe idempotency coordination.
+Crash-safe idempotency coordination for financial mutations.
 
-The idempotency claim (status PROCESSING) is committed up front to protect
-against concurrent duplicate requests.  The business transaction that performs
-the financial mutation is a *separate* transaction, so the naive design leaves
-a crash window: financial commit -> process dies -> response never stored ->
-client retries -> mutation runs twice.
-
-This module closes that window with an atomic marker: while a request owns an
-in-flight idempotency claim, the first commit of any session in that request
-flips the claim row from PROCESSING to COMMITTED *in the same transaction* as
-the business mutation.  A retry that finds COMMITTED replays instead of
-re-executing, so a duplicate invoice/payment/bill/journal/stock movement is
-impossible once the financial transaction has committed — even if the API
-process dies before sending its response.
-
-If the claim row has vanished (e.g. a stale-timeout cleanup deleted it while
-the original request was still running), the commit is aborted rather than
-risking double execution.
+The middleware owns a PROCESSING claim in a separate transaction.  The
+business transaction flips that claim to COMMITTED before its own commit, so a
+response-loss retry can never execute the financial mutation twice.
 """
 
 import contextvars
@@ -27,16 +12,13 @@ from typing import Any, Dict, Optional
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 
-# In-flight idempotency claim owned by the current request.  Set by the
-# middleware before the endpoint runs; visible inside the endpoint because
-# Starlette/anyio copy contextvars into the downstream task.
 _inflight_claim: contextvars.ContextVar[Optional[Dict[str, Any]]] = (
     contextvars.ContextVar("idempotency_inflight_claim", default=None)
 )
 
 
 class IdempotencyClaimLostError(RuntimeError):
-    """The claim row disappeared before the business commit could mark it."""
+    """The claim disappeared before the business transaction could commit."""
 
 
 def set_inflight_claim(claim: Dict[str, Any]) -> contextvars.Token:
@@ -53,18 +35,13 @@ def get_inflight_claim() -> Optional[Dict[str, Any]]:
 
 @event.listens_for(Session, "after_flush")
 def _mark_idempotency_committed_atomically(session: Session, flush_context) -> None:
-    """Flip the claim to COMMITTED inside the business transaction.
+    """Mark the request committed inside the financial SQL transaction.
 
-    Runs on the first flush of any session while this request owns an
-    in-flight claim.  Skipped on SQLite (unit-test convenience; PostgreSQL is
-    the production enforcement point).
-
-    ``after_flush`` fires while the flush is still part of the business
-    transaction (before the actual COMMIT), and the flush has already assigned
-    primary keys via RETURNING, so the created entity's identity is known: the
-    first tenant-owned domain entity is captured and stored on the claim row,
-    letting a committed-but-response-lost replay return the original resource
-    identity.
+    A direct Edit may flush its reversal before its replacement exists.  Such
+    handlers set ``_defer_idempotency_mark`` until the replacement is added;
+    the replacement adapter then stores the preferred user-visible resource in
+    ``_idempotency_resource``.  Ordinary creates retain the original behavior
+    of selecting the first tenant-owned object from ``session.new``.
     """
     claim = _inflight_claim.get()
     if not claim:
@@ -73,27 +50,38 @@ def _mark_idempotency_committed_atomically(session: Session, flush_context) -> N
         return
     if session.info.get("_idem_marked"):
         return
-    session.info["_idem_marked"] = True
+    if session.info.get("_defer_idempotency_mark"):
+        return
+
     resource_type = None
     resource_id = None
-    for obj in session.new:
-        cls = type(obj)
-        if cls.__name__ == "IdempotencyRecord":
-            continue
-        if hasattr(obj, "id") and hasattr(obj, "tenant_id"):
-            pk = getattr(obj, "id", None)
-            if pk is not None:
-                resource_type = cls.__name__
-                resource_id = str(pk)
-                break
+    preferred = session.info.get("_idempotency_resource")
+    if preferred is not None and hasattr(preferred, "id"):
+        pk = getattr(preferred, "id", None)
+        if pk is not None:
+            resource_type = type(preferred).__name__
+            resource_id = str(pk)
+
+    if resource_id is None:
+        for obj in session.new:
+            cls = type(obj)
+            if cls.__name__ == "IdempotencyRecord":
+                continue
+            if hasattr(obj, "id") and hasattr(obj, "tenant_id"):
+                pk = getattr(obj, "id", None)
+                if pk is not None:
+                    resource_type = cls.__name__
+                    resource_id = str(pk)
+                    break
+
     result = session.execute(
         text(
             "UPDATE idempotency_keys "
-            "SET status = 'COMMITTED', is_processed = true, "
-            "resource_type = COALESCE(:resource_type, resource_type), "
-            "resource_id = COALESCE(CAST(:resource_id AS uuid), resource_id) "
-            "WHERE idempotency_key = :key AND tenant_id = :tenant "
-            "AND method = :method AND path = :path"
+            "SET status='COMMITTED', is_processed=true, "
+            "resource_type=COALESCE(:resource_type, resource_type), "
+            "resource_id=COALESCE(CAST(:resource_id AS uuid), resource_id) "
+            "WHERE idempotency_key=:key AND tenant_id=:tenant "
+            "AND method=:method AND path=:path"
         ),
         {
             "key": claim["key"],
@@ -109,3 +97,4 @@ def _mark_idempotency_committed_atomically(session: Session, flush_context) -> N
             "Idempotency claim row is no longer present; aborting commit to "
             "prevent duplicate financial execution."
         )
+    session.info["_idem_marked"] = True
