@@ -1,5 +1,5 @@
 """
-Regression + contract tests for the invoice detail and draft-create endpoints.
+Regression + contract tests for the invoice detail and direct-create endpoints.
 
 Root cause this suite guards against:
   GET /api/v1/invoices/{id} returned HTTP 500 (and the Flutter app masked it as
@@ -85,7 +85,6 @@ def test_invoice_detail_success(client, combined_headers, contact_factory, produ
     assert body["total"] == "5900.0000"
     assert body["contact"]["name"] == contact.name
     assert body["lines"][0]["product_name"] == product.name
-    # response_model contract is valid
     InvoiceResponse.model_validate(body)
 
 
@@ -150,7 +149,6 @@ def test_invoice_detail_nullable_optional_fields(
 
 
 def test_invoice_detail_404(client, combined_headers, tenant):
-    """Unknown invoice id returns 404, not a server error."""
     res = client.get(
         f"/api/v1/invoices/{uuid.uuid4()}",
         headers=combined_headers(),
@@ -160,7 +158,6 @@ def test_invoice_detail_404(client, combined_headers, tenant):
 
 
 def test_invoice_detail_401(client, tenant):
-    """Missing auth token returns 401."""
     res = client.get(
         f"/api/v1/invoices/{uuid.uuid4()}",
         headers={"X-Tenant-ID": str(tenant.id)},
@@ -171,7 +168,6 @@ def test_invoice_detail_401(client, tenant):
 def test_invoice_detail_tenant_isolation(
     client, combined_headers, contact_factory, product_factory, db_session, tenant,
 ):
-    """An invoice in tenant A is not visible to a request scoped to tenant B."""
     from src.infrastructure.database.models import Tenant
 
     contact = contact_factory()
@@ -193,15 +189,12 @@ def test_invoice_detail_tenant_isolation(
     headers = dict(combined_headers())
     headers["X-Tenant-ID"] = str(other_tenant.id)
     res = client.get(f"/api/v1/invoices/{inv.id}", headers=headers)
-    # 403 = caller not a member of the other tenant; 404 = not found. Either way
-    # the invoice data must never leak across tenants.
     assert res.status_code in (403, 404)
     if res.status_code == 404:
         assert "not found" in res.json()["detail"].lower()
 
 
 def test_invoice_list_schema(client, combined_headers, contact_factory, product_factory, db_session):
-    """Invoice list response matches the PaginatedInvoiceResponse contract."""
     contact = contact_factory()
     product = product_factory()
     _build_invoice(db_session, contact.tenant_id, contact, product)
@@ -217,13 +210,12 @@ def test_invoice_list_schema(client, combined_headers, contact_factory, product_
     assert item["contact_name"] == contact.name
 
 
-def test_invoice_create_draft_stays_draft(
+def test_invoice_create_posts_immediately(
     client, combined_headers, contact_factory, product_factory, tenant, db_session,
 ):
-    """POST /invoices with post_on_create=false creates a DRAFT, no ledger/stock effects."""
+    """POST /invoices is a single Save operation that posts accounting and stock."""
     from src.infrastructure.database.models import JournalEntry, StockLedger
 
-    # GST_REGULAR so tax is computed (matches a real configured tenant).
     tenant.tax_mode = "GST_REGULAR"
     db_session.commit()
 
@@ -238,7 +230,6 @@ def test_invoice_create_draft_stays_draft(
         "is_gst_inclusive": False,
         "is_rcm": False,
         "supply_type": "DOMESTIC",
-        "post_on_create": False,
         "line_items": [
             {
                 "product_id": str(product.id),
@@ -253,24 +244,27 @@ def test_invoice_create_draft_stays_draft(
     res = client.post("/api/v1/invoices", headers=combined_headers(), json=payload)
     assert res.status_code == 201
     body = res.json()
-    assert body["status"] == "DRAFT"
+    assert body["status"] == "POSTED"
     assert body["subtotal"] == "5000.0000"
     assert body["total"] == "5900.0000"
-    assert body["invoice_number"]  # auto-generated
+    assert body["invoice_number"]
 
-    # No auto-posting for a draft: no journal entry, no stock movement.
-    journals = db_session.query(JournalEntry).all()
-    assert not journals, "draft save must not create journal entries"
-    moves = db_session.query(StockLedger).filter(
-        StockLedger.reference_type == "INVOICE"
+    journals = db_session.query(JournalEntry).filter(
+        JournalEntry.source_type == "INVOICE",
+        JournalEntry.source_id == uuid.UUID(body["id"]),
     ).all()
-    assert not moves, "draft save must not move stock"
+    assert len(journals) == 1
+    moves = db_session.query(StockLedger).filter(
+        StockLedger.reference_type == "INVOICE",
+        StockLedger.reference_id == uuid.UUID(body["id"]),
+    ).all()
+    assert len(moves) == 1
 
 
 def test_invoice_update_does_not_duplicate(
     client, combined_headers, contact_factory, product_factory, db_session,
 ):
-    """Editing an existing draft updates the same row (no duplicate)."""
+    """Editing leaves one active invoice even when correction creates a replacement row."""
     contact = contact_factory()
     product = product_factory()
     inv = _build_invoice(db_session, contact.tenant_id, contact, product)
@@ -294,6 +288,5 @@ def test_invoice_update_does_not_duplicate(
     assert res.status_code == 200
     assert res.json()["issue_date"] == "2026-08-04"
 
-    # Still exactly one invoice in the tenant.
     res2 = client.get("/api/v1/invoices", headers=combined_headers())
     assert res2.json()["total"] == 1
