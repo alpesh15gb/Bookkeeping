@@ -18,8 +18,8 @@ logger = logging.getLogger("bookkeeping.idempotency")
 
 IDEMPOTENT_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
-# Exact create endpoints that can create accounting/stock facts. Preview and
-# other read-like POST endpoints are deliberately absent.
+# Exact POST creates that can write accounting or stock facts. Read-like POST
+# endpoints such as previews are deliberately not included.
 _REQUIRED_POST_PATHS = {
     "/api/v1/invoices",
     "/api/v1/bills",
@@ -35,14 +35,18 @@ _REQUIRED_POST_PATHS = {
     "/api/v1/returns/purchase",
 }
 
-# Mutations that create reversal/replacement ledger or stock facts. These are
-# just as retry-sensitive as POST creates and therefore require the same key.
+# Every correction below can create a reversal/replacement journal and/or stock
+# movement and is therefore just as retry-sensitive as a create.
 _REQUIRED_MUTATION_PATTERNS = (
     re.compile(r"^/api/v1/(?:invoices|bills|expenses|inventory-adjustments)/[^/]+$"),
+    re.compile(r"^/api/v1/invoices/(?:credit-notes|debit-notes)/[^/]+$"),
+    re.compile(r"^/api/v1/payments/(?:receipts|disbursements)/[^/]+$"),
+    re.compile(r"^/api/v1/returns/(?:sales|purchase)/[^/]+$"),
+    re.compile(r"^/api/v1/accounting/journals/[^/]+$"),
+    # Transitional endpoints remain protected until the router bootstrap removes
+    # them from the public app. Keeping them here also protects direct unit use.
     re.compile(r"^/api/v1/payments/(?:receipts|disbursements)/[^/]+/cancel$"),
     re.compile(r"^/api/v1/accounting/journals/[^/]+/reverse$"),
-    # Transitional endpoints remain protected until their public Draft/Finalize
-    # workflow is fully retired.
     re.compile(r"^/api/v1/invoices/(?:credit-notes|debit-notes)/[^/]+/(?:finalize|cancel)$"),
     re.compile(r"^/api/v1/returns/(?:sales|purchase)/[^/]+/cancel$"),
     re.compile(r"^/api/v1/inventory-adjustments/[^/]+/(?:confirm|cancel)$"),
@@ -53,9 +57,7 @@ def _requires_mandatory_key(method: str, path: str) -> bool:
     method = method.upper()
     if method == "POST" and path in _REQUIRED_POST_PATHS:
         return True
-    if method in {"PUT", "PATCH", "DELETE"}:
-        return any(pattern.match(path) for pattern in _REQUIRED_MUTATION_PATTERNS)
-    if method == "POST":
+    if method in IDEMPOTENT_METHODS:
         return any(pattern.match(path) for pattern in _REQUIRED_MUTATION_PATTERNS)
     return False
 
@@ -79,17 +81,37 @@ def _committed_replay_response(existing=None) -> JSONResponse:
     )
 
 
+def _stored_response(existing) -> StarletteResponse:
+    stored_body = existing["response_body"] or ""
+    content_type = existing["response_content_type"] or "application/json"
+    headers = {"Idempotency-Replayed": "true"}
+    if "application/json" in content_type:
+        return JSONResponse(
+            content=json.loads(stored_body),
+            status_code=existing["response_status"],
+            headers=headers,
+        )
+    return StarletteResponse(
+        content=stored_body,
+        status_code=existing["response_status"],
+        media_type=content_type,
+        headers=headers,
+    )
+
+
 class IdempotencyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if request.method not in IDEMPOTENT_METHODS:
             return await call_next(request)
 
         path = str(request.url.path)
-        idempotency_key = request.headers.get("Idempotency-Key")
-        if not idempotency_key:
+        key = request.headers.get("Idempotency-Key")
+        if not key:
             from src.core.config import settings
 
-            if settings.REQUIRE_IDEMPOTENCY_KEY and _requires_mandatory_key(request.method, path):
+            if settings.REQUIRE_IDEMPOTENCY_KEY and _requires_mandatory_key(
+                request.method, path
+            ):
                 return JSONResponse(
                     status_code=428,
                     content={
@@ -105,14 +127,13 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         tenant_id = request.headers.get("X-Tenant-ID")
         if not tenant_id:
             return await call_next(request)
-        if len(idempotency_key) > 255:
+        if len(key) > 255:
             return JSONResponse(
                 status_code=400,
                 content={"detail": "Idempotency-Key is too long."},
             )
-
         try:
-            uuid.UUID(tenant_id)
+            tenant_uuid = uuid.UUID(tenant_id)
         except ValueError:
             return JSONResponse(
                 status_code=400,
@@ -122,13 +143,12 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         request_body = await request.body()
         request_hash = hashlib.sha256(request_body).hexdigest()
         claim = {
-            "key": idempotency_key,
+            "key": key,
             "tenant": tenant_id,
             "method": request.method,
             "path": path,
         }
-
-        tenant_token = tenant_context.set(uuid.UUID(tenant_id))
+        tenant_token = tenant_context.set(tenant_uuid)
         db = SessionLocal()
         owns_record = False
         inflight_token = None
@@ -137,14 +157,14 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 text(
                     "INSERT INTO idempotency_keys "
                     "(id, idempotency_key, tenant_id, method, path, request_hash, "
-                    " status, is_processed, created_at) "
+                    "status, is_processed, created_at) "
                     "VALUES (:id, :key, :tenant, :method, :path, :request_hash, "
-                    " 'PROCESSING', false, CURRENT_TIMESTAMP) "
+                    "'PROCESSING', false, CURRENT_TIMESTAMP) "
                     "ON CONFLICT (idempotency_key, tenant_id, method, path) DO NOTHING"
                 ),
                 {
                     "id": str(uuid.uuid4()),
-                    "key": idempotency_key,
+                    "key": key,
                     "tenant": tenant_id,
                     "method": request.method,
                     "path": path,
@@ -163,7 +183,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                         "AND method=:method AND path=:path"
                     ),
                     {
-                        "key": idempotency_key,
+                        "key": key,
                         "tenant": tenant_id,
                         "method": request.method,
                         "path": path,
@@ -173,8 +193,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 if existing and existing["status"] == "PROCESSING":
                     from src.core.config import settings
 
-                    now = dt.datetime.now(dt.timezone.utc)
-                    age = now - existing["created_at"]
+                    age = dt.datetime.now(dt.timezone.utc) - existing["created_at"]
                     if age > dt.timedelta(seconds=settings.IDEMPOTENCY_STALE_SECONDS):
                         db.execute(
                             text(
@@ -183,7 +202,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                                 "AND method=:method AND path=:path AND status='PROCESSING'"
                             ),
                             {
-                                "key": idempotency_key,
+                                "key": key,
                                 "tenant": tenant_id,
                                 "method": request.method,
                                 "path": path,
@@ -217,22 +236,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
                 if existing and existing["status"] == "COMMITTED":
                     if existing["response_status"] is not None:
-                        stored_body = existing["response_body"] or ""
-                        content_type = (
-                            existing["response_content_type"] or "application/json"
-                        )
-                        if "application/json" in content_type:
-                            return JSONResponse(
-                                content=json.loads(stored_body),
-                                status_code=existing["response_status"],
-                                headers={"Idempotency-Replayed": "true"},
-                            )
-                        return StarletteResponse(
-                            content=stored_body,
-                            status_code=existing["response_status"],
-                            media_type=content_type,
-                            headers={"Idempotency-Replayed": "true"},
-                        )
+                        return _stored_response(existing)
                     return _committed_replay_response(existing)
 
                 if (
@@ -240,22 +244,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     and existing["status"] == "COMPLETED"
                     and existing["response_status"] is not None
                 ):
-                    stored_body = existing["response_body"] or ""
-                    content_type = (
-                        existing["response_content_type"] or "application/json"
-                    )
-                    if "application/json" in content_type:
-                        return JSONResponse(
-                            content=json.loads(stored_body),
-                            status_code=existing["response_status"],
-                            headers={"Idempotency-Replayed": "true"},
-                        )
-                    return StarletteResponse(
-                        content=stored_body,
-                        status_code=existing["response_status"],
-                        media_type=content_type,
-                        headers={"Idempotency-Replayed": "true"},
-                    )
+                    return _stored_response(existing)
 
                 return JSONResponse(
                     status_code=409,
@@ -272,7 +261,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             logger.exception(
                 "Idempotency infrastructure failure; refusing to execute the "
                 "request unprotected (key=%s path=%s)",
-                idempotency_key,
+                key,
                 path,
             )
             tenant_context.reset(tenant_token)
@@ -293,7 +282,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
         except Exception:
             if owns_record:
-                cleanup_token = tenant_context.set(uuid.UUID(tenant_id))
+                cleanup_token = tenant_context.set(tenant_uuid)
                 cleanup = SessionLocal()
                 try:
                     cleanup.execute(
@@ -303,7 +292,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                             "AND method=:method AND path=:path AND status='PROCESSING'"
                         ),
                         {
-                            "key": idempotency_key,
+                            "key": key,
                             "tenant": tenant_id,
                             "method": request.method,
                             "path": path,
@@ -325,7 +314,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             storage_body = gzip.decompress(body)
 
         if owns_record:
-            storage_token = tenant_context.set(uuid.UUID(tenant_id))
+            storage_token = tenant_context.set(tenant_uuid)
             store = SessionLocal()
             try:
                 if response.status_code >= 500:
@@ -336,7 +325,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                             "AND method=:method AND path=:path"
                         ),
                         {
-                            "key": idempotency_key,
+                            "key": key,
                             "tenant": tenant_id,
                             "method": request.method,
                             "path": path,
@@ -353,14 +342,12 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                             "AND method=:method AND path=:path"
                         ),
                         {
-                            "key": idempotency_key,
+                            "key": key,
                             "tenant": tenant_id,
                             "method": request.method,
                             "path": path,
                             "response_status": response.status_code,
-                            "response_body": storage_body.decode(
-                                "utf-8", errors="strict"
-                            ),
+                            "response_body": storage_body.decode("utf-8", errors="strict"),
                             "content_type": (
                                 response.media_type
                                 or response.headers.get("content-type")
@@ -383,8 +370,12 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
         )
 
 
-# Install the public direct-posting mutation contract after the legacy routers
-# have been imported but before main.py includes them into the application.
+# Compose the public mutation contract after the legacy router modules are
+# loaded but before main.py attaches the routers to FastAPI.
 from src.api.v1.direct_posting_contract import install_direct_posting_contract
+from src.api.v1.direct_posting_contract_ext import (
+    install_extended_direct_posting_contract,
+)
 
 install_direct_posting_contract()
+install_extended_direct_posting_contract()
