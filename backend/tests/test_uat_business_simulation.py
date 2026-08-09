@@ -16,8 +16,11 @@ _base = importlib.util.module_from_spec(_spec)
 sys.modules[_BASE_NAME] = _base
 _spec.loader.exec_module(_base)
 
+# Re-export fixtures/helpers as well as test classes.  In particular the
+# preserved suite owns a module-level autouse schema fixture that pytest must
+# still discover from this collected module.
 for _name in dir(_base):
-    if _name.startswith("Test"):
+    if not _name.startswith("__"):
         globals()[_name] = getattr(_base, _name)
 
 _Phase1Base = _base.TestUAT_Phase1_BusinessSimulation
