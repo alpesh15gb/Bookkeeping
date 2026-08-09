@@ -10,18 +10,12 @@ import bcrypt
 
 from src.core.config import settings
 
-# ---------------------------------------------------------------------------
-# JWT Configuration — all from environment via settings
-# ---------------------------------------------------------------------------
 SECRET_KEY = settings.JWT_SECRET_KEY
 ALGORITHM = settings.JWT_ALGORITHM
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
 
-# ---------------------------------------------------------------------------
-# RBAC Permissions
-# ---------------------------------------------------------------------------
 class Permissions:
     # Company Profiles
     TENANT_VIEW = "tenant:view"
@@ -39,17 +33,18 @@ class Permissions:
     INVOICE_CREATE = "invoice:create"
     INVOICE_VIEW = "invoice:view"
     INVOICE_UPDATE = "invoice:update"
-    INVOICE_FINALIZE = "invoice:finalize"
+    INVOICE_FINALIZE = "invoice:finalize"  # retained for legacy/internal workflows
     INVOICE_DELETE = "invoice:delete"
-    INVOICE_CANCEL = "invoice:cancel"
+    INVOICE_CANCEL = "invoice:cancel"      # retained for statutory/internal workflows
     INVOICE_EMAIL = "invoice:email"
     SALES_CONVERT = "sales:convert"
 
     # Payments Context
     PAYMENT_CREATE = "payment:create"
     PAYMENT_VIEW = "payment:view"
+    PAYMENT_UPDATE = "payment:update"
     PAYMENT_DELETE = "payment:delete"
-    PAYMENT_CANCEL = "payment:cancel"
+    PAYMENT_CANCEL = "payment:cancel"      # retained for compatibility/internal use
 
     # Ledger & Accounting Context
     LEDGER_VIEW = "ledger:view"
@@ -63,8 +58,12 @@ class Permissions:
     # Credit / Debit Notes
     CREDIT_NOTE_CREATE = "credit_note:create"
     CREDIT_NOTE_VIEW = "credit_note:view"
+    CREDIT_NOTE_UPDATE = "credit_note:update"
+    CREDIT_NOTE_DELETE = "credit_note:delete"
     DEBIT_NOTE_CREATE = "debit_note:create"
     DEBIT_NOTE_VIEW = "debit_note:view"
+    DEBIT_NOTE_UPDATE = "debit_note:update"
+    DEBIT_NOTE_DELETE = "debit_note:delete"
 
     # Audit Logs
     AUDIT_VIEW = "audit:view"
@@ -77,7 +76,7 @@ class Permissions:
     EXPENSE_VIEW = "expense:view"
     EXPENSE_EDIT = "expense:edit"
     EXPENSE_DELETE = "expense:delete"
-    EXPENSE_FINALIZE = "expense:finalize"
+    EXPENSE_FINALIZE = "expense:finalize"  # retained for legacy/internal use
 
     # Vendor Bills (Purchases)
     BILL_CREATE = "bill:create"
@@ -98,74 +97,78 @@ class Permissions:
     SYNC_BOOTSTRAP = "sync:bootstrap"
     SYNC_AUTH = "sync:auth"
 
-ROLE_PERMISSIONS = {
 
-"owner": [
-    Permissions.TENANT_VIEW, Permissions.TENANT_UPDATE,
-    Permissions.SETTINGS_VIEW, Permissions.SETTINGS_UPDATE,
-    Permissions.CONTACT_CREATE, Permissions.CONTACT_VIEW,
-    Permissions.CONTACT_UPDATE, Permissions.CONTACT_DELETE,
-    Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW,
-    Permissions.INVOICE_UPDATE, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_DELETE,
-    Permissions.INVOICE_CANCEL, Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
-    Permissions.PAYMENT_CREATE, Permissions.PAYMENT_VIEW, Permissions.PAYMENT_DELETE, Permissions.PAYMENT_CANCEL,
-    Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
-    Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
-    Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
-    Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
-    Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
-    Permissions.EXPENSE_CREATE, Permissions.EXPENSE_VIEW,
-    Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
-    Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
-    Permissions.DATA_IMPORT,
-    Permissions.INVENTORY_VIEW, Permissions.INVENTORY_ADJUST,
-    Permissions.INVENTORY_TRANSFER, Permissions.INVENTORY_FINALIZE,
-    Permissions.SYNC_WRITE, Permissions.SYNC_READ, Permissions.SYNC_BOOTSTRAP, Permissions.SYNC_AUTH,
-],
-"accountant": [
-    Permissions.TENANT_VIEW,
-    Permissions.SETTINGS_VIEW, Permissions.SETTINGS_UPDATE,
-    Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
-    Permissions.INVOICE_VIEW, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_CANCEL,
-    Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
-    Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE, Permissions.PAYMENT_CANCEL,
-    Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
-    Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
-    Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
-    Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
-    Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
-    Permissions.EXPENSE_VIEW, Permissions.EXPENSE_CREATE, Permissions.EXPENSE_FINALIZE,
-    Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
-    Permissions.DATA_IMPORT,
-    Permissions.INVENTORY_VIEW, Permissions.INVENTORY_ADJUST,
-    Permissions.INVENTORY_TRANSFER, Permissions.INVENTORY_FINALIZE,
-],
-"salesperson": [
-    Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
-    Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW, Permissions.INVOICE_UPDATE,
-    Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
-    Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE,
-    Permissions.INVENTORY_VIEW,
-],
-"auditor": [
-    Permissions.TENANT_VIEW,
-    Permissions.SETTINGS_VIEW,
-    Permissions.CONTACT_VIEW,
-    Permissions.INVOICE_VIEW,
-    Permissions.PAYMENT_VIEW,
-    Permissions.LEDGER_VIEW,
-    Permissions.GST_REPORT_VIEW,
-    Permissions.CREDIT_NOTE_VIEW, Permissions.DEBIT_NOTE_VIEW,
-    Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
-    Permissions.EXPENSE_VIEW, Permissions.BILL_VIEW,
-    Permissions.INVENTORY_VIEW,
-],
+ROLE_PERMISSIONS = {
+    "owner": [
+        Permissions.TENANT_VIEW, Permissions.TENANT_UPDATE,
+        Permissions.SETTINGS_VIEW, Permissions.SETTINGS_UPDATE,
+        Permissions.CONTACT_CREATE, Permissions.CONTACT_VIEW,
+        Permissions.CONTACT_UPDATE, Permissions.CONTACT_DELETE,
+        Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW,
+        Permissions.INVOICE_UPDATE, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_DELETE,
+        Permissions.INVOICE_CANCEL, Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
+        Permissions.PAYMENT_CREATE, Permissions.PAYMENT_VIEW, Permissions.PAYMENT_UPDATE,
+        Permissions.PAYMENT_DELETE, Permissions.PAYMENT_CANCEL,
+        Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
+        Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
+        Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
+        Permissions.CREDIT_NOTE_UPDATE, Permissions.CREDIT_NOTE_DELETE,
+        Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
+        Permissions.DEBIT_NOTE_UPDATE, Permissions.DEBIT_NOTE_DELETE,
+        Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+        Permissions.EXPENSE_CREATE, Permissions.EXPENSE_VIEW,
+        Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
+        Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
+        Permissions.DATA_IMPORT,
+        Permissions.INVENTORY_VIEW, Permissions.INVENTORY_ADJUST,
+        Permissions.INVENTORY_TRANSFER, Permissions.INVENTORY_FINALIZE,
+        Permissions.SYNC_WRITE, Permissions.SYNC_READ, Permissions.SYNC_BOOTSTRAP, Permissions.SYNC_AUTH,
+    ],
+    "accountant": [
+        Permissions.TENANT_VIEW,
+        Permissions.SETTINGS_VIEW, Permissions.SETTINGS_UPDATE,
+        Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
+        Permissions.INVOICE_VIEW, Permissions.INVOICE_CREATE, Permissions.INVOICE_UPDATE,
+        Permissions.INVOICE_DELETE, Permissions.INVOICE_FINALIZE, Permissions.INVOICE_CANCEL,
+        Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
+        Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE, Permissions.PAYMENT_UPDATE,
+        Permissions.PAYMENT_DELETE, Permissions.PAYMENT_CANCEL,
+        Permissions.LEDGER_VIEW, Permissions.LEDGER_MANUAL_POST, Permissions.ACCOUNTS_MANAGE,
+        Permissions.GST_REPORT_VIEW, Permissions.GST_FILING_MANAGE,
+        Permissions.CREDIT_NOTE_CREATE, Permissions.CREDIT_NOTE_VIEW,
+        Permissions.CREDIT_NOTE_UPDATE, Permissions.CREDIT_NOTE_DELETE,
+        Permissions.DEBIT_NOTE_CREATE, Permissions.DEBIT_NOTE_VIEW,
+        Permissions.DEBIT_NOTE_UPDATE, Permissions.DEBIT_NOTE_DELETE,
+        Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+        Permissions.EXPENSE_VIEW, Permissions.EXPENSE_CREATE,
+        Permissions.EXPENSE_EDIT, Permissions.EXPENSE_DELETE, Permissions.EXPENSE_FINALIZE,
+        Permissions.BILL_CREATE, Permissions.BILL_VIEW, Permissions.BILL_UPDATE, Permissions.BILL_DELETE,
+        Permissions.DATA_IMPORT,
+        Permissions.INVENTORY_VIEW, Permissions.INVENTORY_ADJUST,
+        Permissions.INVENTORY_TRANSFER, Permissions.INVENTORY_FINALIZE,
+    ],
+    "salesperson": [
+        Permissions.CONTACT_VIEW, Permissions.CONTACT_CREATE, Permissions.CONTACT_UPDATE,
+        Permissions.INVOICE_CREATE, Permissions.INVOICE_VIEW, Permissions.INVOICE_UPDATE,
+        Permissions.INVOICE_EMAIL, Permissions.SALES_CONVERT,
+        Permissions.PAYMENT_VIEW, Permissions.PAYMENT_CREATE,
+        Permissions.INVENTORY_VIEW,
+    ],
+    "auditor": [
+        Permissions.TENANT_VIEW,
+        Permissions.SETTINGS_VIEW,
+        Permissions.CONTACT_VIEW,
+        Permissions.INVOICE_VIEW,
+        Permissions.PAYMENT_VIEW,
+        Permissions.LEDGER_VIEW,
+        Permissions.GST_REPORT_VIEW,
+        Permissions.CREDIT_NOTE_VIEW, Permissions.DEBIT_NOTE_VIEW,
+        Permissions.AUDIT_VIEW, Permissions.REPORTS_VIEW,
+        Permissions.EXPENSE_VIEW, Permissions.BILL_VIEW,
+        Permissions.INVENTORY_VIEW,
+    ],
 }
 
-
-# ---------------------------------------------------------------------------
-# Password hashing — bcrypt
-# ---------------------------------------------------------------------------
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Uses bcrypt to verify a plain text password against a stored hash."""
@@ -173,7 +176,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
     except Exception as e:
         import logging
-        logging.getLogger(__name__).warning("bcrypt verify_password error (hash may be malformed): %s", e)
+        logging.getLogger(__name__).warning(
+            "bcrypt verify_password error (hash may be malformed): %s", e
+        )
         return False
 
 
@@ -182,10 +187,6 @@ def get_password_hash(password: str) -> str:
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt())
     return hashed.decode("utf-8")
 
-
-# ---------------------------------------------------------------------------
-# JWT token generation & decoding
-# ---------------------------------------------------------------------------
 
 def create_access_token(user_id: str, scopes: List[str] = None) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -209,6 +210,7 @@ def create_refresh_token(user_id: str) -> str:
     }
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
+
 def create_2fa_challenge_token(user_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=5)
     payload = {
@@ -221,7 +223,14 @@ def create_2fa_challenge_token(user_id: str) -> str:
 
 
 def decode_token(token: str, expected_type: str = None) -> dict:
-    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["exp", "sub"]})
+    payload = jwt.decode(
+        token,
+        SECRET_KEY,
+        algorithms=[ALGORITHM],
+        options={"require": ["exp", "sub"]},
+    )
     if expected_type and payload.get("type") != expected_type:
-        raise jwt.InvalidTokenError(f"Expected token type '{expected_type}', got '{payload.get('type')}'")
+        raise jwt.InvalidTokenError(
+            f"Expected token type '{expected_type}', got '{payload.get('type')}'"
+        )
     return payload
