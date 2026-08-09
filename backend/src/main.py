@@ -30,7 +30,7 @@ from sqlalchemy.exc import IntegrityError, NoResultFound
 from sqlalchemy.orm import Session
 
 from src.core.config import settings
-from src.core.database import engine, Base, SessionLocal, get_db_session
+from src.core.database import engine, SessionLocal, get_db_session
 from src.core.rate_limiter import limiter, rate_limiter_exceeded_handler
 from src.domains.accounting.services import LedgerValidationError
 from src.core.sentry import init_sentry
@@ -64,7 +64,7 @@ logger = logging.getLogger("bookkeeping")
 # Keep this in sync with the single Alembic head. The ORM is allowed to start
 # so operators can still reach /health, but readiness becomes degraded until
 # migrations are applied. `create_all()` cannot add columns to existing tables.
-REQUIRED_SCHEMA_REVISION = "20260807_0001"
+REQUIRED_SCHEMA_REVISION = "20260810_0001"
 
 
 def _database_schema_revision(connection) -> Optional[str]:
@@ -143,10 +143,11 @@ async def lifespan(app: FastAPI):
 
     init_sentry()
 
-    # Create tables that don't exist yet (safe for all environments)
-    Base.metadata.create_all(bind=engine)
-    logger.info("Database tables verified.")
-
+    # Production schema evolution is owned exclusively by Alembic.  The
+    # application never mutates the schema at startup: it only validates the
+    # applied revision and degrades readiness (503) when the schema is
+    # outdated, so operators see an explicit `alembic upgrade head` signal
+    # instead of a silently repaired or half-migrated database.
     with engine.connect() as connection:
         current_revision = _database_schema_revision(connection)
     if current_revision != REQUIRED_SCHEMA_REVISION:
@@ -156,10 +157,6 @@ async def lifespan(app: FastAPI):
             current_revision or "unknown",
             REQUIRED_SCHEMA_REVISION,
         )
-
-    # Add columns needed for Vyapar import
-    from src.core.database import ensure_vyapar_import_columns
-    ensure_vyapar_import_columns()
 
     # Seed demo data only when explicitly requested via env flag
     if settings.SEED_ON_STARTUP and not settings.is_production:

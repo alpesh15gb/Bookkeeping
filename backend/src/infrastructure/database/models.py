@@ -13,9 +13,10 @@ from datetime import datetime, date, timezone
 from sqlalchemy import (
     BigInteger, Column, String, Boolean, Numeric, Date, DateTime,
     ForeignKey, Text, JSON, Integer, Index, UniqueConstraint, CheckConstraint, text, Uuid,
+    inspect,
 )
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, Session
 from sqlalchemy import event
 from src.core.database import Base
 
@@ -290,6 +291,9 @@ class Invoice(Base):
     tcs_amount = Column(Numeric(15, 4), nullable=False, default=0)  # TCS collected
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    replaces_id = Column(UUID(as_uuid=True), nullable=True)
+    replaced_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -306,6 +310,7 @@ class InvoiceLine(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
@@ -371,6 +376,7 @@ class Payment(Base):
     status = Column(String(20), nullable=False, default="ACTIVE")
     cancelled_at = Column(DateTime(timezone=True))
     cancellation_reason = Column(Text)
+    created_by = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -455,6 +461,9 @@ class Bill(Base):
     is_gst_inclusive = Column(Boolean, nullable=False, default=False)
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    replaces_id = Column(UUID(as_uuid=True), nullable=True)
+    replaced_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -470,6 +479,7 @@ class BillLine(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     bill_id = Column(UUID(as_uuid=True), ForeignKey("bills.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
@@ -525,6 +535,7 @@ class BillPayment(Base):
     status = Column(String(20), nullable=False, default="ACTIVE")
     cancelled_at = Column(DateTime(timezone=True))
     cancellation_reason = Column(Text)
+    created_by = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -571,22 +582,99 @@ class JournalEntry(Base):
     source_type = Column(String(20), nullable=False)  # 'INVOICE', 'BILL', 'PAYMENT', 'MANUAL'
     source_id = Column(UUID(as_uuid=True))
     is_locked = Column(Boolean, nullable=False, default=True)
+    # Direct-posting audit metadata — always populated from authenticated
+    # server context, never from client input.
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    posted_by = Column(UUID(as_uuid=True), nullable=True)
+    posted_at = Column(DateTime(timezone=True), nullable=True)
+    source_channel = Column(String(20), nullable=True)  # UI / API / IMPORT / RECURRING / SYNC
+    # Reversal / correction linkage (bidirectional, self-referencing).
+    reversed_by = Column(UUID(as_uuid=True), nullable=True)
+    reversed_at = Column(DateTime(timezone=True), nullable=True)
+    reversal_transaction_id = Column(UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True)
+    reverses_transaction_id = Column(UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True)
+    replacement_transaction_id = Column(UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True)
+    original_transaction_id = Column(UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
 
     lines = relationship("JournalLine", back_populates="entry", cascade="all, delete-orphan")
 
 
+_JOURNAL_MUTABLE_META = frozenset({
+    # Reversal/correction bookkeeping only — never amounts, accounts, dates,
+    # or directions. These are written by the reversal/correction flow.
+    "reversed_by",
+    "reversed_at",
+    "reversal_transaction_id",
+    "reverses_transaction_id",
+    "replacement_transaction_id",
+    "updated_at",
+})
+
+# Session-info key for the system-managed ledger-delete exception. The value
+# must be a frozenset of eligible JournalEntry.source_type values, set only by
+# src.domains.accounting.ledger_guards.system_ledger_rollback_scope. A plain
+# boolean is never honored — see the delete guards below.
+ALLOW_LEDGER_DELETE_KEY = "ALLOW_LEDGER_DELETE_SOURCE_TYPES"
+
+
 @event.listens_for(JournalEntry, "before_update")
 def prevent_journal_entry_update(mapper, connection, target):
-    if target.is_locked:
-        from sqlalchemy.exc import IntegrityError
+    """Ledger history is append-only. Only reversal/correction metadata may
+    change on a locked entry; everything else raises IntegrityError.
+
+    An entry that is genuinely unlocked (``is_locked`` already False before
+    this flush, not being flipped in it) may still be edited — that preserves
+    pre-existing unlocked records. But an entry that is being *flipped* from
+    locked to unlocked in the same flush that mutates financial fields is
+    treated as a locked-entry change, closing the single-flush bypass.
+    """
+    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy.exc import IntegrityError
+
+    state = sa_inspect(target)
+    changed = {
+        attr.key
+        for attr in state.mapper.column_attrs
+        if state.attrs[attr.key].history.has_changes()
+    }
+    # If it is not locked AND is_locked is not being changed in this flush,
+    # it was already unlocked before the flush — allow the edit.
+    if not target.is_locked and "is_locked" not in changed:
+        return
+    if changed - _JOURNAL_MUTABLE_META:
         raise IntegrityError(
             "Cannot modify a locked journal entry. "
             "Create a reversal entry instead.",
             params={},
             orig=None,
         )
+
+
+@event.listens_for(JournalEntry, "before_delete")
+def prevent_journal_entry_delete(mapper, connection, target):
+    """Ledger history is append-only: entries may be reversed, never deleted.
+
+    The only exception is system-managed year-end roll-forward cleanup: the
+    financial-year close creates YEAR_END/OPENING_BALANCE entries, and a
+    reopen (a permission-gated, audited action) rolls those back by deleting
+    them. Authorization is a frozenset of eligible source types stored in
+    session.info by system_ledger_rollback_scope (see ledger_guards.py); the
+    entry's own source_type must be in that set, so ordinary invoice, bill,
+    payment, expense and manual-journal history is never deletable.
+    """
+    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.orm import object_session
+    allowed = object_session(target).info.get(ALLOW_LEDGER_DELETE_KEY)
+    if isinstance(allowed, frozenset) and target.source_type in allowed:
+        return
+    raise IntegrityError(
+        "Cannot delete a journal entry. "
+        "Create a reversal entry instead.",
+        params={},
+        orig=None,
+    )
 
 
 class JournalLine(Base):
@@ -600,6 +688,7 @@ class JournalLine(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     entry_id = Column(UUID(as_uuid=True), ForeignKey("journal_entries.id"), nullable=False)
     account_id = Column(UUID(as_uuid=True), ForeignKey("accounts.id", ondelete="RESTRICT"), nullable=False)
     amount = Column(Numeric(15, 4), nullable=False)
@@ -608,6 +697,43 @@ class JournalLine(Base):
 
     entry = relationship("JournalEntry", back_populates="lines")
     account = relationship("Account")
+
+
+@event.listens_for(JournalLine, "before_update")
+def prevent_journal_line_update(mapper, connection, target):
+    """Journal lines are immutable accounting history: no in-place edits."""
+    from sqlalchemy.exc import IntegrityError
+    raise IntegrityError(
+        "Cannot modify a journal line. Journal entries are immutable; "
+        "create a reversal entry instead.",
+        params={},
+        orig=None,
+    )
+
+
+@event.listens_for(JournalLine, "before_delete")
+def prevent_journal_line_delete(mapper, connection, target):
+    """Journal lines are part of immutable ledger history: never deletable.
+
+    Same system-managed exception as JournalEntry, keyed off the owning
+    entry's source_type: the line may only be removed when its entry is a
+    system YEAR_END/OPENING_BALANCE roll-forward record and the scoped
+    authorization in session.info names that source type.
+    """
+    from sqlalchemy.exc import IntegrityError
+    from sqlalchemy.orm import object_session
+    session = object_session(target)
+    allowed = session.info.get(ALLOW_LEDGER_DELETE_KEY)
+    if isinstance(allowed, frozenset):
+        entry = session.get(JournalEntry, target.entry_id)
+        if entry is not None and entry.source_type in allowed:
+            return
+    raise IntegrityError(
+        "Cannot delete a journal line. Journal entries are immutable; "
+        "create a reversal entry instead.",
+        params={},
+        orig=None,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -846,6 +972,9 @@ class Expense(Base):
     reference_number = Column(String(50))
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    replaces_id = Column(UUID(as_uuid=True), nullable=True)
+    replaced_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -931,6 +1060,7 @@ class PurchaseOrderLine(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     purchase_order_id = Column(UUID(as_uuid=True), ForeignKey("purchase_orders.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
@@ -1015,6 +1145,7 @@ class GoodsReceiptLine(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     goods_receipt_id = Column(
         UUID(as_uuid=True),
         ForeignKey("goods_receipts.id"),
@@ -1089,6 +1220,7 @@ class SalesOrderLine(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     sales_order_id = Column(UUID(as_uuid=True), ForeignKey("sales_orders.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
@@ -1165,6 +1297,7 @@ class DeliveryChallanLine(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     delivery_challan_id = Column(UUID(as_uuid=True), ForeignKey("delivery_challans.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
@@ -1331,8 +1464,108 @@ class StockLedger(Base):
     reference_id = Column(UUID(as_uuid=True))
     rate = Column(Numeric(15, 4))
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    # Phase 1: actor / channel attribution (stamped by before_insert from
+    # session-scoped server context — never from client input).
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    source_channel = Column(String(20), nullable=True)  # UI / API / IMPORT / RECURRING / SYNC
+    # Movement-level reversal linkage: a reversal movement points at the
+    # original movement it reverses; the original records its reversal.
+    reverses_movement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("stock_ledger.id", name="fk_stock_ledger_reverses_movement"),
+        nullable=True,
+    )
+    reversal_movement_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("stock_ledger.id", name="fk_stock_ledger_reversal_movement"),
+        nullable=True,
+    )
+    reversed_by = Column(UUID(as_uuid=True), nullable=True)
+    reversed_at = Column(DateTime(timezone=True), nullable=True)
 
     product = relationship("Product")
+
+
+# ---------------------------------------------------------------------------
+# STOCK-LEDGER APPEND-ONLY GUARDS
+#
+# Stock movements are inventory accounting history. Once written they may
+# never be updated or deleted in place; corrections must create reversal
+# movements (``original -> reversal -> replacement``). Unlike journal
+# entries there is deliberately NO scoped system-maintenance exception: the
+# year-end reopen flow does not touch stock_ledger, and every correction
+# path (invoice cancel, credit-note cancel, returns, inventory adjustments)
+# already creates ``*_REVERSAL`` rows. If a future flow needs to roll back
+# system-generated movements it must be reviewed and added explicitly.
+# ---------------------------------------------------------------------------
+
+# The ONLY in-place mutations permitted on an existing movement are the
+# reversal-linkage bookkeeping fields written by the correction flow when it
+# creates the reversal movement. Quantity, balance, reference identity,
+# product, warehouse, rate and tenant are never mutable.
+_STOCK_MUTABLE_META = frozenset({
+    "reversal_movement_id",
+    "reversed_by",
+    "reversed_at",
+})
+
+
+@event.listens_for(StockLedger, "before_update")
+def prevent_stock_ledger_update(mapper, connection, target):
+    """Existing stock movements are immutable except reversal-linkage meta."""
+    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy.exc import IntegrityError
+
+    state = sa_inspect(target)
+    changed = {
+        attr.key
+        for attr in state.mapper.column_attrs
+        if state.attrs[attr.key].history.has_changes()
+    }
+    if changed - _STOCK_MUTABLE_META:
+        raise IntegrityError(
+            "Cannot modify a stock-ledger movement. "
+            "Create a reversal movement instead.",
+            params={},
+            orig=None,
+        )
+
+
+@event.listens_for(StockLedger, "before_delete")
+def prevent_stock_ledger_delete(mapper, connection, target):
+    """Stock movements are append-only history — deletion is never allowed."""
+    from sqlalchemy.exc import IntegrityError
+
+    raise IntegrityError(
+        "Cannot delete a stock-ledger movement. "
+        "Create a reversal movement instead.",
+        params={},
+        orig=None,
+    )
+
+
+@event.listens_for(StockLedger, "before_insert")
+def stamp_stock_ledger_attribution(mapper, connection, target):
+    """Stamp actor + source channel from session-scoped server context.
+
+    This is the single attribution mechanism for stock movements: the auth
+    dependency (and the sync handler) attach the authenticated actor to the
+    request's SQLAlchemy session via ``session.info["audit_context"]``, and
+    sync/import/recurring flows stamp the channel via
+    ``session.info["posting_channel"]``. Because it is a before_insert event
+    every creation site is covered without trusting client-supplied values.
+    """
+    from sqlalchemy.orm import object_session
+    # Single source of truth for channel normalization (Phase 0 posting_context).
+    from src.core.posting_context import get_posting_channel
+
+    session = object_session(target)
+    if session is not None:
+        if target.created_by is None:
+            ctx = session.info.get("audit_context") or {}
+            target.created_by = ctx.get("actor_id")
+        if target.source_channel is None:
+            target.source_channel = get_posting_channel(session)
 
 
 # ---------------------------------------------------------------------------
@@ -1417,6 +1650,7 @@ class ProformaInvoiceLine(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     proforma_invoice_id = Column(UUID(as_uuid=True), ForeignKey("proforma_invoices.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
@@ -1474,6 +1708,7 @@ class InventoryAdjustmentLine(Base):
     __tablename__ = "inventory_adjustment_lines"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     adjustment_id = Column("inventory_adjustment_id", UUID(as_uuid=True), ForeignKey("inventory_adjustments.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
     quantity_change = Column(Numeric(15, 4), nullable=False)  # Positive for increase, negative for decrease
@@ -1533,6 +1768,9 @@ class CreditNote(Base):
     total = Column(Numeric(15, 4), nullable=False, default=0)
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    replaces_id = Column(UUID(as_uuid=True), nullable=True)
+    replaced_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -1546,6 +1784,7 @@ class CreditNoteLine(Base):
     __tablename__ = "credit_note_lines"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     credit_note_id = Column(UUID(as_uuid=True), ForeignKey("credit_notes.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
     quantity = Column(Numeric(15, 4), nullable=False)
@@ -1605,6 +1844,9 @@ class DebitNote(Base):
     total = Column(Numeric(15, 4), nullable=False, default=0)
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    replaces_id = Column(UUID(as_uuid=True), nullable=True)
+    replaced_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -1618,6 +1860,7 @@ class DebitNoteLine(Base):
     __tablename__ = "debit_note_lines"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     debit_note_id = Column(UUID(as_uuid=True), ForeignKey("debit_notes.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
     quantity = Column(Numeric(15, 4), nullable=False)
@@ -1877,6 +2120,9 @@ class SalesReturn(Base):
     notes = Column(Text)
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    replaces_id = Column(UUID(as_uuid=True), nullable=True)
+    replaced_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -1889,6 +2135,7 @@ class SalesReturnLine(Base):
     __tablename__ = "sales_return_lines"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     sales_return_id = Column(UUID(as_uuid=True), ForeignKey("sales_returns.id"), nullable=False)
     invoice_line_id = Column(UUID(as_uuid=True), ForeignKey("invoice_lines.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
@@ -1955,6 +2202,9 @@ class PurchaseReturn(Base):
     notes = Column(Text)
     cancelled_at = Column(DateTime(timezone=True))
     cancelled_by = Column(UUID(as_uuid=True))
+    created_by = Column(UUID(as_uuid=True), nullable=True)
+    replaces_id = Column(UUID(as_uuid=True), nullable=True)
+    replaced_by_id = Column(UUID(as_uuid=True), nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -1967,6 +2217,7 @@ class PurchaseReturnLine(Base):
     __tablename__ = "purchase_return_lines"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     purchase_return_id = Column(UUID(as_uuid=True), ForeignKey("purchase_returns.id"), nullable=False)
     bill_line_id = Column(UUID(as_uuid=True), ForeignKey("bill_lines.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
@@ -2102,6 +2353,7 @@ class RecurringInvoiceItem(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     recurring_invoice_id = Column(UUID(as_uuid=True), ForeignKey("recurring_invoices.id"), nullable=False)
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"))
     description = Column(String(255))
@@ -2212,3 +2464,55 @@ class SyncEvent(Base):
     )
     processed: bool = Column(Boolean, nullable=False, default=False)
     processing_error: str | None = Column(Text, nullable=True)
+
+
+# ---------------------------------------------------------------------------
+# Tenant propagation for child / detail tables
+# ---------------------------------------------------------------------------
+# Child tables carry their own tenant_id so PostgreSQL RLS protects them
+# directly (a foreign key to a tenant-owned parent provides NO RLS protection).
+# Before flush, any child row whose tenant_id is unset inherits it from its
+# parent.  The database trigger (see postgres_hardening.py) independently
+# rejects any row whose tenant_id does not match its parent's, so the ORM
+# listener is a convenience, not the enforcement boundary.
+
+_CHILD_PARENT_MAP = {
+    InvoiceLine: ("invoice_id", Invoice),
+    BillLine: ("bill_id", Bill),
+    JournalLine: ("entry_id", JournalEntry),
+    PurchaseOrderLine: ("purchase_order_id", PurchaseOrder),
+    GoodsReceiptLine: ("goods_receipt_id", GoodsReceipt),
+    SalesOrderLine: ("sales_order_id", SalesOrder),
+    DeliveryChallanLine: ("delivery_challan_id", DeliveryChallan),
+    ProformaInvoiceLine: ("proforma_invoice_id", ProformaInvoice),
+    InventoryAdjustmentLine: ("adjustment_id", InventoryAdjustment),
+    CreditNoteLine: ("credit_note_id", CreditNote),
+    DebitNoteLine: ("debit_note_id", DebitNote),
+    SalesReturnLine: ("sales_return_id", SalesReturn),
+    PurchaseReturnLine: ("purchase_return_id", PurchaseReturn),
+    RecurringInvoiceItem: ("recurring_invoice_id", RecurringInvoice),
+}
+
+
+@event.listens_for(Session, "before_flush")
+def _propagate_parent_tenant_to_children(session, flush_context, instances):
+    for obj in session.new:
+        entry = _CHILD_PARENT_MAP.get(type(obj))
+        if entry is None:
+            continue
+        if getattr(obj, "tenant_id", None) is not None:
+            continue
+        fk_attr, parent_cls = entry
+        parent_id = getattr(obj, fk_attr, None)
+        parent = None
+        if parent_id is not None:
+            parent = session.get(parent_cls, parent_id)
+        if parent is None:
+            # The parent may be a pending object linked through a relationship
+            # whose FK column is only assigned later during flush.
+            for rel in inspect(obj).mapper.relationships:
+                if rel.mapper.class_ is parent_cls:
+                    parent = getattr(obj, rel.key, None)
+                    break
+        if parent is not None and getattr(parent, "tenant_id", None) is not None:
+            obj.tenant_id = parent.tenant_id

@@ -56,6 +56,18 @@ def get_audit_actor_id() -> uuid.UUID:
     return actor_id
 
 
+def get_session_audit_actor_id(db: OrmSession):
+    """Return the authenticated actor attached to the request's DB session.
+
+    Dependencies set both a contextvar and the session's ``info`` dict. FastAPI
+    runs sync endpoints in a worker thread where contextvars set in the
+    dependency task are not visible, but the session-scoped identity is — so
+    session-first resolution is the reliable path.
+    """
+    ctx = db.info.get("audit_context") or {}
+    return ctx.get("actor_id")
+
+
 def set_session_audit_context(
     session: OrmSession,
     *,

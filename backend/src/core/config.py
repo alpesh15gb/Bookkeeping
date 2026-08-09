@@ -105,6 +105,16 @@ class Settings(BaseSettings):
     NVIDIA_NIM_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
 
     # ----------------------------------------------------------------
+    # Idempotency
+    # ----------------------------------------------------------------
+    # A PROCESSING claim older than this is presumed abandoned (the process
+    # died before its business transaction committed).  Any request whose
+    # financial transaction committed has already flipped the claim to
+    # COMMITTED atomically, so this timeout never re-runs committed work — it
+    # only re-runs requests that provably never committed.
+    IDEMPOTENCY_STALE_SECONDS: int = 120
+
+    # ----------------------------------------------------------------
     # Rate Limiting
     # ----------------------------------------------------------------
     RATE_LIMIT_ENABLED: bool = True                # Disable for tests

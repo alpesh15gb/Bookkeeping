@@ -888,11 +888,48 @@ def reference_snapshot(
     }
 
 
+def sync_write_context(
+    principal: ApexBooksPrincipal = Depends(get_legacy_principal),
+    db: Session = Depends(get_db_session),
+):
+    """Yield authenticated audit identity + SYNC source channel for the
+    duration of a write request so ledger postings and audit rows carry the
+    offline actor. Identity is always derived from the verified principal,
+    never from client-supplied fields."""
+    from src.common.audit_log import (
+        set_audit_context, clear_audit_context, set_session_audit_context,
+    )
+    from src.core.posting_context import set_session_posting_channel
+
+    audit_token = set_audit_context(
+        tenant_id=principal.tenant_id,
+        actor_id=principal.user_id,
+        actor_email=None,
+        ip_address=None,
+        user_agent=None,
+    )
+    set_session_audit_context(
+        db,
+        tenant_id=principal.tenant_id,
+        actor_id=principal.user_id,
+        actor_email=None,
+        ip_address=None,
+        user_agent=None,
+    )
+    # Session-scoped so it survives the dependency→endpoint thread boundary.
+    set_session_posting_channel(db, "SYNC")
+    try:
+        yield
+    finally:
+        clear_audit_context()
+
+
 @router.post("/sync/push", response_model=SyncPushResponse)
 def sync_push(
     request: SyncPushRequest,
     principal: ApexBooksPrincipal = Depends(get_legacy_principal),
     db: Session = Depends(get_db_session),
+    _sync_ctx: None = Depends(sync_write_context),
 ) -> SyncPushResponse:
     """Accept ApexBooks client events, store them idempotently, and process
     each against the Bookkeeping-master domain."""

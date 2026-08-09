@@ -533,8 +533,14 @@ def update_bill(
     except GSTPeriodFiledError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
 
-    if bill.status not in ("DRAFT", "POSTED"):
-        raise HTTPException(status_code=400, detail="Only draft or posted bills can be modified.")
+    if bill.status != "DRAFT":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Posted bills are immutable accounting history and cannot be "
+                "edited. Cancel the bill and re-issue a replacement instead."
+            )
+        )
 
     if payload.contact_id:
         contact = db.query(Contact).filter(
@@ -616,8 +622,9 @@ def update_bill(
             line_desc = line.description or product.name or "Item"
 
             db_line = None
-            if line.id and str(line.id) in existing_by_id:
-                db_line = existing_by_id[str(line.id)]
+            line_id = getattr(line, "id", None)
+            if line_id and str(line_id) in existing_by_id:
+                db_line = existing_by_id[str(line_id)]
             if db_line is None:
                 key = (line.product_id, line.hsn_sac, line.gst_rate, line.rate)
                 db_line = existing_by_key.get(key)
@@ -709,41 +716,6 @@ def update_bill(
         bill.shipping_charges = header_shipping
         bill.total = rounded_total
         bill.lines = db_lines
-
-    # If bill was already posted, re-post the journal entry with updated amounts
-    if bill.status == "POSTED":
-        if bill.amount_paid and bill.amount_paid > rounded_total:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot reduce bill total below amount already paid ({bill.amount_paid})."
-            )
-
-        # Reverse old journal entry
-        old_je = db.query(JournalEntry).filter(
-            JournalEntry.source_type == "BILL",
-            JournalEntry.source_id == bill.id,
-            JournalEntry.tenant_id == tenant_id,
-        ).first()
-        if old_je:
-            db.query(JournalLine).filter(JournalLine.entry_id == old_je.id).delete()
-            db.delete(old_je)
-
-        # Reverse old stock entries for this bill
-        old_stock_entries = db.query(StockLedger).filter(
-            StockLedger.reference_type == "BILL",
-            StockLedger.reference_id == bill.id,
-            StockLedger.tenant_id == tenant_id,
-        ).all()
-        for entry in old_stock_entries:
-            product = db.query(Product).filter(
-                Product.id == entry.product_id, Product.tenant_id == tenant_id
-            ).with_for_update().first()
-            if product:
-                product.current_stock = (product.current_stock or Decimal("0")) - entry.quantity
-            db.delete(entry)
-
-        # Re-post with new amounts (creates new JE + stock entries)
-        auto_post_bill(db, tenant_id, bill)
 
     db.commit()
     db.refresh(bill)

@@ -176,7 +176,7 @@ async def scan_preview(
 
     try:
         from src.workers.tasks import run_ocr_scan
-        run_ocr_scan.delay(job_id, file_bytes_b64, file.filename or "", confidence)
+        run_ocr_scan.delay(job_id, str(tenant_id), file_bytes_b64, file.filename or "", confidence)
     except Exception as e:
         # Fallback: run synchronously if Celery is down
         logger.warning(f"Celery unavailable, running OCR synchronously: {e}")

@@ -642,14 +642,13 @@ def reopen_financial_year(
     if not reason or not reason.strip():
         raise HTTPException(status_code=400, detail="A reason is required to reopen a financial year.")
 
-    # Check if closing journal exists and delete it
-    if fy.journal_entry_id:
-        je = db.query(JournalEntry).filter(JournalEntry.id == fy.journal_entry_id).first()
-        if je:
-            # Delete journal lines first
-            db.query(JournalLine).filter(JournalLine.entry_id == je.id).delete()
-            db.delete(je)
-
+    # Check if closing journal exists and delete it.
+    # These are system-generated YEAR_END/OPENING_BALANCE roll-forward entries
+    # created by the close flow itself. Deleting them is the documented, audited
+    # roll-back of that close. The append-only ledger guards permit deletion of
+    # ONLY those system source types while the scoped context manager is
+    # active; authorization (accounts:manage) is enforced by the endpoint
+    # dependency above, and _log_audit below records the reopen + actor.
     # CRITICAL #4: Reverse roll-forward
     # Find the next FY (created during close)
     next_fy = db.query(FinancialYear).filter(
@@ -657,41 +656,58 @@ def reopen_financial_year(
         FinancialYear.start_date > fy.end_date,
     ).order_by(FinancialYear.start_date.asc()).first()
 
-    if next_fy:
-        # Delete opening journal entry in next FY (source_type=OPENING_BALANCE)
-        opening_je = db.query(JournalEntry).filter(
-            JournalEntry.tenant_id == tenant_id,
-            JournalEntry.source_type == "OPENING_BALANCE",
-            JournalEntry.entry_date == next_fy.start_date,
-        ).first()
-        if opening_je:
-            db.query(JournalLine).filter(JournalLine.entry_id == opening_je.id).delete()
-            db.delete(opening_je)
+    # Authorize the append-only ledger guards for the system-generated
+    # YEAR_END/OPENING_BALANCE roll-forward entries only (scoped, always
+    # cleared even on exception). Authorization (accounts:manage) is enforced
+    # by the endpoint dependency; _log_audit below records reopen + actor.
+    from src.domains.accounting.ledger_guards import system_ledger_rollback_scope
+    with system_ledger_rollback_scope(db):
+        if fy.journal_entry_id:
+            je = db.query(JournalEntry).filter(JournalEntry.id == fy.journal_entry_id).first()
+            if je:
+                # Delete journal lines first
+                db.query(JournalLine).filter(JournalLine.entry_id == je.id).delete()
+                db.delete(je)
 
-        # Delete OpeningBalanceSnapshot rows for next FY
-        db.query(OpeningBalanceSnapshot).filter(
-            OpeningBalanceSnapshot.tenant_id == tenant_id,
-            OpeningBalanceSnapshot.financial_year_id == fy.id,
-        ).delete()
+        if next_fy:
+            # Delete opening journal entry in next FY (source_type=OPENING_BALANCE)
+            opening_je = db.query(JournalEntry).filter(
+                JournalEntry.tenant_id == tenant_id,
+                JournalEntry.source_type == "OPENING_BALANCE",
+                JournalEntry.entry_date == next_fy.start_date,
+            ).first()
+            if opening_je:
+                db.query(JournalLine).filter(JournalLine.entry_id == opening_je.id).delete()
+                db.delete(opening_je)
 
-        # Delete InventoryCarryForward rows for next FY
-        db.query(InventoryCarryForward).filter(
-            InventoryCarryForward.tenant_id == tenant_id,
-            InventoryCarryForward.financial_year_id == fy.id,
-        ).delete()
+            # Delete OpeningBalanceSnapshot rows for next FY
+            db.query(OpeningBalanceSnapshot).filter(
+                OpeningBalanceSnapshot.tenant_id == tenant_id,
+                OpeningBalanceSnapshot.financial_year_id == fy.id,
+            ).delete()
 
-        # Reset opening_balance on permanent accounts
-        accounts = db.query(Account).filter(
-            Account.tenant_id == tenant_id,
-            Account.account_type.in_(["ASSET", "LIABILITY", "EQUITY"]),
-            Account.deleted_at == None,
-        ).all()
-        for account in accounts:
-            account.opening_balance = Decimal("0.0000")
+            # Delete InventoryCarryForward rows for next FY
+            db.query(InventoryCarryForward).filter(
+                InventoryCarryForward.tenant_id == tenant_id,
+                InventoryCarryForward.financial_year_id == fy.id,
+            ).delete()
 
-        # Recalculate account balances
-        account_ids = {a.id for a in accounts}
-        update_account_balances(db, tenant_id, account_ids)
+            # Reset opening_balance on permanent accounts
+            accounts = db.query(Account).filter(
+                Account.tenant_id == tenant_id,
+                Account.account_type.in_(["ASSET", "LIABILITY", "EQUITY"]),
+                Account.deleted_at == None,
+            ).all()
+            for account in accounts:
+                account.opening_balance = Decimal("0.0000")
+
+            # Recalculate account balances
+            account_ids = {a.id for a in accounts}
+            update_account_balances(db, tenant_id, account_ids)
+
+        # Flush the deletes NOW while the scoped authorization is still on the
+        # session; db.commit() below runs after the scope exits.
+        db.flush()
 
     fy.status = "CURRENT"
     fy.is_current = False

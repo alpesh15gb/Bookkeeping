@@ -1,6 +1,6 @@
 from decimal import Decimal
 from typing import List, Optional, Dict
-from datetime import date
+from datetime import date, datetime, timezone
 import uuid
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -1380,8 +1380,32 @@ def update_account_balances(db: Session, tenant_id: uuid.UUID, account_ids: Opti
     # NOTE: Caller is responsible for db.commit()
 
 
-def commit_ledger_draft(db: Session, tenant_id: uuid.UUID, draft: JournalEntryDraft) -> "JournalEntry":
+def commit_ledger_draft(
+    db: Session,
+    tenant_id: uuid.UUID,
+    draft: JournalEntryDraft,
+    *,
+    actor_id: Optional[uuid.UUID] = None,
+) -> "JournalEntry":
+    """Persist a validated journal draft as an immutable ledger entry.
+
+    Actor and channel metadata are derived from the authenticated request
+    context (never from client input). ``actor_id`` may be supplied explicitly
+    for flows that run outside a request context (e.g. scheduled tasks).
+    """
     from src.infrastructure.database.models import JournalEntry, JournalLine
+    from src.common.audit_log import get_audit_actor_id, get_session_audit_actor_id
+    from src.core.posting_context import get_posting_channel
+
+    now = datetime.now(timezone.utc)
+    actor = actor_id
+    if actor is None:
+        actor = get_session_audit_actor_id(db)
+    if actor is None:
+        try:
+            actor = get_audit_actor_id()
+        except RuntimeError:
+            actor = None
 
     journal_entry = JournalEntry(
         tenant_id=draft.tenant_id,
@@ -1390,6 +1414,10 @@ def commit_ledger_draft(db: Session, tenant_id: uuid.UUID, draft: JournalEntryDr
         description=draft.description,
         source_type=draft.source_type,
         source_id=draft.source_id,
+        created_by=actor,
+        posted_by=actor,
+        posted_at=now,
+        source_channel=get_posting_channel(db),
         lines=[
             JournalLine(
                 account_id=line.account_id,

@@ -1141,24 +1141,29 @@ def import_vyapar_backup(
 
         # ── 10c. Auto-post journal entries for invoices and bills ──────────────
         from src.domains.accounting.auto_post import auto_post_invoice, auto_post_bill
+        from src.core.posting_context import set_session_posting_channel
+        set_session_posting_channel(db, "IMPORT")
         posted_invoices = 0
         posted_bills = 0
-        for inv_id_str in inv_map.values():
-            try:
-                inv = db.query(Invoice).filter(Invoice.id == uuid.UUID(inv_id_str)).first()
-                if inv and inv.status in ("SENT", "DRAFT"):
-                    auto_post_invoice(db, tenant_id, inv, allow_negative_stock=True)
-                    posted_invoices += 1
-            except Exception as e:
-                summary.errors.append(f"Auto-post invoice {inv_id_str}: {e}")
-        for bill_id_str in bill_map.values():
-            try:
-                bill = db.query(Bill).filter(Bill.id == uuid.UUID(bill_id_str)).first()
-                if bill and bill.status in ("UNPAID", "DRAFT"):
-                    auto_post_bill(db, tenant_id, bill)
-                    posted_bills += 1
-            except Exception as e:
-                summary.errors.append(f"Auto-post bill {bill_id_str}: {e}")
+        try:
+            for inv_id_str in inv_map.values():
+                try:
+                    inv = db.query(Invoice).filter(Invoice.id == uuid.UUID(inv_id_str)).first()
+                    if inv and inv.status in ("SENT", "DRAFT"):
+                        auto_post_invoice(db, tenant_id, inv, allow_negative_stock=True)
+                        posted_invoices += 1
+                except Exception as e:
+                    summary.errors.append(f"Auto-post invoice {inv_id_str}: {e}")
+            for bill_id_str in bill_map.values():
+                try:
+                    bill = db.query(Bill).filter(Bill.id == uuid.UUID(bill_id_str)).first()
+                    if bill and bill.status in ("UNPAID", "DRAFT"):
+                        auto_post_bill(db, tenant_id, bill)
+                        posted_bills += 1
+                except Exception as e:
+                    summary.errors.append(f"Auto-post bill {bill_id_str}: {e}")
+        finally:
+            pass
 
         # ── 11. Import payments from txn_payment_mapping ──────────────────────
         try:

@@ -337,6 +337,8 @@ def generate_invoice_now(
     db.add(invoice)
     db.flush()
 
+    from src.core.posting_context import set_session_posting_channel
+    set_session_posting_channel(db, "RECURRING")
     auto_post_invoice(db, tenant_id, invoice)
 
     # Update recurring template

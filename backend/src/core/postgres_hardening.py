@@ -1,9 +1,191 @@
-"""PostgreSQL hardening shared by Alembic and fresh-database bootstrap."""
+"""PostgreSQL hardening shared by Alembic and fresh-database bootstrap.
+
+Everything in here is idempotent so it can run from either the guarded
+fresh-deploy bootstrap (``alembic upgrade head`` on an empty database) or a
+normal revision-by-revision migration.
+"""
 
 from sqlalchemy import inspect, text
 
+# Tables whose rows are shared across all tenants (NULL tenant_id is visible to
+# every tenant; a tenant's own rows are visible only to that tenant).
+_GLOBAL_TENANT_TABLES = {
+    "audit_logs",
+    "terms_templates",
+    "tax_templates",
+    "payment_terms",
+}
 
-_GLOBAL_TENANT_TABLES = {"audit_logs", "terms_templates"}
+# Tables that intentionally do NOT receive Row-Level Security even though they
+# carry a tenant_id column.
+#
+# tenant_memberships is the cross-tenant access-control registry: login and
+# session establishment enumerate a user's memberships across every tenant
+# before any tenant context exists.  RLS on this table would hide those rows
+# from the restricted application role and break authentication.  It contains
+# no tenant accounting data (only user_id / tenant_id / role), and each row is
+# itself the grant of access, so column-level visibility is not a concern.
+_RLS_EXEMPT_TABLES = {"tenant_memberships"}
+
+# Child / detail tables that get explicit tenant ownership plus a database
+# trigger guaranteeing the child's tenant_id matches its parent's tenant_id.
+# Format: child_table -> (parent_table, child_fk_column)
+_CHILD_TABLES = {
+    "invoice_lines": ("invoices", "invoice_id"),
+    "bill_lines": ("bills", "bill_id"),
+    "journal_lines": ("journal_entries", "entry_id"),
+    "purchase_order_lines": ("purchase_orders", "purchase_order_id"),
+    "goods_receipt_lines": ("goods_receipts", "goods_receipt_id"),
+    "sales_order_lines": ("sales_orders", "sales_order_id"),
+    "delivery_challan_lines": ("delivery_challans", "delivery_challan_id"),
+    "proforma_invoice_lines": ("proforma_invoices", "proforma_invoice_id"),
+    "inventory_adjustment_lines": ("inventory_adjustments", "inventory_adjustment_id"),
+    "credit_note_lines": ("credit_notes", "credit_note_id"),
+    "debit_note_lines": ("debit_notes", "debit_note_id"),
+    "sales_return_lines": ("sales_returns", "sales_return_id"),
+    "purchase_return_lines": ("purchase_returns", "purchase_return_id"),
+    "recurring_invoice_items": ("recurring_invoices", "recurring_invoice_id"),
+}
+
+
+def _table_has_column(connection, table: str, column: str) -> bool:
+    try:
+        columns = {
+            col["name"] for col in inspect(connection).get_columns(table)
+        }
+    except Exception:
+        return False
+    return column in columns
+
+
+def _apply_rls_policy(connection, table: str) -> None:
+    quoted = f'"{table}"'
+    connection.execute(text(f"ALTER TABLE {quoted} ENABLE ROW LEVEL SECURITY"))
+    connection.execute(text(f"ALTER TABLE {quoted} FORCE ROW LEVEL SECURITY"))
+    connection.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {quoted}"))
+    if table in _GLOBAL_TENANT_TABLES:
+        condition = (
+            "tenant_id IS NULL OR tenant_id::text = "
+            "current_setting('app.current_tenant_id', true)"
+        )
+    else:
+        condition = (
+            "tenant_id::text = "
+            "current_setting('app.current_tenant_id', true)"
+        )
+    connection.execute(
+        text(
+            f"CREATE POLICY tenant_isolation ON {quoted} "
+            f"USING ({condition}) WITH CHECK ({condition})"
+        )
+    )
+
+
+def _apply_child_table_hardening(connection) -> None:
+    """Explicit tenant ownership for child tables: RLS + tenant-match trigger."""
+    for child, (parent, fk_column) in _CHILD_TABLES.items():
+        if not _table_has_column(connection, child, "tenant_id"):
+            continue
+        _apply_rls_policy(connection, child)
+
+        trigger_name = f"ck_{child}_tenant_matches_parent"
+        function_name = f"apex_{child}_tenant_matches_parent()"
+        quoted_child = f'"{child}"'
+        quoted_parent = f'"{parent}"'
+
+        connection.execute(
+            text(
+                f"""
+                CREATE OR REPLACE FUNCTION {function_name}
+                RETURNS trigger AS $$
+                DECLARE
+                    parent_tenant uuid;
+                BEGIN
+                    IF NEW.tenant_id IS NULL THEN
+                        RAISE EXCEPTION 'child row % has no tenant_id', TG_TABLE_NAME
+                            USING ERRCODE = '23514';
+                    END IF;
+                    SELECT tenant_id INTO parent_tenant
+                      FROM {quoted_parent}
+                     WHERE id = NEW.{fk_column};
+                    IF parent_tenant IS NULL THEN
+                        RAISE EXCEPTION 'child row % references missing parent %',
+                            TG_TABLE_NAME, NEW.{fk_column}
+                            USING ERRCODE = '23503';
+                    END IF;
+                    IF NEW.tenant_id <> parent_tenant THEN
+                        RAISE EXCEPTION 'child row % tenant % does not match parent tenant %',
+                            TG_TABLE_NAME, NEW.tenant_id, parent_tenant
+                            USING ERRCODE = '23514';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql SECURITY DEFINER
+                   SET search_path = public, pg_catalog
+                """
+            )
+        )
+        connection.execute(
+            text(f"DROP TRIGGER IF EXISTS {trigger_name} ON {quoted_child}")
+        )
+        connection.execute(
+            text(
+                f"CREATE TRIGGER {trigger_name} "
+                f"BEFORE INSERT OR UPDATE OF tenant_id, {fk_column} ON {quoted_child} "
+                f"FOR EACH ROW EXECUTE FUNCTION {function_name}"
+            )
+        )
+
+
+def _ensure_tenant_enumerator(connection) -> None:
+    """Controlled cross-tenant enumeration for scheduled maintenance tasks.
+
+    Ordinary application/worker roles never bypass RLS.  Instead they call this
+    SECURITY DEFINER function (owned by the migration role, which has
+    BYPASSRLS) to obtain only the tenant ids and legal names of active tenants
+    — never tenant accounting data.  Per-tenant processing then runs under a
+    normal tenant context with RLS enforced.
+    """
+    connection.execute(
+        text(
+            """
+            CREATE OR REPLACE FUNCTION apex_list_active_tenant_ids()
+            RETURNS TABLE (tenant_id uuid, legal_name text)
+            LANGUAGE sql
+            SECURITY DEFINER
+            SET search_path = public, pg_catalog
+            AS $$
+                SELECT id, legal_name
+                  FROM tenants
+                 WHERE deleted_at IS NULL
+                 ORDER BY legal_name
+            $$
+            """
+        )
+    )
+    # Grant execute to the restricted roles if they exist (they may not in a
+    # plain dev database that never ran the role bootstrap).
+    connection.execute(
+        text(
+            """
+            DO $$
+            DECLARE
+                r text;
+            BEGIN
+                FOREACH r IN ARRAY ARRAY['apexbooks_api', 'apexbooks_worker']
+                LOOP
+                    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+                        EXECUTE format(
+                            'GRANT EXECUTE ON FUNCTION apex_list_active_tenant_ids() TO %I',
+                            r
+                        );
+                    END IF;
+                END LOOP;
+            END
+            $$;
+            """
+        )
+    )
 
 
 def apply_postgres_hardening(connection) -> None:
@@ -13,30 +195,28 @@ def apply_postgres_hardening(connection) -> None:
 
     inspector = inspect(connection)
     for table in inspector.get_table_names():
+        if table in _RLS_EXEMPT_TABLES:
+            # Registry tables must be visible across tenants (e.g. login
+            # enumerates a user's memberships before tenant context exists).
+            # Explicitly remove any previously-applied RLS.
+            quoted = f'"{table}"'
+            connection.execute(
+                text(f"DROP POLICY IF EXISTS tenant_isolation ON {quoted}")
+            )
+            connection.execute(
+                text(f"ALTER TABLE {quoted} DISABLE ROW LEVEL SECURITY")
+            )
+            connection.execute(
+                text(f"ALTER TABLE {quoted} NO FORCE ROW LEVEL SECURITY")
+            )
+            continue
         columns = {column["name"] for column in inspector.get_columns(table)}
         if "tenant_id" not in columns:
             continue
+        _apply_rls_policy(connection, table)
 
-        quoted = f'"{table}"'
-        connection.execute(text(f"ALTER TABLE {quoted} ENABLE ROW LEVEL SECURITY"))
-        connection.execute(text(f"ALTER TABLE {quoted} FORCE ROW LEVEL SECURITY"))
-        connection.execute(text(f"DROP POLICY IF EXISTS tenant_isolation ON {quoted}"))
-        if table in _GLOBAL_TENANT_TABLES:
-            condition = (
-                "tenant_id IS NULL OR tenant_id::text = "
-                "current_setting('app.current_tenant_id', true)"
-            )
-        else:
-            condition = (
-                "tenant_id::text = "
-                "current_setting('app.current_tenant_id', true)"
-            )
-        connection.execute(
-            text(
-                f"CREATE POLICY tenant_isolation ON {quoted} "
-                f"USING ({condition}) WITH CHECK ({condition})"
-            )
-        )
+    _apply_child_table_hardening(connection)
+    _ensure_tenant_enumerator(connection)
 
     connection.execute(
         text(
@@ -91,7 +271,8 @@ def apply_postgres_hardening(connection) -> None:
                 END IF;
                 RETURN NULL;
             END;
-            $$ LANGUAGE plpgsql
+            $$ LANGUAGE plpgsql SECURITY DEFINER
+               SET search_path = public, pg_catalog
             """
         )
     )

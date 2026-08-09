@@ -287,7 +287,7 @@ def create_invoice(
     ):
         try:
             from src.workers.tasks import submit_e_invoice_to_irp
-            submit_e_invoice_to_irp.delay(str(invoice.id))
+            submit_e_invoice_to_irp.delay(str(tenant_id), str(invoice.id))
         except Exception as task_error:
             logger.warning(
                 "Could not enqueue e-invoice task for invoice %s: %s",
@@ -1035,6 +1035,10 @@ def cancel_credit_note(
     )
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
+    from src.domains.accounting.auto_post import link_cancel_reversal
+    link_cancel_reversal(
+        db, tenant_id, "CREDIT_NOTE", cn.id, journal_entry, current_user.id,
+    )
 
     stock_moves = db.query(StockLedger).filter(
         StockLedger.tenant_id == tenant_id,
@@ -1062,7 +1066,7 @@ def cancel_credit_note(
                 db, tenant_id, move.warehouse_id, move.product_id,
                 -move.quantity, product.current_stock,
             )
-            db.add(StockLedger(
+            reversal = StockLedger(
                 tenant_id=tenant_id,
                 product_id=move.product_id,
                 warehouse_id=move.warehouse_id,
@@ -1071,7 +1075,13 @@ def cancel_credit_note(
                 quantity=-move.quantity,
                 balance_quantity=balance_after,
                 rate=move.rate,
-            ))
+                reverses_movement_id=move.id,
+            )
+            db.add(reversal)
+            db.flush()
+            move.reversal_movement_id = reversal.id
+            move.reversed_by = current_user.id
+            move.reversed_at = datetime.now(timezone.utc)
 
     # Reverse the outstanding impact on the linked invoice
     if cn.invoice_id:
@@ -1414,7 +1424,8 @@ def finalize_debit_note(
 def cancel_debit_note(
     dn_id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:finalize")),
+    current_user: User = Depends(get_current_user),
 ):
     dn = db.query(DebitNote).filter(
         DebitNote.id == dn_id,
@@ -1467,10 +1478,14 @@ def cancel_debit_note(
     )
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
+    from src.domains.accounting.auto_post import link_cancel_reversal
+    link_cancel_reversal(
+        db, tenant_id, "DEBIT_NOTE", dn.id, journal_entry, current_user.id,
+    )
 
     dn.status = "CANCELLED"
     dn.cancelled_at = datetime.now(timezone.utc)
-    dn.cancelled_by = tenant_id
+    dn.cancelled_by = current_user.id
     db.commit()
     db.refresh(dn)
     return dn
@@ -1541,23 +1556,15 @@ def update_invoice(
     if payload.issue_date:
         validate_period_open(db, tenant_id, payload.issue_date)
 
-    if invoice.status not in ("DRAFT", "POSTED"):
+    if invoice.status != "DRAFT":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Only draft or posted invoices can be edited."
-        )
-
-    if invoice.status == "POSTED":
-        try:
-            ensure_outward_period_mutable(db, tenant_id, invoice.issue_date)
-        except GSTPeriodFiledError as exc:
-            raise HTTPException(status_code=409, detail=str(exc))
-        existing_allocations = db.query(PaymentAllocation).filter(PaymentAllocation.invoice_id == invoice.id).first()
-        if existing_allocations:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot modify a posted invoice that has payment allocations. Reverse payments first."
+            detail=(
+                "Posted invoices are immutable accounting history and cannot "
+                "be edited. Cancel the invoice and re-issue a replacement "
+                "instead."
             )
+        )
 
     if payload.contact_id:
         contact = db.query(Contact).filter(Contact.id == payload.contact_id, Contact.tenant_id == tenant_id).first()
@@ -1639,8 +1646,9 @@ def update_invoice(
             line_desc = line.description or product.name or "Item"
 
             db_line = None
-            if line.id and str(line.id) in existing_by_id:
-                db_line = existing_by_id[str(line.id)]
+            line_id = getattr(line, "id", None)
+            if line_id and str(line_id) in existing_by_id:
+                db_line = existing_by_id[str(line_id)]
             if db_line is None:
                 key = (line.product_id, line.hsn_sac, line.gst_rate, line.rate)
                 db_line = existing_by_key.get(key)
@@ -1735,48 +1743,6 @@ def update_invoice(
         invoice.total = rounded_total
         invoice.lines = db_lines
 
-    # If invoice was already posted, re-post the journal entry with updated amounts
-    if invoice.status == "POSTED":
-        if invoice.amount_paid and invoice.amount_paid > rounded_total:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Cannot reduce invoice total below amount already paid ({invoice.amount_paid})."
-            )
-
-        from src.domains.accounting.auto_post import _check_no_existing_posting
-
-        # Reverse old journal entry
-        old_je = db.query(JournalEntry).filter(
-            JournalEntry.source_type == "INVOICE",
-            JournalEntry.source_id == invoice.id,
-            JournalEntry.tenant_id == tenant_id,
-        ).first()
-        if old_je:
-            db.query(JournalLine).filter(JournalLine.entry_id == old_je.id).delete()
-            db.delete(old_je)
-
-        # Reverse old stock entries for this invoice
-        old_stock_entries = db.query(StockLedger).filter(
-            StockLedger.reference_type == "INVOICE",
-            StockLedger.reference_id == invoice.id,
-            StockLedger.tenant_id == tenant_id,
-        ).all()
-        for entry in old_stock_entries:
-            product = db.query(Product).filter(
-                Product.id == entry.product_id, Product.tenant_id == tenant_id
-            ).with_for_update().first()
-            if product:
-                product.current_stock = (product.current_stock or Decimal("0")) - entry.quantity
-            db.delete(entry)
-
-        # Re-post with new amounts (creates new JE + stock entries)
-        auto_post_invoice(
-            db,
-            tenant_id,
-            invoice,
-            move_stock=invoice.source_document_type != "DELIVERY_CHALLAN",
-        )
-
     db.commit()
     db.refresh(invoice)
     return invoice
@@ -1825,7 +1791,7 @@ def finalize_invoice(
     if tenant_settings and getattr(tenant_settings, "e_invoice_enabled", None):
         try:
             from src.workers.tasks import submit_e_invoice_to_irp
-            submit_e_invoice_to_irp.delay(str(invoice.id))
+            submit_e_invoice_to_irp.delay(str(tenant_id), str(invoice.id))
         except Exception as task_error:
             logger.warning(
                 "Could not enqueue e-invoice task for invoice %s: %s",
@@ -1997,6 +1963,10 @@ def cancel_invoice(
     )
 
     journal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
+    from src.domains.accounting.auto_post import link_cancel_reversal
+    link_cancel_reversal(
+        db, tenant_id, "INVOICE", invoice.id, journal_entry, current_user.id,
+    )
 
     # Restore only stock that this invoice actually moved. Invoices sourced
     # from delivery challans have no INVOICE stock rows and therefore cannot
@@ -2021,7 +1991,7 @@ def cancel_invoice(
                 db, tenant_id, warehouse_id, move.product_id,
                 restore_quantity, product.current_stock,
             )
-            db.add(StockLedger(
+            reversal = StockLedger(
                 tenant_id=tenant_id,
                 product_id=move.product_id,
                 warehouse_id=warehouse_id,
@@ -2030,7 +2000,15 @@ def cancel_invoice(
                 quantity=restore_quantity,
                 balance_quantity=balance_after,
                 rate=move.rate,
-            ))
+                reverses_movement_id=move.id,
+            )
+            db.add(reversal)
+            # Link the original movement to its reversal (the only in-place
+            # mutation stock movements ever allow — linkage bookkeeping).
+            db.flush()
+            move.reversal_movement_id = reversal.id
+            move.reversed_by = current_user.id
+            move.reversed_at = datetime.now(timezone.utc)
 
     invoice.status = "CANCELLED"
     invoice.cancelled_at = datetime.now(timezone.utc)
@@ -2547,5 +2525,5 @@ def email_invoice(
         raise HTTPException(status_code=400, detail="No recipient email available.")
 
     from src.workers.tasks import send_invoice_email
-    send_invoice_email.delay(str(invoice.id), recipient)
+    send_invoice_email.delay(str(tenant_id), str(invoice.id), recipient)
     return {"detail": f"Invoice email queued to {recipient}."}

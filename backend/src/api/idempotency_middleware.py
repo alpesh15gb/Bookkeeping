@@ -3,15 +3,31 @@ import uuid
 import hashlib
 import json
 import gzip
-from fastapi import Request, Response
+import datetime as dt
+from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, Response as StarletteResponse
 from sqlalchemy import text
 from src.core.database import SessionLocal, tenant_context
+from src.core.idempotency import (
+    clear_inflight_claim,
+    set_inflight_claim,
+)
 
 logger = logging.getLogger("bookkeeping.idempotency")
 
 IDEMPOTENT_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+
+
+def _committed_replay_response() -> JSONResponse:
+    return JSONResponse(
+        status_code=200,
+        content={
+            "detail": "Request already completed; replaying idempotent result.",
+            "code": "IDEMPOTENT_REPLAY",
+        },
+        headers={"Idempotency-Replayed": "true"},
+    )
 
 
 class IdempotencyMiddleware(BaseHTTPMiddleware):
@@ -39,9 +55,16 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         request_body = await request.body()
         request_hash = hashlib.sha256(request_body).hexdigest()
+        claim = {
+            "key": idempotency_key,
+            "tenant": tenant_id,
+            "method": request.method,
+            "path": str(request.url.path),
+        }
         tenant_token = tenant_context.set(uuid.UUID(tenant_id))
         db = SessionLocal()
         owns_record = False
+        inflight_token = None
         try:
             result = db.execute(
                 text(
@@ -68,11 +91,17 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     "AND method=:method AND path=:path"
                 ), {"key": idempotency_key, "tenant": tenant_id, "method": request.method, "path": str(request.url.path)}).mappings().first()
                 if existing and existing["status"] == "PROCESSING":
-                    # Detect stale processing records (older than 60s) and delete+retry
-                    import datetime as dt
+                    # A PROCESSING claim older than the stale threshold was
+                    # abandoned before its business transaction committed (a
+                    # committed financial transaction atomically flips the row
+                    # to COMMITTED — see src/core/idempotency.py).  Claiming
+                    # again is therefore safe; a still-running original would
+                    # be aborted by the claim-lost guard instead of
+                    # double-executing.
+                    from src.core.config import settings
                     now = dt.datetime.now(dt.timezone.utc)
                     age = now - existing["created_at"]
-                    if age > dt.timedelta(seconds=60):
+                    if age > dt.timedelta(seconds=settings.IDEMPOTENCY_STALE_SECONDS):
                         db.execute(
                             text("DELETE FROM idempotency_keys WHERE idempotency_key=:key AND tenant_id=:tenant "
                                  "AND method=:method AND path=:path AND status='PROCESSING'"),
@@ -89,6 +118,27 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                         "detail": "Idempotency-Key was already used with a different request payload.",
                         "code": "IDEMPOTENCY_PAYLOAD_MISMATCH",
                     })
+                if existing and existing["status"] == "COMMITTED":
+                    # The financial transaction committed but the process died
+                    # before the response could be stored.  Replay the stored
+                    # response when available, otherwise return the synthetic
+                    # replay marker — never re-execute.
+                    if existing["response_status"] is not None:
+                        stored_body = existing["response_body"] or ""
+                        content_type = existing["response_content_type"] or "application/json"
+                        if "application/json" in content_type:
+                            return JSONResponse(
+                                content=json.loads(stored_body),
+                                status_code=existing["response_status"],
+                                headers={"Idempotency-Replayed": "true"},
+                            )
+                        return StarletteResponse(
+                            content=stored_body,
+                            status_code=existing["response_status"],
+                            media_type=content_type,
+                            headers={"Idempotency-Replayed": "true"},
+                        )
+                    return _committed_replay_response()
                 if existing and existing["status"] == "COMPLETED" and existing["response_status"] is not None:
                     stored_body = existing["response_body"] or ""
                     content_type = existing["response_content_type"] or "application/json"
@@ -109,6 +159,9 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     "code": "REQUEST_IN_PROGRESS",
                 })
             owns_record = True
+            # Register the claim so the endpoint's first commit flips it to
+            # COMMITTED atomically with the financial mutation.
+            inflight_token = set_inflight_claim(claim)
         except Exception:
             db.rollback()
             logger.exception("Idempotency check failed, allowing request to proceed")
@@ -120,6 +173,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
         except Exception:
             if owns_record:
+                cleanup_token = tenant_context.set(uuid.UUID(tenant_id))
                 cleanup = SessionLocal()
                 try:
                     cleanup.execute(text(
@@ -129,13 +183,18 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                     cleanup.commit()
                 finally:
                     cleanup.close()
+                    tenant_context.reset(cleanup_token)
             raise
+        finally:
+            if inflight_token is not None:
+                clear_inflight_claim(inflight_token)
 
         body = b"".join([chunk async for chunk in response.body_iterator])
         storage_body = body
         if response.headers.get("content-encoding", "").lower() == "gzip":
             storage_body = gzip.decompress(body)
         if owns_record:
+            storage_token = tenant_context.set(uuid.UUID(tenant_id))
             store = SessionLocal()
             try:
                 if response.status_code >= 500:
@@ -158,6 +217,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 store.commit()
             finally:
                 store.close()
+                tenant_context.reset(storage_token)
         headers = dict(response.headers)
         headers.pop("content-length", None)
         return StarletteResponse(

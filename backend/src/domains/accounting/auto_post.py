@@ -47,6 +47,34 @@ def _check_no_existing_posting(db: Session, tenant_id: uuid.UUID, source_type: s
         raise ValueError(f"Document {source_type}:{source_id} already has a journal entry. Duplicate posting blocked.")
 
 
+def link_cancel_reversal(
+    db: Session,
+    tenant_id: uuid.UUID,
+    source_type: str,
+    source_id: uuid.UUID,
+    reversal_entry,
+    user_id: uuid.UUID,
+) -> None:
+    """Link a reversal entry to the original journal entry it reverses.
+
+    The original record is preserved and marked reversed; the reversal points
+    back at it. Never mutates the original's lines or amounts.
+    """
+    from src.infrastructure.database.models import JournalEntry
+    original = db.query(JournalEntry).filter(
+        JournalEntry.tenant_id == tenant_id,
+        JournalEntry.source_type == source_type,
+        JournalEntry.source_id == source_id,
+    ).first()
+    now = datetime.now(timezone.utc)
+    if original is not None:
+        original.reversed_by = user_id
+        original.reversed_at = now
+        original.reversal_transaction_id = reversal_entry.id
+    reversal_entry.reverses_transaction_id = original.id if original is not None else None
+    db.flush()
+
+
 # --- Status Mapping -------------------------------------------------------
 
 def get_display_status(invoice: Invoice) -> str:
@@ -511,7 +539,8 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
         round_off_amount=invoice.round_off,
         is_rcm=invoice.is_rcm,
     )
-    commit_ledger_draft(db, tenant_id, draft)
+    reversal_entry = commit_ledger_draft(db, tenant_id, draft)
+    link_cancel_reversal(db, tenant_id, "INVOICE", invoice.id, reversal_entry, user_id)
 
     # Reverse stock ledger: increment stock for each product line (restoring stock)
     for line in invoice.lines:
@@ -601,7 +630,8 @@ def cancel_bill(db: Session, tenant_id: uuid.UUID, bill: Bill, user_id: uuid.UUI
         tds_account_id=tds_account_id,
         tds_amount=bill.tds_amount or Decimal("0"),
     )
-    commit_ledger_draft(db, tenant_id, draft)
+    reversal_entry = commit_ledger_draft(db, tenant_id, draft)
+    link_cancel_reversal(db, tenant_id, "BILL", bill.id, reversal_entry, user_id)
 
     # Reverse stock ledger: decrement stock for each product line (reversing the purchase)
     for line in bill.lines:
@@ -689,7 +719,8 @@ def cancel_expense(db: Session, tenant_id: uuid.UUID, expense: Expense, user_id:
         round_off_account_id=tax["round_off"],
         round_off_amount=expense.round_off or Decimal("0"),
     )
-    commit_ledger_draft(db, tenant_id, draft)
+    reversal_entry = commit_ledger_draft(db, tenant_id, draft)
+    link_cancel_reversal(db, tenant_id, "EXPENSE", expense.id, reversal_entry, user_id)
 
     expense.status = "CANCELLED"
     expense.cancelled_at = datetime.now(timezone.utc)
@@ -734,7 +765,8 @@ def cancel_credit_note(db: Session, tenant_id: uuid.UUID, cn: CreditNote, user_i
         round_off_account_id=tax["round_off"],
         round_off_amount=cn.round_off,
     )
-    commit_ledger_draft(db, tenant_id, draft)
+    reversal_entry = commit_ledger_draft(db, tenant_id, draft)
+    link_cancel_reversal(db, tenant_id, "CREDIT_NOTE", cn.id, reversal_entry, user_id)
 
     cn.status = "CANCELLED"
     cn.cancelled_at = datetime.now(timezone.utc)
@@ -779,7 +811,8 @@ def cancel_debit_note(db: Session, tenant_id: uuid.UUID, dn: DebitNote, user_id:
         round_off_account_id=tax["round_off"],
         round_off_amount=dn.round_off,
     )
-    commit_ledger_draft(db, tenant_id, draft)
+    reversal_entry = commit_ledger_draft(db, tenant_id, draft)
+    link_cancel_reversal(db, tenant_id, "DEBIT_NOTE", dn.id, reversal_entry, user_id)
 
     dn.status = "CANCELLED"
     dn.cancelled_at = datetime.now(timezone.utc)
@@ -999,7 +1032,8 @@ def cancel_sales_return(db: Session, tenant_id: uuid.UUID, sr: SalesReturn, user
         round_off_account_id=tax["round_off"],
         round_off_amount=sr.round_off,
     )
-    commit_ledger_draft(db, tenant_id, draft)
+    reversal_entry = commit_ledger_draft(db, tenant_id, draft)
+    link_cancel_reversal(db, tenant_id, "SALES_RETURN", sr.id, reversal_entry, user_id)
 
     # Reverse stock: decrement stock (undoing the stock that came in from the sales return)
     for line in sr.lines:
@@ -1071,7 +1105,8 @@ def cancel_purchase_return(db: Session, tenant_id: uuid.UUID, pr: PurchaseReturn
         round_off_account_id=tax["round_off"],
         round_off_amount=pr.round_off,
     )
-    commit_ledger_draft(db, tenant_id, draft)
+    reversal_entry = commit_ledger_draft(db, tenant_id, draft)
+    link_cancel_reversal(db, tenant_id, "PURCHASE_RETURN", pr.id, reversal_entry, user_id)
 
     # Reverse stock: increment stock (undoing the stock that was removed from the purchase return)
     for line in pr.lines:

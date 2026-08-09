@@ -102,8 +102,11 @@ def create_manual_journal_entry(
             detail=f"Journal Entry reference number '{ref_num}' already exists."
         )
 
-    # Build draft to enforce double-entry validation explicitly
-    from src.domains.accounting.services import JournalEntryDraft, JournalLineDraft
+    # Build draft to enforce double-entry validation explicitly; posting is
+    # atomic and stamps the authenticated actor/channel on the ledger entry.
+    from src.domains.accounting.services import (
+        JournalEntryDraft, JournalLineDraft, commit_ledger_draft,
+    )
     draft_lines = [
         JournalLineDraft(line.account_id, line.amount, line.direction, line.narration)
         for line in db_lines
@@ -119,21 +122,7 @@ def create_manual_journal_entry(
         lines=draft_lines
     )
 
-    journal_entry = JournalEntry(
-        id=entry_id,
-        tenant_id=tenant_id,
-        entry_date=payload.entry_date,
-        reference_number=ref_num,
-        description=payload.description,
-        source_type="MANUAL",
-        source_id=entry_id,
-        lines=db_lines
-    )
-
-    db.add(journal_entry)
-    db.flush()
-    affected = {line.account_id for line in db_lines}
-    update_account_balances(db, tenant_id, affected)
+    journal_entry = commit_ledger_draft(db, tenant_id, draft)
     db.commit()
 
     # Re-fetch lines with account details to build response
@@ -248,36 +237,29 @@ def create_contra_entry(
         )
 
     entry_id = uuid.uuid4()
-    db_lines = [
-        JournalLine(
-            account_id=payload.debit_account_id,
-            amount=payload.amount,
-            direction="DEBIT",
-            narration=payload.description or "Contra Debit"
-        ),
-        JournalLine(
-            account_id=payload.credit_account_id,
-            amount=payload.amount,
-            direction="CREDIT",
-            narration=payload.description or "Contra Credit"
-        )
-    ]
-
-    journal_entry = JournalEntry(
-        id=entry_id,
+    from src.domains.accounting.services import (
+        JournalEntryDraft, JournalLineDraft, commit_ledger_draft,
+    )
+    draft = JournalEntryDraft(
         tenant_id=tenant_id,
         entry_date=payload.entry_date,
         reference_number=ref_num,
         description=payload.description or "Contra Entry",
         source_type="CONTRA",
         source_id=entry_id,
-        lines=db_lines
+        lines=[
+            JournalLineDraft(
+                payload.debit_account_id, payload.amount, "DEBIT",
+                payload.description or "Contra Debit",
+            ),
+            JournalLineDraft(
+                payload.credit_account_id, payload.amount, "CREDIT",
+                payload.description or "Contra Credit",
+            ),
+        ],
     )
 
-    db.add(journal_entry)
-    db.flush()
-
-    update_account_balances(db, tenant_id, {payload.debit_account_id, payload.credit_account_id})
+    journal_entry = commit_ledger_draft(db, tenant_id, draft)
     db.commit()
 
     # Re-fetch lines with account details to build response
@@ -417,6 +399,16 @@ def reverse_manual_journal_entry(
     if duplicate_reference:
         reference = NumberingSeriesService.generate_next_number(db, tenant_id, "JOURNAL")
 
+    from src.common.audit_log import get_audit_actor_id, get_session_audit_actor_id
+    from src.core.posting_context import get_posting_channel
+    now = datetime.now(timezone.utc)
+    actor = get_session_audit_actor_id(db)
+    if actor is None:
+        try:
+            actor = get_audit_actor_id()
+        except RuntimeError:
+            actor = None
+
     reversal = JournalEntry(
         id=uuid.uuid4(),
         tenant_id=tenant_id,
@@ -425,6 +417,11 @@ def reverse_manual_journal_entry(
         description=f"Reversal of {original.reference_number}: {payload.reason.strip()}",
         source_type="JOURNAL_REVERSAL",
         source_id=original.id,
+        created_by=actor,
+        posted_by=actor,
+        posted_at=now,
+        source_channel=get_posting_channel(db),
+        reverses_transaction_id=original.id,
         lines=[JournalLine(
             account_id=line.account_id,
             amount=line.amount,
@@ -435,6 +432,10 @@ def reverse_manual_journal_entry(
     db.add(reversal)
     db.flush()
     update_account_balances(db, tenant_id, {line.account_id for line in original.lines})
+    # Mark the original as reversed without mutating its amounts/lines.
+    original.reversed_by = actor
+    original.reversed_at = now
+    original.reversal_transaction_id = reversal.id
     db.commit()
 
     reversal = db.query(JournalEntry).options(

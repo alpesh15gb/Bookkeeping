@@ -39,6 +39,17 @@ class JournalEntryResponse(SchemaBase):
     description: str
     source_type: str
     source_id: Optional[uuid.UUID] = None
+    # Direct-posting audit metadata (server-derived, informational in responses).
+    created_by: Optional[uuid.UUID] = None
+    posted_by: Optional[uuid.UUID] = None
+    posted_at: Optional[datetime] = None
+    source_channel: Optional[str] = None
+    reversed_by: Optional[uuid.UUID] = None
+    reversed_at: Optional[datetime] = None
+    reversal_transaction_id: Optional[uuid.UUID] = None
+    reverses_transaction_id: Optional[uuid.UUID] = None
+    replacement_transaction_id: Optional[uuid.UUID] = None
+    original_transaction_id: Optional[uuid.UUID] = None
     created_at: datetime
     updated_at: datetime
     lines: List[JournalLineResponse]

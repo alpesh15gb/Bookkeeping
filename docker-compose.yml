@@ -7,8 +7,13 @@ services:
       POSTGRES_DB: bookkeeping
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD must be set}
+      DB_MIGRATOR_PASSWORD: ${DB_MIGRATOR_PASSWORD:?DB_MIGRATOR_PASSWORD must be set}
+      DB_API_PASSWORD: ${DB_API_PASSWORD:?DB_API_PASSWORD must be set}
+      DB_WORKER_PASSWORD: ${DB_WORKER_PASSWORD:?DB_WORKER_PASSWORD must be set}
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # First init of the data volume only: creates apexbooks_migrator / apexbooks_api / apexbooks_worker.
+      - ./backend/scripts/initdb_roles.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d bookkeeping"]
       interval: 10s
@@ -39,7 +44,8 @@ services:
       - "8000:8000"
     environment:
       - APP_ENV=production
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/bookkeeping
+      - DATABASE_URL=postgresql://apexbooks_api:${DB_API_PASSWORD:?DB_API_PASSWORD must be set}@db:5432/bookkeeping
+      - MIGRATION_DATABASE_URL=postgresql://apexbooks_migrator:${DB_MIGRATOR_PASSWORD:?DB_MIGRATOR_PASSWORD must be set}@db:5432/bookkeeping
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
@@ -47,6 +53,8 @@ services:
       - CARTUNEZ_MEDUSA_BASE_URL
       - CARTUNEZ_MEDUSA_API_KEY
       - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
+    # Migrations run with the privileged migrator role; the API itself serves
+    # with the restricted apexbooks_api role (RLS enforced, no superuser).
     command: ["sh", "-c", "alembic upgrade head && exec uvicorn src.main:app --host 0.0.0.0 --port 8000"]
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
@@ -69,7 +77,7 @@ services:
     command: celery -A src.workers.tasks worker --loglevel=info
     environment:
       - APP_ENV=production
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/bookkeeping
+      - DATABASE_URL=postgresql://apexbooks_worker:${DB_WORKER_PASSWORD:?DB_WORKER_PASSWORD must be set}@db:5432/bookkeeping
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
@@ -89,7 +97,7 @@ services:
     command: celery -A src.workers.tasks beat --loglevel=info
     environment:
       - APP_ENV=production
-      - DATABASE_URL=postgresql://postgres:${DB_PASSWORD:?DB_PASSWORD must be set}@db:5432/bookkeeping
+      - DATABASE_URL=postgresql://apexbooks_worker:${DB_WORKER_PASSWORD:?DB_WORKER_PASSWORD must be set}@db:5432/bookkeeping
       - REDIS_URL=redis://redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY

@@ -32,8 +32,11 @@ from src.integrations.cartunez import order_models as _integration_order_models 
 from src.integrations.cartunez import payment_models as _integration_payment_models  # noqa: F401
 target_metadata = Base.metadata
 
-# Override sqlalchemy.url with DATABASE_URL env var when running in Docker
-database_url = os.getenv("DATABASE_URL")
+# Override sqlalchemy.url with env vars when running in Docker.
+# MIGRATION_DATABASE_URL (the privileged migration role) wins over DATABASE_URL
+# (the restricted application role), so `alembic upgrade head` never runs as a
+# role that lacks DDL privileges.
+database_url = os.getenv("MIGRATION_DATABASE_URL") or os.getenv("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
@@ -77,9 +80,11 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         # The historical chain begins with ALTER statements and predates an
-        # Alembic baseline.  A genuinely empty database therefore needs the
-        # current declarative schema once; existing databases always follow
-        # the normal revision-by-revision migration path below.
+        # Alembic baseline, so the revision-by-revision chain is not
+        # reproducible from an empty database.  A genuinely empty database
+        # therefore gets the current declarative schema once (guarded fresh-
+        # deploy bootstrap) and is stamped at head; existing databases always
+        # follow the normal revision-by-revision migration path below.
         existing_tables = inspect(connection).get_table_names()
         # SQLAlchemy 2 starts an implicit transaction for the inspection query.
         # Alembic will not commit a transaction it considers externally owned,

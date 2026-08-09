@@ -45,27 +45,30 @@ celery_app.conf.beat_schedule.update({
 })
 
 
-def _find_without_rls(db, model, *filters):
-    """Resolve a row when the tenant is not yet known (task entry point).
+def list_active_tenant_ids(db):
+    """Controlled cross-tenant enumeration for scheduled maintenance tasks.
 
-    Temporarily disables row-level security for the current transaction so an
-    object can be located by ID alone, then re-enables it under the object's
-    tenant so the remainder of the task runs with RLS enforced.
-    ``SET LOCAL row_security = off`` requires table ownership — the migration
-    user owns the schema. No-op on SQLite.
+    On PostgreSQL this calls the SECURITY DEFINER function
+    ``apex_list_active_tenant_ids()`` (owned by the migration role, which has
+    BYPASSRLS) so the restricted worker role only ever receives tenant ids and
+    legal names — never tenant accounting data.  Per-tenant processing below
+    runs under a normal tenant context with RLS enforced.
     """
-    if db.get_bind().dialect.name == "sqlite":
-        return db.query(model).filter(*filters).first()
-    db.connection().execute(text("SET LOCAL row_security = off"))
-    obj = db.query(model).filter(*filters).first()
-    if obj is not None:
-        db.connection().execute(text("SET LOCAL row_security = on"))
-        set_db_tenant_context(db, obj.tenant_id)
-    return obj
+    if db.get_bind().dialect.name == "postgresql":
+        rows = db.execute(
+            text("SELECT tenant_id, legal_name FROM apex_list_active_tenant_ids()")
+        ).mappings().all()
+        return [(row["tenant_id"], row["legal_name"]) for row in rows]
+    from src.infrastructure.database.models import Tenant
+    return [
+        (t.id, t.legal_name)
+        for t in db.query(Tenant).filter(Tenant.deleted_at == None).all()
+    ]
 
 
 @contextmanager
 def _tenant_scope(db, tenant_id):
+    """Run a block with tenant context established; RLS stays enforced."""
     set_db_tenant_context(db, tenant_id)
     try:
         yield
@@ -73,49 +76,86 @@ def _tenant_scope(db, tenant_id):
         tenant_context.set(None)
 
 
+def _get_tenant_scoped(db, tenant_id, model, entity_id):
+    """Resolve a tenant-owned row after establishing explicit tenant context.
+
+    The tenant is always a task argument — never discovered by scanning rows
+    without RLS.  Missing or cross-tenant ids simply resolve to None because
+    RLS filters them out.
+    """
+    set_db_tenant_context(db, tenant_id)
+    return db.query(model).filter(model.id == entity_id).first()
+
+
 @celery_app.task(name="tasks.deliver_cartunez_master_data")
 def deliver_cartunez_master_data() -> Dict[str, Any]:
-    """Deliver pending Contract v1 ApexBooks-owned master-data events."""
+    """Deliver pending Contract v1 ApexBooks-owned master-data events.
+
+    Tenant enumeration is the only cross-tenant read and it is restricted to
+    tenant ids (``apex_list_active_tenant_ids()``).  Each tenant's webhook
+    queue is then processed inside an explicit tenant context, so ordinary
+    worker code never bypasses RLS.
+    """
     from src.integrations.cartunez.outbound import CartunezOutboundDispatcher
 
     db = SessionLocal()
+    totals = {"tenants": 0, "selected": 0, "delivered": 0, "failed": 0}
     try:
-        # Cross-tenant webhook queue — dispatch regardless of tenant isolation.
-        if db.get_bind().dialect.name != "sqlite":
-            db.connection().execute(text("SET LOCAL row_security = off"))
-        return CartunezOutboundDispatcher().dispatch_pending(db)
+        dispatcher = CartunezOutboundDispatcher()
+        for tenant_id, _legal_name in list_active_tenant_ids(db):
+            with _tenant_scope(db, tenant_id):
+                try:
+                    result = dispatcher.dispatch_pending(
+                        db, limit=settings.CARTUNEZ_DELIVERY_BATCH_SIZE
+                    )
+                    if result.get("enabled"):
+                        totals["tenants"] += 1
+                        totals["selected"] += result.get("selected", 0)
+                        totals["delivered"] += result.get("delivered", 0)
+                        totals["failed"] += result.get("failed", 0)
+                except Exception:
+                    logger.exception(
+                        "Cartunez dispatch failed for tenant %s", tenant_id
+                    )
+        return {"enabled": True, **totals}
     finally:
         tenant_context.set(None)
         db.close()
 
 
 @celery_app.task(bind=True, name="tasks.submit_e_invoice_to_irp", max_retries=3, default_retry_delay=60)
-def submit_e_invoice_to_irp(self, invoice_id: str) -> Dict[str, Any]:
-    """Submits a finalized Invoice payload to the NIC IRP gateway."""
-    logger.info(f"Starting e-invoice generation task for Invoice ID: {invoice_id}")
+def submit_e_invoice_to_irp(self, tenant_id: str, invoice_id: str) -> Dict[str, Any]:
+    """Submits a finalized Invoice payload to the NIC IRP gateway.
+
+    Tenant context is explicit: callers pass both tenant_id and invoice_id, and
+    the task establishes tenant context before touching any tenant-owned row.
+    """
+    logger.info(f"Starting e-invoice generation task for tenant {tenant_id}, Invoice {invoice_id}")
     try:
         from src.infrastructure.database.models import Invoice
         from src.domains.taxation.einvoice_service import EInvoiceService
 
-        # Convert string ID to UUID for SQLAlchemy UUID column compatibility
+        # Convert string IDs to UUID for SQLAlchemy UUID column compatibility
+        tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
         invoice_uuid = uuid.UUID(invoice_id) if isinstance(invoice_id, str) else invoice_id
 
         db = SessionLocal()
         try:
-            invoice = _find_without_rls(db, Invoice, Invoice.id == invoice_uuid)
+            invoice = _get_tenant_scoped(db, tenant_uuid, Invoice, invoice_uuid)
             if not invoice:
-                logger.error(f"Invoice {invoice_id} not found for e-invoice submission.")
-                return {"invoice_id": invoice_id, "status": "FAILED", "error": "Invoice not found"}
-            result = EInvoiceService.generate_einvoice(db=db, tenant_id=invoice.tenant_id, invoice_id=invoice.id)
+                logger.error(f"Invoice {invoice_id} not found for tenant {tenant_id} in e-invoice submission.")
+                return {"invoice_id": invoice_id, "tenant_id": tenant_id, "status": "FAILED", "error": "Invoice not found"}
+            result = EInvoiceService.generate_einvoice(db=db, tenant_id=tenant_uuid, invoice_id=invoice.id)
             return {
                 "invoice_id": invoice_id,
+                "tenant_id": tenant_id,
                 "irn": result.get("irn", ""),
                 "status": "GENERATED",
             }
         finally:
             db.close()
     except Exception as exc:
-        logger.error(f"e-Invoice submission failed for {invoice_id}: {exc}")
+        logger.error(f"e-Invoice submission failed for tenant {tenant_id}, invoice {invoice_id}: {exc}")
         # In eager/test mode, retrying causes infinite loops — skip retry
         if self.request.is_eager:
             raise
@@ -123,15 +163,16 @@ def submit_e_invoice_to_irp(self, invoice_id: str) -> Dict[str, Any]:
 
 
 @celery_app.task(name="tasks.generate_invoice_pdf")
-def generate_invoice_pdf(invoice_id: str) -> str:
+def generate_invoice_pdf(tenant_id: str, invoice_id: str) -> str:
     """Generates a PDF copy of the invoice and uploads to S3-compatible storage."""
-    logger.info(f"Generating PDF invoice for Invoice ID: {invoice_id}")
+    logger.info(f"Generating PDF invoice for tenant {tenant_id}, Invoice ID: {invoice_id}")
     try:
         from src.infrastructure.database.models import Invoice
         from src.domains.printing.invoice_pdf import generate_invoice_pdf as _gen_pdf
         db = SessionLocal()
         try:
-            invoice = _find_without_rls(db, Invoice, Invoice.id == invoice_id)
+            tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            invoice = _get_tenant_scoped(db, tenant_uuid, Invoice, invoice_id)
             if not invoice:
                 return ""
             pdf_bytes = _gen_pdf(
@@ -172,9 +213,9 @@ def generate_invoice_pdf(invoice_id: str) -> str:
 
 
 @celery_app.task(bind=True, name="tasks.send_invoice_email", max_retries=3, default_retry_delay=60, time_limit=300, soft_time_limit=280)
-def send_invoice_email(self, invoice_id: str, recipient_email: str) -> bool:
+def send_invoice_email(self, tenant_id: str, invoice_id: str, recipient_email: str) -> bool:
     """Sends the generated PDF invoice to the customer via SMTP."""
-    logger.info(f"Sending invoice email to {recipient_email} for Invoice ID: {invoice_id}")
+    logger.info(f"Sending invoice email to {recipient_email} for tenant {tenant_id}, Invoice ID: {invoice_id}")
     try:
         from email.mime.multipart import MIMEMultipart
         from email.mime.text import MIMEText
@@ -183,9 +224,10 @@ def send_invoice_email(self, invoice_id: str, recipient_email: str) -> bool:
 
         db = SessionLocal()
         try:
-            invoice = _find_without_rls(db, Invoice, Invoice.id == invoice_id)
+            tenant_uuid = uuid.UUID(tenant_id) if isinstance(tenant_id, str) else tenant_id
+            invoice = _get_tenant_scoped(db, tenant_uuid, Invoice, invoice_id)
             if not invoice:
-                logger.error(f"Invoice {invoice_id} not found for email notification.")
+                logger.error(f"Invoice {invoice_id} not found for tenant {tenant_id} in email notification.")
                 return False
             company_name = invoice.tenant.legal_name if invoice.tenant else "ApexBooks"
             subject, html_body = invoice_email(invoice.invoice_number, company_name)
@@ -226,9 +268,8 @@ def send_overdue_invoice_reminders():
         db = SessionLocal()
         try:
             today = date.today()
-            tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
-            for tenant in tenants:
-                with _tenant_scope(db, tenant.id):
+            for tenant_id, _legal_name in list_active_tenant_ids(db):
+                with _tenant_scope(db, tenant_id):
                     overdue_invoices = db.query(Invoice).filter(
                         Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
                         Invoice.due_date < today,
@@ -246,7 +287,7 @@ def send_overdue_invoice_reminders():
                     <p>This is a friendly reminder that Invoice <strong>{invoice.invoice_number}</strong>
                     for <strong>₹{invoice.total}</strong> is <strong>{days_overdue} days overdue</strong>.</p>
                     <p>Please arrange payment at your earliest convenience.</p>
-                    <p>Regards,<br>{tenant.legal_name}</p>
+                    <p>Regards,<br>{legal_name}</p>
                     """
                     msg = MIMEMultipart()
                     msg["From"] = settings.EMAIL_FROM
@@ -284,23 +325,22 @@ def send_gst_filing_alerts():
             alert_days = {5: "GST filing approaching", 10: "GSTR-1 due soon", 15: "Mid-month reminder", 18: "GSTR-3B due in 2 days", 20: "GSTR-3B due today"}
             if today.day in alert_days:
                 message = alert_days[today.day]
-                tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
-                for tenant in tenants:
-                    with _tenant_scope(db, tenant.id):
+                for tenant_id, _legal_name in list_active_tenant_ids(db):
+                    with _tenant_scope(db, tenant_id):
                         owner = db.query(User).join(TenantMembership).filter(
-                            TenantMembership.tenant_id == tenant.id,
+                            TenantMembership.tenant_id == tenant_id,
                             TenantMembership.role == "owner"
                         ).first()
                     if owner and owner.email:
                         body = f"""
                         <p>Hi {owner.full_name},</p>
-                        <p><strong>{message}</strong> for {tenant.legal_name}.</p>
+                        <p><strong>{message}</strong> for {legal_name}.</p>
                         <p>Please log in to ApexBooks to file your GST returns.</p>
                         """
                         msg = MIMEMultipart()
                         msg["From"] = settings.EMAIL_FROM
                         msg["To"] = owner.email
-                        msg["Subject"] = f"GST Filing Alert — {tenant.legal_name}"
+                        msg["Subject"] = f"GST Filing Alert — {legal_name}"
                         msg.attach(MIMEText(body, "html"))
                         try:
                             send_email_smtp(msg)
@@ -327,13 +367,12 @@ def generate_monthly_aging_report():
         db = SessionLocal()
         try:
             today = date.today()
-            tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
-            for tenant in tenants:
-                with _tenant_scope(db, tenant.id):
-                    receivables = AgingService.get_receivables(db, tenant.id, today)
-                    payables = AgingService.get_payables(db, tenant.id, today)
+            for tenant_id, _legal_name in list_active_tenant_ids(db):
+                with _tenant_scope(db, tenant_id):
+                    receivables = AgingService.get_receivables(db, tenant_id, today)
+                    payables = AgingService.get_payables(db, tenant_id, today)
                     owner = db.query(User).join(TenantMembership).filter(
-                        TenantMembership.tenant_id == tenant.id,
+                        TenantMembership.tenant_id == tenant_id,
                         TenantMembership.role == "owner"
                     ).first()
 
@@ -355,14 +394,14 @@ def generate_monthly_aging_report():
 
                 body = f"""
                 <p>Hi {owner.full_name},</p>
-                <p>Your monthly aging report for <strong>{tenant.legal_name}</strong> as of {today.strftime('%d-%b-%Y')}:</p>
+                <p>Your monthly aging report for <strong>{legal_name}</strong> as of {today.strftime('%d-%b-%Y')}:</p>
                 {_table("Receivables (Customers)", receivables)}
                 {_table("Payables (Vendors)", payables)}
                 """
                 msg = MIMEMultipart()
                 msg["From"] = settings.EMAIL_FROM
                 msg["To"] = owner.email
-                msg["Subject"] = f"Monthly Aging Report — {tenant.legal_name}"
+                msg["Subject"] = f"Monthly Aging Report — {legal_name}"
                 msg.attach(MIMEText(body, "html"))
                 try:
                     send_email_smtp(msg)
@@ -385,10 +424,9 @@ def cleanup_expired_invitations():
 
         db = SessionLocal()
         try:
-            tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
             expired_count = 0
-            for tenant in tenants:
-                with _tenant_scope(db, tenant.id):
+            for tenant_id, _legal_name in list_active_tenant_ids(db):
+                with _tenant_scope(db, tenant_id):
                     expired = db.query(TenantInvitation).filter(
                         TenantInvitation.status == "PENDING",
                         TenantInvitation.expires_at < datetime.now(timezone.utc)
@@ -420,17 +458,16 @@ def send_daily_business_summary():
         db = SessionLocal()
         try:
             today = date.today()
-            tenants = db.query(Tenant).filter(Tenant.deleted_at == None).all()
-            for tenant in tenants:
-                with _tenant_scope(db, tenant.id):
+            for tenant_id, _legal_name in list_active_tenant_ids(db):
+                with _tenant_scope(db, tenant_id):
                     owner = db.query(User).join(TenantMembership).filter(
-                        TenantMembership.tenant_id == tenant.id,
+                        TenantMembership.tenant_id == tenant_id,
                         TenantMembership.role == "owner"
                     ).first()
 
                     # Sales today
                     sales_today = db.query(func.coalesce(func.sum(Invoice.total), 0)).filter(
-                        Invoice.tenant_id == tenant.id,
+                        Invoice.tenant_id == tenant_id,
                         Invoice.issue_date == today,
                         Invoice.status.notin_(["DRAFT", "CANCELLED"]),
                         Invoice.deleted_at == None
@@ -438,7 +475,7 @@ def send_daily_business_summary():
 
                     # Receipts today
                     receipts_today = db.query(func.coalesce(func.sum(Payment.amount), 0)).filter(
-                        Payment.tenant_id == tenant.id,
+                        Payment.tenant_id == tenant_id,
                         Payment.payment_date == today,
                         Payment.status == "ACTIVE",
                         Payment.deleted_at == None
@@ -446,7 +483,7 @@ def send_daily_business_summary():
 
                     # Expenses today
                     expenses_today = db.query(func.coalesce(func.sum(Bill.total), 0)).filter(
-                        Bill.tenant_id == tenant.id,
+                        Bill.tenant_id == tenant_id,
                         Bill.issue_date == today,
                         Bill.status.notin_(["DRAFT", "CANCELLED"]),
                         Bill.deleted_at == None
@@ -457,7 +494,7 @@ def send_daily_business_summary():
 
                 body = f"""
                 <p>Hi {owner.full_name},</p>
-                <p>Here is tonight's daily business summary for <strong>{tenant.legal_name}</strong> ({today.strftime('%d-%b-%Y')}):</p>
+                <p>Here is tonight's daily business summary for <strong>{legal_name}</strong> ({today.strftime('%d-%b-%Y')}):</p>
                 <ul>
                     <li><strong>Total Sales Invoiced:</strong> ₹{sales_today:,.2f}</li>
                     <li><strong>Total Payments Received:</strong> ₹{receipts_today:,.2f}</li>
@@ -469,7 +506,7 @@ def send_daily_business_summary():
                 msg = MIMEMultipart()
                 msg["From"] = settings.EMAIL_FROM
                 msg["To"] = owner.email
-                msg["Subject"] = f"Daily Business Summary — {tenant.legal_name}"
+                msg["Subject"] = f"Daily Business Summary — {legal_name}"
                 msg.attach(MIMEText(body, "html"))
                 try:
                     send_email_smtp(msg)
@@ -488,10 +525,13 @@ def send_daily_business_summary():
 # ---------------------------------------------------------------------------
 
 @celery_app.task(name="tasks.run_ocr_scan", time_limit=120, soft_time_limit=110)
-def run_ocr_scan(job_id: str, file_bytes_b64: str, filename: str, confidence: float) -> dict:
+def run_ocr_scan(job_id: str, tenant_id: str, file_bytes_b64: str, filename: str, confidence: float) -> dict:
     """Run OCR in a Celery worker — completely async, never blocks the API server.
 
-    Stores result in Redis for the API to poll.
+    Stores result in Redis for the API to poll.  The tenant id is carried on
+    the task contract (the job belongs to a tenant) and recorded with the job
+    so status polling can verify ownership; the task itself performs no
+    database access.
     """
     import base64
     import json
@@ -501,7 +541,7 @@ def run_ocr_scan(job_id: str, file_bytes_b64: str, filename: str, confidence: fl
 
     try:
         # Update status: processing
-        r.hset(f"scan:{job_id}", mapping={"status": "processing", "progress": "OCR started"})
+        r.hset(f"scan:{job_id}", mapping={"status": "processing", "progress": "OCR started", "tenant_id": tenant_id})
         r.expire(f"scan:{job_id}", 600)  # 10 min TTL
 
         file_bytes = base64.b64decode(file_bytes_b64)
