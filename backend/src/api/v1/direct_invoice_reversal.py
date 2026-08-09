@@ -1,10 +1,8 @@
 """Complete invoice reversal adapter for direct Edit/Delete.
 
-The legacy public `/cancel` handler had good stock-reversal linkage but did not
-pass shipping/RCM arguments to the ledger reversal engine.  The older domain
-helper handled shipping/RCM but did not stamp the stronger stock linkage
-metadata.  This adapter combines both invariants and is used only internally by
-the public PUT/DELETE contract.
+The public contract is simple (Edit/Delete), but accounting correction remains
+strict: active downstream financial/compliance records must be reversed first,
+and historical reversed records must not permanently block a correction.
 """
 
 import uuid
@@ -12,42 +10,100 @@ from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import Depends, HTTPException
-from sqlalchemy.orm import Session
 
 from src.api.deps import enforce_permission, get_current_user
 from src.core.database import get_db_session
 from src.domains.accounting.auto_post import link_cancel_reversal
-from src.domains.accounting.services import (
-    AccountResolver,
-    LedgerPostingEngine,
-    commit_ledger_draft,
-)
-from src.domains.inventory.services import (
-    get_stock_balance_after,
-    resolve_reversal_warehouse_id,
-)
+from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, commit_ledger_draft
+from src.domains.inventory.services import get_stock_balance_after, resolve_reversal_warehouse_id
 from src.domains.taxation.filing_lock import ensure_outward_period_mutable, GSTPeriodFiledError
 from src.infrastructure.database.models import (
+    CreditNote,
+    DebitNote,
+    EWayBill,
     Invoice,
+    Payment,
     PaymentAllocation,
     Product,
+    SalesReturn,
     StockLedger,
     User,
 )
 
 
+def _guard_active_dependencies(db, tenant_id: uuid.UUID, invoice: Invoice) -> None:
+    # Historical allocations remain in the audit trail after a receipt is
+    # reversed/soft-deleted.  Only a currently active receipt blocks correction.
+    active_payment = db.query(PaymentAllocation.id).join(
+        Payment, Payment.id == PaymentAllocation.payment_id
+    ).filter(
+        PaymentAllocation.invoice_id == invoice.id,
+        PaymentAllocation.tenant_id == tenant_id,
+        Payment.tenant_id == tenant_id,
+        Payment.deleted_at == None,
+        Payment.status != "CANCELLED",
+    ).first()
+    if active_payment:
+        raise HTTPException(
+            status_code=409,
+            detail="Reverse applied receipt(s) before correcting this invoice.",
+        )
+
+    active_credit_note = db.query(CreditNote.id).filter(
+        CreditNote.tenant_id == tenant_id,
+        CreditNote.invoice_id == invoice.id,
+        CreditNote.deleted_at == None,
+        CreditNote.status != "CANCELLED",
+    ).first()
+    if active_credit_note:
+        raise HTTPException(
+            status_code=409,
+            detail="Reverse linked credit note(s) before correcting this invoice.",
+        )
+
+    active_debit_note = db.query(DebitNote.id).filter(
+        DebitNote.tenant_id == tenant_id,
+        DebitNote.invoice_id == invoice.id,
+        DebitNote.deleted_at == None,
+        DebitNote.status != "CANCELLED",
+    ).first()
+    if active_debit_note:
+        raise HTTPException(
+            status_code=409,
+            detail="Reverse linked debit note(s) before correcting this invoice.",
+        )
+
+    active_return = db.query(SalesReturn.id).filter(
+        SalesReturn.tenant_id == tenant_id,
+        SalesReturn.invoice_id == invoice.id,
+        SalesReturn.deleted_at == None,
+        SalesReturn.status != "CANCELLED",
+    ).first()
+    if active_return:
+        raise HTTPException(
+            status_code=409,
+            detail="Reverse linked sales return(s) before correcting this invoice.",
+        )
+
+    active_eway = db.query(EWayBill.id).filter(
+        EWayBill.tenant_id == tenant_id,
+        EWayBill.invoice_id == invoice.id,
+        EWayBill.status != "CANCELLED",
+    ).first()
+    if active_eway:
+        raise HTTPException(
+            status_code=409,
+            detail="Cancel the active e-Way Bill before correcting this invoice.",
+        )
+
+
 def cancel_invoice_for_direct_correction(
     id: uuid.UUID,
-    db: Session = Depends(get_db_session),
+    db=Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:delete")),
     current_user: User = Depends(get_current_user),
 ):
-    """Reverse a financially posted invoice while preserving every fact.
-
-    The caller may pass the normal Session or the direct-contract
-    DeferredCommitSession.  With the latter, the final commit below becomes a
-    flush so reversal + replacement remain one atomic transaction.
-    """
+    """Reverse a financially posted invoice while preserving every fact."""
     invoice = db.query(Invoice).filter(
         Invoice.id == id,
         Invoice.tenant_id == tenant_id,
@@ -72,14 +128,7 @@ def cancel_invoice_for_direct_correction(
             detail="This invoice is not in a reversible accounting state.",
         )
 
-    if db.query(PaymentAllocation.id).filter(
-        PaymentAllocation.invoice_id == invoice.id,
-        PaymentAllocation.tenant_id == tenant_id,
-    ).first():
-        raise HTTPException(
-            status_code=409,
-            detail="Reverse applied receipt(s) before correcting this invoice.",
-        )
+    _guard_active_dependencies(db, tenant_id, invoice)
 
     resolver = AccountResolver(db, tenant_id)
     customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
@@ -91,8 +140,6 @@ def cancel_invoice_for_direct_correction(
     cess_account_id = resolver.resolve("cess_output")
     round_off_account_id = resolver.resolve("round_off") if invoice.round_off != 0 else None
 
-    # Reverse exactly what the original posting engine recorded, including
-    # shipping income and reverse-charge behavior.
     ledger_draft = LedgerPostingEngine.create_invoice_reversal_posting(
         tenant_id=tenant_id,
         invoice_id=invoice.id,
@@ -118,18 +165,11 @@ def cancel_invoice_for_direct_correction(
         is_rcm=invoice.is_rcm,
     )
     reversal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
-    link_cancel_reversal(
-        db,
-        tenant_id,
-        "INVOICE",
-        invoice.id,
-        reversal_entry,
-        current_user.id,
-    )
+    link_cancel_reversal(db, tenant_id, "INVOICE", invoice.id, reversal_entry, current_user.id)
 
-    # Restore only stock actually moved by this invoice.  Source-derived
-    # invoices (for example from a delivery challan) have no INVOICE movement
-    # and therefore cannot double-restore already delivered stock.
+    # Reverse only stock actually posted by this invoice. Source-derived invoices
+    # (e.g. delivery challan conversions) have no INVOICE stock movement, so no
+    # double-restoration can occur.
     stock_moves = db.query(StockLedger).filter(
         StockLedger.tenant_id == tenant_id,
         StockLedger.reference_type == "INVOICE",
@@ -137,36 +177,22 @@ def cancel_invoice_for_direct_correction(
     ).all()
     for move in stock_moves:
         if move.reversal_movement_id is not None:
-            raise HTTPException(
-                status_code=409,
-                detail="This invoice stock movement has already been reversed.",
-            )
+            raise HTTPException(status_code=409, detail="This invoice stock movement has already been reversed.")
         product = db.query(Product).filter(
             Product.id == move.product_id,
             Product.tenant_id == tenant_id,
         ).with_for_update().first()
         if not product:
-            raise HTTPException(
-                status_code=409,
-                detail="A product referenced by this invoice no longer exists.",
-            )
+            raise HTTPException(status_code=409, detail="A product referenced by this invoice no longer exists.")
 
         restore_quantity = -move.quantity
         product.current_stock = (product.current_stock or Decimal("0")) + restore_quantity
         warehouse_id = move.warehouse_id or resolve_reversal_warehouse_id(
-            db,
-            tenant_id,
-            "INVOICE",
-            invoice.id,
-            move.product_id,
+            db, tenant_id, "INVOICE", invoice.id, move.product_id
         )
         balance_after = get_stock_balance_after(
-            db,
-            tenant_id,
-            warehouse_id,
-            move.product_id,
-            restore_quantity,
-            product.current_stock,
+            db, tenant_id, warehouse_id, move.product_id,
+            restore_quantity, product.current_stock,
         )
         reversal_move = StockLedger(
             tenant_id=tenant_id,
@@ -195,9 +221,8 @@ def cancel_invoice_for_direct_correction(
 
 
 def install_direct_invoice_reversal() -> None:
-    # Direct route handlers look up this module attribute at execution time, so
-    # replacing the internal callable does not re-expose the removed /cancel
-    # route and keeps the public API limited to POST/PUT/DELETE.
     from src.api.v1 import invoices as invoice_api
+    from src.api.v1.direct_bill_reversal import install_direct_bill_reversal
 
     invoice_api.cancel_invoice = cancel_invoice_for_direct_correction
+    install_direct_bill_reversal()
