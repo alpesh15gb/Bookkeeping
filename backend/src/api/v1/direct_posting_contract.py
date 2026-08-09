@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
@@ -36,7 +34,7 @@ from src.api.v1 import invoices as invoice_api
 
 
 class DirectInvoiceCreate(InvoiceBase):
-    """Public create contract: there is no post/draft switch."""
+    """Public invoice create contract: Save always posts; there is no draft switch."""
 
     line_items: List[InvoiceLineCreate] = Field(..., min_length=1)
     discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
@@ -56,7 +54,7 @@ class DirectInvoiceCreate(InvoiceBase):
 
 
 class DirectBillCreate(BillBase):
-    """Public create contract with server-generated bill number when omitted."""
+    """Public bill create contract: Save always posts and number may be server-generated."""
 
     bill_number: Optional[str] = Field(None, max_length=50)
     line_items: List[BillLineCreate] = Field(..., min_length=1)
@@ -71,11 +69,11 @@ class DirectBillCreate(BillBase):
 
 
 class DeferredCommitSession:
-    """Proxy that turns legacy handler commits into flushes.
+    """Proxy that turns a legacy handler commit into flush.
 
-    This lets us safely compose legacy validation/posting functions into one
-    outer atomic reversal+replacement transaction without duplicating their
-    tax, stock and ledger logic.
+    Legacy posting/cancellation functions are battle-tested.  Using this proxy
+    lets the direct public contract compose them inside one outer transaction,
+    so reversal + replacement never land separately.
     """
 
     def __init__(self, session: Session):
@@ -110,17 +108,24 @@ def _remove_route(router, path: str, method: str) -> None:
 
 
 def _set_replay_resource(db: Session, obj: Any) -> None:
-    """Explicitly point idempotent crash replay at the replacement document."""
+    """Atomically mark the in-flight key committed and point replay at obj.
+
+    This is used after a composed correction has created its replacement.  It
+    intentionally runs in the same SQL transaction as reversal/replacement,
+    closing the response-loss crash window even when intermediate flushes were
+    deferred from the generic Session hook.
+    """
     from src.core.idempotency import get_inflight_claim
 
     claim = get_inflight_claim()
     resource_id = getattr(obj, "id", None)
     if not claim or resource_id is None or db.get_bind().dialect.name != "postgresql":
         return
-    db.execute(
+    result = db.execute(
         text(
             "UPDATE idempotency_keys "
-            "SET resource_type=:resource_type, resource_id=CAST(:resource_id AS uuid) "
+            "SET status='COMMITTED', is_processed=true, "
+            "resource_type=:resource_type, resource_id=CAST(:resource_id AS uuid) "
             "WHERE idempotency_key=:key AND tenant_id=:tenant "
             "AND method=:method AND path=:path"
         ),
@@ -133,10 +138,18 @@ def _set_replay_resource(db: Session, obj: Any) -> None:
             "path": claim["path"],
         },
     )
+    if result.rowcount == 0:
+        from src.core.idempotency import IdempotencyClaimLostError
+
+        raise IdempotencyClaimLostError(
+            "Idempotency claim disappeared before replacement commit."
+        )
+    db.info["_idem_marked"] = True
 
 
 @event.listens_for(Session, "before_flush")
 def _attach_replacement_links(session: Session, flush_context, instances) -> None:
+    """Attach immutable document replacement links before the replacement flush."""
     context = session.info.get("_direct_replacement_context")
     if not context:
         return
@@ -149,9 +162,25 @@ def _attach_replacement_links(session: Session, flush_context, instances) -> Non
                 obj.replaces_id = original.id
             if hasattr(original, "replaced_by_id"):
                 original.replaced_by_id = obj.id
-            _set_replay_resource(session, obj)
+            # Tell the generic after_flush idempotency hook which resource is
+            # the user-visible result, and release the intermediate-flush defer.
+            session.info["_idempotency_resource"] = obj
+            session.info.pop("_defer_idempotency_mark", None)
             session.info.pop("_direct_replacement_context", None)
             break
+
+
+def _begin_replacement(db: Session, model, original) -> None:
+    # Cancellation helpers flush reversal journals before the replacement
+    # exists.  Do not let that intermediate flush become the replay resource.
+    db.info["_direct_replacement_context"] = (model, original)
+    db.info["_defer_idempotency_mark"] = True
+
+
+def _end_replacement(db: Session) -> None:
+    db.info.pop("_direct_replacement_context", None)
+    db.info.pop("_defer_idempotency_mark", None)
+    db.info.pop("_idempotency_resource", None)
 
 
 def _invoice_lines(invoice: Invoice) -> List[InvoiceLineCreate]:
@@ -197,9 +226,11 @@ def _bill_discount_rate(bill: Bill) -> Decimal:
     subtotal = bill.subtotal or Decimal("0")
     if subtotal <= 0:
         return Decimal("0")
-    line_discount = sum((x.discount or Decimal("0") for x in bill.lines), Decimal("0"))
-    header = max((bill.discount_total or Decimal("0")) - line_discount, Decimal("0"))
-    return (header * 100 / subtotal).quantize(Decimal("0.0001"))
+    line_discount = sum((line.discount or Decimal("0") for line in bill.lines), Decimal("0"))
+    header_discount = max(
+        (bill.discount_total or Decimal("0")) - line_discount, Decimal("0")
+    )
+    return (header_discount * 100 / subtotal).quantize(Decimal("0.0001"))
 
 
 def _legacy_invoice_payload(payload: DirectInvoiceCreate) -> InvoiceCreate:
@@ -248,8 +279,7 @@ def direct_update_invoice(
         raise HTTPException(404, "Invoice not found in this company context.")
     if original.source_document_type:
         raise HTTPException(
-            409,
-            "Correct source-derived invoices from the originating document workflow.",
+            409, "Correct source-derived invoices from their originating document."
         )
     if original.irn:
         raise HTTPException(
@@ -257,7 +287,7 @@ def direct_update_invoice(
             "This invoice has an IRN. Complete the statutory e-invoice correction workflow first.",
         )
     if original.status == "PAID":
-        raise HTTPException(409, "Reverse the applied receipt(s) before editing this invoice.")
+        raise HTTPException(409, "Reverse applied receipt(s) before editing this invoice.")
 
     replacement_payload = InvoiceCreate(
         contact_id=payload.contact_id or original.contact_id,
@@ -307,24 +337,25 @@ def direct_update_invoice(
     )
 
     proxy = DeferredCommitSession(db)
-    if original.status == "DRAFT":
-        original.deleted_at = datetime.now(timezone.utc)
-    else:
-        if original.status == "SENT":
-            original.status = "POSTED"
-        _unwrap(invoice_api.cancel_invoice)(id, proxy, tenant_id, current_user)
-        original.deleted_at = datetime.now(timezone.utc)
-
-    db.info["_direct_replacement_context"] = (Invoice, original)
+    _begin_replacement(db, Invoice, original)
     try:
-        # The legacy create's commit is the single real commit: reversal,
-        # soft-delete, replacement document, stock and replacement journal land
-        # atomically.
-        return _unwrap(invoice_api.create_invoice)(
+        if original.status == "DRAFT":
+            original.deleted_at = datetime.now(timezone.utc)
+        else:
+            if original.status == "SENT":
+                original.status = "POSTED"
+            _unwrap(invoice_api.cancel_invoice)(id, proxy, tenant_id, current_user)
+            original.deleted_at = datetime.now(timezone.utc)
+
+        # create_invoice performs the single real commit. The before_flush hook
+        # links original/replacement and makes the replacement the idempotent
+        # crash-replay resource before that commit.
+        replacement = _unwrap(invoice_api.create_invoice)(
             request, replacement_payload, db, tenant_id
         )
+        return replacement
     finally:
-        db.info.pop("_direct_replacement_context", None)
+        _end_replacement(db)
 
 
 def direct_delete_invoice(
@@ -343,7 +374,7 @@ def direct_delete_invoice(
     if original.irn:
         raise HTTPException(409, "Complete the statutory e-invoice cancellation workflow first.")
     if original.status == "PAID":
-        raise HTTPException(409, "Reverse the applied receipt(s) before deleting this invoice.")
+        raise HTTPException(409, "Reverse applied receipt(s) before deleting this invoice.")
 
     proxy = DeferredCommitSession(db)
     if original.status == "DRAFT":
@@ -385,7 +416,9 @@ def direct_update_bill(
     if not original:
         raise HTTPException(404, "Vendor Bill not found in this company context.")
     if original.status == "PAID":
-        raise HTTPException(409, "Reverse the applied vendor payment(s) before editing this bill.")
+        raise HTTPException(
+            409, "Reverse applied vendor payment(s) before editing this bill."
+        )
 
     from src.domains.company.services import NumberingSeriesService
 
@@ -432,21 +465,20 @@ def direct_update_bill(
     )
 
     proxy = DeferredCommitSession(db)
-    if original.status == "DRAFT":
-        original.deleted_at = datetime.now(timezone.utc)
-    else:
-        if original.status == "UNPAID":
-            original.status = "POSTED"
-        _unwrap(bill_api.cancel_bill_route)(id, proxy, tenant_id, current_user)
-        original.deleted_at = datetime.now(timezone.utc)
-
-    db.info["_direct_replacement_context"] = (Bill, original)
+    _begin_replacement(db, Bill, original)
     try:
+        if original.status == "DRAFT":
+            original.deleted_at = datetime.now(timezone.utc)
+        else:
+            if original.status == "UNPAID":
+                original.status = "POSTED"
+            _unwrap(bill_api.cancel_bill_route)(id, proxy, tenant_id, current_user)
+            original.deleted_at = datetime.now(timezone.utc)
         return _unwrap(bill_api.create_bill)(
             request, replacement_payload, db, tenant_id
         )
     finally:
-        db.info.pop("_direct_replacement_context", None)
+        _end_replacement(db)
 
 
 def direct_delete_bill(
@@ -463,7 +495,9 @@ def direct_delete_bill(
     if not original:
         raise HTTPException(404, "Vendor Bill not found.")
     if original.status == "PAID":
-        raise HTTPException(409, "Reverse the applied vendor payment(s) before deleting this bill.")
+        raise HTTPException(
+            409, "Reverse applied vendor payment(s) before deleting this bill."
+        )
 
     proxy = DeferredCommitSession(db)
     if original.status == "DRAFT":
@@ -541,14 +575,14 @@ def direct_update_expense(
     )
 
     proxy = DeferredCommitSession(db)
-    if original.status == "DRAFT":
-        original.deleted_at = datetime.now(timezone.utc)
-    else:
-        _unwrap(expense_api.cancel_expense)(id, proxy, tenant_id, current_user)
-        original.deleted_at = datetime.now(timezone.utc)
-
-    db.info["_direct_replacement_context"] = (Expense, original)
+    _begin_replacement(db, Expense, original)
     try:
+        if original.status == "DRAFT":
+            original.deleted_at = datetime.now(timezone.utc)
+        else:
+            _unwrap(expense_api.cancel_expense)(id, proxy, tenant_id, current_user)
+            original.deleted_at = datetime.now(timezone.utc)
+
         created = _unwrap(expense_api.create_expense)(
             request, replacement_payload, proxy, tenant_id
         )
@@ -562,7 +596,7 @@ def direct_update_expense(
         db.refresh(replacement)
         return expense_api._expense_to_response(replacement)
     finally:
-        db.info.pop("_direct_replacement_context", None)
+        _end_replacement(db)
 
 
 def direct_delete_expense(
