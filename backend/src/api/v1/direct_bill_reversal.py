@@ -52,7 +52,7 @@ def cancel_bill_for_direct_correction(
         raise HTTPException(status_code=409, detail="This bill is not in a reversible accounting state.")
 
     active_payment = db.query(BillPaymentAllocation.id).join(
-        BillPayment, BillPayment.id == BillPaymentAllocation.bill_payment_id
+        BillPayment, BillPayment.id == BillPaymentAllocation.payment_id
     ).filter(
         BillPaymentAllocation.bill_id == bill.id,
         BillPaymentAllocation.tenant_id == tenant_id,
