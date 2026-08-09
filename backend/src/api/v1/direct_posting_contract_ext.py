@@ -1,15 +1,15 @@
-from __future__ import annotations
-
 import uuid
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from typing import Optional
 
 from fastapi import Depends, HTTPException, Request, Response, status
-from sqlalchemy import event
+from pydantic import Field
 from sqlalchemy.orm import Session
 
 from src.api.deps import enforce_permission, get_current_user
+from src.core.config import settings
 from src.core.database import get_db_session
+from src.core.rate_limiter import limiter
 from src.infrastructure.database.models import (
     BillPayment,
     CreditNote,
@@ -51,6 +51,8 @@ from src.schemas.payment_schemas import (
 )
 from src.api.v1.direct_posting_contract import (
     DeferredCommitSession,
+    _begin_replacement,
+    _end_replacement,
     _remove_route,
     _set_replay_resource,
     _unwrap,
@@ -66,16 +68,8 @@ def _soft_delete(obj) -> None:
     obj.deleted_at = datetime.now(timezone.utc)
 
 
-def _set_replacement_context(db: Session, model, original) -> None:
-    db.info["_direct_replacement_context"] = (model, original)
-
-
-def _clear_replacement_context(db: Session) -> None:
-    db.info.pop("_direct_replacement_context", None)
-
-
 # ---------------------------------------------------------------------------
-# Credit / debit notes: create posts immediately; edit reverses then replaces.
+# Credit / debit notes
 # ---------------------------------------------------------------------------
 
 def direct_create_credit_note(
@@ -95,7 +89,7 @@ def direct_update_credit_note(
     id: uuid.UUID,
     payload: CreditNoteCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("credit_note:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("credit_note:update")),
     current_user: User = Depends(get_current_user),
 ):
     original = db.query(CreditNote).filter(
@@ -107,31 +101,30 @@ def direct_update_credit_note(
         raise HTTPException(404, "Credit Note not found.")
 
     proxy = DeferredCommitSession(db)
-    if original.status == "DRAFT":
-        _soft_delete(original)
-    else:
-        _unwrap(invoice_api.cancel_credit_note)(id, proxy, tenant_id, current_user)
-        _soft_delete(original)
-
-    replacement_payload = payload.model_copy(update={"credit_note_number": None})
-    _set_replacement_context(db, CreditNote, original)
+    _begin_replacement(db, CreditNote, original)
     try:
-        note = _unwrap(invoice_api.create_credit_note)(
+        if original.status != "DRAFT":
+            _unwrap(invoice_api.cancel_credit_note)(id, proxy, tenant_id, current_user)
+        _soft_delete(original)
+        replacement_payload = payload.model_copy(update={"credit_note_number": None})
+        replacement = _unwrap(invoice_api.create_credit_note)(
             replacement_payload, proxy, tenant_id
         )
-        note = _unwrap(invoice_api.finalize_credit_note)(note.id, proxy, tenant_id)
-        _set_replay_resource(db, note)
+        replacement = _unwrap(invoice_api.finalize_credit_note)(
+            replacement.id, proxy, tenant_id
+        )
+        _set_replay_resource(db, replacement)
         db.commit()
-        db.refresh(note)
+        db.refresh(replacement)
+        return replacement
     finally:
-        _clear_replacement_context(db)
-    return note
+        _end_replacement(db)
 
 
 def direct_delete_credit_note(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("credit_note:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("credit_note:delete")),
     current_user: User = Depends(get_current_user),
 ):
     original = db.query(CreditNote).filter(
@@ -166,7 +159,7 @@ def direct_update_debit_note(
     id: uuid.UUID,
     payload: DebitNoteCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("debit_note:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("debit_note:update")),
     current_user: User = Depends(get_current_user),
 ):
     original = db.query(DebitNote).filter(
@@ -178,31 +171,30 @@ def direct_update_debit_note(
         raise HTTPException(404, "Debit Note not found.")
 
     proxy = DeferredCommitSession(db)
-    if original.status == "DRAFT":
-        _soft_delete(original)
-    else:
-        _unwrap(invoice_api.cancel_debit_note)(id, proxy, tenant_id, current_user)
-        _soft_delete(original)
-
-    replacement_payload = payload.model_copy(update={"debit_note_number": None})
-    _set_replacement_context(db, DebitNote, original)
+    _begin_replacement(db, DebitNote, original)
     try:
-        note = _unwrap(invoice_api.create_debit_note)(
+        if original.status != "DRAFT":
+            _unwrap(invoice_api.cancel_debit_note)(id, proxy, tenant_id, current_user)
+        _soft_delete(original)
+        replacement_payload = payload.model_copy(update={"debit_note_number": None})
+        replacement = _unwrap(invoice_api.create_debit_note)(
             replacement_payload, proxy, tenant_id
         )
-        note = _unwrap(invoice_api.finalize_debit_note)(note.id, proxy, tenant_id)
-        _set_replay_resource(db, note)
+        replacement = _unwrap(invoice_api.finalize_debit_note)(
+            replacement.id, proxy, tenant_id
+        )
+        _set_replay_resource(db, replacement)
         db.commit()
-        db.refresh(note)
+        db.refresh(replacement)
+        return replacement
     finally:
-        _clear_replacement_context(db)
-    return note
+        _end_replacement(db)
 
 
 def direct_delete_debit_note(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("debit_note:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("debit_note:delete")),
     current_user: User = Depends(get_current_user),
 ):
     original = db.query(DebitNote).filter(
@@ -221,8 +213,12 @@ def direct_delete_debit_note(
 
 
 # ---------------------------------------------------------------------------
-# Inventory adjustments: save performs the accounting/stock confirmation.
+# Inventory adjustments
 # ---------------------------------------------------------------------------
+
+class DirectInventoryAdjustmentCreate(InventoryAdjustmentCreate):
+    adjustment_number: Optional[str] = Field(None, max_length=50)
+
 
 def _inventory_lines(adjustment: InventoryAdjustment):
     return [
@@ -235,12 +231,24 @@ def _inventory_lines(adjustment: InventoryAdjustment):
     ]
 
 
+def _inventory_create_payload(
+    db: Session, tenant_id: uuid.UUID, payload: DirectInventoryAdjustmentCreate
+) -> InventoryAdjustmentCreate:
+    from src.domains.company.services import NumberingSeriesService
+
+    values = payload.model_dump()
+    values["adjustment_number"] = values.get("adjustment_number") or NumberingSeriesService.generate_next_number(
+        db, tenant_id, "INVENTORY_ADJUSTMENT"
+    )
+    return InventoryAdjustmentCreate(**values)
+
+
 def _link_inventory_reversal(
     db: Session,
     tenant_id: uuid.UUID,
     adjustment_id: uuid.UUID,
     user_id: uuid.UUID,
-) -> JournalEntry | None:
+):
     original = db.query(JournalEntry).filter(
         JournalEntry.tenant_id == tenant_id,
         JournalEntry.source_type == "INVENTORY_ADJUSTMENT",
@@ -261,13 +269,13 @@ def _link_inventory_reversal(
 
 
 def direct_create_inventory_adjustment(
-    payload: InventoryAdjustmentCreate,
+    payload: DirectInventoryAdjustmentCreate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("inventory:adjust")),
 ):
     proxy = DeferredCommitSession(db)
     adjustment = _unwrap(inventory_api.create_inventory_adjustment)(
-        payload, proxy, tenant_id
+        _inventory_create_payload(db, tenant_id, payload), proxy, tenant_id
     )
     adjustment = _unwrap(inventory_api.confirm_inventory_adjustment)(
         adjustment.id, proxy, tenant_id
@@ -293,7 +301,6 @@ def direct_update_inventory_adjustment(
     if not original:
         raise HTTPException(404, "Inventory Adjustment not found.")
 
-    line_items = payload.line_items or _inventory_lines(original)
     from src.domains.company.services import NumberingSeriesService
 
     replacement_number = payload.adjustment_number
@@ -305,36 +312,38 @@ def direct_update_inventory_adjustment(
         adjustment_number=replacement_number,
         adjustment_date=payload.adjustment_date or original.adjustment_date,
         reason=payload.reason if payload.reason is not None else original.reason,
-        line_items=line_items,
+        line_items=payload.line_items or _inventory_lines(original),
     )
 
     proxy = DeferredCommitSession(db)
     original_je = None
-    if original.status == "CONFIRMED":
-        _unwrap(inventory_api.cancel_inventory_adjustment)(id, proxy, tenant_id)
-        original_je = _link_inventory_reversal(
-            db, tenant_id, id, current_user.id
-        )
-    _soft_delete(original)
+    _begin_replacement(db, InventoryAdjustment, original)
+    try:
+        if original.status == "CONFIRMED":
+            _unwrap(inventory_api.cancel_inventory_adjustment)(id, proxy, tenant_id)
+            original_je = _link_inventory_reversal(db, tenant_id, id, current_user.id)
+        _soft_delete(original)
 
-    adjustment = _unwrap(inventory_api.create_inventory_adjustment)(
-        replacement_payload, proxy, tenant_id
-    )
-    adjustment = _unwrap(inventory_api.confirm_inventory_adjustment)(
-        adjustment.id, proxy, tenant_id
-    )
-    replacement_je = db.query(JournalEntry).filter(
-        JournalEntry.tenant_id == tenant_id,
-        JournalEntry.source_type == "INVENTORY_ADJUSTMENT",
-        JournalEntry.source_id == adjustment.id,
-    ).first()
-    if original_je and replacement_je:
-        original_je.replacement_transaction_id = replacement_je.id
-        replacement_je.original_transaction_id = original_je.id
-    _set_replay_resource(db, adjustment)
-    db.commit()
-    db.refresh(adjustment)
-    return adjustment
+        replacement = _unwrap(inventory_api.create_inventory_adjustment)(
+            replacement_payload, proxy, tenant_id
+        )
+        replacement = _unwrap(inventory_api.confirm_inventory_adjustment)(
+            replacement.id, proxy, tenant_id
+        )
+        replacement_je = db.query(JournalEntry).filter(
+            JournalEntry.tenant_id == tenant_id,
+            JournalEntry.source_type == "INVENTORY_ADJUSTMENT",
+            JournalEntry.source_id == replacement.id,
+        ).first()
+        if original_je and replacement_je:
+            original_je.replacement_transaction_id = replacement_je.id
+            replacement_je.original_transaction_id = original_je.id
+        _set_replay_resource(db, replacement)
+        db.commit()
+        db.refresh(replacement)
+        return replacement
+    finally:
+        _end_replacement(db)
 
 
 def direct_delete_inventory_adjustment(
@@ -360,15 +369,16 @@ def direct_delete_inventory_adjustment(
 
 
 # ---------------------------------------------------------------------------
-# Payments: central API only; edit = reversal + new payment; delete = reversal.
+# Payments: one central API; edits reverse + recreate, deletes reverse + hide.
 # ---------------------------------------------------------------------------
 
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def direct_update_receipt(
     request: Request,
     id: uuid.UUID,
     payload: PaymentCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("payment:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("payment:update")),
 ):
     original = db.query(Payment).filter(
         Payment.id == id,
@@ -377,33 +387,34 @@ def direct_update_receipt(
     ).with_for_update().first()
     if not original:
         raise HTTPException(404, "Payment receipt not found.")
+
     proxy = DeferredCommitSession(db)
-    _unwrap(payment_api.cancel_payment_receipt)(
-        id,
-        PaymentCancel(reason="Corrected by edit", cancellation_date=date.today()),
-        proxy,
-        tenant_id,
-    )
-    _soft_delete(original)
-    replacement_payload = payload.model_copy(update={"payment_number": None})
-    _set_replacement_context(db, Payment, original)
+    _begin_replacement(db, Payment, original)
     try:
-        payment = _unwrap(payment_api.create_payment_receipt)(
+        _unwrap(payment_api.cancel_payment_receipt)(
+            id,
+            PaymentCancel(reason="Corrected by edit", cancellation_date=date.today()),
+            proxy,
+            tenant_id,
+        )
+        _soft_delete(original)
+        replacement_payload = payload.model_copy(update={"payment_number": None})
+        replacement = _unwrap(payment_api.create_payment_receipt)(
             request, replacement_payload, proxy, tenant_id
         )
-        original.cancellation_reason = f"Corrected by payment {payment.id}"
-        _set_replay_resource(db, payment)
+        original.cancellation_reason = f"Corrected by payment {replacement.id}"
+        _set_replay_resource(db, replacement)
         db.commit()
-        db.refresh(payment)
+        db.refresh(replacement)
+        return replacement
     finally:
-        _clear_replacement_context(db)
-    return payment
+        _end_replacement(db)
 
 
 def direct_delete_receipt(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("payment:cancel")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("payment:delete")),
 ):
     original = db.query(Payment).filter(
         Payment.id == id,
@@ -424,12 +435,13 @@ def direct_delete_receipt(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def direct_update_disbursement(
     request: Request,
     id: uuid.UUID,
     payload: BillPaymentCreate,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("payment:create")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("payment:update")),
 ):
     original = db.query(BillPayment).filter(
         BillPayment.id == id,
@@ -438,33 +450,34 @@ def direct_update_disbursement(
     ).with_for_update().first()
     if not original:
         raise HTTPException(404, "Disbursement not found.")
+
     proxy = DeferredCommitSession(db)
-    _unwrap(payment_api.cancel_vendor_payment)(
-        id,
-        PaymentCancel(reason="Corrected by edit", cancellation_date=date.today()),
-        proxy,
-        tenant_id,
-    )
-    _soft_delete(original)
-    replacement_payload = payload.model_copy(update={"payment_number": None})
-    _set_replacement_context(db, BillPayment, original)
+    _begin_replacement(db, BillPayment, original)
     try:
-        payment = _unwrap(payment_api.create_vendor_payment)(
+        _unwrap(payment_api.cancel_vendor_payment)(
+            id,
+            PaymentCancel(reason="Corrected by edit", cancellation_date=date.today()),
+            proxy,
+            tenant_id,
+        )
+        _soft_delete(original)
+        replacement_payload = payload.model_copy(update={"payment_number": None})
+        replacement = _unwrap(payment_api.create_vendor_payment)(
             request, replacement_payload, proxy, tenant_id
         )
-        original.cancellation_reason = f"Corrected by payment {payment.id}"
-        _set_replay_resource(db, payment)
+        original.cancellation_reason = f"Corrected by payment {replacement.id}"
+        _set_replay_resource(db, replacement)
         db.commit()
-        db.refresh(payment)
+        db.refresh(replacement)
+        return replacement
     finally:
-        _clear_replacement_context(db)
-    return payment
+        _end_replacement(db)
 
 
 def direct_delete_disbursement(
     id: uuid.UUID,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("payment:cancel")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("payment:delete")),
 ):
     original = db.query(BillPayment).filter(
         BillPayment.id == id,
@@ -486,9 +499,10 @@ def direct_delete_disbursement(
 
 
 # ---------------------------------------------------------------------------
-# Returns: already post on create; expose correction as PUT/DELETE, not cancel.
+# Sales / purchase returns: POST already posts; correction is PUT/DELETE.
 # ---------------------------------------------------------------------------
 
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def direct_update_sales_return(
     request: Request,
     id: uuid.UUID,
@@ -504,23 +518,24 @@ def direct_update_sales_return(
     ).with_for_update().first()
     if not original:
         raise HTTPException(404, "Sales return not found.")
+
     proxy = DeferredCommitSession(db)
-    if original.status != "DRAFT":
-        _unwrap(return_api.cancel_sales_return_route)(
-            id, proxy, tenant_id, current_user
-        )
-    _soft_delete(original)
-    _set_replacement_context(db, SalesReturn, original)
+    _begin_replacement(db, SalesReturn, original)
     try:
+        if original.status != "DRAFT":
+            _unwrap(return_api.cancel_sales_return_route)(
+                id, proxy, tenant_id, current_user
+            )
+        _soft_delete(original)
         replacement = _unwrap(return_api.create_sales_return)(
             request, payload, proxy, tenant_id
         )
         _set_replay_resource(db, replacement)
         db.commit()
         db.refresh(replacement)
+        return replacement
     finally:
-        _clear_replacement_context(db)
-    return replacement
+        _end_replacement(db)
 
 
 def direct_delete_sales_return(
@@ -538,14 +553,13 @@ def direct_delete_sales_return(
         raise HTTPException(404, "Sales return not found.")
     proxy = DeferredCommitSession(db)
     if original.status != "DRAFT":
-        _unwrap(return_api.cancel_sales_return_route)(
-            id, proxy, tenant_id, current_user
-        )
+        _unwrap(return_api.cancel_sales_return_route)(id, proxy, tenant_id, current_user)
     _soft_delete(original)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def direct_update_purchase_return(
     request: Request,
     id: uuid.UUID,
@@ -561,23 +575,24 @@ def direct_update_purchase_return(
     ).with_for_update().first()
     if not original:
         raise HTTPException(404, "Purchase return not found.")
+
     proxy = DeferredCommitSession(db)
-    if original.status != "DRAFT":
-        _unwrap(return_api.cancel_purchase_return_route)(
-            id, proxy, tenant_id, current_user
-        )
-    _soft_delete(original)
-    _set_replacement_context(db, PurchaseReturn, original)
+    _begin_replacement(db, PurchaseReturn, original)
     try:
+        if original.status != "DRAFT":
+            _unwrap(return_api.cancel_purchase_return_route)(
+                id, proxy, tenant_id, current_user
+            )
+        _soft_delete(original)
         replacement = _unwrap(return_api.create_purchase_return)(
             request, payload, proxy, tenant_id
         )
         _set_replay_resource(db, replacement)
         db.commit()
         db.refresh(replacement)
+        return replacement
     finally:
-        _clear_replacement_context(db)
-    return replacement
+        _end_replacement(db)
 
 
 def direct_delete_purchase_return(
@@ -595,16 +610,15 @@ def direct_delete_purchase_return(
         raise HTTPException(404, "Purchase return not found.")
     proxy = DeferredCommitSession(db)
     if original.status != "DRAFT":
-        _unwrap(return_api.cancel_purchase_return_route)(
-            id, proxy, tenant_id, current_user
-        )
+        _unwrap(return_api.cancel_purchase_return_route)(id, proxy, tenant_id, current_user)
     _soft_delete(original)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # ---------------------------------------------------------------------------
-# Manual journal: create is already direct; edit/delete are reversal semantics.
+# Manual journals: ledger rows are never edited/deleted; public PUT/DELETE
+# compose the existing reversal engine.
 # ---------------------------------------------------------------------------
 
 def direct_update_manual_journal(
@@ -622,27 +636,40 @@ def direct_update_manual_journal(
     if original.source_type not in ("MANUAL", "CONTRA"):
         raise HTTPException(400, "Only manual/contra entries can be corrected here.")
 
+    # Both legacy handlers flush. Defer the generic idempotency marker until the
+    # replacement exists, then explicitly mark the replacement in the same tx.
+    db.info["_defer_idempotency_mark"] = True
     proxy = DeferredCommitSession(db)
-    reversal = _unwrap(accounting_api.reverse_manual_journal_entry)(
-        id,
-        JournalReversalCreate(
-            reversal_date=payload.entry_date,
-            reason="Corrected by edit",
-        ),
-        proxy,
-        tenant_id,
-    )
-    replacement_payload = payload.model_copy(update={"reference_number": None})
-    replacement = _unwrap(accounting_api.create_manual_journal_entry)(
-        replacement_payload, proxy, tenant_id
-    )
-    original.replacement_transaction_id = replacement.id
-    replacement.original_transaction_id = original.id
-    reversal.reverses_transaction_id = original.id
-    _set_replay_resource(db, replacement)
-    db.commit()
-    db.refresh(replacement)
-    return replacement
+    try:
+        reversal_response = _unwrap(accounting_api.reverse_manual_journal_entry)(
+            id,
+            JournalReversalCreate(
+                reversal_date=payload.entry_date,
+                reason="Corrected by edit",
+            ),
+            proxy,
+            tenant_id,
+        )
+        replacement_response = _unwrap(accounting_api.create_manual_journal_entry)(
+            payload.model_copy(update={"reference_number": None}), proxy, tenant_id
+        )
+        replacement = db.query(JournalEntry).filter(
+            JournalEntry.id == replacement_response.id,
+            JournalEntry.tenant_id == tenant_id,
+        ).one()
+        reversal = db.query(JournalEntry).filter(
+            JournalEntry.id == reversal_response.id,
+            JournalEntry.tenant_id == tenant_id,
+        ).one()
+        original.replacement_transaction_id = replacement.id
+        replacement.original_transaction_id = original.id
+        reversal.reverses_transaction_id = original.id
+        _set_replay_resource(db, replacement)
+        db.info.pop("_defer_idempotency_mark", None)
+        db.commit()
+        return _unwrap(accounting_api.get_journal_entry)(replacement.id, db, tenant_id)
+    finally:
+        db.info.pop("_defer_idempotency_mark", None)
 
 
 def direct_delete_manual_journal(
@@ -652,10 +679,7 @@ def direct_delete_manual_journal(
 ):
     _unwrap(accounting_api.reverse_manual_journal_entry)(
         id,
-        JournalReversalCreate(
-            reversal_date=date.today(),
-            reason="Deleted by user",
-        ),
+        JournalReversalCreate(reversal_date=date.today(), reason="Deleted by user"),
         db,
         tenant_id,
     )
@@ -671,7 +695,7 @@ def install_extended_direct_posting_contract() -> None:
         return
     _INSTALLED = True
 
-    # Notes
+    # Credit notes
     for path, method in (
         ("/invoices/credit-notes", "POST"),
         ("/invoices/credit-notes/{cn_id}/finalize", "POST"),
@@ -691,6 +715,7 @@ def install_extended_direct_posting_contract() -> None:
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
+    # Debit notes
     for path, method in (
         ("/invoices/debit-notes", "POST"),
         ("/invoices/debit-notes/{dn_id}/finalize", "POST"),
@@ -733,12 +758,9 @@ def install_extended_direct_posting_contract() -> None:
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
-    # Central payments only: keep existing POST creates and GETs, replace cancel.
-    for path in (
-        "/payments/receipts/{id}/cancel",
-        "/payments/disbursements/{id}/cancel",
-    ):
-        _remove_route(payment_api.router, path, "POST")
+    # Payments: central routes only. Old /cancel actions become PUT/DELETE.
+    _remove_route(payment_api.router, "/payments/receipts/{id}/cancel", "POST")
+    _remove_route(payment_api.router, "/payments/disbursements/{id}/cancel", "POST")
     payment_api.router.add_api_route(
         "/receipts/{id}", direct_update_receipt, methods=["PUT"],
         response_model=PaymentResponse,
@@ -756,7 +778,7 @@ def install_extended_direct_posting_contract() -> None:
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
-    # Returns already POST directly. Hide cancel; correction is PUT/DELETE.
+    # Returns already auto-post on POST.
     _remove_route(return_api.router, "/returns/sales/{id}/cancel", "POST")
     _remove_route(return_api.router, "/returns/purchase/{id}/cancel", "POST")
     return_api.router.add_api_route(
@@ -776,7 +798,7 @@ def install_extended_direct_posting_contract() -> None:
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
-    # Manual journal reversal becomes an internal implementation detail.
+    # Manual journal reversal remains internal implementation detail.
     _remove_route(accounting_api.router, "/accounting/journals/{id}/reverse", "POST")
     accounting_api.router.add_api_route(
         "/journals/{id}", direct_update_manual_journal, methods=["PUT"],
