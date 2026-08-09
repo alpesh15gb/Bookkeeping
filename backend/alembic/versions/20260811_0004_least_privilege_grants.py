@@ -15,6 +15,12 @@ and the docker entrypoint):
                     removes even the attempt for raw SQL).
 * alembic_version— SELECT only (the API health/readiness probe reads the
                     revision; it never writes schema bookkeeping).
+* users / tenant_memberships / password_reset_tokens — the CELERY WORKER
+                    gets no INSERT/UPDATE/DELETE on users and memberships
+                    (it only reads the owner's email), and NO access at all to
+                    password_reset_tokens.  tenant_memberships is deliberately
+                    RLS-exempt, so its access is narrowed at the privilege
+                    layer instead.
 
 Revocations are applied when the roles exist (plain developer databases
 without the role bootstrap are skipped).  The owner of the objects is the
@@ -52,6 +58,19 @@ def upgrade() -> None:
             ),
             {"role": role},
         )
+        if role == "apexbooks_worker":
+            conn.execute(
+                text(
+                    "DO $$ "
+                    "BEGIN "
+                    "IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'apexbooks_worker') THEN "
+                    "   REVOKE INSERT, UPDATE, DELETE ON TABLE users, tenant_memberships "
+                    "       FROM apexbooks_worker; "
+                    "   REVOKE ALL ON TABLE password_reset_tokens FROM apexbooks_worker; "
+                    "END IF; "
+                    "END $$;"
+                )
+            )
 
 
 def downgrade() -> None:

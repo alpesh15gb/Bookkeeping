@@ -124,6 +124,23 @@ def main() -> int:
                 "FROM apexbooks_api, apexbooks_worker"
             )
         )
+        # Security-sensitive tables: the CELERY WORKER never writes user,
+        # membership or password-reset rows (it only reads the owner's email
+        # via users/tenant_memberships), and never needs password-reset data
+        # at all.  tenant_memberships is intentionally RLS-exempt, so its
+        # access must be narrowed at the privilege layer.
+        conn.execute(
+            text(
+                "REVOKE INSERT, UPDATE, DELETE ON TABLE users, tenant_memberships "
+                "FROM apexbooks_worker"
+            )
+        )
+        conn.execute(
+            text(
+                "REVOKE ALL ON TABLE password_reset_tokens "
+                "FROM apexbooks_worker"
+            )
+        )
         # The controlled tenant enumerator is callable only by the restricted
         # application roles, never by arbitrary PUBLIC.
         conn.execute(

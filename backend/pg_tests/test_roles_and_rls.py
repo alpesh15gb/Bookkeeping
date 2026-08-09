@@ -221,6 +221,50 @@ def test_least_privilege_alembic_version_read_only(db_api, db_admin):
     ).scalar() is True
 
 
+def test_least_privilege_worker_security_tables(db_admin, db_worker):
+    """The CELERY WORKER cannot write user / membership rows (it only reads
+    the owner's email) and has NO access at all to password-reset tokens.
+    tenant_memberships is deliberately RLS-exempt, so the privilege layer is
+    what keeps a compromised worker from tampering with it."""
+    for priv in ("INSERT", "UPDATE", "DELETE"):
+        for table in ("users", "tenant_memberships"):
+            assert db_admin.execute(
+                text("SELECT has_table_privilege(:role, :table, :priv)"),
+                {"role": WORKER_ROLE, "table": table, "priv": priv},
+            ).scalar() is False, f"worker must not {priv} {table}"
+    for priv in ("SELECT", "INSERT", "UPDATE", "DELETE"):
+        assert db_admin.execute(
+            text("SELECT has_table_privilege(:role, 'password_reset_tokens', :priv)"),
+            {"role": WORKER_ROLE, "priv": priv},
+        ).scalar() is False, f"worker must not {priv} password_reset_tokens"
+    # The worker still needs read access to users/tenant_memberships for the
+    # owner-email lookup in notification tasks.
+    assert db_admin.execute(
+        text("SELECT has_table_privilege(:role, 'users', 'SELECT')"),
+        {"role": WORKER_ROLE},
+    ).scalar() is True
+    assert db_admin.execute(
+        text("SELECT has_table_privilege(:role, 'tenant_memberships', 'SELECT')"),
+        {"role": WORKER_ROLE},
+    ).scalar() is True
+    # The API role keeps the auth flows it needs.
+    assert db_admin.execute(
+        text("SELECT has_table_privilege(:role, 'users', 'INSERT')"),
+        {"role": API_ROLE},
+    ).scalar() is True
+    # End-to-end: a worker session cannot insert a user row.
+    with pytest.raises(Exception):
+        db_worker.execute(
+            text(
+                "INSERT INTO users (id, email, full_name, password_hash) "
+                "VALUES (:id, :email, 'x', 'x')"
+            ),
+            {"id": str(uuid.uuid4()), "email": "worker-blocked@example.com"},
+        )
+        db_worker.commit()
+    db_worker.rollback()
+
+
 def test_least_privilege_sequence_usage_only(db_admin):
     """Sequences grant USAGE only — nextval/currval/setval all work with
     USAGE and the application never needs SELECT on a sequence."""

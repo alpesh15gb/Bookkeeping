@@ -24,6 +24,7 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
+from sqlalchemy import func
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
@@ -502,14 +503,30 @@ class TestYearEndScenario4_Reopen:
         assert len(cf_after) == 0, \
             f"Inventory carry-forward should be deleted after reopen, got {len(cf_after)}"
 
-        # Verify next FY's opening journal entry deleted
+        # The ledger is append-only: reopen REVERSES the closing journal
+        # entry (marks it reversed + posts a balancing reversal) instead of
+        # deleting it.
+        closing_je_id = close_resp.json()["journal_entry_id"]
+        assert closing_je_id, "close should have created a YEAR_END journal entry"
         db = SessionLocal()
         try:
-            next_fy_je = db.query(JournalEntry).filter(
-                JournalEntry.tenant_id == tid,
-                JournalEntry.source_type == "OPENING_BALANCE",
+            closing_je = db.query(JournalEntry).filter(JournalEntry.id == uuid.UUID(closing_je_id)).first()
+            assert closing_je is not None, "Closing journal entry must still exist (append-only ledger)"
+            assert closing_je.reversed_at is not None, "Closing journal entry should be marked reversed after reopen"
+            assert closing_je.reversal_transaction_id is not None, "Closing journal entry should link its reversal"
+            reversal = db.query(JournalEntry).filter(
+                JournalEntry.id == closing_je.reversal_transaction_id,
             ).first()
-            assert next_fy_je is None, "Opening journal entry should be deleted after reopen"
+            assert reversal is not None, "Reversal entry should exist"
+            assert reversal.source_type == "YEAR_END_REVERSAL"
+            # The reversal negates the original lines (debits == credits).
+            dr = db.query(JournalLine).filter(
+                JournalLine.entry_id == reversal.id, JournalLine.direction == "DEBIT",
+            ).with_entities(func.coalesce(func.sum(JournalLine.amount), 0)).scalar()
+            cr = db.query(JournalLine).filter(
+                JournalLine.entry_id == reversal.id, JournalLine.direction == "CREDIT",
+            ).with_entities(func.coalesce(func.sum(JournalLine.amount), 0)).scalar()
+            assert dr == cr, "Reversal entry must balance"
         finally:
             db.close()
 

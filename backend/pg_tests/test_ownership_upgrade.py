@@ -1,12 +1,17 @@
 """Existing-deployment ownership migration (postgres-owned -> apexbooks_migrator).
 
-Simulates a production database created the OLD way (schema owned by the
-``postgres`` superuser), then runs the documented upgrade path:
+Simulates a REAL pre-squash production database and the exact upgrade path:
 
-1. Schema is built as ``postgres`` (an older deployment).
+1. A schema at the legacy head (20260810_0001) is built as ``postgres`` —
+   an older deployment created before the restricted-migration architecture.
 2. scripts/transfer_ownership.py moves ownership to ``apexbooks_migrator``.
-3. An Alembic schema change runs as ``apexbooks_migrator`` and succeeds.
+3. ``alembic upgrade head`` runs AS ``apexbooks_migrator``: the squashed
+   baseline is a no-op (schema exists), then 20260811_0001..0004 apply.
 4. apexbooks_api / apexbooks_worker still own nothing and cannot bypass RLS.
+
+The legacy-head shape is produced by building the squashed-baseline snapshot
+and reverting exactly the deltas the new chain adds (payment-allocation
+tenant_id + idempotency resource columns), then stamping 20260810_0001.
 """
 
 import os
@@ -28,11 +33,60 @@ from conftest import (
 
 OWN_TEST_DB = "apex_books_owntest"
 BASELINE_REVISION = "20260811_0000_squashed_baseline"
+LEGACY_CHAIN_HEAD = "20260810_0001"
+
+
+def _revert_new_chain_deltas(admin_url: str) -> None:
+    """Turn the squashed-baseline shape into the legacy-head (20260810_0001)
+    shape: drop exactly what migrations 20260811_0001 and 0003 add.
+
+    The baseline snapshot is the legacy-head schema PLUS those deltas, so this
+    yields a faithful legacy deployment (the allocation join tables carry no
+    tenant_id and idempotency_keys has no resource columns).
+    """
+    engine = create_engine(admin_url)
+    with engine.begin() as conn:
+        for table, trigger in (
+            ("payment_allocations", "ck_payment_allocations_tenant_matches_parents"),
+            ("bill_payment_allocations", "ck_bill_payment_allocations_tenant_matches_parents"),
+        ):
+            conn.execute(text(f'DROP TRIGGER IF EXISTS "{trigger}" ON "{table}"'))
+            conn.execute(text(f'DROP POLICY IF EXISTS tenant_isolation ON "{table}"'))
+            conn.execute(text(f'ALTER TABLE "{table}" NO FORCE ROW LEVEL SECURITY'))
+            conn.execute(text(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY'))
+            conn.execute(text(f'DROP INDEX IF EXISTS "ix_{table}_tenant"'))
+            conn.execute(text(f'ALTER TABLE "{table}" DROP COLUMN tenant_id'))
+        conn.execute(text("ALTER TABLE idempotency_keys DROP COLUMN resource_type"))
+        conn.execute(text("ALTER TABLE idempotency_keys DROP COLUMN resource_id"))
+    engine.dispose()
+
+
+def _stamp_legacy_head(admin_url: str) -> None:
+    """Record 20260810_0001 as the current revision without running any
+    migrations.  Uses MigrationContext directly (with an explicit commit):
+    the ``alembic stamp`` CLI path wraps the write in env.py's transaction
+    block, which does not reliably persist for non-head revisions.
+    """
+    import os as _os
+    from alembic.config import Config
+    from alembic.runtime.migration import MigrationContext
+    from alembic.script import ScriptDirectory
+
+    cfg = Config(_os.path.join(BACKEND_DIR, "alembic.ini"))
+    cfg.set_main_option("sqlalchemy.url", admin_url)
+    engine = create_engine(admin_url)
+    with engine.connect() as conn:
+        MigrationContext.configure(conn).stamp(
+            ScriptDirectory.from_config(cfg), LEGACY_CHAIN_HEAD
+        )
+        conn.commit()
+    engine.dispose()
 
 
 @pytest.fixture(scope="module")
 def owntest(pg):
-    """Build an 'old deployment' DB, transfer ownership, upgrade as migrator."""
+    """Build a REAL legacy-head deployment as postgres, transfer ownership,
+    then upgrade to head as apexbooks_migrator."""
     admin = _admin_engine("postgres")
     with admin.connect() as conn:
         conn.execute(text(f'DROP DATABASE IF EXISTS "{OWN_TEST_DB}"'))
@@ -44,9 +98,8 @@ def owntest(pg):
     postgres_url = _url("postgres", _pw_of_admin())
     migrator_url = _url(MIGRATOR_ROLE, "apex_migrator_test_pw")
 
-    # Step 1: build the schema as postgres (old deployment).  Only the
-    # baseline revision, so the new-chain migrations (0001..0004) remain to be
-    # applied later by the migration role.
+    # Step 1: build the schema as postgres (old deployment) at the LEGACY
+    # HEAD: baseline snapshot minus the new-chain deltas, stamped 20260810_0001.
     env = dict(os.environ)
     env["DATABASE_URL"] = postgres_url
     env["MIGRATION_DATABASE_URL"] = postgres_url
@@ -58,9 +111,32 @@ def owntest(pg):
         text=True,
     )
     assert proc.returncode == 0, f"baseline upgrade as postgres failed:\n{proc.stdout}\n{proc.stderr}"
+    _revert_new_chain_deltas(postgres_url)
+    _stamp_legacy_head(postgres_url)
+    # The legacy alembic_version column is VARCHAR(32); the real legacy
+    # deployment would not have been widened yet.
+    engine = create_engine(postgres_url)
+    with engine.begin() as conn:
+        conn.execute(
+            text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(32)")
+        )
+        # Old deployments granted CRUD to the application roles (the API ran
+        # as a role with table privileges; only ownership was postgres).
+        conn.execute(
+            text(
+                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public "
+                "TO apexbooks_api, apexbooks_worker"
+            )
+        )
+        conn.execute(
+            text(
+                "GRANT USAGE ON ALL SEQUENCES IN SCHEMA public "
+                "TO apexbooks_api, apexbooks_worker"
+            )
+        )
+    engine.dispose()
 
     # Step 2: transfer ownership to apexbooks_migrator (superuser script).
-    env["DATABASE_URL"] = postgres_url
     proc = subprocess.run(
         [sys.executable, "scripts/transfer_ownership.py"],
         cwd=BACKEND_DIR,
@@ -70,7 +146,8 @@ def owntest(pg):
     )
     assert proc.returncode == 0, f"transfer_ownership failed:\n{proc.stdout}\n{proc.stderr}"
 
-    # Step 3: run an Alembic schema change (0001..0004) AS apexbooks_migrator.
+    # Step 3: run an Alembic schema change (baseline no-op -> 0001..0004)
+    # AS apexbooks_migrator.
     env["DATABASE_URL"] = migrator_url
     env["MIGRATION_DATABASE_URL"] = migrator_url
     proc = subprocess.run(

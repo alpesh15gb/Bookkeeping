@@ -23,9 +23,9 @@ BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
 
 
-def run(label: str, command: list[str], cwd: Path) -> None:
+def run(label: str, command: list[str], cwd: Path, env: dict | None = None) -> None:
     print(f"\n=== {label} ===", flush=True)
-    result = subprocess.run(command, cwd=cwd, check=False)
+    result = subprocess.run(command, cwd=cwd, check=False, env=env)
     if result.returncode:
         raise SystemExit(f"{label} failed with exit code {result.returncode}.")
 
@@ -65,6 +65,21 @@ def run_backend_suites(python: str) -> None:
             # this correctness and usability stabilization gate.
             command.extend(["-k", "not TestUAT_Phase7_Stress"])
         run(f"Backend regression: {suite}", command, BACKEND)
+
+    # PostgreSQL integration suite: MANDATORY in the production acceptance
+    # gate (REQUIRE_POSTGRES_TESTS=1 turns an unavailable PostgreSQL into a
+    # hard failure, never a silent skip).  The suite creates its own test
+    # database and runs the real Alembic migrations.
+    env = dict(os.environ)
+    env["REQUIRE_POSTGRES_TESTS"] = "1"
+    if "TEST_DATABASE_URL" not in env:
+        env["TEST_DATABASE_URL"] = "postgresql://postgres:postgres@localhost:5432/postgres"
+    run(
+        "PostgreSQL integration (RLS / roles / concurrency / idempotency)",
+        [python, "-m", "pytest", "pg_tests", "-q"],
+        BACKEND,
+        env=env,
+    )
 
 
 def executable(name: str) -> str:

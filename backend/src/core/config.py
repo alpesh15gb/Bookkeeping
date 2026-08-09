@@ -113,6 +113,10 @@ class Settings(BaseSettings):
     # COMMITTED atomically, so this timeout never re-runs committed work — it
     # only re-runs requests that provably never committed.
     IDEMPOTENCY_STALE_SECONDS: int = 120
+    # Financial mutations (invoice / bill / payment / journal creation) must
+    # carry an Idempotency-Key so a client retry can never double-post money
+    # movements.  Disable only for legacy clients that predate the rule.
+    REQUIRE_IDEMPOTENCY_KEY: bool = True
 
     # ----------------------------------------------------------------
     # Rate Limiting

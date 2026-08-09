@@ -79,7 +79,6 @@ def main() -> int:
                                   AND d.objid = c.oid
                                   AND d.refclassid = 'pg_class'::regclass
                                   AND d.refobjsubid > 0
-                                  AND d.deptype = 'i'
                            )
                     LOOP
                         EXECUTE format(

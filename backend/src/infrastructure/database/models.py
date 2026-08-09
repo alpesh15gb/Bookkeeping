@@ -616,13 +616,6 @@ _JOURNAL_MUTABLE_META = frozenset({
     "updated_at",
 })
 
-# Session-info key for the system-managed ledger-delete exception. The value
-# must be a frozenset of eligible JournalEntry.source_type values, set only by
-# src.domains.accounting.ledger_guards.system_ledger_rollback_scope. A plain
-# boolean is never honored — see the delete guards below.
-ALLOW_LEDGER_DELETE_KEY = "ALLOW_LEDGER_DELETE_SOURCE_TYPES"
-
-
 @event.listens_for(JournalEntry, "before_update")
 def prevent_journal_entry_update(mapper, connection, target):
     """Ledger history is append-only. Only reversal/correction metadata may
@@ -660,19 +653,13 @@ def prevent_journal_entry_update(mapper, connection, target):
 def prevent_journal_entry_delete(mapper, connection, target):
     """Ledger history is append-only: entries may be reversed, never deleted.
 
-    The only exception is system-managed year-end roll-forward cleanup: the
-    financial-year close creates YEAR_END/OPENING_BALANCE entries, and a
-    reopen (a permission-gated, audited action) rolls those back by deleting
-    them. Authorization is a frozenset of eligible source types stored in
-    session.info by system_ledger_rollback_scope (see ledger_guards.py); the
-    entry's own source_type must be in that set, so ordinary invoice, bill,
-    payment, expense and manual-journal history is never deletable.
+    There is no exception and no client-settable bypass: year-end reopen and
+    every correction flow create REVERSAL entries instead of deleting
+    history, so an attacker who can run raw SQL can never destroy accounting
+    facts by setting a GUC.  The database-level triggers (see
+    postgres_hardening.py) enforce the same rule for raw SQL.
     """
     from sqlalchemy.exc import IntegrityError
-    from sqlalchemy.orm import object_session
-    allowed = object_session(target).info.get(ALLOW_LEDGER_DELETE_KEY)
-    if isinstance(allowed, frozenset) and target.source_type in allowed:
-        return
     raise IntegrityError(
         "Cannot delete a journal entry. "
         "Create a reversal entry instead.",
@@ -719,19 +706,10 @@ def prevent_journal_line_update(mapper, connection, target):
 def prevent_journal_line_delete(mapper, connection, target):
     """Journal lines are part of immutable ledger history: never deletable.
 
-    Same system-managed exception as JournalEntry, keyed off the owning
-    entry's source_type: the line may only be removed when its entry is a
-    system YEAR_END/OPENING_BALANCE roll-forward record and the scoped
-    authorization in session.info names that source type.
+    Same rule as JournalEntry: no exception, no bypass.  Year-end reopen
+    reverses the roll-forward entries instead of deleting them.
     """
     from sqlalchemy.exc import IntegrityError
-    from sqlalchemy.orm import object_session
-    session = object_session(target)
-    allowed = session.info.get(ALLOW_LEDGER_DELETE_KEY)
-    if isinstance(allowed, frozenset):
-        entry = session.get(JournalEntry, target.entry_id)
-        if entry is not None and entry.source_type in allowed:
-            return
     raise IntegrityError(
         "Cannot delete a journal line. Journal entries are immutable; "
         "create a reversal entry instead.",
@@ -2524,5 +2502,17 @@ def _propagate_parent_tenant_to_children(session, flush_context, instances):
                 if rel.mapper.class_ is parent_cls:
                     parent = getattr(obj, rel.key, None)
                     break
+            if parent is None and parent_id is not None:
+                # Or the parent may be another pending object in this same
+                # flush whose PK was assigned before the child was built.
+                # `session.get()` cannot see pending objects, so scan
+                # session.new directly.
+                pk_attr = parent_cls.__mapper__.primary_key[0].name
+                for candidate in session.new:
+                    if isinstance(candidate, parent_cls):
+                        candidate_pk = getattr(candidate, pk_attr, None)
+                        if candidate_pk is not None and str(candidate_pk) == str(parent_id):
+                            parent = candidate
+                            break
         if parent is not None and getattr(parent, "tenant_id", None) is not None:
             obj.tenant_id = parent.tenant_id

@@ -22,6 +22,20 @@ from src.infrastructure.database.models import (
 )
 from src.domains.accounting.services import AccountResolver
 from src.domains.taxation.services import GSTEngine
+from src.core.database import engine, Base, SessionLocal
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _reset_schema_for_uat():
+    """
+    The application no longer runs Base.metadata.create_all() on startup
+    (Alembic is the only production schema manager), so this module must
+    (re)build the SQLite test schema itself like the sibling test modules do.
+    """
+    Base.metadata.drop_all(bind=engine)
+    Base.metadata.create_all(bind=engine)
+    yield
+    SessionLocal.close_all()
 
 
 # ════════════════════════════════════════════════════════════════════

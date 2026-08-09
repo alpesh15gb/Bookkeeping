@@ -18,6 +18,16 @@ logger = logging.getLogger("bookkeeping.idempotency")
 
 IDEMPOTENT_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
+# POST endpoints that CREATE financial records.  These are mandatory
+# idempotency endpoints: a client retry (network drop, process crash) must
+# never be able to create a duplicate invoice / bill / payment / journal.
+_REQUIRED_KEY_PATH_PREFIXES = (
+    "/api/v1/invoices",
+    "/api/v1/bills",
+    "/api/v1/payments",
+    "/api/v1/accounting/journals",
+)
+
 
 def _committed_replay_response(existing=None) -> JSONResponse:
     """Replay for a request whose financial transaction committed but whose
@@ -49,6 +59,27 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
         idempotency_key = request.headers.get("Idempotency-Key")
         if not idempotency_key:
+            from src.core.config import settings
+            path = str(request.url.path)
+            if (
+                settings.REQUIRE_IDEMPOTENCY_KEY
+                and request.method == "POST"
+                and path.startswith(_REQUIRED_KEY_PATH_PREFIXES)
+            ):
+                # Financial mutations are mandatory-idempotency: refuse to
+                # execute the mutation without a key rather than run it
+                # unprotected (a retry could double-post money movements).
+                return JSONResponse(
+                    status_code=428,
+                    content={
+                        "detail": (
+                            "An Idempotency-Key header is required for this "
+                            "financial mutation so retries can never create a "
+                            "duplicate."
+                        ),
+                        "code": "IDEMPOTENCY_KEY_REQUIRED",
+                    },
+                )
             return await call_next(request)
 
         tenant_id = request.headers.get("X-Tenant-ID")

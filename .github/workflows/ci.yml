@@ -70,18 +70,7 @@ jobs:
 
       - name: Alembic single-head validation
         working-directory: backend
-        run: |
-          HEADS=$(python -m alembic heads)
-          COUNT=$(python - <<'EOF'
-import subprocess
-out = subprocess.run(["python", "-m", "alembic", "heads"], capture_output=True, text=True).stdout
-lines = [l for l in out.splitlines() if l.strip() and not l.strip().startswith("(")]
-print(len(lines))
-EOF
-          )
-          echo "alembic heads:"
-          echo "$HEADS"
-          test "$COUNT" = "1" || (echo "FAIL: expected exactly one Alembic head, found $COUNT" && exit 1)
+        run: python scripts/ci_check_single_head.py
 
       - name: Backend regression suite (SQLite)
         working-directory: backend
@@ -97,23 +86,8 @@ EOF
       - name: Fresh-database migration from empty PostgreSQL
         working-directory: backend
         env:
-          PGPASSWORD: postgres
-        run: |
-          psql -h localhost -U postgres -d postgres -c 'DROP DATABASE IF EXISTS ci_fresh_migration'
-          psql -h localhost -U postgres -d postgres -c 'CREATE DATABASE ci_fresh_migration'
-          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ci_fresh_migration" \
-            python -m alembic upgrade head
-          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ci_fresh_migration" \
-            python - <<'EOF'
-from sqlalchemy import create_engine, text
-eng = create_engine("postgresql://postgres:postgres@localhost:5432/ci_fresh_migration")
-with eng.connect() as c:
-    heads = c.execute(text("SELECT version_num FROM alembic_version")).fetchall()
-    print("alembic_version heads:", heads)
-    assert len(heads) == 1, heads
-eng.dispose()
-print("Fresh empty-database migration OK")
-EOF
+          CI_ADMIN_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: python scripts/ci_fresh_migration.py
 
   docker:
     name: Docker image build

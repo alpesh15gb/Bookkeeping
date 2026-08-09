@@ -82,6 +82,18 @@ BEGIN
         EXECUTE 'REVOKE EXECUTE ON FUNCTION public.apex_list_active_tenant_ids() FROM PUBLIC';
         EXECUTE 'GRANT EXECUTE ON FUNCTION public.apex_list_active_tenant_ids() TO apexbooks_api, apexbooks_worker';
     END IF;
+    -- Security-sensitive tables: the worker never writes user / membership /
+    -- password-reset rows (it only reads the owner email), and never needs
+    -- password-reset data at all.  tenant_memberships is RLS-exempt, so its
+    -- access must be narrowed at the privilege layer.
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'public' AND c.relname IN ('users', 'tenant_memberships')) THEN
+        EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON TABLE public.users, public.tenant_memberships FROM apexbooks_worker';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'public' AND c.relname = 'password_reset_tokens') THEN
+        EXECUTE 'REVOKE ALL ON TABLE public.password_reset_tokens FROM apexbooks_worker';
+    END IF;
 END
 \$\$;
 SQL

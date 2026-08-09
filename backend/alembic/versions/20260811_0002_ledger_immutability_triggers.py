@@ -13,17 +13,17 @@ database itself for every role:
   description / source_type / source_id / lock state / attribution; only the
   reversal/correction linkage metadata (reversed_by, reversed_at,
   reversal_transaction_id, reverses_transaction_id,
-  replacement_transaction_id, updated_at) may change.  Deletion is refused
-  unless the transaction-scoped GUC ``app.allow_ledger_delete`` lists the
-  entry's source_type — set ONLY by the authorized, audited financial-year
-  reopen flow for system YEAR_END / OPENING_BALANCE roll-forward entries.
-* journal_lines — never updated; deleted only under the same scoped
-  roll-back authorization.
+  replacement_transaction_id, updated_at) may change.  NEVER deleted.
+* journal_lines — never updated, never deleted.
 * stock_ledger — never updated except reversal-linkage metadata; never
   deleted.
 
-All trigger functions are SECURITY DEFINER (owned by the migration role), so
-the enforcement holds regardless of the calling role.
+There is deliberately NO client-settable bypass (a GUC naming eligible
+source types would let any role holding DELETE on the ledger tables destroy
+accounting history with raw SQL).  Corrections and the financial-year reopen
+create REVERSAL entries instead.  All trigger functions are SECURITY DEFINER
+(owned by the migration role), so the enforcement holds regardless of the
+calling role.
 """
 
 from alembic import op

@@ -22,9 +22,10 @@ import sys
 import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 from src.core.database import Base
-# Register every table with Base.metadata so the squashed baseline revision
-# (20260811_0000_squashed_baseline) can build the complete schema on a fresh
-# database, and so autogenerate diffs see the whole model.
+# Register every table with Base.metadata so autogenerate diffs see the whole
+# model.  (The squashed baseline revision does NOT use this metadata — it is
+# a committed static snapshot — but keeping the registration here means
+# `alembic check` / autogenerate compares against the complete model.)
 from src.infrastructure.database import models as _models  # noqa: F401
 from src.infrastructure.database.idempotency import IdempotencyRecord as _IdempotencyRecord  # noqa: F401
 from src.integrations.core import models as _integration_models  # noqa: F401
@@ -42,23 +43,28 @@ if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
 # ---------------------------------------------------------------------------
-# Squashed-baseline chain bookkeeping.
+# Chain layout.
 #
-# The current chain is rooted at the squashed baseline revision
-# ``20260811_0000_squashed_baseline`` (down_revision = None).  The pre-squash
-# chain (20260524_0001 .. 20260810_0001) is preserved under
-# ``alembic/versions_legacy/`` for auditability but is NOT loaded by Alembic:
-# those revisions predate an Alembic baseline and cannot be replayed from an
-# empty database (54 of the tables they ALTER were created outside the chain).
+# The migration chain is a single linear sequence in alembic/versions/:
 #
-# Deployments that already ran the legacy chain carry the legacy head revision
-# in their alembic_version table.  Their schema is exactly the schema the
-# squashed baseline describes (the legacy head is the direct ancestor), so we
-# STAMP the baseline and continue with normal upgrades.  Everything else
-# (fresh databases, databases already on the new chain) upgrades normally.
+#   20260524_0001 .. 20260810_0001   (historical ALTERs; kept so that existing
+#                                    deployments sitting on ANY legacy
+#                                    revision can upgrade forward)
+#   -> 20260811_0000_squashed_baseline   (immutable full-schema snapshot;
+#                                         no-op when a schema already exists)
+#   -> 20260811_0001 .. 20260811_0004    (deltas: allocation tenancy, ledger
+#                                         immutability, idempotency resource
+#                                         recovery, least-privilege grants)
+#
+# Because the whole chain is loaded:
+#   * a fresh database is stamped to the legacy head by env.py and then built
+#     by the baseline snapshot (the legacy ALTERs cannot replay from empty —
+#     54 of the tables they modify predate the chain, which is exactly why the
+#     baseline exists);
+#   * an existing deployment on ANY legacy revision upgrades by running the
+#     remaining legacy ALTERs, then the baseline (a no-op), then the deltas.
 # ---------------------------------------------------------------------------
-LEGACY_CHAIN_HEADS = {"20260810_0001"}
-SQUASHED_BASELINE_REVISION = "20260811_0000_squashed_baseline"
+LEGACY_CHAIN_HEAD = "20260810_0001"
 
 
 def _current_revision(connection):
@@ -109,56 +115,39 @@ def run_migrations_online() -> None:
 
     with connectable.connect() as connection:
         existing_tables = inspect(connection).get_table_names()
-        # SQLAlchemy 2 starts an implicit transaction for the inspection query.
-        # Alembic will not commit a transaction it considers externally owned,
-        # so leaving this open makes a successful upgrade roll back silently
-        # when the connection closes. End inspection before Alembic takes over.
-        connection.commit()
-
         current_rev = _current_revision(connection) if existing_tables else None
+        # SQLAlchemy 2 starts an implicit transaction for every inspection /
+        # revision-read query.  Alembic will not commit a transaction it
+        # considers externally owned, so leaving any such transaction open
+        # makes a successful upgrade (or stamp) roll back silently when the
+        # connection closes.  End ALL implicit transactions before Alembic
+        # takes over.
+        connection.commit()
 
         if existing_tables and current_rev is None:
             raise RuntimeError(
                 "Database contains tables but no alembic_version entry. "
-                "Refusing to guess: verify the schema, then stamp the "
-                "squashed baseline explicitly (alembic stamp "
-                "20260811_0000_squashed_baseline) before upgrading."
+                "Refusing to guess: verify the schema, then stamp an explicit "
+                "revision before upgrading (e.g. alembic stamp "
+                f"{LEGACY_CHAIN_HEAD} for a legacy schema, or "
+                "20260811_0000_squashed_baseline for a schema already at the "
+                "squashed shape)."
             )
 
-        if current_rev in LEGACY_CHAIN_HEADS:
-            # Legacy deployment: schema already matches the squashed baseline.
-            # Stamp it and let the normal upgrade continue to head.
+        if not existing_tables:
+            # Fresh database: the historical ALTER chain cannot replay from an
+            # empty schema (54 of the tables it modifies predate Alembic), and
+            # the squashed baseline IS that whole chain's final shape.  Record
+            # the legacy head as the effective starting point; the baseline
+            # then builds the complete schema from its committed snapshot.
             print(
-                f"env.py: stamping squashed baseline {SQUASHED_BASELINE_REVISION} "
-                f"(was on legacy chain head {current_rev})",
+                f"env.py: empty database — stamping legacy head "
+                f"{LEGACY_CHAIN_HEAD}; the squashed baseline will build the "
+                f"schema.",
                 file=sys.stderr,
             )
-            # The new-chain revision ids exceed VARCHAR(32).  Widen the
-            # version column first; requires table ownership (the ownership
-            # transfer script must run before the first new-chain upgrade on
-            # an existing deployment).
-            try:
-                connection.execute(
-                    text(
-                        "ALTER TABLE alembic_version "
-                        "ALTER COLUMN version_num TYPE VARCHAR(255)"
-                    )
-                )
-                connection.commit()
-            except Exception as exc:  # pragma: no cover - environment dependent
-                raise RuntimeError(
-                    "Cannot widen alembic_version for the squashed baseline. "
-                    "Run scripts/transfer_ownership.py first so the migration "
-                    "role owns the schema. (%s)" % exc
-                ) from exc
-            # Alembic's stamp() resolves the *current* heads from the loaded
-            # script directory, and the legacy head is no longer loaded.  Purge
-            # the stale version row so stamp() treats the baseline as a fresh
-            # head (the schema is already at the baseline shape).
-            connection.execute(text("DELETE FROM alembic_version"))
-            connection.commit()
             MigrationContext.configure(connection).stamp(
-                ScriptDirectory.from_config(config), SQUASHED_BASELINE_REVISION
+                ScriptDirectory.from_config(config), LEGACY_CHAIN_HEAD
             )
             connection.commit()
 

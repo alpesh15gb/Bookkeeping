@@ -240,16 +240,17 @@ def _apply_ledger_immutability(connection) -> None:
     can bypass them.  These triggers make the ledger immutable at the database
     itself for EVERY role (superuser included):
 
-    * journal_entries  — identity/dating/source/lock fields never change;
-      only reversal/correction linkage metadata may.  Deletion is allowed
-      ONLY for system-generated YEAR_END / OPENING_BALANCE roll-forward
-      entries while the tightly-scoped GUC ``app.allow_ledger_delete`` is set
-      to a list containing the entry's source_type (set by the authorized
-      reopen flow only).
-    * journal_lines    — never updated; deleted only with the same scoped
-      roll-back of system roll-forward entries.
-    * stock_ledger     — never updated except reversal-linkage metadata;
-      never deleted.
+    * journal_entries  — NEVER updated (except reversal/correction linkage
+      metadata) and NEVER deleted.  Corrections and year-end reopen are done
+      with REVERSAL entries, never by rewriting or deleting history.
+    * journal_lines    — NEVER updated, NEVER deleted.
+    * stock_ledger     — NEVER updated (except reversal-linkage metadata),
+      NEVER deleted.
+
+    There is deliberately NO client-settable bypass: a transaction-scoped GUC
+    that named eligible source types would let any role that holds DELETE on
+    the ledger tables (the application roles do) destroy accounting history
+    with raw SQL.  Append-only means append-only.
     """
     if not (
         _table_has_column(connection, "journal_entries", "id")
@@ -299,18 +300,8 @@ def _apply_ledger_immutability(connection) -> None:
             """
             CREATE OR REPLACE FUNCTION apex_guard_journal_entries_delete()
             RETURNS trigger AS $$
-            DECLARE
-                allowed text;
             BEGIN
-                allowed := current_setting('app.allow_ledger_delete', true);
-                IF allowed IS NULL OR allowed = '' THEN
-                    RAISE EXCEPTION 'journal_entries is append-only: deletion requires the scoped roll-back authorization'
-                        USING ERRCODE = '55000';
-                END IF;
-                IF OLD.source_type = ANY (string_to_array(allowed, ',')) THEN
-                    RETURN OLD;
-                END IF;
-                RAISE EXCEPTION 'journal entry of source type % is not eligible for deletion', OLD.source_type
+                RAISE EXCEPTION 'journal_entries is append-only accounting history and can never be deleted; create a reversal entry instead'
                     USING ERRCODE = '55000';
             END;
             $$ LANGUAGE plpgsql SECURITY DEFINER
@@ -337,20 +328,8 @@ def _apply_ledger_immutability(connection) -> None:
             """
             CREATE OR REPLACE FUNCTION apex_guard_journal_lines_delete()
             RETURNS trigger AS $$
-            DECLARE
-                allowed text;
-                parent_source text;
             BEGIN
-                allowed := current_setting('app.allow_ledger_delete', true);
-                IF allowed IS NULL OR allowed = '' THEN
-                    RAISE EXCEPTION 'journal_lines is immutable accounting history; create a reversal entry instead'
-                        USING ERRCODE = '55000';
-                END IF;
-                SELECT source_type INTO parent_source FROM journal_entries WHERE id = OLD.entry_id;
-                IF parent_source = ANY (string_to_array(allowed, ',')) THEN
-                    RETURN OLD;
-                END IF;
-                RAISE EXCEPTION 'journal line belongs to source type % which is not eligible for deletion', parent_source
+                RAISE EXCEPTION 'journal_lines is immutable accounting history and can never be deleted; create a reversal entry instead'
                     USING ERRCODE = '55000';
             END;
             $$ LANGUAGE plpgsql SECURITY DEFINER

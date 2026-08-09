@@ -7,7 +7,10 @@ python scripts/production_acceptance.py
 ```
 
 It fails immediately if migrations have multiple heads, any backend workflow
-test fails, Flutter analysis reports an error/warning, or any Flutter test fails.
+test fails, the PostgreSQL integration suite (backend/pg_tests — RLS, roles,
+concurrency, idempotency crash-safety, ownership upgrade) fails or cannot run
+(REQUIRE_POSTGRES_TESTS=1 makes an unavailable PostgreSQL a hard failure),
+Flutter analysis reports an error/warning, or any Flutter test fails.
 
 ## Workflow evidence
 

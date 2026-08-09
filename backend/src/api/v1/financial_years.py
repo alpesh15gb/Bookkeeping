@@ -491,7 +491,10 @@ def close_financial_year(
         )
 
     entry_id = uuid.uuid4()
-    ref_num = f"YEC-{fy.start_date.year}-{fy.end_date.year % 100:02d}"
+    # Unique per close attempt: the ledger is append-only, so a close that is
+    # reversed by a reopen leaves its entry in place and a later re-close
+    # must not collide with the earlier entry's reference number.
+    ref_num = f"YEC-{fy.start_date.year}-{fy.end_date.year % 100:02d}-{uuid.uuid4().hex[:6].upper()}"
     journal_entry = None
 
     if len(closing_lines) >= 2:
@@ -612,6 +615,44 @@ def close_financial_year(
     }
 
 
+def _reverse_journal_entry(db: Session, entry: JournalEntry, actor_id: uuid.UUID) -> JournalEntry:
+    """Post a balancing reversal entry for ``entry`` and mark it reversed.
+
+    The original entry is preserved and only its reversal-linkage metadata
+    changes (allowed by both the ORM guard and the database trigger); the new
+    reversal negates every line, so debits still equal credits.  This is how
+    year-end reopen undoes system roll-forward entries now that journal
+    history can never be deleted.
+    """
+    now = datetime.now(timezone.utc)
+    reversal = JournalEntry(
+        tenant_id=entry.tenant_id,
+        entry_date=entry.entry_date,
+        reference_number=f"REV-{entry.reference_number or str(entry.id)}",
+        description=f"Reversal of {entry.reference_number or entry.description} ({entry.source_type})",
+        source_type=f"{entry.source_type}_REVERSAL",
+        source_id=entry.id,
+        is_locked=True,
+        reverses_transaction_id=entry.id,
+        lines=[
+            JournalLine(
+                tenant_id=entry.tenant_id,
+                account_id=line.account_id,
+                amount=line.amount,
+                direction="CREDIT" if line.direction == "DEBIT" else "DEBIT",
+                narration=f"Reversal of {entry.reference_number or entry.id}",
+            )
+            for line in entry.lines
+        ],
+    )
+    db.add(reversal)
+    db.flush()
+    entry.reversed_by = actor_id
+    entry.reversed_at = now
+    entry.reversal_transaction_id = reversal.id
+    return reversal
+
+
 @router.post("/{fy_id}/reopen")
 def reopen_financial_year(
     fy_id: uuid.UUID,
@@ -656,58 +697,60 @@ def reopen_financial_year(
         FinancialYear.start_date > fy.end_date,
     ).order_by(FinancialYear.start_date.asc()).first()
 
-    # Authorize the append-only ledger guards for the system-generated
-    # YEAR_END/OPENING_BALANCE roll-forward entries only (scoped, always
-    # cleared even on exception). Authorization (accounts:manage) is enforced
-    # by the endpoint dependency; _log_audit below records reopen + actor.
-    from src.domains.accounting.ledger_guards import system_ledger_rollback_scope
-    with system_ledger_rollback_scope(db):
-        if fy.journal_entry_id:
-            je = db.query(JournalEntry).filter(JournalEntry.id == fy.journal_entry_id).first()
-            if je:
-                # Delete journal lines first
-                db.query(JournalLine).filter(JournalLine.entry_id == je.id).delete()
-                db.delete(je)
+    # The ledger is append-only at every layer (ORM guards + database
+    # triggers): journal history is NEVER deleted, and there is deliberately
+    # no client-settable bypass.  Reopen therefore REVERSES the system
+    # roll-forward entries instead of deleting them — the originals stay in
+    # the ledger, marked reversed, and a balancing reversal entry is posted.
+    if fy.journal_entry_id:
+        je = db.query(JournalEntry).filter(
+            JournalEntry.id == fy.journal_entry_id,
+            JournalEntry.tenant_id == tenant_id,
+        ).first()
+        if je:
+            _reverse_journal_entry(db, je, actor_id)
 
-        if next_fy:
-            # Delete opening journal entry in next FY (source_type=OPENING_BALANCE)
-            opening_je = db.query(JournalEntry).filter(
-                JournalEntry.tenant_id == tenant_id,
-                JournalEntry.source_type == "OPENING_BALANCE",
-                JournalEntry.entry_date == next_fy.start_date,
-            ).first()
-            if opening_je:
-                db.query(JournalLine).filter(JournalLine.entry_id == opening_je.id).delete()
-                db.delete(opening_je)
+    if next_fy:
+        # Reverse the opening journal entry in next FY (source_type=
+        # OPENING_BALANCE).  Only reverse an unreversed entry, so a re-close
+        # after an earlier reopen never picks the already-reversed one.
+        opening_je = db.query(JournalEntry).filter(
+            JournalEntry.tenant_id == tenant_id,
+            JournalEntry.source_type == "OPENING_BALANCE",
+            JournalEntry.entry_date == next_fy.start_date,
+            JournalEntry.reversed_at == None,
+        ).first()
+        if opening_je:
+            _reverse_journal_entry(db, opening_je, actor_id)
 
-            # Delete OpeningBalanceSnapshot rows for next FY
-            db.query(OpeningBalanceSnapshot).filter(
-                OpeningBalanceSnapshot.tenant_id == tenant_id,
-                OpeningBalanceSnapshot.financial_year_id == fy.id,
-            ).delete()
+        # OpeningBalanceSnapshot / InventoryCarryForward are roll-forward
+        # snapshots (not ledger history) — safe to remove.
+        db.query(OpeningBalanceSnapshot).filter(
+            OpeningBalanceSnapshot.tenant_id == tenant_id,
+            OpeningBalanceSnapshot.financial_year_id == fy.id,
+        ).delete()
 
-            # Delete InventoryCarryForward rows for next FY
-            db.query(InventoryCarryForward).filter(
-                InventoryCarryForward.tenant_id == tenant_id,
-                InventoryCarryForward.financial_year_id == fy.id,
-            ).delete()
+        # InventoryCarryForward rows for next FY
+        db.query(InventoryCarryForward).filter(
+            InventoryCarryForward.tenant_id == tenant_id,
+            InventoryCarryForward.financial_year_id == fy.id,
+        ).delete()
 
-            # Reset opening_balance on permanent accounts
-            accounts = db.query(Account).filter(
-                Account.tenant_id == tenant_id,
-                Account.account_type.in_(["ASSET", "LIABILITY", "EQUITY"]),
-                Account.deleted_at == None,
-            ).all()
-            for account in accounts:
-                account.opening_balance = Decimal("0.0000")
+        # Reset opening_balance on permanent accounts
+        accounts = db.query(Account).filter(
+            Account.tenant_id == tenant_id,
+            Account.account_type.in_(["ASSET", "LIABILITY", "EQUITY"]),
+            Account.deleted_at == None,
+        ).all()
+        for account in accounts:
+            account.opening_balance = Decimal("0.0000")
 
-            # Recalculate account balances
-            account_ids = {a.id for a in accounts}
-            update_account_balances(db, tenant_id, account_ids)
+        # Recalculate account balances (the reversal entries above are part
+        # of the ledger, so balances return to their pre-close state).
+        account_ids = {a.id for a in accounts}
+        update_account_balances(db, tenant_id, account_ids)
 
-        # Flush the deletes NOW while the scoped authorization is still on the
-        # session; db.commit() below runs after the scope exits.
-        db.flush()
+    db.flush()
 
     fy.status = "CURRENT"
     fy.is_current = False

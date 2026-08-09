@@ -543,71 +543,48 @@ def test_expense_draft_workflow_still_works(client, combined_headers, tenant, db
 
 
 # ---------------------------------------------------------------------------
-# 9. Year-end system exception is narrowly scoped
+# 9. Journal history is append-only: no deletion path exists at all
 # ---------------------------------------------------------------------------
 
-def test_year_end_scope_cannot_delete_ordinary_posted_journal(
+def test_journal_entry_can_never_be_deleted(
     client, combined_headers, tenant, admin_user, db_session,
 ):
-    """Even while the year-end roll-back authorization is active, an ordinary
-    posted journal (INVOICE) can never be deleted — only the system-generated
-    YEAR_END/OPENING_BALANCE source types are eligible."""
-    from src.domains.accounting.ledger_guards import system_ledger_rollback_scope
-
+    """Posted journal entries can never be deleted via the ORM — there is no
+    scoped exception and no flag a caller can set: corrections and year-end
+    reopen must create reversal entries."""
     accounts = _resolve_accounts(db_session, tenant.id)
     payload = _journal_payload(tenant.id, accounts)
     created = client.post("/api/v1/accounting/journals", json=payload, headers=combined_headers())
     assert created.status_code == 201, created.text
     manual_je = db_session.query(JournalEntry).filter(JournalEntry.source_type == "MANUAL").one()
 
-    # Ordinary manual-journal entry is NOT in the roll-forward allow-list, so
-    # even inside the scoped year-end authorization it must refuse deletion.
-    with system_ledger_rollback_scope(db_session):
-        db_session.delete(manual_je)
-        with pytest.raises(IntegrityError):
-            db_session.flush()
-        db_session.rollback()
-
-    # The entry is untouched, and the scope flag was cleared on exit.
-    assert db_session.query(JournalEntry).filter(JournalEntry.id == manual_je.id).first() is not None
-    from src.infrastructure.database.models import ALLOW_LEDGER_DELETE_KEY
-    assert ALLOW_LEDGER_DELETE_KEY not in db_session.info
-
-
-def test_year_end_scope_rejects_naive_boolean_flag(
-    client, combined_headers, tenant, admin_user, db_session,
-):
-    """A naive `session.info[flag] = True` must NOT authorize deletion — the
-    guard only honors the frozenset produced by system_ledger_rollback_scope."""
-    from src.infrastructure.database.models import ALLOW_LEDGER_DELETE_KEY
-
-    accounts = _resolve_accounts(db_session, tenant.id)
-    payload = _journal_payload(tenant.id, accounts)
-    created = client.post("/api/v1/accounting/journals", json=payload, headers=combined_headers())
-    assert created.status_code == 201, created.text
-    manual_je = db_session.query(JournalEntry).filter(JournalEntry.source_type == "MANUAL").one()
-
-    db_session.info[ALLOW_LEDGER_DELETE_KEY] = True  # naive misuse
     db_session.delete(manual_je)
     with pytest.raises(IntegrityError):
         db_session.flush()
     db_session.rollback()
-    db_session.info.pop(ALLOW_LEDGER_DELETE_KEY, None)
 
+    # The entry is untouched.
     assert db_session.query(JournalEntry).filter(JournalEntry.id == manual_je.id).first() is not None
 
 
-def test_year_end_scope_cleared_even_on_exception(
+def test_journal_line_can_never_be_deleted(
     client, combined_headers, tenant, admin_user, db_session,
 ):
-    """The scoped authorization is always cleared, even when the body raises."""
-    from src.domains.accounting.ledger_guards import system_ledger_rollback_scope
-    from src.infrastructure.database.models import ALLOW_LEDGER_DELETE_KEY
+    """Journal lines are immutable history: deleting one must fail even when
+    the owning entry is untouched."""
+    accounts = _resolve_accounts(db_session, tenant.id)
+    payload = _journal_payload(tenant.id, accounts)
+    created = client.post("/api/v1/accounting/journals", json=payload, headers=combined_headers())
+    assert created.status_code == 201, created.text
+    manual_je = db_session.query(JournalEntry).filter(JournalEntry.source_type == "MANUAL").one()
+    line = manual_je.lines[0]
 
-    with pytest.raises(RuntimeError):
-        with system_ledger_rollback_scope(db_session):
-            raise RuntimeError("boom")
-    assert ALLOW_LEDGER_DELETE_KEY not in db_session.info
+    db_session.delete(line)
+    with pytest.raises(IntegrityError):
+        db_session.flush()
+    db_session.rollback()
+
+    assert db_session.query(JournalLine).filter(JournalLine.id == line.id).first() is not None
 
 
 # ---------------------------------------------------------------------------

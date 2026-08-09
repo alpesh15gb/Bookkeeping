@@ -273,7 +273,10 @@ def test_concurrent_duplicate_requests_one_wins(app_env, db_admin):
         t.join(timeout=30)
 
     assert 200 in statuses
-    # 409 while another request still holds the claim; never 2 successful
-    # executions with the same key.
-    assert statuses.count(200) == 1
+    # Exactly ONE request executes the financial mutation; the others are
+    # either 409 (claim still in flight) or a 200 replay of the committed
+    # result (the winner finished before they arrived).  Both are safe — the
+    # invariant is a single created resource, never two.
     assert _count_invoices(db_admin, number) == 1
+    for code in statuses:
+        assert code in (200, 409), f"unexpected status {code}"

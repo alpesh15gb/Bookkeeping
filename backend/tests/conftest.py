@@ -31,6 +31,11 @@ settings.DEBUG = True
 settings.APP_ENV = "development"
 settings.SEED_ON_STARTUP = False
 settings.RATE_LIMIT_ENABLED = False
+# The existing regression suite predates the mandatory-Idempotency-Key rule
+# for financial mutations and posts invoices/bills/payments without the
+# header.  Enforcement is tested separately (test_idempotency_middleware.py);
+# production keeps REQUIRE_IDEMPOTENCY_KEY=True.
+settings.REQUIRE_IDEMPOTENCY_KEY = False
 
 # Configure Celery to NOT execute tasks eagerly in testing.
 # Tasks will be queued to the broker but won't execute (no worker running).
@@ -124,6 +129,20 @@ try:
 except Exception:
     pass  # Stale lock from previous run — tables will be recreated
 Base.metadata.create_all(bind=engine)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _ensure_schema_per_module():
+    """
+    The application no longer runs Base.metadata.create_all() on startup
+    (Alembic is the only production schema manager).  Several test modules
+    drop the schema in their teardown without rebuilding it, so re-create the
+    tables before every module that relies on a pre-built schema.  This is a
+    test-harness convenience only — production readiness still requires
+    Alembic migrations to be applied.
+    """
+    Base.metadata.create_all(bind=engine)
+    yield
 
 
 @pytest.fixture
