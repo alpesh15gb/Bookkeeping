@@ -3,25 +3,81 @@ from __future__ import annotations
 import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any, Callable, List, Optional
 
 from fastapi import Depends, HTTPException, Request, Response, status
+from pydantic import Field
 from sqlalchemy import event, text
 from sqlalchemy.orm import Session
 
 from src.api.deps import enforce_permission, get_current_user
+from src.core.config import settings
 from src.core.database import get_db_session
-from src.infrastructure.database.models import Invoice, Bill, Expense, User
-from src.schemas.document import InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceLineCreate
-from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillLineCreate
-from src.schemas.expense_schemas import ExpenseCreate, ExpenseUpdate, ExpenseResponse
-from src.api.v1 import invoices as invoice_api
+from src.core.rate_limiter import limiter
+from src.infrastructure.database.models import Bill, Expense, Invoice, User
+from src.schemas.bill_schemas import (
+    BillBase,
+    BillCreate,
+    BillLineCreate,
+    BillResponse,
+    BillUpdate,
+)
+from src.schemas.document import (
+    InvoiceBase,
+    InvoiceCreate,
+    InvoiceLineCreate,
+    InvoiceResponse,
+    InvoiceUpdate,
+)
+from src.schemas.expense_schemas import ExpenseCreate, ExpenseResponse, ExpenseUpdate
 from src.api.v1 import bills as bill_api
 from src.api.v1 import expenses as expense_api
+from src.api.v1 import invoices as invoice_api
+
+
+class DirectInvoiceCreate(InvoiceBase):
+    """Public create contract: there is no post/draft switch."""
+
+    line_items: List[InvoiceLineCreate] = Field(..., min_length=1)
+    discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
+    notes: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+    reference_number: Optional[str] = Field(None, max_length=50)
+    sales_person_id: Optional[uuid.UUID] = None
+    is_gst_inclusive: Optional[bool] = False
+    is_rcm: Optional[bool] = False
+    supply_type: Optional[str] = Field(
+        default="DOMESTIC",
+        pattern="^(DOMESTIC|EXPORT_WITH_TAX|EXPORT_WITHOUT_TAX|SEZ_WITH_TAX|SEZ_WITHOUT_TAX)$",
+    )
+    tds_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    tcs_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+
+
+class DirectBillCreate(BillBase):
+    """Public create contract with server-generated bill number when omitted."""
+
+    bill_number: Optional[str] = Field(None, max_length=50)
+    line_items: List[BillLineCreate] = Field(..., min_length=1)
+    discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    shipping_charges: Optional[Decimal] = Field(default=Decimal("0.0000"), ge=0)
+    notes: Optional[str] = None
+    terms_and_conditions: Optional[str] = None
+    reference_number: Optional[str] = Field(None, max_length=50)
+    tds_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    is_gst_inclusive: Optional[bool] = False
+    itc_eligible: bool = True
 
 
 class DeferredCommitSession:
-    """Session proxy used to keep legacy multi-step handlers in one transaction."""
+    """Proxy that turns legacy handler commits into flushes.
+
+    This lets us safely compose legacy validation/posting functions into one
+    outer atomic reversal+replacement transaction without duplicating their
+    tax, stock and ledger logic.
+    """
+
     def __init__(self, session: Session):
         self._session = session
 
@@ -54,15 +110,12 @@ def _remove_route(router, path: str, method: str) -> None:
 
 
 def _set_replay_resource(db: Session, obj: Any) -> None:
+    """Explicitly point idempotent crash replay at the replacement document."""
     from src.core.idempotency import get_inflight_claim
 
     claim = get_inflight_claim()
     resource_id = getattr(obj, "id", None)
-    if (
-        not claim
-        or resource_id is None
-        or db.get_bind().dialect.name != "postgresql"
-    ):
+    if not claim or resource_id is None or db.get_bind().dialect.name != "postgresql":
         return
     db.execute(
         text(
@@ -101,7 +154,7 @@ def _attach_replacement_links(session: Session, flush_context, instances) -> Non
             break
 
 
-def _invoice_lines(invoice: Invoice):
+def _invoice_lines(invoice: Invoice) -> List[InvoiceLineCreate]:
     return [
         InvoiceLineCreate(
             product_id=line.product_id,
@@ -116,7 +169,7 @@ def _invoice_lines(invoice: Invoice):
     ]
 
 
-def _bill_lines(bill: Bill):
+def _bill_lines(bill: Bill) -> List[BillLineCreate]:
     return [
         BillLineCreate(
             product_id=line.product_id,
@@ -149,16 +202,33 @@ def _bill_discount_rate(bill: Bill) -> Decimal:
     return (header * 100 / subtotal).quantize(Decimal("0.0001"))
 
 
+def _legacy_invoice_payload(payload: DirectInvoiceCreate) -> InvoiceCreate:
+    return InvoiceCreate(**payload.model_dump(), post_on_create=True)
+
+
+def _legacy_bill_payload(
+    db: Session, tenant_id: uuid.UUID, payload: DirectBillCreate
+) -> BillCreate:
+    from src.domains.company.services import NumberingSeriesService
+
+    values = payload.model_dump()
+    values["bill_number"] = values.get("bill_number") or NumberingSeriesService.generate_next_number(
+        db, tenant_id, "BILL"
+    )
+    values["post_on_create"] = True
+    return BillCreate(**values)
+
+
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def direct_create_invoice(
     request: Request,
-    payload: InvoiceCreate,
+    payload: DirectInvoiceCreate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:create")),
 ):
-    # post_on_create is kept only as a legacy input compatibility field; callers
-    # can no longer create a persistent accounting draft.
-    payload = payload.model_copy(update={"post_on_create": True})
-    return _unwrap(invoice_api.create_invoice)(request, payload, db, tenant_id)
+    return _unwrap(invoice_api.create_invoice)(
+        request, _legacy_invoice_payload(payload), db, tenant_id
+    )
 
 
 def direct_update_invoice(
@@ -179,7 +249,7 @@ def direct_update_invoice(
     if original.source_document_type:
         raise HTTPException(
             409,
-            "Correct invoices created from another source document from that source workflow.",
+            "Correct source-derived invoices from the originating document workflow.",
         )
     if original.irn:
         raise HTTPException(
@@ -196,13 +266,37 @@ def direct_update_invoice(
         due_date=payload.due_date or original.due_date,
         pos_state_code=payload.pos_state_code or original.pos_state_code,
         line_items=payload.line_items or _invoice_lines(original),
-        discount_rate=payload.discount_rate if payload.discount_rate is not None else _invoice_discount_rate(original),
-        shipping_charges=payload.shipping_charges if payload.shipping_charges is not None else original.shipping_charges,
+        discount_rate=(
+            payload.discount_rate
+            if payload.discount_rate is not None
+            else _invoice_discount_rate(original)
+        ),
+        shipping_charges=(
+            payload.shipping_charges
+            if payload.shipping_charges is not None
+            else original.shipping_charges
+        ),
         notes=payload.notes if payload.notes is not None else original.notes,
-        terms_and_conditions=payload.terms_and_conditions if payload.terms_and_conditions is not None else original.terms_and_conditions,
-        reference_number=payload.reference_number if payload.reference_number is not None else original.reference_number,
-        sales_person_id=payload.sales_person_id if payload.sales_person_id is not None else original.sales_person_id,
-        is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive is not None else original.is_gst_inclusive,
+        terms_and_conditions=(
+            payload.terms_and_conditions
+            if payload.terms_and_conditions is not None
+            else original.terms_and_conditions
+        ),
+        reference_number=(
+            payload.reference_number
+            if payload.reference_number is not None
+            else original.reference_number
+        ),
+        sales_person_id=(
+            payload.sales_person_id
+            if payload.sales_person_id is not None
+            else original.sales_person_id
+        ),
+        is_gst_inclusive=(
+            payload.is_gst_inclusive
+            if payload.is_gst_inclusive is not None
+            else original.is_gst_inclusive
+        ),
         is_rcm=payload.is_rcm if payload.is_rcm is not None else original.is_rcm,
         supply_type=payload.supply_type or original.supply_type,
         currency=payload.currency or original.currency,
@@ -223,14 +317,14 @@ def direct_update_invoice(
 
     db.info["_direct_replacement_context"] = (Invoice, original)
     try:
-        # create_invoice performs the one real commit, making reversal,
-        # soft-delete, replacement document and replacement posting atomic.
-        replacement = _unwrap(invoice_api.create_invoice)(
+        # The legacy create's commit is the single real commit: reversal,
+        # soft-delete, replacement document, stock and replacement journal land
+        # atomically.
+        return _unwrap(invoice_api.create_invoice)(
             request, replacement_payload, db, tenant_id
         )
     finally:
         db.info.pop("_direct_replacement_context", None)
-    return replacement
 
 
 def direct_delete_invoice(
@@ -263,14 +357,16 @@ def direct_delete_invoice(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def direct_create_bill(
     request: Request,
-    payload: BillCreate,
+    payload: DirectBillCreate,
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("bill:create")),
 ):
-    payload = payload.model_copy(update={"post_on_create": True})
-    return _unwrap(bill_api.create_bill)(request, payload, db, tenant_id)
+    return _unwrap(bill_api.create_bill)(
+        request, _legacy_bill_payload(db, tenant_id, payload), db, tenant_id
+    )
 
 
 def direct_update_bill(
@@ -300,14 +396,38 @@ def direct_update_bill(
         due_date=payload.due_date or original.due_date,
         pos_state_code=payload.pos_state_code or original.pos_state_code,
         line_items=payload.line_items or _bill_lines(original),
-        discount_rate=payload.discount_rate if payload.discount_rate is not None else _bill_discount_rate(original),
-        shipping_charges=payload.shipping_charges if payload.shipping_charges is not None else original.shipping_charges,
+        discount_rate=(
+            payload.discount_rate
+            if payload.discount_rate is not None
+            else _bill_discount_rate(original)
+        ),
+        shipping_charges=(
+            payload.shipping_charges
+            if payload.shipping_charges is not None
+            else original.shipping_charges
+        ),
         notes=payload.notes if payload.notes is not None else original.notes,
-        terms_and_conditions=payload.terms_and_conditions if payload.terms_and_conditions is not None else original.terms_and_conditions,
-        reference_number=payload.reference_number if payload.reference_number is not None else original.reference_number,
+        terms_and_conditions=(
+            payload.terms_and_conditions
+            if payload.terms_and_conditions is not None
+            else original.terms_and_conditions
+        ),
+        reference_number=(
+            payload.reference_number
+            if payload.reference_number is not None
+            else original.reference_number
+        ),
         tds_rate=payload.tds_rate if payload.tds_rate is not None else original.tds_rate,
-        is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive is not None else original.is_gst_inclusive,
-        itc_eligible=payload.itc_eligible if payload.itc_eligible is not None else original.itc_eligible,
+        is_gst_inclusive=(
+            payload.is_gst_inclusive
+            if payload.is_gst_inclusive is not None
+            else original.is_gst_inclusive
+        ),
+        itc_eligible=(
+            payload.itc_eligible
+            if payload.itc_eligible is not None
+            else original.itc_eligible
+        ),
         post_on_create=True,
     )
 
@@ -322,12 +442,11 @@ def direct_update_bill(
 
     db.info["_direct_replacement_context"] = (Bill, original)
     try:
-        replacement = _unwrap(bill_api.create_bill)(
+        return _unwrap(bill_api.create_bill)(
             request, replacement_payload, db, tenant_id
         )
     finally:
         db.info.pop("_direct_replacement_context", None)
-    return replacement
 
 
 def direct_delete_bill(
@@ -358,6 +477,7 @@ def direct_delete_bill(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@limiter.limit(settings.RATE_LIMIT_DEFAULT)
 def direct_create_expense(
     request: Request,
     payload: ExpenseCreate,
@@ -365,11 +485,14 @@ def direct_create_expense(
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:create")),
 ):
     proxy = DeferredCommitSession(db)
-    expense = _unwrap(expense_api.create_expense)(request, payload, proxy, tenant_id)
-    posted = _unwrap(expense_api.post_expense)(expense.id, proxy, tenant_id)
+    created = _unwrap(expense_api.create_expense)(request, payload, proxy, tenant_id)
+    _unwrap(expense_api.post_expense)(created.id, proxy, tenant_id)
     db.commit()
-    db.refresh(posted)
-    return posted
+    expense = db.query(Expense).filter(
+        Expense.id == created.id,
+        Expense.tenant_id == tenant_id,
+    ).first()
+    return expense_api._expense_to_response(expense)
 
 
 def direct_update_expense(
@@ -389,16 +512,32 @@ def direct_update_expense(
         raise HTTPException(404, "Expense not found.")
 
     replacement_payload = ExpenseCreate(
-        expense_category_id=payload.expense_category_id if payload.expense_category_id is not None else original.expense_category_id,
-        bank_account_id=payload.bank_account_id if payload.bank_account_id is not None else original.bank_account_id,
+        expense_category_id=(
+            payload.expense_category_id
+            if payload.expense_category_id is not None
+            else original.expense_category_id
+        ),
+        bank_account_id=(
+            payload.bank_account_id
+            if payload.bank_account_id is not None
+            else original.bank_account_id
+        ),
         expense_date=payload.expense_date or original.expense_date,
         vendor_name=payload.vendor_name if payload.vendor_name is not None else original.vendor_name,
         description=payload.description if payload.description is not None else original.description,
         amount=payload.amount if payload.amount is not None else original.amount,
         gst_rate=payload.gst_rate if payload.gst_rate is not None else original.gst_rate,
-        place_of_supply_state_code=payload.place_of_supply_state_code if payload.place_of_supply_state_code is not None else original.place_of_supply_state_code,
+        place_of_supply_state_code=(
+            payload.place_of_supply_state_code
+            if payload.place_of_supply_state_code is not None
+            else original.place_of_supply_state_code
+        ),
         notes=payload.notes if payload.notes is not None else original.notes,
-        reference_number=payload.reference_number if payload.reference_number is not None else original.reference_number,
+        reference_number=(
+            payload.reference_number
+            if payload.reference_number is not None
+            else original.reference_number
+        ),
     )
 
     proxy = DeferredCommitSession(db)
@@ -410,17 +549,20 @@ def direct_update_expense(
 
     db.info["_direct_replacement_context"] = (Expense, original)
     try:
-        replacement = _unwrap(expense_api.create_expense)(
+        created = _unwrap(expense_api.create_expense)(
             request, replacement_payload, proxy, tenant_id
         )
-        replacement = _unwrap(expense_api.post_expense)(
-            replacement.id, proxy, tenant_id
-        )
+        _unwrap(expense_api.post_expense)(created.id, proxy, tenant_id)
+        replacement = db.query(Expense).filter(
+            Expense.id == created.id,
+            Expense.tenant_id == tenant_id,
+        ).first()
+        _set_replay_resource(db, replacement)
         db.commit()
         db.refresh(replacement)
+        return expense_api._expense_to_response(replacement)
     finally:
         db.info.pop("_direct_replacement_context", None)
-    return expense_api._expense_to_response(replacement)
 
 
 def direct_delete_expense(
@@ -465,16 +607,20 @@ def install_direct_posting_contract() -> None:
         ("/invoices/{id}/payment", "POST"),
     ):
         _remove_route(invoice_api.router, path, method)
-
     invoice_api.router.add_api_route(
-        "", direct_create_invoice, methods=["POST"],
-        response_model=InvoiceResponse, status_code=status.HTTP_201_CREATED,
+        "",
+        direct_create_invoice,
+        methods=["POST"],
+        response_model=InvoiceResponse,
+        status_code=status.HTTP_201_CREATED,
     )
     invoice_api.router.add_api_route(
-        "/{id}", direct_update_invoice, methods=["PUT"], response_model=InvoiceResponse,
+        "/{id}", direct_update_invoice, methods=["PUT"], response_model=InvoiceResponse
     )
     invoice_api.router.add_api_route(
-        "/{id}", direct_delete_invoice, methods=["DELETE"],
+        "/{id}",
+        direct_delete_invoice,
+        methods=["DELETE"],
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
@@ -487,16 +633,20 @@ def install_direct_posting_contract() -> None:
         ("/bills/{id}/payment", "POST"),
     ):
         _remove_route(bill_api.router, path, method)
-
     bill_api.router.add_api_route(
-        "", direct_create_bill, methods=["POST"],
-        response_model=BillResponse, status_code=status.HTTP_201_CREATED,
+        "",
+        direct_create_bill,
+        methods=["POST"],
+        response_model=BillResponse,
+        status_code=status.HTTP_201_CREATED,
     )
     bill_api.router.add_api_route(
-        "/{id}", direct_update_bill, methods=["PUT"], response_model=BillResponse,
+        "/{id}", direct_update_bill, methods=["PUT"], response_model=BillResponse
     )
     bill_api.router.add_api_route(
-        "/{id}", direct_delete_bill, methods=["DELETE"],
+        "/{id}",
+        direct_delete_bill,
+        methods=["DELETE"],
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
@@ -509,15 +659,19 @@ def install_direct_posting_contract() -> None:
         ("/expenses/bulk-delete", "POST"),
     ):
         _remove_route(expense_api.router, path, method)
-
     expense_api.router.add_api_route(
-        "", direct_create_expense, methods=["POST"],
-        response_model=ExpenseResponse, status_code=status.HTTP_201_CREATED,
+        "",
+        direct_create_expense,
+        methods=["POST"],
+        response_model=ExpenseResponse,
+        status_code=status.HTTP_201_CREATED,
     )
     expense_api.router.add_api_route(
-        "/{id}", direct_update_expense, methods=["PUT"], response_model=ExpenseResponse,
+        "/{id}", direct_update_expense, methods=["PUT"], response_model=ExpenseResponse
     )
     expense_api.router.add_api_route(
-        "/{id}", direct_delete_expense, methods=["DELETE"],
+        "/{id}",
+        direct_delete_expense,
+        methods=["DELETE"],
         status_code=status.HTTP_204_NO_CONTENT,
     )
