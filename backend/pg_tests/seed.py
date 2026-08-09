@@ -16,6 +16,8 @@ from src.infrastructure.database.models import (
     AuditLog,
     Bill,
     BillLine,
+    BillPayment,
+    BillPaymentAllocation,
     Branch,
     Contact,
     Invoice,
@@ -23,6 +25,7 @@ from src.infrastructure.database.models import (
     JournalEntry,
     JournalLine,
     Payment,
+    PaymentAllocation,
     Product,
     StockLedger,
     Tenant,
@@ -248,6 +251,63 @@ def seed_payment(
     db.add(payment)
     db.flush()
     return payment
+
+
+def seed_bill_payment(
+    db: Session,
+    tenant_id: uuid.UUID,
+    contact: Contact,
+    number: str,
+    amount: Decimal = Decimal("118.00"),
+) -> BillPayment:
+    bill_payment = BillPayment(
+        tenant_id=tenant_id,
+        contact_id=contact.id,
+        payment_number=number,
+        payment_date=date.today(),
+        payment_mode="BANK",
+        amount=amount,
+        status="ACTIVE",
+    )
+    db.add(bill_payment)
+    db.flush()
+    return bill_payment
+
+
+def seed_payment_allocation(
+    db: Session,
+    tenant_id: uuid.UUID,
+    payment: Payment,
+    invoice: Invoice,
+    amount: Decimal = Decimal("118.00"),
+) -> PaymentAllocation:
+    allocation = PaymentAllocation(
+        tenant_id=tenant_id,
+        payment_id=payment.id,
+        invoice_id=invoice.id,
+        amount=amount,
+    )
+    db.add(allocation)
+    db.flush()
+    return allocation
+
+
+def seed_bill_payment_allocation(
+    db: Session,
+    tenant_id: uuid.UUID,
+    payment: BillPayment,
+    bill: Bill,
+    amount: Decimal = Decimal("118.00"),
+) -> BillPaymentAllocation:
+    allocation = BillPaymentAllocation(
+        tenant_id=tenant_id,
+        payment_id=payment.id,
+        bill_id=bill.id,
+        amount=amount,
+    )
+    db.add(allocation)
+    db.flush()
+    return allocation
 
 
 def seed_journal_entry(

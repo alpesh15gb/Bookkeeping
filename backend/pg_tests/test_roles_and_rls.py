@@ -118,12 +118,14 @@ def test_tenant_isolation_select_and_update_delete(db_api, db_admin, seeded):
     )
     assert result.rowcount == 0
 
-    # Same-tenant UPDATE works.
+    # Same-tenant UPDATE works (affects exactly the tenant-A rows the admin
+    # can see — the DB accumulates rows across the session, so compare
+    # against the admin count rather than an absolute number).
     result = db_api.execute(
         text("UPDATE invoices SET notes = 'x' WHERE tenant_id = :tid"),
         {"tid": str(TENANT_A)},
     )
-    assert result.rowcount == 1
+    assert result.rowcount == owned_by_a
 
     # Cross-tenant DELETE affects zero rows.
     result = db_api.execute(
@@ -189,3 +191,67 @@ def test_global_templates_visible_to_all_tenants(db_api, db_admin, seeded):
     set_tenant(db_api, TENANT_A)
     rates = db_api.execute(text("SELECT rate FROM tax_templates")).scalars().all()
     assert "18.00" in rates or 18.00 in rates
+
+
+def test_least_privilege_audit_logs_not_writable(db_api, db_admin):
+    """The API role must not be able to UPDATE or DELETE audit_logs even with
+    raw SQL — the least-privilege grant model forbids it (defense in depth
+    on top of the immutability trigger)."""
+    for priv in ("UPDATE", "DELETE"):
+        assert db_admin.execute(
+            text("SELECT has_table_privilege(:role, 'audit_logs', :priv)"),
+            {"role": API_ROLE, "priv": priv},
+        ).scalar() is False
+    assert db_admin.execute(
+        text("SELECT has_table_privilege(:role, 'audit_logs', 'INSERT')"),
+        {"role": API_ROLE},
+    ).scalar() is True
+
+
+def test_least_privilege_alembic_version_read_only(db_api, db_admin):
+    for priv in ("INSERT", "UPDATE", "DELETE"):
+        assert db_admin.execute(
+            text("SELECT has_table_privilege(:role, 'alembic_version', :priv)"),
+            {"role": API_ROLE, "priv": priv},
+        ).scalar() is False
+    # The readiness probe reads it.
+    assert db_admin.execute(
+        text("SELECT has_table_privilege(:role, 'alembic_version', 'SELECT')"),
+        {"role": API_ROLE},
+    ).scalar() is True
+
+
+def test_least_privilege_sequence_usage_only(db_admin):
+    """Sequences grant USAGE only — nextval/currval/setval all work with
+    USAGE and the application never needs SELECT on a sequence."""
+    seq = db_admin.execute(
+        text(
+            "SELECT c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+            "WHERE n.nspname = 'public' AND c.relkind = 'S' LIMIT 1"
+        )
+    ).scalar()
+    if not seq:
+        pytest.skip("no sequences in public schema")
+    assert db_admin.execute(
+        text("SELECT has_sequence_privilege(:role, :seq, 'USAGE')"),
+        {"role": API_ROLE, "seq": seq},
+    ).scalar() is True
+    assert db_admin.execute(
+        text("SELECT has_sequence_privilege(:role, :seq, 'SELECT')"),
+        {"role": API_ROLE, "seq": seq},
+    ).scalar() is False
+
+
+def test_tenant_enumerator_not_public(db_admin):
+    """The controlled tenant enumerator is callable by the restricted roles
+    but never by arbitrary PUBLIC."""
+    public_ok = db_admin.execute(
+        text(
+            "SELECT has_function_privilege('public', 'apex_list_active_tenant_ids()', 'EXECUTE')"
+        )
+    ).scalar()
+    assert public_ok is False
+    assert db_admin.execute(
+        text("SELECT has_function_privilege(:role, 'apex_list_active_tenant_ids()', 'EXECUTE')"),
+        {"role": API_ROLE},
+    ).scalar() is True

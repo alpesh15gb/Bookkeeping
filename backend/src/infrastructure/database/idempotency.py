@@ -23,4 +23,11 @@ class IdempotencyRecord(Base):
     response_status = Column(Integer)
     response_body = Column(Text)
     response_content_type = Column(String(100))
+    # Committed-but-response-lost recovery: when the financial transaction
+    # commits but the process dies before the response can be stored, the
+    # retry replays with the created resource's identity instead of a generic
+    # message.  Populated atomically with the COMMITTED marker (see
+    # src/core/idempotency.py).
+    resource_type = Column(String(100))
+    resource_id = Column(UUID(as_uuid=True))
     created_at = Column(DateTime(timezone=True), nullable=False, default=func.now())

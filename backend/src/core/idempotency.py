@@ -51,23 +51,47 @@ def get_inflight_claim() -> Optional[Dict[str, Any]]:
     return _inflight_claim.get()
 
 
-@event.listens_for(Session, "before_commit")
-def _mark_idempotency_committed_atomically(session: Session) -> None:
+@event.listens_for(Session, "after_flush")
+def _mark_idempotency_committed_atomically(session: Session, flush_context) -> None:
     """Flip the claim to COMMITTED inside the business transaction.
 
-    Runs on the first commit of any session while this request owns an
+    Runs on the first flush of any session while this request owns an
     in-flight claim.  Skipped on SQLite (unit-test convenience; PostgreSQL is
     the production enforcement point).
+
+    ``after_flush`` fires while the flush is still part of the business
+    transaction (before the actual COMMIT), and the flush has already assigned
+    primary keys via RETURNING, so the created entity's identity is known: the
+    first tenant-owned domain entity is captured and stored on the claim row,
+    letting a committed-but-response-lost replay return the original resource
+    identity.
     """
     claim = _inflight_claim.get()
     if not claim:
         return
     if session.get_bind().dialect.name != "postgresql":
         return
+    if session.info.get("_idem_marked"):
+        return
+    session.info["_idem_marked"] = True
+    resource_type = None
+    resource_id = None
+    for obj in session.new:
+        cls = type(obj)
+        if cls.__name__ == "IdempotencyRecord":
+            continue
+        if hasattr(obj, "id") and hasattr(obj, "tenant_id"):
+            pk = getattr(obj, "id", None)
+            if pk is not None:
+                resource_type = cls.__name__
+                resource_id = str(pk)
+                break
     result = session.execute(
         text(
             "UPDATE idempotency_keys "
-            "SET status = 'COMMITTED', is_processed = true "
+            "SET status = 'COMMITTED', is_processed = true, "
+            "resource_type = COALESCE(:resource_type, resource_type), "
+            "resource_id = COALESCE(CAST(:resource_id AS uuid), resource_id) "
             "WHERE idempotency_key = :key AND tenant_id = :tenant "
             "AND method = :method AND path = :path"
         ),
@@ -76,6 +100,8 @@ def _mark_idempotency_committed_atomically(session: Session) -> None:
             "tenant": claim["tenant"],
             "method": claim["method"],
             "path": claim["path"],
+            "resource_type": resource_type,
+            "resource_id": resource_id,
         },
     )
     if result.rowcount == 0:

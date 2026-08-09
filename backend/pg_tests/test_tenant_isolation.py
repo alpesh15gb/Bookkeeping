@@ -95,15 +95,18 @@ def test_tenant_b_cannot_read_tenant_a_accounting_data(db_api, seeded):
         assert _count(db_api, table, TENANT_A) == 0
 
 
-def test_direct_child_table_access_blocked(db_api, seeded):
+def test_direct_child_table_access_blocked(db_api, db_admin, seeded):
     """A direct query on child tables must not return other tenants' rows."""
     set_tenant(db_api, TENANT_A)
-    assert db_api.execute(text("SELECT count(*) FROM invoice_lines")).scalar() == 1
-    assert db_api.execute(text("SELECT count(*) FROM bill_lines")).scalar() == 1
-    assert db_api.execute(text("SELECT count(*) FROM journal_lines")).scalar() == 2
-    assert _count(db_api, "invoice_lines", TENANT_B) == 0
-    assert _count(db_api, "bill_lines", TENANT_B) == 0
-    assert _count(db_api, "journal_lines", TENANT_B) == 0
+    # Rows accumulate across the session; compare against the true counts.
+    for table in ("invoice_lines", "bill_lines", "journal_lines"):
+        owned = db_admin.execute(
+            text(f"SELECT count(*) FROM {table} WHERE tenant_id = :t"),
+            {"t": str(TENANT_A)},
+        ).scalar()
+        assert owned > 0, f"{table} should have tenant A rows"
+        assert db_api.execute(text(f"SELECT count(*) FROM {table}")).scalar() == owned
+        assert _count(db_api, table, TENANT_B) == 0, f"{table} leaked tenant B rows"
 
 
 def test_child_tenant_must_match_parent(db_admin, db_api, seeded):
@@ -146,14 +149,18 @@ def test_update_and_delete_other_tenant_rows_are_noops(db_api, seeded):
     assert result.rowcount == 0
 
 
-def test_orm_queries_respect_rls(db_api, seeded):
+def test_orm_queries_respect_rls(db_api, db_admin, seeded):
     set_tenant(db_api, TENANT_A)
     invoices = db_api.query(Invoice).all()
-    assert [i.id for i in invoices] == [seeded["inv_a"].id]
+    assert len(invoices) == db_admin.execute(
+        text("SELECT count(*) FROM invoices WHERE tenant_id = :t"),
+        {"t": str(TENANT_A)},
+    ).scalar()
+    assert all(i.tenant_id == TENANT_A for i in invoices)
     bills = db_api.query(Bill).all()
-    assert [b.id for b in bills] == [seeded["bill_a"].id]
+    assert all(b.tenant_id == TENANT_A for b in bills)
     payments = db_api.query(Payment).all()
-    assert [p.id for p in payments] == [seeded["pay_a"].id]
+    assert all(p.tenant_id == TENANT_A for p in payments)
     entries = db_api.query(JournalEntry).all()
     assert all(e.tenant_id == TENANT_A for e in entries)
     moves = db_api.query(StockLedger).all()

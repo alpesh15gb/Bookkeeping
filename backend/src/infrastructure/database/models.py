@@ -389,6 +389,7 @@ class PaymentAllocation(Base):
     __table_args__ = (
         Index("ix_payment_allocations_payment_id", "payment_id"),
         Index("ix_payment_allocations_invoice_id", "invoice_id"),
+        Index("ix_payment_allocations_tenant", "tenant_id"),
         Index("ix_payment_allocations_payment_invoice", "payment_id", "invoice_id"),
         UniqueConstraint(
             "payment_id", "invoice_id", name="uq_payment_allocations_payment_invoice"
@@ -397,6 +398,7 @@ class PaymentAllocation(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     payment_id = Column(UUID(as_uuid=True), ForeignKey("payments.id"), nullable=False)
     invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=False)
     amount = Column(Numeric(15, 4), nullable=False)
@@ -548,10 +550,12 @@ class BillPaymentAllocation(Base):
     __table_args__ = (
         Index("ix_bill_payment_allocations_payment_id", "payment_id"),
         Index("ix_bill_payment_allocations_bill_id", "bill_id"),
+        Index("ix_bill_payment_allocations_tenant", "tenant_id"),
         CheckConstraint("amount > 0", name="ck_bill_payment_allocations_amount"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), nullable=False)
     payment_id = Column(UUID(as_uuid=True), ForeignKey("bill_payments.id"), nullable=False)
     bill_id = Column(UUID(as_uuid=True), ForeignKey("bills.id"), nullable=False)
     amount = Column(Numeric(15, 4), nullable=False)
@@ -2491,6 +2495,12 @@ _CHILD_PARENT_MAP = {
     SalesReturnLine: ("sales_return_id", SalesReturn),
     PurchaseReturnLine: ("purchase_return_id", PurchaseReturn),
     RecurringInvoiceItem: ("recurring_invoice_id", RecurringInvoice),
+    # Payment allocations are tenant-owned join rows: the propagation listener
+    # inherits the tenant from the payment, and the database trigger enforces
+    # that the allocation's tenant matches BOTH the payment and the
+    # invoice/bill it allocates against (see postgres_hardening.py).
+    PaymentAllocation: ("payment_id", Payment),
+    BillPaymentAllocation: ("payment_id", BillPayment),
 }
 
 

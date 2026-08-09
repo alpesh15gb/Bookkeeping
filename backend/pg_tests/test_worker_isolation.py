@@ -52,7 +52,12 @@ def test_worker_cannot_read_other_tenant_ledger(db_worker, db_admin, seeded):
     db_admin.commit()
 
     set_tenant(db_worker, TENANT_A)
-    assert db_worker.execute(text("SELECT count(*) FROM journal_entries")).scalar() == 1
+    seen_by_worker = db_worker.execute(text("SELECT count(*) FROM journal_entries")).scalar()
+    owned_by_a = db_admin.execute(
+        text("SELECT count(*) FROM journal_entries WHERE tenant_id = :t"),
+        {"t": str(TENANT_A)},
+    ).scalar()
+    assert seen_by_worker == owned_by_a
     assert db_worker.execute(
         text("SELECT count(*) FROM journal_entries WHERE tenant_id = :t"),
         {"t": str(TENANT_B)},

@@ -60,9 +60,25 @@ def system_ledger_rollback_scope(
         )
     previous = db.info.get(ALLOW_LEDGER_DELETE_KEY)
     db.info[ALLOW_LEDGER_DELETE_KEY] = allowed
+    # Mirror the authorization into the database: the PostgreSQL-level
+    # immutability triggers (see postgres_hardening.py) refuse to delete
+    # journal rows unless this transaction-scoped GUC lists the entry's
+    # source_type.  SET LOCAL is transaction-scoped, so the authorization
+    # dies with the transaction and can never leak into a pooled connection.
+    # Skipped on SQLite (unit-test convenience; the triggers only exist on
+    # PostgreSQL).
+    is_postgresql = db.get_bind().dialect.name == "postgresql"
+    if is_postgresql:
+        from sqlalchemy import text
+        db.execute(
+            text("SET LOCAL app.allow_ledger_delete = :allowed"),
+            {"allowed": ",".join(sorted(allowed))},
+        )
     try:
         yield
     finally:
+        if is_postgresql:
+            db.execute(text("SET LOCAL app.allow_ledger_delete = ''"))
         if previous is None:
             db.info.pop(ALLOW_LEDGER_DELETE_KEY, None)
         else:

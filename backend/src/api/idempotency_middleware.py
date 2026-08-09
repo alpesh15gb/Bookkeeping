@@ -19,13 +19,25 @@ logger = logging.getLogger("bookkeeping.idempotency")
 IDEMPOTENT_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
 
 
-def _committed_replay_response() -> JSONResponse:
+def _committed_replay_response(existing=None) -> JSONResponse:
+    """Replay for a request whose financial transaction committed but whose
+    response was never stored (the process died in between).  Returns the
+    original resource identity when the commit marker captured it, so clients
+    can recover the invoice/payment/bill id instead of a generic message."""
+    content = {
+        "detail": "Request already completed; replaying idempotent result.",
+        "code": "IDEMPOTENT_REPLAY",
+    }
+    if existing and existing.get("resource_type") and existing.get("resource_id"):
+        content["resource_type"] = existing["resource_type"]
+        content["resource_id"] = str(existing["resource_id"])
+        content["detail"] = (
+            "Request already completed; the original resource is returned "
+            "instead of re-executing."
+        )
     return JSONResponse(
         status_code=200,
-        content={
-            "detail": "Request already completed; replaying idempotent result.",
-            "code": "IDEMPOTENT_REPLAY",
-        },
+        content=content,
         headers={"Idempotency-Replayed": "true"},
     )
 
@@ -86,7 +98,8 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
 
             if result.rowcount == 0:
                 existing = db.execute(text(
-                    "SELECT request_hash, status, response_status, response_body, response_content_type, created_at "
+                    "SELECT request_hash, status, response_status, response_body, response_content_type, created_at, "
+                    "resource_type, resource_id "
                     "FROM idempotency_keys WHERE idempotency_key=:key AND tenant_id=:tenant "
                     "AND method=:method AND path=:path"
                 ), {"key": idempotency_key, "tenant": tenant_id, "method": request.method, "path": str(request.url.path)}).mappings().first()
@@ -121,8 +134,9 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 if existing and existing["status"] == "COMMITTED":
                     # The financial transaction committed but the process died
                     # before the response could be stored.  Replay the stored
-                    # response when available, otherwise return the synthetic
-                    # replay marker — never re-execute.
+                    # response when available; otherwise return the synthetic
+                    # replay marker (with the captured resource identity when
+                    # known) — never re-execute.
                     if existing["response_status"] is not None:
                         stored_body = existing["response_body"] or ""
                         content_type = existing["response_content_type"] or "application/json"
@@ -138,7 +152,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                             media_type=content_type,
                             headers={"Idempotency-Replayed": "true"},
                         )
-                    return _committed_replay_response()
+                    return _committed_replay_response(existing)
                 if existing and existing["status"] == "COMPLETED" and existing["response_status"] is not None:
                     stored_body = existing["response_body"] or ""
                     content_type = existing["response_content_type"] or "application/json"
@@ -164,10 +178,30 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             inflight_token = set_inflight_claim(claim)
         except Exception:
             db.rollback()
-            logger.exception("Idempotency check failed, allowing request to proceed")
+            # Fail CLOSED: a caller that supplied an Idempotency-Key gets a
+            # 503 instead of an unprotected financial execution.  Running the
+            # mutation without deduplication could double-post money movements
+            # on retry, so the infrastructure failure must not silently
+            # downgrade to no protection.
+            logger.exception(
+                "Idempotency infrastructure failure; refusing to execute the "
+                "request unprotected (key=%s path=%s)",
+                idempotency_key,
+                str(request.url.path),
+            )
+            return JSONResponse(
+                status_code=503,
+                content={
+                    "detail": "Idempotency infrastructure is unavailable. The request was NOT executed; retry later with the same Idempotency-Key.",
+                    "code": "IDEMPOTENCY_UNAVAILABLE",
+                },
+            )
         finally:
             db.close()
-            tenant_context.reset(tenant_token)
+            # tenant_context is intentionally left set here: ``call_next``
+            # below runs the endpoint, whose sessions must open under this
+            # tenant's RLS context (the after_begin listener applies SET
+            # LOCAL from the ContextVar).  It is reset after the response.
 
         try:
             response = await call_next(request)
@@ -184,6 +218,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
                 finally:
                     cleanup.close()
                     tenant_context.reset(cleanup_token)
+            tenant_context.reset(tenant_token)
             raise
         finally:
             if inflight_token is not None:
@@ -218,6 +253,7 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             finally:
                 store.close()
                 tenant_context.reset(storage_token)
+        tenant_context.reset(tenant_token)
         headers = dict(response.headers)
         headers.pop("content-length", None)
         return StarletteResponse(

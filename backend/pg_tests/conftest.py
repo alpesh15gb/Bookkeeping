@@ -10,8 +10,11 @@ Run from backend/:
     TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5432/postgres \
         .venv314/Scripts/python.exe -m pytest pg_tests -q
 
-The suite skips (not fails) when PostgreSQL is unreachable, so it never blocks
-the fast SQLite regression suite.
+When PostgreSQL is unreachable the suite skips (not fails) so it never blocks
+the fast SQLite regression suite.  CI and production acceptance set
+``REQUIRE_POSTGRES_TESTS=1``, which turns that skip into a hard failure — the
+PostgreSQL integration suite is mandatory there and can never be silently
+skipped.
 """
 
 import os
@@ -65,30 +68,15 @@ def _admin_engine(dbname: str):
     )
 
 
-@pytest.fixture(scope="session")
-def pg():
-    """Prepare an empty test database via Alembic and create the roles."""
-    global _roles_created
-    try:
-        admin = _admin_engine("postgres")
-        with admin.connect() as conn:
-            conn.execute(text("SELECT 1"))
-    except Exception as exc:  # pragma: no cover - environment dependent
-        pytest.skip(f"PostgreSQL unavailable ({exc}); skipping integration suite")
+def create_roles_and_grants(dbname: str) -> None:
+    """Create the three application roles + schema grants on ``dbname``.
 
-    # Recreate the test database from scratch.
-    admin = _admin_engine("postgres")
-    with admin.connect() as conn:
-        conn.execute(text(f'DROP DATABASE IF EXISTS "{TEST_DB}"'))
-        conn.execute(text(f'CREATE DATABASE "{TEST_DB}"'))
-    admin.dispose()
-
-    api_url = _replace_credentials(ADMIN_DATABASE_URL, API_ROLE, API_PASSWORD)
-    worker_url = _replace_credentials(ADMIN_DATABASE_URL, WORKER_ROLE, WORKER_PASSWORD)
-    migrator_url = _replace_credentials(ADMIN_DATABASE_URL, MIGRATOR_ROLE, MIGRATOR_PASSWORD)
-
-    # Create roles + grants (same SQL the docker-entrypoint bootstrap runs).
-    admin = _admin_engine(TEST_DB)
+    Mirrors scripts/initdb_roles.sh / scripts/bootstrap_db.py exactly: the
+    migrator gets BYPASSRLS + CREATEDB, the API/worker roles are fully
+    restricted, and default privileges let the migrator's future objects be
+    used by the application roles.
+    """
+    admin = _admin_engine(dbname)
     with admin.begin() as conn:
         conn.execute(
             text(
@@ -132,12 +120,44 @@ def pg():
         conn.execute(
             text(
                 "ALTER DEFAULT PRIVILEGES FOR ROLE apexbooks_migrator IN SCHEMA public "
-                "GRANT USAGE, SELECT ON SEQUENCES TO apexbooks_api, apexbooks_worker"
+                "GRANT USAGE ON SEQUENCES TO apexbooks_api, apexbooks_worker"
             )
         )
     admin.dispose()
 
-    # Run the full deployment command: alembic upgrade head (fresh-DB bootstrap).
+
+@pytest.fixture(scope="session")
+def pg():
+    """Prepare an empty test database via Alembic and create the roles."""
+    global _roles_created
+    try:
+        admin = _admin_engine("postgres")
+        with admin.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except Exception as exc:  # pragma: no cover - environment dependent
+        if os.getenv("REQUIRE_POSTGRES_TESTS") == "1":
+            pytest.fail(
+                f"REQUIRE_POSTGRES_TESTS=1 but PostgreSQL is unavailable ({exc}). "
+                "The PostgreSQL integration suite is mandatory and must not be skipped."
+            )
+        pytest.skip(f"PostgreSQL unavailable ({exc}); skipping integration suite")
+
+    # Recreate the test database from scratch.
+    admin = _admin_engine("postgres")
+    with admin.connect() as conn:
+        conn.execute(text(f'DROP DATABASE IF EXISTS "{TEST_DB}"'))
+        conn.execute(text(f'CREATE DATABASE "{TEST_DB}"'))
+    admin.dispose()
+
+    api_url = _replace_credentials(ADMIN_DATABASE_URL, API_ROLE, API_PASSWORD)
+    worker_url = _replace_credentials(ADMIN_DATABASE_URL, WORKER_ROLE, WORKER_PASSWORD)
+    migrator_url = _replace_credentials(ADMIN_DATABASE_URL, MIGRATOR_ROLE, MIGRATOR_PASSWORD)
+
+    # Create roles + grants (same SQL the docker-entrypoint bootstrap runs).
+    create_roles_and_grants(TEST_DB)
+
+    # Run the full deployment command: alembic upgrade head (fresh-DB
+    # bootstrap — the squashed baseline + migrations, no create_all shortcut).
     env = dict(os.environ)
     env["MIGRATION_DATABASE_URL"] = migrator_url
     env["DATABASE_URL"] = migrator_url
@@ -150,18 +170,9 @@ def pg():
     )
     assert proc.returncode == 0, f"alembic upgrade head failed:\n{proc.stdout}\n{proc.stderr}"
 
-    # The bootstrap created tables as apexbooks_migrator; default privileges
-    # already granted CRUD to the app roles, but re-apply for pre-existing
-    # objects to be safe.
-    admin = _admin_engine(TEST_DB)
-    with admin.begin() as conn:
-        conn.execute(
-            text(
-                "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public "
-                "TO apexbooks_api, apexbooks_worker"
-            )
-        )
-    admin.dispose()
+    # Migration 20260811_0004 applies the least-privilege revocations; the
+    # fresh database has no pre-existing objects, so no blanket re-grant is
+    # needed here (a blanket re-grant would UNDO those revocations).
 
     ctx = {
         "admin_url": _replace_credentials(ADMIN_DATABASE_URL, "postgres", _pw_of_admin()),

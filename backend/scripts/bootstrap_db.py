@@ -93,7 +93,7 @@ def main() -> int:
         conn.execute(
             text(
                 "ALTER DEFAULT PRIVILEGES FOR ROLE apexbooks_migrator IN SCHEMA public "
-                "GRANT USAGE, SELECT ON SEQUENCES TO apexbooks_api, apexbooks_worker"
+                "GRANT USAGE ON SEQUENCES TO apexbooks_api, apexbooks_worker"
             )
         )
         conn.execute(
@@ -104,12 +104,43 @@ def main() -> int:
         )
         conn.execute(
             text(
-                "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public "
+                "GRANT USAGE ON ALL SEQUENCES IN SCHEMA public "
                 "TO apexbooks_api, apexbooks_worker"
             )
         )
+        # ---- Least privilege (kept in sync with migration 20260811_0004) ----
+        # audit_logs is append-only: the application never updates/deletes it.
+        conn.execute(
+            text(
+                "REVOKE UPDATE, DELETE ON TABLE audit_logs "
+                "FROM apexbooks_api, apexbooks_worker"
+            )
+        )
+        # alembic_version is schema bookkeeping: the API only reads it for the
+        # readiness probe and must never write it.
+        conn.execute(
+            text(
+                "REVOKE INSERT, UPDATE, DELETE ON TABLE alembic_version "
+                "FROM apexbooks_api, apexbooks_worker"
+            )
+        )
+        # The controlled tenant enumerator is callable only by the restricted
+        # application roles, never by arbitrary PUBLIC.
+        conn.execute(
+            text(
+                "DO $$ "
+                "BEGIN "
+                "IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace "
+                "          WHERE n.nspname = 'public' AND p.proname = 'apex_list_active_tenant_ids') THEN "
+                "   REVOKE EXECUTE ON FUNCTION public.apex_list_active_tenant_ids() FROM PUBLIC; "
+                "   GRANT EXECUTE ON FUNCTION public.apex_list_active_tenant_ids() "
+                "       TO apexbooks_api, apexbooks_worker; "
+                "END IF; "
+                "END $$;"
+            )
+        )
     engine.dispose()
-    print("bootstrap_db.py: roles and grants applied.")
+    print("bootstrap_db.py: roles and least-privilege grants applied.")
     return 0
 
 

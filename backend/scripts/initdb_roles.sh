@@ -52,14 +52,38 @@ GRANT USAGE ON SCHEMA public TO apexbooks_api, apexbooks_worker;
 
 -- Default privileges: everything the migrator creates going forward (all
 -- migration DDL) is readable/writable by the restricted application roles.
+-- Sequences: USAGE only (least privilege; nextval/currval/setval all work
+-- with USAGE and the application never needs SELECT on a sequence).
 ALTER DEFAULT PRIVILEGES FOR ROLE apexbooks_migrator IN SCHEMA public
     GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO apexbooks_api, apexbooks_worker;
 ALTER DEFAULT PRIVILEGES FOR ROLE apexbooks_migrator IN SCHEMA public
-    GRANT USAGE, SELECT ON SEQUENCES TO apexbooks_api, apexbooks_worker;
+    GRANT USAGE ON SEQUENCES TO apexbooks_api, apexbooks_worker;
 
 -- Also cover objects that pre-date the default-privilege statement.
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO apexbooks_api, apexbooks_worker;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO apexbooks_api, apexbooks_worker;
+GRANT USAGE ON ALL SEQUENCES IN SCHEMA public TO apexbooks_api, apexbooks_worker;
+
+-- Least privilege (kept in sync with migration 20260811_0004).  These run
+-- before migrations create the objects, so each statement is guarded: apply
+-- now when the object exists, otherwise the migration (20260811_0004) and
+-- bootstrap_db.py apply the same policy later.
+DO \$\$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'public' AND c.relname = 'audit_logs') THEN
+        EXECUTE 'REVOKE UPDATE, DELETE ON TABLE public.audit_logs FROM apexbooks_api, apexbooks_worker';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+               WHERE n.nspname = 'public' AND c.relname = 'alembic_version') THEN
+        EXECUTE 'REVOKE INSERT, UPDATE, DELETE ON TABLE public.alembic_version FROM apexbooks_api, apexbooks_worker';
+    END IF;
+    IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+               WHERE n.nspname = 'public' AND p.proname = 'apex_list_active_tenant_ids') THEN
+        EXECUTE 'REVOKE EXECUTE ON FUNCTION public.apex_list_active_tenant_ids() FROM PUBLIC';
+        EXECUTE 'GRANT EXECUTE ON FUNCTION public.apex_list_active_tenant_ids() TO apexbooks_api, apexbooks_worker';
+    END IF;
+END
+\$\$;
 SQL
 
 echo "initdb_roles.sh: roles apexbooks_migrator / apexbooks_api / apexbooks_worker ready."

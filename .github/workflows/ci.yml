@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # PostgreSQL integration tests are MANDATORY in CI.  If the suite cannot
+  # connect to PostgreSQL it fails instead of skipping (see pg_tests/conftest.py).
+  REQUIRE_POSTGRES_TESTS: "1"
+  # Never touch real external services during CI.
+  IRP_BASE_URL: ""
+  SMTP_HOST: ""
+  S3_BUCKET: ""
+  GST_VERIFY_API_KEY: ""
+  CARTUNEZ_OUTBOUND_ENABLED: "false"
+
+jobs:
+  backend:
+    name: Backend (regression + PostgreSQL integration)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio httpx
+
+      - name: Python static check (compileall)
+        working-directory: backend
+        run: python -m compileall -q src scripts pg_tests
+
+      - name: Alembic single-head validation
+        working-directory: backend
+        run: |
+          HEADS=$(python -m alembic heads)
+          COUNT=$(python - <<'EOF'
+import subprocess
+out = subprocess.run(["python", "-m", "alembic", "heads"], capture_output=True, text=True).stdout
+lines = [l for l in out.splitlines() if l.strip() and not l.strip().startswith("(")]
+print(len(lines))
+EOF
+          )
+          echo "alembic heads:"
+          echo "$HEADS"
+          test "$COUNT" = "1" || (echo "FAIL: expected exactly one Alembic head, found $COUNT" && exit 1)
+
+      - name: Backend regression suite (SQLite)
+        working-directory: backend
+        run: python -m pytest -q
+
+      - name: PostgreSQL integration suite (mandatory)
+        working-directory: backend
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+          REQUIRE_POSTGRES_TESTS: "1"
+        run: python -m pytest pg_tests -q
+
+      - name: Fresh-database migration from empty PostgreSQL
+        working-directory: backend
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d postgres -c 'DROP DATABASE IF EXISTS ci_fresh_migration'
+          psql -h localhost -U postgres -d postgres -c 'CREATE DATABASE ci_fresh_migration'
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ci_fresh_migration" \
+            python -m alembic upgrade head
+          DATABASE_URL="postgresql://postgres:postgres@localhost:5432/ci_fresh_migration" \
+            python - <<'EOF'
+from sqlalchemy import create_engine, text
+eng = create_engine("postgresql://postgres:postgres@localhost:5432/ci_fresh_migration")
+with eng.connect() as c:
+    heads = c.execute(text("SELECT version_num FROM alembic_version")).fetchall()
+    print("alembic_version heads:", heads)
+    assert len(heads) == 1, heads
+eng.dispose()
+print("Fresh empty-database migration OK")
+EOF
+
+  docker:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t bookkeeping-backend:ci -f backend/Dockerfile backend/
+
+      - name: Verify image runs (imports + startup check)
+        run: |
+          docker run --rm --entrypoint python bookkeeping-backend:ci -c \
+            "from src.main import app; print('app imports OK')"

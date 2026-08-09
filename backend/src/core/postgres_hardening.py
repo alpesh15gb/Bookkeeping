@@ -137,6 +137,322 @@ def _apply_child_table_hardening(connection) -> None:
         )
 
 
+# Payment allocation join rows: the allocation's tenant must match BOTH the
+# payment it belongs to AND the invoice/bill it allocates against.  Format:
+# table -> (payment_table, payment_fk, document_table, document_fk).
+_PAYMENT_ALLOCATION_TABLES = {
+    "payment_allocations": ("payments", "payment_id", "invoices", "invoice_id"),
+    "bill_payment_allocations": ("bill_payments", "payment_id", "bills", "bill_id"),
+}
+
+# Columns that may be changed in place on an otherwise immutable journal entry.
+# Mirrors the ORM guard in models.py: only reversal/correction linkage
+# bookkeeping.  Everything else (amounts are on lines; identity, dating,
+# source linkage, lock state, attribution) is append-only history.
+_JOURNAL_ENTRY_MUTABLE_META = frozenset({
+    "reversed_by",
+    "reversed_at",
+    "reversal_transaction_id",
+    "reverses_transaction_id",
+    "replacement_transaction_id",
+    "updated_at",
+})
+
+# Columns that may change in place on a stock movement.  Mirrors the ORM guard.
+_STOCK_LEDGER_MUTABLE_META = frozenset({
+    "reversal_movement_id",
+    "reversed_by",
+    "reversed_at",
+})
+
+
+def _apply_payment_allocation_hardening(connection) -> None:
+    """RLS + two-parent tenant-consistency enforcement for allocation rows.
+
+    payment_allocations links a payments row to an invoices row;
+    bill_payment_allocations links bill_payments to bills.  Both sides must
+    belong to the allocation's tenant or the link is a cross-tenant leak.
+    PostgreSQL itself rejects any such link via a BEFORE trigger.
+    """
+    if any(
+        not _table_has_column(connection, table, "tenant_id")
+        for table in _PAYMENT_ALLOCATION_TABLES
+    ):
+        return
+    connection.execute(
+        text(
+            """
+            CREATE OR REPLACE FUNCTION apex_allocation_tenant_matches_parents()
+            RETURNS trigger AS $$
+            DECLARE
+                payment_tenant uuid;
+                document_tenant uuid;
+            BEGIN
+                IF NEW.tenant_id IS NULL THEN
+                    RAISE EXCEPTION 'allocation row % has no tenant_id', TG_TABLE_NAME
+                        USING ERRCODE = '23514';
+                END IF;
+                IF TG_TABLE_NAME = 'payment_allocations' THEN
+                    SELECT tenant_id INTO payment_tenant FROM payments WHERE id = NEW.payment_id;
+                    SELECT tenant_id INTO document_tenant FROM invoices WHERE id = NEW.invoice_id;
+                ELSIF TG_TABLE_NAME = 'bill_payment_allocations' THEN
+                    SELECT tenant_id INTO payment_tenant FROM bill_payments WHERE id = NEW.payment_id;
+                    SELECT tenant_id INTO document_tenant FROM bills WHERE id = NEW.bill_id;
+                ELSE
+                    RAISE EXCEPTION 'unexpected table %', TG_TABLE_NAME
+                        USING ERRCODE = '22000';
+                END IF;
+                IF payment_tenant IS NULL OR document_tenant IS NULL THEN
+                    RAISE EXCEPTION 'allocation row % references a missing parent', TG_TABLE_NAME
+                        USING ERRCODE = '23503';
+                END IF;
+                IF NEW.tenant_id <> payment_tenant OR NEW.tenant_id <> document_tenant THEN
+                    RAISE EXCEPTION 'allocation % tenant % must match payment tenant % and document tenant %',
+                        TG_TABLE_NAME, NEW.tenant_id, payment_tenant, document_tenant
+                        USING ERRCODE = '23514';
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql SECURITY DEFINER
+               SET search_path = public, pg_catalog
+            """
+        )
+    )
+    for table, (_, payment_fk, _, document_fk) in _PAYMENT_ALLOCATION_TABLES.items():
+        quoted = f'"{table}"'
+        _apply_rls_policy(connection, table)
+        connection.execute(
+            text(f"DROP TRIGGER IF EXISTS ck_{table}_tenant_matches_parents ON {quoted}")
+        )
+        connection.execute(
+            text(
+                f"CREATE TRIGGER ck_{table}_tenant_matches_parents "
+                f"BEFORE INSERT OR UPDATE OF tenant_id, {payment_fk}, {document_fk} ON {quoted} "
+                f"FOR EACH ROW EXECUTE FUNCTION apex_allocation_tenant_matches_parents()"
+            )
+        )
+
+
+def _apply_ledger_immutability(connection) -> None:
+    """PostgreSQL-level append-only enforcement for the accounting ledger.
+
+    ORM listeners (models.py) are a convenience for the application; raw SQL
+    can bypass them.  These triggers make the ledger immutable at the database
+    itself for EVERY role (superuser included):
+
+    * journal_entries  — identity/dating/source/lock fields never change;
+      only reversal/correction linkage metadata may.  Deletion is allowed
+      ONLY for system-generated YEAR_END / OPENING_BALANCE roll-forward
+      entries while the tightly-scoped GUC ``app.allow_ledger_delete`` is set
+      to a list containing the entry's source_type (set by the authorized
+      reopen flow only).
+    * journal_lines    — never updated; deleted only with the same scoped
+      roll-back of system roll-forward entries.
+    * stock_ledger     — never updated except reversal-linkage metadata;
+      never deleted.
+    """
+    if not (
+        _table_has_column(connection, "journal_entries", "id")
+        and _table_has_column(connection, "journal_lines", "id")
+        and _table_has_column(connection, "stock_ledger", "id")
+    ):
+        return
+    connection.execute(
+        text(
+            """
+            CREATE OR REPLACE FUNCTION apex_guard_journal_entries_update()
+            RETURNS trigger AS $$
+            BEGIN
+                IF NEW.is_locked IS DISTINCT FROM OLD.is_locked THEN
+                    RAISE EXCEPTION 'journal_entries is append-only: lock state cannot change'
+                        USING ERRCODE = '55000';
+                END IF;
+                IF NOT OLD.is_locked THEN
+                    -- Pre-existing unlocked entries remain editable (legacy
+                    -- records predate the append-only guarantee).
+                    RETURN NEW;
+                END IF;
+                IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+                   OR NEW.entry_date IS DISTINCT FROM OLD.entry_date
+                   OR NEW.reference_number IS DISTINCT FROM OLD.reference_number
+                   OR NEW.description IS DISTINCT FROM OLD.description
+                   OR NEW.source_type IS DISTINCT FROM OLD.source_type
+                   OR NEW.source_id IS DISTINCT FROM OLD.source_id
+                   OR NEW.created_by IS DISTINCT FROM OLD.created_by
+                   OR NEW.posted_by IS DISTINCT FROM OLD.posted_by
+                   OR NEW.posted_at IS DISTINCT FROM OLD.posted_at
+                   OR NEW.source_channel IS DISTINCT FROM OLD.source_channel
+                   OR NEW.original_transaction_id IS DISTINCT FROM OLD.original_transaction_id
+                THEN
+                    RAISE EXCEPTION 'journal_entries is append-only; only reversal/correction metadata may change. Create a reversal entry instead.'
+                        USING ERRCODE = '55000';
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql SECURITY DEFINER
+               SET search_path = public, pg_catalog
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE OR REPLACE FUNCTION apex_guard_journal_entries_delete()
+            RETURNS trigger AS $$
+            DECLARE
+                allowed text;
+            BEGIN
+                allowed := current_setting('app.allow_ledger_delete', true);
+                IF allowed IS NULL OR allowed = '' THEN
+                    RAISE EXCEPTION 'journal_entries is append-only: deletion requires the scoped roll-back authorization'
+                        USING ERRCODE = '55000';
+                END IF;
+                IF OLD.source_type = ANY (string_to_array(allowed, ',')) THEN
+                    RETURN OLD;
+                END IF;
+                RAISE EXCEPTION 'journal entry of source type % is not eligible for deletion', OLD.source_type
+                    USING ERRCODE = '55000';
+            END;
+            $$ LANGUAGE plpgsql SECURITY DEFINER
+               SET search_path = public, pg_catalog
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE OR REPLACE FUNCTION apex_guard_journal_lines_update()
+            RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'journal_lines is immutable accounting history; create a reversal entry instead'
+                    USING ERRCODE = '55000';
+            END;
+            $$ LANGUAGE plpgsql SECURITY DEFINER
+               SET search_path = public, pg_catalog
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE OR REPLACE FUNCTION apex_guard_journal_lines_delete()
+            RETURNS trigger AS $$
+            DECLARE
+                allowed text;
+                parent_source text;
+            BEGIN
+                allowed := current_setting('app.allow_ledger_delete', true);
+                IF allowed IS NULL OR allowed = '' THEN
+                    RAISE EXCEPTION 'journal_lines is immutable accounting history; create a reversal entry instead'
+                        USING ERRCODE = '55000';
+                END IF;
+                SELECT source_type INTO parent_source FROM journal_entries WHERE id = OLD.entry_id;
+                IF parent_source = ANY (string_to_array(allowed, ',')) THEN
+                    RETURN OLD;
+                END IF;
+                RAISE EXCEPTION 'journal line belongs to source type % which is not eligible for deletion', parent_source
+                    USING ERRCODE = '55000';
+            END;
+            $$ LANGUAGE plpgsql SECURITY DEFINER
+               SET search_path = public, pg_catalog
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE OR REPLACE FUNCTION apex_guard_stock_ledger_update()
+            RETURNS trigger AS $$
+            BEGIN
+                IF NEW.tenant_id IS DISTINCT FROM OLD.tenant_id
+                   OR NEW.product_id IS DISTINCT FROM OLD.product_id
+                   OR NEW.warehouse_id IS DISTINCT FROM OLD.warehouse_id
+                   OR NEW.reference_type IS DISTINCT FROM OLD.reference_type
+                   OR NEW.reference_id IS DISTINCT FROM OLD.reference_id
+                   OR NEW.quantity IS DISTINCT FROM OLD.quantity
+                   OR NEW.balance_quantity IS DISTINCT FROM OLD.balance_quantity
+                   OR NEW.rate IS DISTINCT FROM OLD.rate
+                   OR NEW.created_at IS DISTINCT FROM OLD.created_at
+                   OR NEW.created_by IS DISTINCT FROM OLD.created_by
+                   OR NEW.source_channel IS DISTINCT FROM OLD.source_channel
+                   OR NEW.reverses_movement_id IS DISTINCT FROM OLD.reverses_movement_id
+                THEN
+                    RAISE EXCEPTION 'stock_ledger is append-only; only reversal-linkage metadata may change. Create a reversal movement instead.'
+                        USING ERRCODE = '55000';
+                END IF;
+                RETURN NEW;
+            END;
+            $$ LANGUAGE plpgsql SECURITY DEFINER
+               SET search_path = public, pg_catalog
+            """
+        )
+    )
+    connection.execute(
+        text(
+            """
+            CREATE OR REPLACE FUNCTION apex_guard_stock_ledger_delete()
+            RETURNS trigger AS $$
+            BEGIN
+                RAISE EXCEPTION 'stock_ledger is append-only inventory history; create a reversal movement instead'
+                    USING ERRCODE = '55000';
+            END;
+            $$ LANGUAGE plpgsql SECURITY DEFINER
+               SET search_path = public, pg_catalog
+            """
+        )
+    )
+
+    connection.execute(text("DROP TRIGGER IF EXISTS ck_journal_entries_immutable ON journal_entries"))
+    connection.execute(text("DROP TRIGGER IF EXISTS ck_journal_entries_no_delete ON journal_entries"))
+    connection.execute(text("DROP TRIGGER IF EXISTS ck_journal_lines_immutable ON journal_lines"))
+    connection.execute(text("DROP TRIGGER IF EXISTS ck_journal_lines_no_delete ON journal_lines"))
+    connection.execute(text("DROP TRIGGER IF EXISTS ck_stock_ledger_immutable ON stock_ledger"))
+    connection.execute(text("DROP TRIGGER IF EXISTS ck_stock_ledger_no_delete ON stock_ledger"))
+
+    connection.execute(
+        text(
+            "CREATE TRIGGER ck_journal_entries_immutable "
+            "BEFORE UPDATE ON journal_entries "
+            "FOR EACH ROW EXECUTE FUNCTION apex_guard_journal_entries_update()"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE TRIGGER ck_journal_entries_no_delete "
+            "BEFORE DELETE ON journal_entries "
+            "FOR EACH ROW EXECUTE FUNCTION apex_guard_journal_entries_delete()"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE TRIGGER ck_journal_lines_immutable "
+            "BEFORE UPDATE ON journal_lines "
+            "FOR EACH ROW EXECUTE FUNCTION apex_guard_journal_lines_update()"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE TRIGGER ck_journal_lines_no_delete "
+            "BEFORE DELETE ON journal_lines "
+            "FOR EACH ROW EXECUTE FUNCTION apex_guard_journal_lines_delete()"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE TRIGGER ck_stock_ledger_immutable "
+            "BEFORE UPDATE ON stock_ledger "
+            "FOR EACH ROW EXECUTE FUNCTION apex_guard_stock_ledger_update()"
+        )
+    )
+    connection.execute(
+        text(
+            "CREATE TRIGGER ck_stock_ledger_no_delete "
+            "BEFORE DELETE ON stock_ledger "
+            "FOR EACH ROW EXECUTE FUNCTION apex_guard_stock_ledger_delete()"
+        )
+    )
+
+
 def _ensure_tenant_enumerator(connection) -> None:
     """Controlled cross-tenant enumeration for scheduled maintenance tasks.
 
@@ -216,6 +532,8 @@ def apply_postgres_hardening(connection) -> None:
         _apply_rls_policy(connection, table)
 
     _apply_child_table_hardening(connection)
+    _apply_payment_allocation_hardening(connection)
+    _apply_ledger_immutability(connection)
     _ensure_tenant_enumerator(connection)
 
     connection.execute(

@@ -28,7 +28,8 @@ def app_env(pg, db_admin):
     from sqlalchemy.pool import NullPool
 
     seed_tenants(db_admin)
-    contact = seed_contact(db_admin, TENANT_A, "Cust A")
+    token = uuid.uuid4().hex[:8]
+    contact = seed_contact(db_admin, TENANT_A, f"Cust {token}")
     db_admin.commit()
 
     engine = __import__("sqlalchemy").create_engine(pg["api_url"], poolclass=NullPool)
@@ -74,41 +75,44 @@ def app_env(pg, db_admin):
             db.close()
 
     client = TestClient(app)
-    yield {"client": client, "session_factory": Session, "engine": engine, "contact": contact}
+    yield {"client": client, "session_factory": Session, "engine": engine, "contact": contact, "token": token}
     engine.dispose()
 
 
-def _count_invoices(db) -> int:
+def _count_invoices(db, number: str) -> int:
     return db.execute(
-        text("SELECT count(*) FROM invoices WHERE tenant_id = :t"),
-        {"t": str(TENANT_A)},
+        text("SELECT count(*) FROM invoices WHERE tenant_id = :t AND invoice_number = :num"),
+        {"t": str(TENANT_A), "num": number},
     ).scalar()
 
 
 def test_same_key_same_payload_replays(app_env, db_admin):
     client = app_env["client"]
     key = str(uuid.uuid4())
+    number = f"IDEM-1-{app_env['token']}"
     headers = {"X-Tenant-ID": str(TENANT_A), "Idempotency-Key": key}
 
-    first = client.post("/tx", json={"number": "IDEM-1"}, headers=headers)
+    first = client.post("/tx", json={"number": number}, headers=headers)
     assert first.status_code == 200
-    second = client.post("/tx", json={"number": "IDEM-1"}, headers=headers)
+    second = client.post("/tx", json={"number": number}, headers=headers)
     assert second.status_code == 200
     assert second.headers.get("Idempotency-Replayed") == "true"
     assert second.json()["id"] == first.json()["id"]
-    assert _count_invoices(db_admin) == 1
+    assert _count_invoices(db_admin, number) == 1
 
 
 def test_same_key_different_payload_rejected(app_env, db_admin):
     client = app_env["client"]
     key = str(uuid.uuid4())
+    number = f"IDEM-2-{app_env['token']}"
     headers = {"X-Tenant-ID": str(TENANT_A), "Idempotency-Key": key}
 
-    first = client.post("/tx", json={"number": "IDEM-2"}, headers=headers)
+    first = client.post("/tx", json={"number": number}, headers=headers)
     assert first.status_code == 200
     retry = client.post("/tx", json={"number": "DIFFERENT"}, headers=headers)
     assert retry.status_code == 422
-    assert _count_invoices(db_admin) == 1
+    assert _count_invoices(db_admin, number) == 1
+    assert _count_invoices(db_admin, "DIFFERENT") == 0
 
 
 def test_crash_after_commit_before_response_no_duplicate(app_env, db_admin):
@@ -120,10 +124,16 @@ def test_crash_after_commit_before_response_no_duplicate(app_env, db_admin):
     client = app_env["client"]
     session_factory = app_env["session_factory"]
     key = str(uuid.uuid4())
-    body_hash = hashlib.sha256(_json.dumps({"number": "IDEM-CRASH-1"}).encode()).hexdigest()
+    number = f"IDEM-CRASH-{app_env['token']}"
+    # httpx/TestClient serializes JSON with compact separators — the stored
+    # hash must match the bytes the middleware will hash on the retry.
+    body_hash = hashlib.sha256(
+        _json.dumps({"number": number}, separators=(",", ":")).encode()
+    ).hexdigest()
 
     # --- Phase 1: claim the idempotency record like the middleware does ---
     claim_db = session_factory()
+    set_tenant(claim_db, TENANT_A)  # production runs under tenant RLS context
     claim_db.execute(
         text(
             "INSERT INTO idempotency_keys "
@@ -151,7 +161,7 @@ def test_crash_after_commit_before_response_no_duplicate(app_env, db_admin):
         business_db.add(Invoice(
             tenant_id=TENANT_A,
             contact_id=app_env["contact"].id,
-            invoice_number="IDEM-CRASH-1",
+            invoice_number=number,
             issue_date=date.today(),
             due_date=date.today(),
             status="POSTED",
@@ -171,7 +181,10 @@ def test_crash_after_commit_before_response_no_duplicate(app_env, db_admin):
             exchange_rate=Decimal("1.000000"),
         ))
         business_db.commit()
-        # The marker is now atomic with the financial commit.
+        # The marker is now atomic with the financial commit.  (SET LOCAL is
+        # transaction-scoped, so re-apply tenant context for this new
+        # transaction — exactly what production does per transaction.)
+        set_tenant(business_db, TENANT_A)
         status = business_db.execute(
             text("SELECT status FROM idempotency_keys WHERE idempotency_key = :key"),
             {"key": key},
@@ -184,13 +197,24 @@ def test_crash_after_commit_before_response_no_duplicate(app_env, db_admin):
 
     # Simulate process death: the response is NEVER stored.  Row is COMMITTED.
     # --- Phase 3: client retries the same key ---
-    assert _count_invoices(db_admin) == 1
+    assert _count_invoices(db_admin, number) == 1
     headers = {"X-Tenant-ID": str(TENANT_A), "Idempotency-Key": key}
-    retry = client.post("/tx", json={"number": "IDEM-CRASH-1"}, headers=headers)
+    retry = client.post("/tx", json={"number": number}, headers=headers)
     assert retry.status_code == 200
     assert retry.headers.get("Idempotency-Replayed") == "true"
     # No duplicate invoice despite the crash.
-    assert _count_invoices(db_admin) == 1
+    assert _count_invoices(db_admin, number) == 1
+    # The committed-but-response-lost replay recovers the ORIGINAL resource
+    # identity (captured atomically with the COMMITTED marker) instead of a
+    # generic message.
+    body = retry.json()
+    assert body.get("resource_type") == "Invoice"
+    assert body.get("resource_id")
+    created = db_admin.execute(
+        text("SELECT id FROM invoices WHERE invoice_number = :num"),
+        {"num": number},
+    ).scalar()
+    assert body["resource_id"] == str(created)
 
 
 def test_abandoned_processing_claim_before_commit_can_retry(app_env, db_admin):
@@ -201,6 +225,7 @@ def test_abandoned_processing_claim_before_commit_can_retry(app_env, db_admin):
     key = str(uuid.uuid4())
 
     claim_db = session_factory()
+    set_tenant(claim_db, TENANT_A)  # production runs under tenant RLS context
     claim_db.execute(
         text(
             "INSERT INTO idempotency_keys "
@@ -218,15 +243,17 @@ def test_abandoned_processing_claim_before_commit_can_retry(app_env, db_admin):
     claim_db.commit()
     claim_db.close()
 
+    number = f"IDEM-STALE-{app_env['token']}"
     headers = {"X-Tenant-ID": str(TENANT_A), "Idempotency-Key": key}
-    resp = client.post("/tx", json={"number": "IDEM-STALE-1"}, headers=headers)
+    resp = client.post("/tx", json={"number": number}, headers=headers)
     assert resp.status_code == 200
-    assert _count_invoices(db_admin) == 1
+    assert _count_invoices(db_admin, number) == 1
 
 
 def test_concurrent_duplicate_requests_one_wins(app_env, db_admin):
     client = app_env["client"]
     key = str(uuid.uuid4())
+    number = f"IDEM-CONC-{app_env['token']}"
     headers = {"X-Tenant-ID": str(TENANT_A), "Idempotency-Key": key}
 
     barrier = threading.Barrier(4)
@@ -235,7 +262,7 @@ def test_concurrent_duplicate_requests_one_wins(app_env, db_admin):
 
     def fire():
         barrier.wait(timeout=10)
-        resp = client.post("/tx", json={"number": "IDEM-CONC-1"}, headers=headers)
+        resp = client.post("/tx", json={"number": number}, headers=headers)
         with lock:
             statuses.append(resp.status_code)
 
@@ -249,4 +276,4 @@ def test_concurrent_duplicate_requests_one_wins(app_env, db_admin):
     # 409 while another request still holds the claim; never 2 successful
     # executions with the same key.
     assert statuses.count(200) == 1
-    assert _count_invoices(db_admin) == 1
+    assert _count_invoices(db_admin, number) == 1
