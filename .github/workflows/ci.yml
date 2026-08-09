@@ -72,9 +72,13 @@ jobs:
         working-directory: backend
         run: python scripts/ci_check_single_head.py
 
-      - name: Backend regression suite (SQLite)
+      - name: Backend regression suite (SQLite, per-file isolation)
         working-directory: backend
-        run: python -m pytest -q
+        # Some legacy SQLite test modules rebuild/mutate the shared test.db
+        # schema (drop_all/create_all in setUp/tearDown), so running the whole
+        # suite in one process lets state leak between files.  Run one test
+        # file per process, exactly like scripts/production_acceptance.py.
+        run: python scripts/ci_run_sqlite_suite.py
 
       - name: PostgreSQL integration suite (mandatory)
         working-directory: backend
@@ -100,6 +104,12 @@ jobs:
         run: docker build -t bookkeeping-backend:ci -f backend/Dockerfile backend/
 
       - name: Verify image runs (imports + startup check)
+        # The image runs as a non-root user with no write access to /app, so
+        # the default sqlite:///./bookkeeping.db fallback cannot be opened.
+        # Give the smoke test an explicit writable temp database.
         run: |
-          docker run --rm --entrypoint python bookkeeping-backend:ci -c \
+          docker run --rm \
+            -e DATABASE_URL=sqlite:////tmp/bookkeeping.db \
+            --entrypoint python \
+            bookkeeping-backend:ci -c \
             "from src.main import app; print('app imports OK')"
