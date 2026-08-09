@@ -386,6 +386,8 @@ from src.api.v1.direct_posting_contract import install_direct_posting_contract
 from src.api.v1.direct_posting_contract_ext import (
     install_extended_direct_posting_contract,
 )
+from src.api.v1.direct_invoice_reversal import install_direct_invoice_reversal
 
 install_direct_posting_contract()
 install_extended_direct_posting_contract()
+install_direct_invoice_reversal()
