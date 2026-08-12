@@ -115,6 +115,12 @@ def _add_child_tenant_columns() -> None:
                 f"FROM {parent} AS p WHERE c.{fk_column} = p.id AND c.tenant_id IS NULL"
             )
         )
+        # Backfills can queue DEFERRABLE constraint triggers (notably the
+        # journal-balance trigger on journal_lines). PostgreSQL will refuse
+        # ALTER TABLE while those trigger events are pending, so force all
+        # outstanding deferred constraints to be checked before the DDL.
+        if _is_postgresql():
+            op.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
         op.execute(text(f"ALTER TABLE {child} ALTER COLUMN tenant_id SET NOT NULL"))
         op.execute(text(f"CREATE INDEX IF NOT EXISTS ix_{child}_tenant_id ON {child} (tenant_id)"))
 
