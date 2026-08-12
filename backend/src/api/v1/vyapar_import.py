@@ -23,7 +23,7 @@ from src.infrastructure.database.models import (
 from src.api.deps import enforce_permission
 from src.domains.company.services import NumberingSeriesService
 from src.domains.inventory.services import resolve_default_warehouse_id
-from src.common.import_normalization import normalize_hsn_sac
+from src.common.import_normalization import normalize_hsn_sac, next_payment_number
 
 router = APIRouter(prefix="/import", tags=["Data Import"])
 
@@ -1184,6 +1184,19 @@ def import_vyapar_backup(
                 payments_by_txn.setdefault(txn_id, []).append(pm_dict)
 
             # Process payments for sale invoices (type=1)
+            used_payment_numbers: set = set()
+
+            def _lookup_payment(model, number: str):
+                return (
+                    db.query(model)
+                    .filter(
+                        model.tenant_id == tenant_id,
+                        model.payment_number == number,
+                        model.deleted_at == None,
+                    )
+                    .first()
+                )
+
             for pm_list in payments_by_txn.values():
                 for pm in pm_list:
                     txn_id = pm["txn_id"]
@@ -1214,10 +1227,19 @@ def import_vyapar_backup(
 
                     if inv_uuid:
                         # Customer receipt → Payment + PaymentAllocation
+                        payment_number = next_payment_number(
+                            f"VYP-PAY-{txn_id}",
+                            lambda n: _lookup_payment(Payment, n),
+                            contact_id_val,
+                            Decimal(str(round(amount, 2))),
+                            used_payment_numbers,
+                        )
+                        if payment_number is None:
+                            continue
                         payment = Payment(
                             tenant_id=tenant_id,
                             contact_id=contact_id_val,
-                            payment_number=f"VYP-PAY-{txn_id}",
+                            payment_number=payment_number,
                             payment_date=_parse_date(pm.get("payment_date") or date.today().isoformat()),
                             payment_mode=payment_mode,
                             amount=Decimal(str(round(amount, 2))),
@@ -1235,10 +1257,19 @@ def import_vyapar_backup(
                         db.add(alloc)
                     elif bill_uuid:
                         # Vendor payment → BillPayment + BillPaymentAllocation
+                        payment_number = next_payment_number(
+                            f"VYP-BPAY-{txn_id}",
+                            lambda n: _lookup_payment(BillPayment, n),
+                            contact_id_val,
+                            Decimal(str(round(amount, 2))),
+                            used_payment_numbers,
+                        )
+                        if payment_number is None:
+                            continue
                         bill_payment = BillPayment(
                             tenant_id=tenant_id,
                             contact_id=contact_id_val,
-                            payment_number=f"VYP-BPAY-{txn_id}",
+                            payment_number=payment_number,
                             payment_date=_parse_date(pm.get("payment_date") or date.today().isoformat()),
                             payment_mode=payment_mode,
                             amount=Decimal(str(round(amount, 2))),
