@@ -12,8 +12,8 @@ POST /api/v1/bills/scan-save
   — Takes the user-edited payload from the preview.
   — Creates missing vendor contact if needed.
   — Creates missing products if needed.
-  — Creates the bill.
-  — Returns the created bill.
+  — Creates the bill as a DRAFT for explicit review/finalization.
+  — Returns the created draft bill.
 """
 import logging
 import asyncio
@@ -309,7 +309,7 @@ def _build_preview_response(ocr: dict, db: Session, tenant_id: uuid.UUID) -> dic
 
 @router.post(
     "/scan-save",
-    summary="Save a scanned bill — creates missing vendor/products and the bill",
+    summary="Save a scanned bill as draft — creates missing vendor/products and the draft bill",
     response_class=JSONResponse,
     status_code=status.HTTP_201_CREATED,
 )
@@ -322,9 +322,12 @@ def scan_save(
     """
     Takes the user-edited payload from `scan-preview` and:
       1. Creates the vendor contact if it doesn't exist.
-      2. Creates missing products.
+      2. Creates missing products if needed.
       3. Builds a proper `BillCreate` payload.
-      4. Creates the bill via the existing `create_bill` logic.
+      4. Creates the bill as DRAFT via the existing `create_bill` logic.
+
+    OCR-derived financial data must be explicitly finalized through the normal
+    bill workflow after the user has reviewed the saved draft.
     """
     vendor_data = payload.get("vendor", {})
     bill_data = payload.get("bill", {})
@@ -487,9 +490,10 @@ def scan_save(
         "terms_and_conditions": bill_data.get("terms_and_conditions"),
         "reference_number": bill_data.get("reference_number") or None,
         "tds_rate": "0",
+        "post_on_create": False,
     }
 
-    # ── Create bill using existing logic ───────────────────────────────────
+    # ── Create draft bill using existing logic ─────────────────────────────
     from src.api.v1.bills import create_bill as _create_bill_core
     try:
         result = _create_bill_core(
@@ -505,10 +509,11 @@ def scan_save(
         raise HTTPException(status_code=500, detail=f"Failed to create bill: {e}")
 
     return {
-        "detail": "Bill created successfully.",
+        "detail": "Bill draft created successfully.",
         "bill_id": str(result.id),
         "bill_number": result.bill_number,
         "vendor_id": contact_id,
+        "status": result.status,
         "total": str(result.total),
         "line_items_count": len(db_lines),
     }
