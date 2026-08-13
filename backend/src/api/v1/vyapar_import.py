@@ -594,8 +594,8 @@ def import_vyapar_backup(
             party_state_code = contact_state_map.get(name_id, origin_state_code)
             txn_is_intrastate = (party_state_code == origin_state_code)
 
-            # ── SALES INVOICES (type=1) ─────────────────────────────────────
-            if txn_type == 1 and contact_id_str:
+            # ── SALES INVOICES (type=1 item-based, type=3 cash sales) ──────────
+            if txn_type in (1, 3) and contact_id_str:
                 inv_number = _gen_inv_number(ref_number, "INV")
                 existing_inv = (
                     db.query(Invoice)
@@ -973,8 +973,8 @@ def import_vyapar_backup(
 
                     summary.bills_imported += 1
 
-            # ── PURCHASE BILLS (type=28) ──────────────────────────────────────
-            elif txn_type == 28 and contact_id_str:
+            # ── PURCHASE BILLS (type=2 and type=28) ───────────────────────────
+            elif txn_type in (2, 28) and contact_id_str:
                 bill_number = _gen_inv_number(ref_number, "BILL")
                 existing_bill = (
                     db.query(Bill)
@@ -1121,10 +1121,10 @@ def import_vyapar_backup(
             # informational and don't map directly — skip silently.
 
         # ── 10b. Fix contact types from transaction data ──────────────────────
-        # Contacts appearing in type=28 (purchase) transactions should be VENDOR or BOTH
+        # Contacts appearing in purchase (type=2 / type=28) transactions should be VENDOR or BOTH
         purchase_name_ids = set()
         for txn in vy_txns:
-            if txn["txn_type"] == 28 and txn["txn_name_id"]:
+            if txn["txn_type"] in (2, 28) and txn["txn_name_id"]:
                 purchase_name_ids.add(txn["txn_name_id"])
         for name_id in purchase_name_ids:
             if name_id in contact_map:
