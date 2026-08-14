@@ -30,6 +30,7 @@ from datetime import date
 from src.api.deps import enforce_permission
 from src.core.database import get_db_session
 from src.domains.scanning.invoice_scanner import get_scanner
+from src.domains.scanning.quality import looks_like_ocr_noise
 from src.infrastructure.database.models import Contact, Product, Bill, BillLine
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver
@@ -248,6 +249,19 @@ def _build_preview_response(ocr: dict, db: Session, tenant_id: uuid.UUID) -> dic
     vendor_gstin = ocr.get("vendor_gstin")
     vendor_address = ocr.get("vendor_address")
 
+    warnings = list(ocr.get("warnings") or [])
+
+    # A vendor name that is really a merged table row is worse than none:
+    # force the user to type it so a wrong vendor is never silently created.
+    if vendor_name and looks_like_ocr_noise(vendor_name):
+        warnings.append(
+            "The vendor name could not be read reliably — the OCR picked up a table "
+            "row instead of a company name. Type the vendor manually before saving."
+        )
+        vendor_name = None
+        vendor_address = None
+        vendor_gstin = None  # a GSTIN paired with a noise name is untrustworthy
+
     existing_vendor = _lookup_vendor(db, tenant_id, vendor_name, vendor_gstin)
 
     preview_lines: List[Dict[str, Any]] = []
@@ -303,7 +317,7 @@ def _build_preview_response(ocr: dict, db: Session, tenant_id: uuid.UUID) -> dic
         "total": ocr.get("total"),
         "confidence": ocr.get("overall_confidence", 0.0),
         "confidence_scores": ocr.get("confidence_scores", {}),
-        "warnings": ocr.get("warnings", []),
+        "warnings": warnings,
     }
 
 
@@ -393,6 +407,32 @@ def scan_save(
             resolver.resolve(f"vendor.{new_vendor.id}")
         except Exception as e:
             logger.warning(f"Could not auto-create AP account for vendor {new_vendor.id}: {e}")
+
+    # ── Duplicate-draft detection ──────────────────────────────────────────
+    # Scans are cheap to re-run; a double draft is not. Refuse to create a
+    # second bill matching an existing one for the same vendor + number.
+    bill_number = (bill_data.get("bill_number") or "").strip()
+    if bill_number:
+        dup = db.query(Bill).filter(
+            Bill.tenant_id == tenant_id,
+            Bill.contact_id == contact_id,
+            func.upper(func.trim(Bill.bill_number)) == bill_number.upper(),
+            Bill.deleted_at == None,
+        ).first()
+        if dup:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "message": (
+                        f"Bill '{dup.bill_number}' from this vendor already exists "
+                        f"(status: {dup.status}). Review it in Bills instead of scanning again."
+                    ),
+                    "existing_bill_id": str(dup.id),
+                    "existing_bill_number": dup.bill_number,
+                    "existing_bill_status": dup.status,
+                    "code": "DUPLICATE_BILL",
+                },
+            )
 
     # ── Resolve / create products ──────────────────────────────────────────
     db_lines: List[dict] = []

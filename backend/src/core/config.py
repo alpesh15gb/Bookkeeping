@@ -102,7 +102,19 @@ class Settings(BaseSettings):
     OCR_ENGINE: str = "paddleocr"  # "google_vision" or "paddleocr"
     GOOGLE_VISION_API_KEY: str = ""
     NVIDIA_NIM_API_KEY: str = ""
+    # OpenAI-compatible vision endpoint (e.g. Omniroute gateway). Empty string
+    # keeps the default NVIDIA hosted NIM URL. The gateway is used when either
+    # this or NVIDIA_NIM_API_KEY is set.
+    NVIDIA_NIM_BASE_URL: str = ""
     NVIDIA_NIM_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
+    # Comma-separated fallback vision models tried in order when the primary
+    # model fails or returns an unusable extraction (engine rotation).
+    NVIDIA_NIM_FALLBACK_MODELS: str = "auto/best-vision,auto/pro-vision,auto/multimodal,auto/vision"
+    # Extra attempts after the first for transient errors (429/5xx/network).
+    NVIDIA_NIM_MAX_RETRIES: int = 2
+    NVIDIA_NIM_TIMEOUT_SECONDS: int = 90
+    # How many PDF pages the vision pipeline walks looking for the bill content.
+    SCAN_MAX_PDF_PAGES: int = 5
 
     # ----------------------------------------------------------------
     # Idempotency

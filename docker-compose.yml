@@ -53,6 +53,13 @@ services:
       - CARTUNEZ_MEDUSA_BASE_URL
       - CARTUNEZ_MEDUSA_API_KEY
       - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
+      - NVIDIA_NIM_API_KEY
+      - NVIDIA_NIM_BASE_URL
+      - NVIDIA_NIM_MODEL
+      - NVIDIA_NIM_FALLBACK_MODELS
+      - NVIDIA_NIM_MAX_RETRIES
+      - NVIDIA_NIM_TIMEOUT_SECONDS
+      - SCAN_MAX_PDF_PAGES
     # Migrations run with the privileged migrator role; the API itself serves
     # with the restricted apexbooks_api role (RLS enforced, no superuser).
     command: ["sh", "-c", "alembic upgrade head && exec uvicorn src.main:app --host 0.0.0.0 --port 8000"]
@@ -84,6 +91,13 @@ services:
       - CARTUNEZ_MEDUSA_BASE_URL
       - CARTUNEZ_MEDUSA_API_KEY
       - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
+      - NVIDIA_NIM_API_KEY
+      - NVIDIA_NIM_BASE_URL
+      - NVIDIA_NIM_MODEL
+      - NVIDIA_NIM_FALLBACK_MODELS
+      - NVIDIA_NIM_MAX_RETRIES
+      - NVIDIA_NIM_TIMEOUT_SECONDS
+      - SCAN_MAX_PDF_PAGES
     depends_on:
       backend:
         condition: service_healthy

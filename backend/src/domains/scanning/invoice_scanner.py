@@ -18,10 +18,12 @@ from __future__ import annotations
 import io
 import logging
 import re
+import time
 import warnings
 from datetime import date
 from typing import Optional, List, Dict, Any, Tuple
 from src.core.config import settings
+from src.domains.scanning.quality import compute_confidence, reconcile_totals, validate_extraction
 
 # Suppress PaddleOCR model/lang warnings, Pydantic model_ protected namespace warnings, and requests/urllib3 version warnings
 warnings.filterwarnings("ignore", category=UserWarning, message=".*lang and ocr_version will be ignored.*")
@@ -530,6 +532,71 @@ def _deskew(gray):
     return rotated
 
 
+def _is_transient_error(exc: Exception) -> bool:
+    """True for errors worth retrying: 429/5xx responses and network failures.
+
+    Works with real ``requests`` exceptions and with anything whose response
+    carries a status code.
+    """
+    status = getattr(exc, "response", None)
+    code = getattr(status, "status_code", None) if status is not None else None
+    if code is not None:
+        return code == 429 or 500 <= code < 600
+    name = type(exc).__name__.lower()
+    return any(t in name for t in ("timeout", "connection", "proxyerror", "retryerror", "chunked"))
+
+
+def _result_is_empty(result: dict) -> bool:
+    """True when an extraction carries no usable data at all."""
+    if not result:
+        return True
+    return not any([
+        result.get("vendor_name"),
+        result.get("bill_number"),
+        result.get("line_items"),
+        result.get("total"),
+    ])
+
+
+def _merge_extractions(primary: dict, secondary: dict) -> dict:
+    """Fill gaps in ``primary`` with values from ``secondary`` (OCR fallback).
+
+    Only None/empty fields are replaced; the higher-quality extraction keeps
+    its values. Warnings from both sides are kept and confidence recomputed.
+    """
+    merged = dict(primary)
+    scalar_fields = (
+        "vendor_name", "vendor_gstin", "vendor_address", "bill_number",
+        "bill_date", "due_date", "po_number", "subtotal", "cgst", "sgst",
+        "igst", "total",
+    )
+    filled = []
+    for field in scalar_fields:
+        if not merged.get(field) and secondary.get(field):
+            merged[field] = secondary[field]
+            filled.append(field)
+    if not merged.get("line_items") and secondary.get("line_items"):
+        merged["line_items"] = secondary["line_items"]
+        filled.append("line_items")
+
+    warnings = list(primary.get("warnings") or [])
+    for w in (secondary.get("warnings") or []):
+        if w not in warnings:
+            warnings.append(w)
+    if filled:
+        warnings.append(
+            "Some fields could not be read by the vision engine and were filled "
+            "from the OCR fallback — verify them before saving."
+        )
+    merged["warnings"] = warnings
+
+    scores = compute_confidence(merged)
+    merged["confidence_scores"] = dict(scores)
+    merged["confidence_scores"]["_engine"] = "vision+ocr"
+    merged["overall_confidence"] = min(round(sum(scores.values()), 2), 1.0)
+    return merged
+
+
 def _pdf_to_image_bytes(pdf_bytes: bytes, page: int = 1) -> bytes:
     try:
         from pdf2image import convert_from_bytes
@@ -589,11 +656,31 @@ class InvoiceScanner:
             )
 
     def scan(self, file_bytes: bytes, filename: str = "", confidence_threshold: float = 0.3) -> dict:
-        # ── Nvidia NIM integration ───────────────────────────────────────
-        if getattr(settings, "NVIDIA_NIM_API_KEY", None):
-            logger.info("Nvidia NIM key found. Running Nvidia NIM standalone multimodal extractor.")
-            return self._scan_with_nvidia_nim(file_bytes, filename)
+        """Robust multi-engine scan: vision LLM primary, PaddleOCR fallback.
 
+        The vision pipeline (transient retries, model rotation, PDF multi-page
+        walk) runs first. If every vision model fails or returns nothing usable,
+        PaddleOCR takes over and its extraction is merged in to fill gaps.
+        """
+        vision_configured = bool(
+            getattr(settings, "NVIDIA_NIM_API_KEY", None)
+            or getattr(settings, "NVIDIA_NIM_BASE_URL", None)
+        )
+        if vision_configured:
+            result = self._scan_vision_robust(file_bytes, filename)
+            if result is not None and not _result_is_empty(result):
+                return result
+            if result is not None:
+                logger.warning(
+                    "Vision pipeline returned nothing usable — running "
+                    "PaddleOCR fallback and merging fields."
+                )
+                ocr = self._scan_with_paddleocr(file_bytes, filename, confidence_threshold)
+                return _merge_extractions(result, ocr)
+            logger.warning("All vision models failed — falling back to PaddleOCR.")
+        return self._scan_with_paddleocr(file_bytes, filename, confidence_threshold)
+
+    def _scan_with_paddleocr(self, file_bytes: bytes, filename: str = "", confidence_threshold: float = 0.3) -> dict:
         warnings: list[str] = []
 
         # ── 1. Convert PDF if needed ─────────────────────────────────────
@@ -681,10 +768,15 @@ class InvoiceScanner:
         logger.info(f"Extracted {len(result_data.get('line_items', []))} line items: {result_data.get('line_items')}")
 
         # ── 7. Confidence scoring ─────────────────────────────────────
+        mismatches = reconcile_totals(result_data)
+        if mismatches:
+            warnings.extend(mismatches)
+
         scores = _compute_confidence(result_data)
-        overall = round(sum(scores.values()), 2)
+        overall = min(round(sum(scores.values()), 2), 1.0)
         result_data["confidence_scores"] = scores
         result_data["overall_confidence"] = overall
+        warnings.extend(validate_extraction(result_data))
         result_data["warnings"] = warnings
 
         if overall < confidence_threshold:
@@ -1551,7 +1643,72 @@ class InvoiceScanner:
             "warnings":          warnings,
         }
 
-    def _scan_with_nvidia_nim(self, file_bytes: bytes, filename: str) -> dict:
+    def _vision_models(self) -> List[str]:
+        """Primary vision model followed by configured fallbacks (rotation)."""
+        primary = settings.NVIDIA_NIM_MODEL or "meta/llama-3.2-11b-vision-instruct"
+        fallbacks = [
+            m.strip()
+            for m in (getattr(settings, "NVIDIA_NIM_FALLBACK_MODELS", "") or "").split(",")
+            if m.strip()
+        ]
+        models = [primary]
+        for m in fallbacks:
+            if m != primary and m not in models:
+                models.append(m)
+        return models
+
+    def _vision_cascade(self, image_bytes: bytes) -> Optional[dict]:
+        """Try each vision model in order; return the first usable extraction.
+
+        A "usable" result has at least one critical field (vendor name, bill
+        number, line items, or total). Models that raise are skipped; the last
+        (weakest) result is kept so the caller can merge it with the OCR fallback.
+        """
+        last_result = None
+        for model in self._vision_models():
+            try:
+                result = self._scan_with_nvidia_nim(image_bytes, "scan-image.png", model_override=model)
+            except Exception as e:
+                logger.warning(f"Vision model {model} failed: {e}")
+                continue
+            last_result = result
+            if not _result_is_empty(result):
+                logger.info(f"Vision model {model} produced a usable extraction.")
+                return result
+        return last_result
+
+    def _scan_vision_robust(self, file_bytes: bytes, filename: str) -> Optional[dict]:
+        """Vision-first scan handling PDFs page-by-page.
+
+        Images go straight through the cascade. PDFs are converted page by page
+        (up to ``SCAN_MAX_PDF_PAGES``) and the first page that yields a usable
+        extraction wins — a bill whose line items sit on page 2 is still read.
+        """
+        is_pdf = filename.lower().endswith(".pdf") or file_bytes[:4] == b"%PDF"
+        if not is_pdf:
+            return self._vision_cascade(file_bytes)
+
+        max_pages = getattr(settings, "SCAN_MAX_PDF_PAGES", 5)
+        last_result = None
+        first_err = None
+        for page in range(1, max_pages + 1):
+            try:
+                image_bytes = _pdf_to_image_bytes(file_bytes, page=page)
+            except Exception as e:
+                if page == 1:
+                    first_err = e
+                    logger.warning(f"PDF conversion failed for vision scan: {e}")
+                break
+            result = self._vision_cascade(image_bytes)
+            last_result = result
+            if result is not None and not _result_is_empty(result):
+                logger.info(f"Vision extraction succeeded on PDF page {page}.")
+                return result
+        if first_err and last_result is None:
+            return None  # conversion failed everywhere → caller falls back to OCR
+        return last_result
+
+    def _scan_with_nvidia_nim(self, file_bytes: bytes, filename: str, model_override: Optional[str] = None) -> dict:
         import base64
         import requests
         import json
@@ -1559,19 +1716,27 @@ class InvoiceScanner:
         # 1. Convert PDF to image bytes if needed
         lower_name = filename.lower()
         if lower_name.endswith(".pdf") or file_bytes[:4] == b"%PDF":
-            image_bytes = _pdf_to_image_bytes(file_bytes)
+            try:
+                image_bytes = _pdf_to_image_bytes(file_bytes)
+            except Exception as e:
+                logger.warning(f"PDF conversion failed for NIM scan: {e}")
+                return self._empty_result([
+                    f"Could not convert the PDF to an image: {e}. "
+                    "Try uploading a photo of the bill instead."
+                ])
         else:
             image_bytes = file_bytes
 
         img_b64 = base64.b64encode(image_bytes).decode("utf-8")
 
         api_key = settings.NVIDIA_NIM_API_KEY
-        model = settings.NVIDIA_NIM_MODEL or "meta/llama-3.2-11b-vision-instruct"
+        model = model_override or settings.NVIDIA_NIM_MODEL or "meta/llama-3.2-11b-vision-instruct"
+        base_url = (settings.NVIDIA_NIM_BASE_URL or "https://integrate.api.nvidia.com/v1").rstrip("/")
+        endpoint = f"{base_url}/chat/completions"
 
-        headers = {
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json"
-        }
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
 
         prompt = (
             "You are an expert bookkeeping and invoice scanning assistant.\n"
@@ -1591,8 +1756,9 @@ class InvoiceScanner:
             "   - buyer_name: The company name of the buyer/customer (e.g. Apex Integrations).\n"
             "   - buyer_gstin: The 15-character GSTIN of the buyer/customer.\n"
             "   - buyer_address: The physical address of the buyer/customer.\n"
-            "   - bill_number: The exact invoice number.\n"
+            "   - bill_number: The invoice/serial reference printed next to 'Invoice No.', 'Bill No.', or 'Invoice #'. It is ALWAYS alphanumeric or numeric (e.g. INV-2026-00117, MC2025-26/7164, 1042) — it is NEVER a GSTIN, a phone number, or a date. If no invoice number is visible, use null.\n"
             "   - bill_date: The date of the invoice (format as YYYY-MM-DD).\n"
+            "   - All money values (subtotal, cgst, sgst, igst, total, rate, amount) must be plain numbers without currency symbols, thousand separators, or text (e.g. 11600.00, never 'Rs 11,600.00' or '11,600').\n"
             "\n"
             "The JSON must have the following schema:\n"
             "{\n"
@@ -1644,18 +1810,27 @@ class InvoiceScanner:
                 }
             ],
             "response_format": {"type": "json_object"},
+            "stream": False,
             "temperature": 0.1,
             "max_tokens": 2048
         }
 
-        logger.info(f"Sending vision extraction request to Nvidia NIM with model {model}...")
-        response = requests.post(
-            "https://integrate.api.nvidia.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60
-        )
-        response.raise_for_status()
+        logger.info(f"Sending vision extraction request to {endpoint} with model {model}...")
+        timeout = getattr(settings, "NVIDIA_NIM_TIMEOUT_SECONDS", 90)
+        max_attempts = 1 + getattr(settings, "NVIDIA_NIM_MAX_RETRIES", 2)
+        attempt = 0
+        while True:
+            attempt += 1
+            try:
+                response = requests.post(endpoint, headers=headers, json=payload, timeout=timeout)
+                response.raise_for_status()
+                break
+            except Exception as e:
+                if attempt >= max_attempts or not _is_transient_error(e):
+                    raise
+                delay = 1.5 * (2 ** (attempt - 1))
+                logger.warning(f"Vision request attempt {attempt} failed ({e}); retrying in {delay:.1f}s")
+                time.sleep(delay)
         res_data = response.json()
         content = res_data["choices"][0]["message"]["content"].strip()
 
@@ -1700,23 +1875,42 @@ class InvoiceScanner:
             "igst": _clean_amount(str(parsed.get("igst", 0.0))),
             "total": _clean_amount(str(parsed.get("total", 0.0))),
             "line_items": [],
-            "confidence_scores": {"_engine": "nvidia_nim"},
-            "overall_confidence": 0.98,
             "warnings": []
         }
 
+        # Some vision models use different key names per line item — map them all.
+        def _pick(d: dict, *keys):
+            for k in keys:
+                if d.get(k) is not None:
+                    return d[k]
+            return None
+
         for item in parsed.get("line_items", []):
-            qty = float(item.get("quantity") or 1.0)
-            rate = float(item.get("rate") or 0.0)
-            amt = float(item.get("amount") or (qty * rate))
+            if not isinstance(item, dict):
+                continue
+            qty = _clean_amount(str(_pick(item, "quantity", "qty", "qty") or "")) or 1.0
+            rate = _clean_amount(str(_pick(item, "rate", "unit_price", "price", "unit_cost") or "")) or 0.0
+            amt_raw = _pick(item, "amount", "line_total", "total", "subtotal")
+            amt = _clean_amount(str(amt_raw)) if amt_raw is not None else (qty * rate)
+            name = str(_pick(item, "product_name", "item", "name", "item_name", "description", "product") or "").strip()
             result["line_items"].append({
-                "product_name": str(item.get("product_name") or "").strip(),
+                "product_name": name,
                 "hsn_sac": str(item.get("hsn_sac") or "") if item.get("hsn_sac") else None,
-                "quantity": qty,
-                "rate": rate,
+                "quantity": float(qty),
+                "rate": float(rate),
                 "gst_rate": float(item.get("gst_rate") or 0.0),
-                "amount": amt
+                "amount": float(amt)
             })
+
+        # ── Honest confidence — presence alone is not trust ───────────────
+        scores = compute_confidence(result)
+        mismatches = reconcile_totals(result)
+        if mismatches:
+            result["warnings"].extend(mismatches)
+        result["warnings"].extend(validate_extraction(result))
+        result["confidence_scores"] = dict(scores)
+        result["confidence_scores"]["_engine"] = "nvidia_nim"
+        result["overall_confidence"] = min(round(sum(scores.values()), 2), 1.0)
 
         logger.info(f"Nvidia NIM extraction complete. Extracted {len(result['line_items'])} line items.")
         return result
@@ -1887,46 +2081,8 @@ class InvoiceScanner:
 # ---------------------------------------------------------------------------
 
 def _compute_confidence(data: dict) -> dict:
-    scores = {}
-
-    # ── Header fields (weighted) ──────────────────────────────────────
-    header_fields = {
-        'vendor_name': 0.15,
-        'vendor_gstin': 0.10,
-        'bill_number': 0.10,
-        'bill_date': 0.05,
-    }
-    for f, weight in header_fields.items():
-        val = data.get(f)
-        scores[f] = weight if val not in (None, '', [], 0.0, 0) else 0.0
-
-    # ── Financial totals (weighted) ───────────────────────────────────
-    total_fields = {
-        'subtotal': 0.10,
-        'total': 0.15,
-    }
-    for f, weight in total_fields.items():
-        val = data.get(f)
-        scores[f] = weight if val not in (None, '', [], 0.0, 0) else 0.0
-
-    # ── Line items (most important — 35% weight) ──────────────────────
-    items = data.get('line_items', [])
-    if items:
-        # Score based on item quality
-        item_score = 0.35
-        # Bonus if items have HSN codes
-        items_with_hsn = sum(1 for i in items if i.get('hsn_sac'))
-        if items_with_hsn > 0:
-            item_score += 0.05
-        # Bonus if items have GST rates
-        items_with_gst = sum(1 for i in items if i.get('gst_rate', 0) > 0)
-        if items_with_gst > 0:
-            item_score += 0.05
-        scores['line_items'] = min(item_score, 0.45)
-    else:
-        scores['line_items'] = 0.0
-
-    return scores
+    """Quality-aware per-field confidence (see src.domains.scanning.quality)."""
+    return compute_confidence(data)
 
 
 # ---------------------------------------------------------------------------

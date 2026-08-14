@@ -1,3 +1,4 @@
+import json
 import pytest
 from unittest.mock import patch, MagicMock
 from src.domains.scanning.invoice_scanner import InvoiceScanner, _clean_json_string, _robust_json_loads
@@ -71,16 +72,147 @@ def test_scan_with_nvidia_nim_success(mock_post):
         assert result["line_items"][0]["amount"] == 100.0
 
 @patch("requests.post")
-def test_scan_nvidia_nim_standalone_fails_without_fallback(mock_post):
-    # Mock settings with NIM API key
-    with patch.object(settings, "NVIDIA_NIM_API_KEY", "mock_key"):
-        # Mock requests.post to raise an error
-        mock_post.side_effect = Exception("NIM Connection Timeout")
+def test_scan_nvidia_nim_uses_gateway_base_url_without_auth(mock_post):
+    # Omniroute-style gateway: custom base URL, no API key required
+    with patch.object(settings, "NVIDIA_NIM_API_KEY", ""), \
+         patch.object(settings, "NVIDIA_NIM_BASE_URL", "http://82.112.236.81:20128/v1"), \
+         patch.object(settings, "NVIDIA_NIM_MODEL", "auto/best-vision"):
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {
+            "choices": [{"message": {"content": '{"vendor_name": "Omni Supplies", "total": 13688.0}'}}]
+        }
+        mock_post.return_value = mock_response
 
         scanner = InvoiceScanner()
-        # Verify that the exception propagates and does NOT fall back to PaddleOCR
-        with pytest.raises(Exception, match="NIM Connection Timeout"):
-            scanner.scan(b"file_bytes", "invoice.png")
+        with patch("src.domains.scanning.invoice_scanner._pdf_to_image_bytes", return_value=b"image_bytes"):
+            result = scanner.scan(b"pdf_bytes", "test.pdf")
+
+        args, kwargs = mock_post.call_args
+        assert args[0] == "http://82.112.236.81:20128/v1/chat/completions"
+        assert "Authorization" not in kwargs["headers"]
+        assert kwargs["json"]["model"] == "auto/best-vision"
+        assert kwargs["json"]["stream"] is False
+        assert result["vendor_name"] == "Omni Supplies"
+        assert result["total"] == 13688.0
+
+@patch("requests.post")
+def test_scan_with_nvidia_nim_maps_alternate_line_item_keys(mock_post):
+    # Vision models often return item/qty/price instead of product_name/quantity/rate
+    with patch.object(settings, "NVIDIA_NIM_API_KEY", "mock_key"), \
+         patch.object(settings, "NVIDIA_NIM_BASE_URL", ""), \
+         patch.object(settings, "NVIDIA_NIM_MODEL", "mock_model"):
+
+        content = json.dumps({
+            "vendor_name": "Omni Supplies Pvt Ltd",
+            "vendor_gstin": "27AAHCM1234F1Z5",
+            "subtotal": "Rs 11,600.00",
+            "total": "Rs 13,688.00",
+            "line_items": [
+                {"item": "Steel Rods", "quantity": "100", "rate": "116.00", "amount": "11,600.00"},
+                {"name": "Nuts", "qty": 50, "price": "10.00", "line_total": 500.0},
+            ]
+        })
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = {"choices": [{"message": {"content": content}}]}
+        mock_post.return_value = mock_response
+
+        scanner = InvoiceScanner()
+        with patch("src.domains.scanning.invoice_scanner._pdf_to_image_bytes", return_value=b"image_bytes"):
+            result = scanner.scan(b"pdf_bytes", "test.pdf")
+
+        assert result["subtotal"] == 11600.0
+        assert result["total"] == 13688.0
+        lines = result["line_items"]
+        assert len(lines) == 2
+        assert lines[0]["product_name"] == "Steel Rods"
+        assert lines[0]["quantity"] == 100.0
+        assert lines[0]["rate"] == 116.0
+        assert lines[0]["amount"] == 11600.0
+        assert lines[1]["product_name"] == "Nuts"
+        assert lines[1]["quantity"] == 50.0
+        assert lines[1]["amount"] == 500.0
+
+@patch("requests.post")
+def test_scan_vision_rotates_to_fallback_model_on_failure(mock_post):
+    # Primary model fails → the cascade should try the fallback model
+    with patch.object(settings, "NVIDIA_NIM_API_KEY", "mock_key"), \
+         patch.object(settings, "NVIDIA_NIM_MODEL", "primary-model"), \
+         patch.object(settings, "NVIDIA_NIM_FALLBACK_MODELS", "fallback-model"):
+
+        def side_effect(*args, **kwargs):
+            if kwargs["json"]["model"] == "primary-model":
+                raise Exception("NIM Connection Timeout")
+            mock_response = MagicMock()
+            mock_response.raise_for_status = MagicMock()
+            mock_response.json.return_value = {
+                "choices": [{"message": {"content": '{"vendor_name": "Fallback Vendor", "total": 100.0}'}}]
+            }
+            return mock_response
+
+        mock_post.side_effect = side_effect
+        scanner = InvoiceScanner()
+        with patch("src.domains.scanning.invoice_scanner._pdf_to_image_bytes", return_value=b"image_bytes"):
+            result = scanner.scan(b"pdf_bytes", "test.pdf")
+
+        assert result["vendor_name"] == "Fallback Vendor"
+        models = [c.kwargs["json"]["model"] for c in mock_post.call_args_list]
+        assert models == ["primary-model", "fallback-model"]
+
+@patch("requests.post")
+def test_scan_falls_back_to_ocr_when_all_vision_models_fail(mock_post):
+    # Every vision model fails → scan must degrade to the PaddleOCR path
+    with patch.object(settings, "NVIDIA_NIM_API_KEY", "mock_key"), \
+         patch.object(settings, "NVIDIA_NIM_MODEL", "primary-model"), \
+         patch.object(settings, "NVIDIA_NIM_FALLBACK_MODELS", ""):
+
+        mock_post.side_effect = Exception("NIM Connection Timeout")
+        scanner = InvoiceScanner()
+        with patch.object(
+            scanner, "_scan_with_paddleocr",
+            return_value={"vendor_name": "OCR Vendor", "bill_number": "OCR-1", "total": 5.0}
+        ) as ocr_mock, \
+             patch("src.domains.scanning.invoice_scanner._pdf_to_image_bytes", return_value=b"image_bytes"):
+            result = scanner.scan(b"pdf_bytes", "test.pdf")
+
+        assert ocr_mock.called
+        assert result["vendor_name"] == "OCR Vendor"
+
+def test_merge_extractions_fills_gaps_from_ocr():
+    from src.domains.scanning.invoice_scanner import _merge_extractions
+
+    primary = {
+        "vendor_name": "Omni Supplies",
+        "bill_number": None,
+        "line_items": [],
+        "subtotal": 11600.0,
+        "total": None,
+        "warnings": ["Total missing"],
+        "confidence_scores": {},
+        "overall_confidence": 0.3,
+    }
+    secondary = {
+        "vendor_name": None,
+        "bill_number": "INV-42",
+        "line_items": [{"product_name": "Nuts", "quantity": 10.0, "rate": 5.0, "amount": 50.0}],
+        "subtotal": 50.0,
+        "total": 59.0,
+        "warnings": ["Line items vs subtotal mismatch"],
+    }
+    merged = _merge_extractions(primary, secondary)
+
+    # Gaps filled, primary values kept
+    assert merged["vendor_name"] == "Omni Supplies"
+    assert merged["bill_number"] == "INV-42"
+    assert merged["subtotal"] == 11600.0
+    assert merged["line_items"][0]["product_name"] == "Nuts"
+    # Warnings combined + provenance note added
+    assert "Total missing" in merged["warnings"]
+    assert "Line items vs subtotal mismatch" in merged["warnings"]
+    assert any("OCR fallback" in w for w in merged["warnings"])
+    assert merged["confidence_scores"]["_engine"] == "vision+ocr"
 
 @patch("requests.post")
 def test_scan_with_nvidia_nim_fallback(mock_post):
