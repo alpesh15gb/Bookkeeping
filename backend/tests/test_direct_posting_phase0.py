@@ -205,7 +205,7 @@ def test_bill_save_posts_immediately_and_number_can_be_generated(
     ).count() == 1
 
 
-def test_expense_save_stays_draft_until_posted(client, combined_headers, tenant, db_session):
+def test_expense_save_posts_immediately(client, combined_headers, tenant, db_session):
     category = _expense_category(db_session, tenant)
     response = client.post(
         "/api/v1/expenses",
@@ -220,11 +220,11 @@ def test_expense_save_stays_draft_until_posted(client, combined_headers, tenant,
         headers=combined_headers(),
     )
     assert response.status_code == 201, response.text
-    assert response.json()["status"] == "DRAFT"
+    assert response.json()["status"] == "POSTED"
     assert db_session.query(JournalEntry).filter(
         JournalEntry.source_type == "EXPENSE",
         JournalEntry.source_id == uuid.UUID(response.json()["id"]),
-    ).count() == 0
+    ).count() == 1
 
 
 # ---------------------------------------------------------------------------

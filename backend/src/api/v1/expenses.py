@@ -224,6 +224,12 @@ def create_expense(
             reference_number=payload.reference_number,
         )
         db.add(expense)
+        db.flush()
+
+        # Auto-post the expense on creation so it lands in the ledger
+        # immediately (matching the invoice/bill direct-posting contract).
+        auto_post_expense(db, tenant_id, expense)
+
         db.commit()
         db.refresh(expense)
         return _expense_to_response(expense)
@@ -231,7 +237,11 @@ def create_expense(
         raise
     except GSTPeriodFiledError as e:
         raise HTTPException(status_code=409, detail=str(e))
+    except ValueError as e:
+        db.rollback()
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
+        db.rollback()
         logger.error(f"Error creating expense: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to create expense: {str(e)}")
 

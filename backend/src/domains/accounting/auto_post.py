@@ -326,14 +326,12 @@ def auto_post_bill(db: Session, tenant_id: uuid.UUID, bill: Bill) -> JournalEntr
 
 
 # --- Auto-Post Expense ---------------------------------------------------
-# NOTE: Expenses are NOT auto-posted on creation. They require a manual /post call.
-# This is a deliberate design: expenses often need review before posting (e.g., receipt
-# attachment, approval workflows). The /post endpoint in expenses.py handles posting
-# with the correct bank_account_id from the expense record.
-#
-# auto_post_expense below is used ONLY by batch import tools (Vyapar, Tally) that
-# create already-verified expenses. It uses the default cash account since imported
-# expenses may not have a bank_account_id.
+# Expenses are auto-posted on creation via the public API (expenses.py),
+# matching the invoice/bill direct-posting contract. The /post endpoint
+# remains available for legacy draft expenses. auto_post_expense is also used
+# by batch import tools (Vyapar, Tally) that create already-verified expenses.
+# It uses the expense's bank_account_id or falls back to the default cash
+# account since imported expenses may not have a bank_account_id.
 
 def auto_post_expense(db: Session, tenant_id: uuid.UUID, expense: Expense) -> JournalEntry:
     """Auto-post an expense on creation. Creates journal entry and sets status to POSTED."""

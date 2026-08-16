@@ -583,10 +583,11 @@ def direct_update_expense(
             _unwrap(expense_api.cancel_expense)(id, proxy, tenant_id, current_user)
             original.deleted_at = datetime.now(timezone.utc)
 
+        # create_expense auto-posts on creation, so the replacement is already
+        # POSTED with its journal entry inside the same transaction.
         created = _unwrap(expense_api.create_expense)(
             request, replacement_payload, proxy, tenant_id
         )
-        _unwrap(expense_api.post_expense)(created.id, proxy, tenant_id)
         replacement = db.query(Expense).filter(
             Expense.id == created.id,
             Expense.tenant_id == tenant_id,
