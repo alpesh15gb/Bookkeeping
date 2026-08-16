@@ -60,6 +60,7 @@ class NumberingSeriesService:
         "SALES_RETURN": "SR",
         "PURCHASE_RETURN": "PR",
         "TRANSFER": "ST",
+        "GOODS_RECEIPT": "GRN",
     }
 
     @staticmethod
@@ -85,11 +86,10 @@ class NumberingSeriesService:
         if not series:
             # Automatic fallback seeding — handle race where two requests seed simultaneously
             try:
-                series = NumberingSeriesService.seed_default_series(db, tenant_id, document_type)
-                db.flush()
+                with db.begin_nested():
+                    series = NumberingSeriesService.seed_default_series(db, tenant_id, document_type)
+                    db.flush()
             except IntegrityError:
-                db.rollback()
-                # Another request seeded first — re-fetch with lock
                 series = db.query(NumberingSeries).filter(
                     NumberingSeries.tenant_id == tenant_id,
                     NumberingSeries.document_type == document_type,
@@ -217,14 +217,13 @@ def derive_origin_state_code(gstin: Optional[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # Origin state resolution — from tenant GSTIN or TenantSetting fallback
 # ---------------------------------------------------------------------------
-def resolve_origin_state_code(db: Session, tenant_id: uuid.UUID) -> str:
+def resolve_origin_state_code(db: Session, tenant_id: uuid.UUID) -> Optional[str]:
     """
-    Returns the 2-character origin state code for a tenant.
+    Returns the 2-character origin state code for a tenant, or None if unknown.
 
     Resolution order:
       1. TenantSetting.origin_state_code — explicit override (set in Settings page)
       2. Tenant.gstin[:2] — auto-detected from GSTIN prefix
-      3. Fallback to "36" (Telangana) to prevent HTTP 500 crashes
     """
     setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
     if setting and setting.origin_state_code:
@@ -237,7 +236,7 @@ def resolve_origin_state_code(db: Session, tenant_id: uuid.UUID) -> str:
         if derived:
             return derived
 
-    return "36"
+    return None
 
 
 

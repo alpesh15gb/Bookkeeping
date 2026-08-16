@@ -84,6 +84,7 @@ class InvoiceLineResponse(InvoiceLineBase):
     cess_rate: Decimal
     cess_amount: Decimal
     total: Decimal
+    quantity_remaining: Optional[Decimal] = None
 
 # Invoice Header Schemas
 class InvoiceBase(SchemaBase):

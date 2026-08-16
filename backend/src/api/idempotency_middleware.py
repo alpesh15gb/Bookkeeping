@@ -33,6 +33,8 @@ _REQUIRED_POST_PATHS = {
     "/api/v1/invoices/debit-notes",
     "/api/v1/returns/sales",
     "/api/v1/returns/purchase",
+    "/api/v1/goods-receipts",
+    "/api/v1/bills/scan-save",
 }
 
 # A correction creates reversal/replacement journal and/or stock facts and is
@@ -43,13 +45,15 @@ _REQUIRED_MUTATION_PATTERNS = (
     re.compile(r"^/api/v1/payments/(?:receipts|disbursements)/[^/]+$"),
     re.compile(r"^/api/v1/returns/(?:sales|purchase)/[^/]+$"),
     re.compile(r"^/api/v1/accounting/journals/[^/]+$"),
-    # Transitional handlers remain protected even though the router bootstrap
-    # removes them from the public app.
     re.compile(r"^/api/v1/payments/(?:receipts|disbursements)/[^/]+/cancel$"),
     re.compile(r"^/api/v1/accounting/journals/[^/]+/reverse$"),
     re.compile(r"^/api/v1/invoices/(?:credit-notes|debit-notes)/[^/]+/(?:finalize|cancel)$"),
     re.compile(r"^/api/v1/returns/(?:sales|purchase)/[^/]+/cancel$"),
     re.compile(r"^/api/v1/inventory-adjustments/[^/]+/(?:confirm|cancel)$"),
+    re.compile(r"^/api/v1/(?:invoices|bills)/[^/]+/finalize$"),
+    re.compile(r"^/api/v1/expenses/[^/]+/(?:post|cancel)$"),
+    re.compile(r"^/api/v1/recurring-invoices/[^/]+/generate$"),
+    re.compile(r"^/api/v1/goods-receipts/[^/]+/(?:confirm|cancel)$"),
 )
 
 

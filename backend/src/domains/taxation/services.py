@@ -1,6 +1,6 @@
 import sys
 from decimal import Decimal, ROUND_CEILING, ROUND_HALF_UP
-from typing import NamedTuple, Set
+from typing import NamedTuple, Optional, Set
 
 class TaxSplit(NamedTuple):
     cgst_rate: Decimal
@@ -115,8 +115,8 @@ class GSTEngine:
 
     @staticmethod
     def calculate_tax(
-        origin_state_code: str,
-        place_of_supply_state_code: str,
+        origin_state_code: Optional[str],
+        place_of_supply_state_code: Optional[str],
         base_amount: Decimal,
         gst_rate: Decimal,
         cess_rate: Decimal = Decimal("0.00"),
@@ -152,8 +152,11 @@ class GSTEngine:
         utgst_rate = Decimal("0.00")
         utgst_amount = Decimal("0.00")
 
-        # Determine Intra-state vs Inter-state
-        is_intra_state = (origin_state_code == place_of_supply_state_code) and not force_igst
+        # Determine Intra-state vs Inter-state. Missing origin or POS is never
+        # treated as intra-state (empty == empty would otherwise split CGST/SGST).
+        origin = (origin_state_code or "").strip()
+        pos = (place_of_supply_state_code or "").strip()
+        is_intra_state = bool(origin) and bool(pos) and origin == pos and not force_igst
 
         if is_intra_state:
             # Intra-state: CGST + SGST/UTGST

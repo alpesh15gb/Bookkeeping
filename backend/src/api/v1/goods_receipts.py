@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from typing import List
 import uuid
 from datetime import date, datetime, timezone
+from decimal import Decimal
 
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
@@ -11,9 +13,61 @@ from src.infrastructure.database.models import (
 )
 from src.schemas.goods_receipt_schemas import (
     GoodsReceiptCreate, GoodsReceiptResponse, GoodsReceiptListResponse,
-    PaginatedGoodsReceiptResponse,
+    PaginatedGoodsReceiptResponse, GoodsReceiptLineResponse,
 )
 from src.api.deps import enforce_permission
+from src.domains.company.services import NumberingSeriesService
+
+router = APIRouter(prefix="/goods-receipts", tags=["Goods Receipts (GRN)"])
+
+
+def _received_qty_for_po_line(
+    db: Session,
+    tenant_id: uuid.UUID,
+    po_line_id: uuid.UUID,
+    exclude_gr_id: uuid.UUID | None = None,
+) -> Decimal:
+    query = db.query(func.coalesce(func.sum(GoodsReceiptLine.quantity_received), 0)).join(
+        GoodsReceipt, GoodsReceiptLine.goods_receipt_id == GoodsReceipt.id
+    ).filter(
+        GoodsReceipt.tenant_id == tenant_id,
+        GoodsReceipt.deleted_at == None,
+        GoodsReceipt.status.in_(("DRAFT", "CONFIRMED")),
+        GoodsReceiptLine.purchase_order_line_id == po_line_id,
+    )
+    if exclude_gr_id is not None:
+        query = query.filter(GoodsReceipt.id != exclude_gr_id)
+    return Decimal(str(query.scalar() or 0))
+
+
+def annotate_po_remaining(db: Session, tenant_id: uuid.UUID, po: PurchaseOrder) -> None:
+    for line in po.lines or []:
+        received = _received_qty_for_po_line(db, tenant_id, line.id)
+        remaining = line.quantity - received
+        if remaining < 0:
+            remaining = Decimal("0")
+        line.quantity_remaining = remaining
+
+
+def _ensure_qty_within_remaining(
+    db: Session,
+    tenant_id: uuid.UUID,
+    po_line_id: uuid.UUID | None,
+    quantity_received: Decimal,
+    exclude_gr_id: uuid.UUID | None = None,
+) -> None:
+    if po_line_id is None:
+        return
+    po_line = db.query(PurchaseOrderLine).filter(PurchaseOrderLine.id == po_line_id).with_for_update().first()
+    if not po_line:
+        raise HTTPException(status_code=400, detail="Purchase order line was not found.")
+    already = _received_qty_for_po_line(db, tenant_id, po_line_id, exclude_gr_id=exclude_gr_id)
+    remaining = po_line.quantity - already
+    if quantity_received > remaining:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Received quantity exceeds remaining ordered quantity ({remaining}).",
+        )
 
 router = APIRouter(prefix="/goods-receipts", tags=["Goods Receipts (GRN)"])
 
@@ -79,13 +133,7 @@ def create_goods_receipt(
 ):
     contact_id, po_number = _resolve_po_details(db, tenant_id, payload.purchase_order_id)
 
-    # Generate receipt number — simplest approach: timestamp-based
-    today = date.today()
-    count = db.query(GoodsReceipt).filter(
-        GoodsReceipt.tenant_id == tenant_id,
-        GoodsReceipt.receipt_date == today,
-    ).count()
-    receipt_number = f"GRN-{today.strftime('%Y%m%d')}-{count + 1:04d}"
+    receipt_number = NumberingSeriesService.generate_next_number(db, tenant_id, "GOODS_RECEIPT")
 
     gr = GoodsReceipt(
         tenant_id=tenant_id,
@@ -116,6 +164,9 @@ def create_goods_receipt(
                 status_code=400,
                 detail="Received quantity must be greater than zero.",
             )
+        _ensure_qty_within_remaining(
+            db, tenant_id, line_in.purchase_order_line_id, line_in.quantity_received
+        )
         line = GoodsReceiptLine(
             goods_receipt_id=gr.id,
             purchase_order_line_id=line_in.purchase_order_line_id,
@@ -211,7 +262,7 @@ def confirm_goods_receipt(
         GoodsReceipt.id == id,
         GoodsReceipt.tenant_id == tenant_id,
         GoodsReceipt.deleted_at == None,
-    ).first()
+    ).with_for_update().first()
 
     if not gr:
         raise HTTPException(status_code=404, detail="Goods receipt not found.")
@@ -219,11 +270,14 @@ def confirm_goods_receipt(
         raise HTTPException(status_code=400, detail=f"Cannot confirm goods receipt in status '{gr.status}'.")
 
     for line in gr.lines:
+        _ensure_qty_within_remaining(
+            db, tenant_id, line.purchase_order_line_id, line.quantity_received, exclude_gr_id=gr.id
+        )
         product = db.query(Product).filter(
             Product.id == line.product_id,
             Product.tenant_id == tenant_id,
             Product.deleted_at == None,
-        ).first()
+        ).with_for_update().first()
         if product is None:
             raise HTTPException(
                 status_code=409,

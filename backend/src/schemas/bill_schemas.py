@@ -36,6 +36,7 @@ class BillLineResponse(BillLineBase):
     cess_rate: Decimal
     cess_amount: Decimal
     total: Decimal
+    quantity_remaining: Optional[Decimal] = None
 
 # Bill Header Schemas
 class BillBase(SchemaBase):
@@ -150,6 +151,7 @@ class PurchaseOrderLineCreate(PurchaseOrderLineBase):
 class PurchaseOrderLineResponse(PurchaseOrderLineBase):
     id: uuid.UUID
     product_name: Optional[str] = None
+    quantity_remaining: Optional[Decimal] = None
     subtotal: Decimal
     cgst_rate: Decimal
     cgst_amount: Decimal

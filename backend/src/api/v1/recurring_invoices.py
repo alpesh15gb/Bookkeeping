@@ -236,12 +236,17 @@ def generate_invoice_now(
         RecurringInvoice.id == id,
         RecurringInvoice.tenant_id == tenant_id,
         RecurringInvoice.deleted_at == None,
-    ).first()
+    ).with_for_update().first()
     if not recurring:
         raise HTTPException(status_code=404, detail="Recurring invoice not found.")
 
     if not recurring.is_active:
         raise HTTPException(status_code=400, detail="Recurring invoice is not active.")
+    if recurring.end_mode == "AFTER_N" and recurring.max_occurrences is not None:
+        if recurring.occurrences_created >= recurring.max_occurrences:
+            raise HTTPException(status_code=400, detail="This recurring invoice has already reached its maximum occurrences.")
+    if recurring.end_mode == "ON_DATE" and recurring.end_date and date.today() > recurring.end_date:
+        raise HTTPException(status_code=400, detail="This recurring invoice has already ended.")
 
     from src.domains.accounting.auto_post import auto_post_invoice
     origin_state_code = resolve_origin_state_code(db, tenant_id)
@@ -344,7 +349,8 @@ def generate_invoice_now(
     # Update recurring template
     recurring.occurrences_created += 1
     recurring.last_generated = today
-    recurring.next_date = _calculate_next_date(today, recurring.frequency, recurring.interval_count)
+    schedule_from = recurring.next_date or today
+    recurring.next_date = _calculate_next_date(schedule_from, recurring.frequency, recurring.interval_count)
 
     # Check end conditions
     if recurring.end_mode == "ON_DATE" and recurring.end_date and recurring.next_date > recurring.end_date:

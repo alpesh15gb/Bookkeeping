@@ -151,7 +151,13 @@ def preview_expense(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:view")),
 ):
-    totals = _compute_expense_totals(db=db, tenant_id=tenant_id, amount=payload.amount, gst_rate=payload.gst_rate, place_of_supply_state_code=payload.place_of_supply_state_code or "27")
+    totals = _compute_expense_totals(
+        db=db,
+        tenant_id=tenant_id,
+        amount=payload.amount,
+        gst_rate=payload.gst_rate,
+        place_of_supply_state_code=payload.place_of_supply_state_code or resolve_origin_state_code(db, tenant_id) or "",
+    )
     totals["gst_rate"] = GSTEngine.resolve_inward_gst_rate(db, tenant_id, payload.gst_rate)
     return ExpensePreviewResponse(**totals)
 

@@ -758,9 +758,6 @@ def install_extended_direct_posting_contract() -> None:
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
-    # Payments: central routes only. Old /cancel actions become PUT/DELETE.
-    _remove_route(payment_api.router, "/payments/receipts/{id}/cancel", "POST")
-    _remove_route(payment_api.router, "/payments/disbursements/{id}/cancel", "POST")
     payment_api.router.add_api_route(
         "/receipts/{id}", direct_update_receipt, methods=["PUT"],
         response_model=PaymentResponse,
@@ -778,9 +775,6 @@ def install_extended_direct_posting_contract() -> None:
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
-    # Returns already auto-post on POST.
-    _remove_route(return_api.router, "/returns/sales/{id}/cancel", "POST")
-    _remove_route(return_api.router, "/returns/purchase/{id}/cancel", "POST")
     return_api.router.add_api_route(
         "/sales/{id}", direct_update_sales_return, methods=["PUT"],
         response_model=SalesReturnResponse,
@@ -798,8 +792,6 @@ def install_extended_direct_posting_contract() -> None:
         status_code=status.HTTP_204_NO_CONTENT,
     )
 
-    # Manual journal reversal remains internal implementation detail.
-    _remove_route(accounting_api.router, "/accounting/journals/{id}/reverse", "POST")
     accounting_api.router.add_api_route(
         "/journals/{id}", direct_update_manual_journal, methods=["PUT"],
         response_model=JournalEntryResponse,

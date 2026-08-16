@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import func
 from typing import List, Optional
 import uuid
 from decimal import Decimal
 from datetime import date, datetime, timezone
 
 from src.core.database import get_db_session
-from src.infrastructure.database.models import Bill, BillLine, Contact, Product, StockLedger, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant, User
+from src.infrastructure.database.models import Bill, BillLine, Contact, Product, StockLedger, BillPayment, BillPaymentAllocation, Account, JournalEntry, JournalLine, TenantSetting, BankingProfile, Tenant, User, PurchaseReturn, PurchaseReturnLine
 from src.schemas.bill_schemas import BillCreate, BillUpdate, BillResponse, BillListResponse, BillPaymentCreate, PaginatedBillResponse
 from src.domains.taxation.services import GSTEngine
 from src.domains.accounting.services import AccountResolver, LedgerPostingEngine, update_account_balances, commit_ledger_draft
@@ -424,6 +425,18 @@ def get_bill(
     ).first()
     if not bill:
         raise HTTPException(status_code=404, detail="Vendor Bill not found in this company context.")
+    returned_rows = db.query(
+        PurchaseReturnLine.bill_line_id,
+        func.coalesce(func.sum(PurchaseReturnLine.quantity), 0),
+    ).join(PurchaseReturn, PurchaseReturnLine.purchase_return_id == PurchaseReturn.id).filter(
+        PurchaseReturn.tenant_id == tenant_id,
+        PurchaseReturn.deleted_at == None,
+        PurchaseReturn.status == "POSTED",
+        PurchaseReturnLine.bill_line_id.in_([line.id for line in bill.lines]),
+    ).group_by(PurchaseReturnLine.bill_line_id).all() if bill.lines else []
+    returned = {line_id: qty for line_id, qty in returned_rows}
+    for line in bill.lines:
+        line.quantity_remaining = max(line.quantity - Decimal(returned.get(line.id, 0)), Decimal("0"))
     return bill
 
 @router.get("/{id}/pdf-payload")
@@ -731,7 +744,7 @@ def finalize_bill(
         Bill.id == id,
         Bill.tenant_id == tenant_id,
         Bill.deleted_at == None
-    ).first()
+    ).with_for_update().first()
     if not bill:
         raise HTTPException(status_code=404, detail="Vendor Bill not found in this company context.")
 

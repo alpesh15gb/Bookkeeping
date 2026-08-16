@@ -34,7 +34,7 @@ from src.api.v1 import invoices as invoice_api
 
 
 class DirectInvoiceCreate(InvoiceBase):
-    """Public invoice create contract: Save always posts; there is no draft switch."""
+    """Public invoice create: posts immediately unless post_on_create is false."""
 
     line_items: List[InvoiceLineCreate] = Field(..., min_length=1)
     discount_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
@@ -51,10 +51,11 @@ class DirectInvoiceCreate(InvoiceBase):
     )
     tds_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     tcs_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
+    post_on_create: bool = True
 
 
 class DirectBillCreate(BillBase):
-    """Public bill create contract: Save always posts and number may be server-generated."""
+    """Public bill create: posts immediately unless post_on_create is false."""
 
     bill_number: Optional[str] = Field(None, max_length=50)
     line_items: List[BillLineCreate] = Field(..., min_length=1)
@@ -66,6 +67,7 @@ class DirectBillCreate(BillBase):
     tds_rate: Optional[Decimal] = Field(default=Decimal("0.00"), ge=0, le=100)
     is_gst_inclusive: Optional[bool] = False
     itc_eligible: bool = True
+    post_on_create: bool = True
 
 
 class DeferredCommitSession:
@@ -234,7 +236,7 @@ def _bill_discount_rate(bill: Bill) -> Decimal:
 
 
 def _legacy_invoice_payload(payload: DirectInvoiceCreate) -> InvoiceCreate:
-    return InvoiceCreate(**payload.model_dump(), post_on_create=True)
+    return InvoiceCreate(**payload.model_dump())
 
 
 def _legacy_bill_payload(
@@ -246,7 +248,7 @@ def _legacy_bill_payload(
     values["bill_number"] = values.get("bill_number") or NumberingSeriesService.generate_next_number(
         db, tenant_id, "BILL"
     )
-    values["post_on_create"] = True
+    values["post_on_create"] = bool(values.get("post_on_create", True))
     return BillCreate(**values)
 
 
@@ -288,6 +290,8 @@ def direct_update_invoice(
         )
     if original.status == "PAID":
         raise HTTPException(409, "Reverse applied receipt(s) before editing this invoice.")
+    if original.status == "DRAFT":
+        return _unwrap(invoice_api.update_invoice)(id, payload, db, tenant_id)
 
     replacement_payload = InvoiceCreate(
         contact_id=payload.contact_id or original.contact_id,
@@ -419,6 +423,8 @@ def direct_update_bill(
         raise HTTPException(
             409, "Reverse applied vendor payment(s) before editing this bill."
         )
+    if original.status == "DRAFT":
+        return _unwrap(bill_api.update_bill)(id, payload, db, tenant_id)
 
     from src.domains.company.services import NumberingSeriesService
 
@@ -518,15 +524,7 @@ def direct_create_expense(
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:create")),
 ):
-    proxy = DeferredCommitSession(db)
-    created = _unwrap(expense_api.create_expense)(request, payload, proxy, tenant_id)
-    _unwrap(expense_api.post_expense)(created.id, proxy, tenant_id)
-    db.commit()
-    expense = db.query(Expense).filter(
-        Expense.id == created.id,
-        Expense.tenant_id == tenant_id,
-    ).first()
-    return expense_api._expense_to_response(expense)
+    return _unwrap(expense_api.create_expense)(request, payload, db, tenant_id)
 
 
 def direct_update_expense(
@@ -544,6 +542,8 @@ def direct_update_expense(
     ).with_for_update().first()
     if not original:
         raise HTTPException(404, "Expense not found.")
+    if original.status == "DRAFT":
+        return _unwrap(expense_api.update_expense)(id, payload, db, tenant_id)
 
     replacement_payload = ExpenseCreate(
         expense_category_id=(
@@ -636,8 +636,6 @@ def install_direct_posting_contract() -> None:
         ("/invoices", "POST"),
         ("/invoices/{id}", "PUT"),
         ("/invoices/{id}", "DELETE"),
-        ("/invoices/{id}/finalize", "POST"),
-        ("/invoices/{id}/cancel", "POST"),
         ("/invoices/{id}/payment", "POST"),
     ):
         _remove_route(invoice_api.router, path, method)
@@ -662,8 +660,6 @@ def install_direct_posting_contract() -> None:
         ("/bills", "POST"),
         ("/bills/{id}", "PUT"),
         ("/bills/{id}", "DELETE"),
-        ("/bills/{id}/finalize", "POST"),
-        ("/bills/{id}/cancel", "POST"),
         ("/bills/{id}/payment", "POST"),
     ):
         _remove_route(bill_api.router, path, method)
@@ -688,8 +684,6 @@ def install_direct_posting_contract() -> None:
         ("/expenses", "POST"),
         ("/expenses/{id}", "PUT"),
         ("/expenses/{id}", "DELETE"),
-        ("/expenses/{id}/post", "POST"),
-        ("/expenses/{id}/cancel", "POST"),
         ("/expenses/bulk-delete", "POST"),
     ):
         _remove_route(expense_api.router, path, method)

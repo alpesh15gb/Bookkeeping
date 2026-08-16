@@ -1,8 +1,8 @@
-"""Final direct-posting accounting contract tests.
+"""Direct-posting accounting contract tests.
 
-Public financial UX is Save / Edit / Delete.  Save posts immediately; Edit
-creates a linked reversal + replacement; Delete reverses and hides the business
-document while immutable journal/stock history remains.
+Create posts immediately unless post_on_create is false. Edit of a posted
+document creates a linked reversal + replacement; draft edits stay in place.
+Delete reverses posted documents and hides the business record.
 """
 import json
 import uuid
@@ -111,43 +111,40 @@ def _expense_category(db_session, tenant):
 # Public API shape
 # ---------------------------------------------------------------------------
 
-def test_public_contract_has_no_finalize_cancel_post_confirm_or_reverse_routes():
+def test_public_contract_keeps_draft_finalize_and_cancel_routes():
     routes = {
         (route.path, method)
         for route in app.routes
         for method in (getattr(route, "methods", set()) or set())
     }
-    forbidden = {
+    required = {
         ("/api/v1/invoices/{id}/finalize", "POST"),
         ("/api/v1/invoices/{id}/cancel", "POST"),
-        ("/api/v1/invoices/{id}/payment", "POST"),
         ("/api/v1/bills/{id}/finalize", "POST"),
         ("/api/v1/bills/{id}/cancel", "POST"),
-        ("/api/v1/bills/{id}/payment", "POST"),
         ("/api/v1/expenses/{id}/post", "POST"),
         ("/api/v1/expenses/{id}/cancel", "POST"),
-        ("/api/v1/inventory-adjustments/{id}/confirm", "POST"),
-        ("/api/v1/inventory-adjustments/{id}/cancel", "POST"),
         ("/api/v1/accounting/journals/{id}/reverse", "POST"),
         ("/api/v1/payments/receipts/{id}/cancel", "POST"),
         ("/api/v1/payments/disbursements/{id}/cancel", "POST"),
         ("/api/v1/returns/sales/{id}/cancel", "POST"),
         ("/api/v1/returns/purchase/{id}/cancel", "POST"),
     }
-    assert not (routes & forbidden), routes & forbidden
+    missing = required - routes
+    assert not missing, missing
 
 
-def test_public_create_schemas_do_not_expose_post_on_create_and_bill_number_optional():
+def test_public_create_schemas_expose_optional_post_on_create_and_bill_number():
     schema = app.openapi()
     invoice_ref = schema["paths"]["/api/v1/invoices"]["post"]["requestBody"]["content"]["application/json"]["schema"]["$ref"]
     invoice_name = invoice_ref.rsplit("/", 1)[-1]
     invoice_schema = schema["components"]["schemas"][invoice_name]
-    assert "post_on_create" not in invoice_schema.get("properties", {})
+    assert "post_on_create" in invoice_schema.get("properties", {})
 
     bill_ref = schema["paths"]["/api/v1/bills"]["post"]["requestBody"]["content"]["application/json"]["schema"]["$ref"]
     bill_name = bill_ref.rsplit("/", 1)[-1]
     bill_schema = schema["components"]["schemas"][bill_name]
-    assert "post_on_create" not in bill_schema.get("properties", {})
+    assert "post_on_create" in bill_schema.get("properties", {})
     assert "bill_number" not in bill_schema.get("required", [])
 
 
@@ -174,19 +171,21 @@ def test_invoice_save_posts_immediately(
     ).count() == 1
 
 
-def test_legacy_post_on_create_false_cannot_create_a_draft(
+def test_post_on_create_false_creates_a_draft(
     client, combined_headers, contact_factory, product_factory, db_session,
 ):
     contact = contact_factory(contact_type="CUSTOMER")
     product = product_factory(product_type="SERVICE", current_stock=Decimal("0"))
     payload = _invoice_payload(contact.id, product.id)
-    payload["post_on_create"] = False  # ignored legacy input; no draft switch exists
+    payload["post_on_create"] = False
     response = client.post("/api/v1/invoices", json=payload, headers=combined_headers())
     assert response.status_code == 201, response.text
-    assert response.json()["status"] == "POSTED"
+    assert response.json()["status"] == "DRAFT"
+    invoice_id = uuid.UUID(response.json()["id"])
     assert db_session.query(JournalEntry).filter(
-        JournalEntry.source_type == "INVOICE"
-    ).count() == 1
+        JournalEntry.source_type == "INVOICE",
+        JournalEntry.source_id == invoice_id,
+    ).count() == 0
 
 
 def test_bill_save_posts_immediately_and_number_can_be_generated(
@@ -206,7 +205,7 @@ def test_bill_save_posts_immediately_and_number_can_be_generated(
     ).count() == 1
 
 
-def test_expense_save_posts_immediately(client, combined_headers, tenant, db_session):
+def test_expense_save_stays_draft_until_posted(client, combined_headers, tenant, db_session):
     category = _expense_category(db_session, tenant)
     response = client.post(
         "/api/v1/expenses",
@@ -221,11 +220,11 @@ def test_expense_save_posts_immediately(client, combined_headers, tenant, db_ses
         headers=combined_headers(),
     )
     assert response.status_code == 201, response.text
-    assert response.json()["status"] == "POSTED"
+    assert response.json()["status"] == "DRAFT"
     assert db_session.query(JournalEntry).filter(
         JournalEntry.source_type == "EXPENSE",
         JournalEntry.source_id == uuid.UUID(response.json()["id"]),
-    ).count() == 1
+    ).count() == 0
 
 
 # ---------------------------------------------------------------------------

@@ -15,7 +15,8 @@ from src.core.database import get_db_session
 from src.infrastructure.database.models import (
     Invoice, InvoiceLine, Contact, Product, StockLedger,
     Payment, PaymentAllocation, Account, JournalEntry, JournalLine,
-    CreditNote, CreditNoteLine, DebitNote, DebitNoteLine, TenantSetting, BankingProfile, Tenant, User
+    CreditNote, CreditNoteLine, DebitNote, DebitNoteLine, TenantSetting, BankingProfile, Tenant, User,
+    SalesReturn, SalesReturnLine,
 )
 from src.schemas.document import (
     InvoiceCreate, InvoiceUpdate, InvoiceResponse, InvoiceListResponse,
@@ -1534,6 +1535,18 @@ def get_invoice(
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found in this company context.")
+    returned_rows = db.query(
+        SalesReturnLine.invoice_line_id,
+        func.coalesce(func.sum(SalesReturnLine.quantity), 0),
+    ).join(SalesReturn, SalesReturnLine.sales_return_id == SalesReturn.id).filter(
+        SalesReturn.tenant_id == tenant_id,
+        SalesReturn.deleted_at == None,
+        SalesReturn.status == "POSTED",
+        SalesReturnLine.invoice_line_id.in_([line.id for line in invoice.lines]),
+    ).group_by(SalesReturnLine.invoice_line_id).all() if invoice.lines else []
+    returned = {line_id: qty for line_id, qty in returned_rows}
+    for line in invoice.lines:
+        line.quantity_remaining = max(line.quantity - Decimal(returned.get(line.id, 0)), Decimal("0"))
     return invoice
 
 @router.put("/{id}", response_model=InvoiceResponse)

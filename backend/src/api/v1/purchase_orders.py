@@ -174,6 +174,8 @@ def get_purchase_order(
     ).first()
     if not po:
         raise HTTPException(status_code=404, detail="Purchase Order not found in this company context.")
+    from src.api.v1.goods_receipts import annotate_po_remaining
+    annotate_po_remaining(db, tenant_id, po)
     return po
 
 
