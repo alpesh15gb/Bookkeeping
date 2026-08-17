@@ -60,6 +60,11 @@ services:
       - NVIDIA_NIM_MAX_RETRIES
       - NVIDIA_NIM_TIMEOUT_SECONDS
       - SCAN_MAX_PDF_PAGES
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASSWORD
+      - EMAIL_FROM
     # Migrations run with the privileged migrator role; the API itself serves
     # with the restricted apexbooks_api role (RLS enforced, no superuser).
     command: ["sh", "-c", "alembic upgrade head && exec uvicorn src.main:app --host 0.0.0.0 --port 8000"]
@@ -98,6 +103,11 @@ services:
       - NVIDIA_NIM_MAX_RETRIES
       - NVIDIA_NIM_TIMEOUT_SECONDS
       - SCAN_MAX_PDF_PAGES
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASSWORD
+      - EMAIL_FROM
     depends_on:
       backend:
         condition: service_healthy
