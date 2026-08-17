@@ -112,11 +112,13 @@ def _expense_category(db_session, tenant):
 # ---------------------------------------------------------------------------
 
 def test_public_contract_keeps_draft_finalize_and_cancel_routes():
-    routes = {
-        (route.path, method)
-        for route in app.routes
-        for method in (getattr(route, "methods", set()) or set())
-    }
+    # FastAPI 0.141 exposes included routers through lazy `_IncludedRouter`
+    # placeholders in `app.routes`, so reflecting over `app.routes` cannot see
+    # the registered paths (the app itself serves them fine). The OpenAPI
+    # schema materializes the full route table, so assert against it — the
+    # same source the sibling schema tests use below.
+    schema = app.openapi()
+    paths = schema.get("paths", {})
     required = {
         ("/api/v1/invoices/{id}/finalize", "POST"),
         ("/api/v1/invoices/{id}/cancel", "POST"),
@@ -130,7 +132,7 @@ def test_public_contract_keeps_draft_finalize_and_cancel_routes():
         ("/api/v1/returns/sales/{id}/cancel", "POST"),
         ("/api/v1/returns/purchase/{id}/cancel", "POST"),
     }
-    missing = required - routes
+    missing = {f"{method} {path}" for path, method in required if method.lower() not in paths.get(path, {})}
     assert not missing, missing
 
 

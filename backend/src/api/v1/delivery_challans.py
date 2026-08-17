@@ -9,7 +9,7 @@ from src.core.database import get_db_session
 from src.infrastructure.database.models import (
     DeliveryChallan, DeliveryChallanLine, SalesOrder, Invoice, InvoiceLine,
     StockLedger,
-    Contact, Product, JournalEntry, JournalLine
+    Contact, Product, JournalEntry, JournalLine, TenantSetting
 )
 from src.schemas.bill_schemas import (
     DeliveryChallanCreate, DeliveryChallanUpdate, DeliveryChallanResponse, DeliveryChallanListResponse
@@ -486,3 +486,72 @@ def cancel_delivery_challan(
     db.commit()
     db.refresh(dc)
     return dc
+
+
+@router.get("/{id}/print")
+def print_delivery_challan(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+):
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    dc = db.query(DeliveryChallan).filter(
+        DeliveryChallan.id == id,
+        DeliveryChallan.tenant_id == tenant_id,
+        DeliveryChallan.deleted_at == None,
+    ).first()
+    if not dc:
+        raise HTTPException(status_code=404, detail="Delivery challan not found.")
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
+    items = []
+    for line in dc.lines:
+        product = line.product
+        items.append({
+            "description": line.description or (product.name if product else "N/A"),
+            "hsn_sac": line.hsn_sac or "",
+            "gst_rate": float(line.gst_rate or 0),
+            "cgst_rate": float(line.cgst_rate or 0),
+            "cgst_amount": float(line.cgst_amount or 0),
+            "sgst_rate": float(line.sgst_rate or 0),
+            "sgst_amount": float(line.sgst_amount or 0),
+            "igst_rate": float(line.igst_rate or 0),
+            "igst_amount": float(line.igst_amount or 0),
+            "quantity": float(line.quantity),
+            "rate": float(line.rate),
+            "total": float(line.total),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=dc.challan_number,
+        issue_date=dc.challan_date,
+        due_date=dc.due_date,
+        customer_name=dc.contact.name if dc.contact else "N/A",
+        customer_gstin=dc.contact.gstin if dc.contact else None,
+        items=items,
+        subtotal=dc.subtotal,
+        cgst=dc.cgst_amount,
+        sgst=dc.sgst_amount,
+        igst=dc.igst_amount,
+        round_off=Decimal("0.00"),
+        total=dc.total,
+        template=template,
+        doc_type="DELIVERY CHALLAN",
+        tenant_id=tenant_id,
+        db=db,
+        customer_address=dc.contact.billing_address if dc.contact else None,
+        place_of_supply_state_code=dc.pos_state_code,
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=DeliveryChallan_{dc.challan_number}.pdf"},
+    )

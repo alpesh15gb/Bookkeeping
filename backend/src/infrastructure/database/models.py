@@ -1811,6 +1811,7 @@ class DebitNote(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     tenant_id = Column(UUID(as_uuid=True), nullable=False)
     invoice_id = Column(UUID(as_uuid=True), ForeignKey("invoices.id"), nullable=True)
+    contact_id = Column(UUID(as_uuid=True), ForeignKey("contacts.id"), nullable=True)
     debit_note_number = Column(String(50), nullable=False)
     issue_date = Column(Date, nullable=False)
     reason = Column(String(255), nullable=False)
@@ -1835,7 +1836,16 @@ class DebitNote(Base):
 
     # Relationships
     invoice = relationship("Invoice")
+    contact = relationship("Contact")
     lines = relationship("DebitNoteLine", back_populates="debit_note", cascade="all, delete-orphan")
+
+    @property
+    def contact_name(self) -> "str | None":
+        if self.contact is not None:
+            return self.contact.name
+        if self.invoice is not None and self.invoice.contact is not None:
+            return self.invoice.contact.name
+        return None
 
 
 class DebitNoteLine(Base):

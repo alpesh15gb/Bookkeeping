@@ -361,6 +361,49 @@ class TestCreditDebitNotes(unittest.TestCase):
         finally:
             db.close()
 
+    def test_standalone_debit_note_persists_contact_and_posts(self):
+        """Regression: DebitNoteCreate.accepted contact_id but the model had no
+        column, so standalone debit notes silently dropped the party and could
+        not be finalized. The direct contract must persist contact_id, resolve
+        contact_name, auto-post, and write a balanced journal entry."""
+        created = self.client.post(
+            "/api/v1/invoices/debit-notes",
+            json={
+                "contact_id": str(self.contact_id),
+                "issue_date": str(date.today()),
+                "reason": "Rate difference on July supply",
+                "line_items": [{
+                    "product_id": str(self.product_id),
+                    "quantity": 1,
+                    "rate": 1180,
+                    "discount": 0,
+                    "hsn_sac": "84713010",
+                    "gst_rate": 18,
+                }],
+            },
+            headers=self.headers,
+        )
+        self.assertEqual(created.status_code, 201, created.text)
+        body = created.json()
+        self.assertEqual(body["contact_id"], str(self.contact_id))
+        self.assertEqual(body["contact_name"], "Test Customer Ltd")
+        self.assertEqual(body["status"], "POSTED")
+        self.assertTrue(body["debit_note_number"], "no number assigned")
+        self.assertIsNone(body["invoice_id"])
+
+        db = SessionLocal()
+        try:
+            note = db.query(DebitNote).filter(DebitNote.id == uuid.UUID(body["id"])).one()
+            self.assertEqual(note.contact_id, self.contact_id)
+            entry = db.query(JournalEntry).filter(
+                JournalEntry.source_type == "DEBIT_NOTE",
+                JournalEntry.source_id == note.id,
+            ).one_or_none()
+            self.assertIsNotNone(entry, "no journal entry for standalone debit note")
+            self._assert_balanced(entry)
+        finally:
+            db.close()
+
 
 if __name__ == "__main__":
     unittest.main()

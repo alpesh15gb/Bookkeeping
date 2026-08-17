@@ -327,6 +327,8 @@ class DebitNoteResponse(SchemaBase):
     id: uuid.UUID
     tenant_id: uuid.UUID
     invoice_id: Optional[uuid.UUID]
+    contact_id: Optional[uuid.UUID] = None
+    contact_name: Optional[str] = None
     debit_note_number: str
     issue_date: date
     reason: Optional[str]
@@ -351,6 +353,8 @@ class DebitNoteListResponse(SchemaBase):
     total: Decimal
     reason: Optional[str]
     created_at: datetime
+    contact_id: Optional[uuid.UUID] = None
+    contact_name: Optional[str] = None
 
 # Payment Recieve Schemas
 class PaymentAllocationSchema(SchemaBase):

@@ -1115,7 +1115,8 @@ def list_debit_notes(
     tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
 ):
     q = db.query(DebitNote).options(
-        joinedload(DebitNote.invoice).joinedload(Invoice.contact)
+        joinedload(DebitNote.invoice).joinedload(Invoice.contact),
+        joinedload(DebitNote.contact),
     ).filter(
         DebitNote.tenant_id == tenant_id,
         DebitNote.deleted_at == None
@@ -1137,6 +1138,8 @@ def list_debit_notes(
             total=dn.total,
             reason=dn.reason,
             created_at=dn.created_at,
+            contact_id=dn.contact_id,
+            contact_name=dn.contact_name or (dn.invoice.contact.name if dn.invoice and dn.invoice.contact else None),
         )
         for dn in notes
     ]
@@ -1239,6 +1242,7 @@ def create_debit_note(
     dn = DebitNote(
         tenant_id=tenant_id,
         invoice_id=payload.invoice_id,
+        contact_id=payload.contact_id,
         debit_note_number=dn_number,
         issue_date=payload.issue_date,
         reason=payload.reason,
@@ -1378,7 +1382,7 @@ def finalize_debit_note(
     from src.domains.accounting.auto_post import _check_no_existing_posting
     _check_no_existing_posting(db, tenant_id, "DEBIT_NOTE", dn.id)
 
-    contact_id = dn.invoice.contact_id if dn.invoice else None
+    contact_id = dn.contact_id or (dn.invoice.contact_id if dn.invoice else None)
     if not contact_id:
         raise HTTPException(status_code=400, detail="Debit Note must be linked to a contact or invoice for finalization.")
     resolver = AccountResolver(db, tenant_id)

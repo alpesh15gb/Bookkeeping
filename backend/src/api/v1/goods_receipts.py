@@ -9,7 +9,7 @@ from decimal import Decimal
 from src.core.database import get_db_session
 from src.infrastructure.database.models import (
     GoodsReceipt, GoodsReceiptLine, PurchaseOrder, PurchaseOrderLine,
-    Contact, Product, Branch, StockLedger,
+    Contact, Product, Branch, StockLedger, TenantSetting,
 )
 from src.schemas.goods_receipt_schemas import (
     GoodsReceiptCreate, GoodsReceiptResponse, GoodsReceiptListResponse,
@@ -391,3 +391,75 @@ def cancel_goods_receipt(
     po_number = gr.purchase_order.po_number if gr.purchase_order else ""
     contact_name = gr.contact.name if gr.contact else ""
     return _build_response(gr, po_number, contact_name)
+
+
+@router.get("/{id}/print")
+def print_goods_receipt(
+    id: uuid.UUID,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+):
+    from fastapi.responses import StreamingResponse
+    from src.domains.printing.invoice_pdf import generate_invoice_pdf
+    from io import BytesIO
+
+    gr = db.query(GoodsReceipt).filter(
+        GoodsReceipt.id == id,
+        GoodsReceipt.tenant_id == tenant_id,
+        GoodsReceipt.deleted_at == None,
+    ).first()
+    if not gr:
+        raise HTTPException(status_code=404, detail="Goods receipt not found.")
+
+    setting = db.query(TenantSetting).filter(TenantSetting.tenant_id == tenant_id).first()
+    template = "professional"
+    if setting and setting.extra_settings:
+        template = setting.extra_settings.get("pdf_template", "professional")
+
+    items = []
+    for line in gr.lines:
+        product = line.product
+        rate = Decimal("0.0000")
+        if line.purchase_order_line_id:
+            po_line = db.query(PurchaseOrderLine).filter(
+                PurchaseOrderLine.id == line.purchase_order_line_id
+            ).first()
+            if po_line:
+                rate = po_line.rate
+        items.append({
+            "description": (product.name if product else "N/A"),
+            "hsn_sac": (product.hsn_sac if product else "") or "",
+            "gst_rate": float(product.gst_rate if product else 0),
+            "cgst_rate": 0.0,
+            "cgst_amount": 0.0,
+            "sgst_rate": 0.0,
+            "sgst_amount": 0.0,
+            "igst_rate": 0.0,
+            "igst_amount": 0.0,
+            "quantity": float(line.quantity_received),
+            "rate": float(rate),
+            "total": float(line.quantity_received * rate),
+        })
+
+    pdf_bytes = generate_invoice_pdf(
+        invoice_number=gr.receipt_number,
+        issue_date=gr.receipt_date,
+        due_date=gr.receipt_date,
+        customer_name=gr.contact.name if gr.contact else "N/A",
+        customer_gstin=gr.contact.gstin if gr.contact else None,
+        items=items,
+        subtotal=sum((Decimal(item["total"]) for item in items), Decimal("0.0000")),
+        total=sum((Decimal(item["total"]) for item in items), Decimal("0.0000")),
+        round_off=Decimal("0.00"),
+        template=template,
+        doc_type="GOODS RECEIPT",
+        tenant_id=tenant_id,
+        db=db,
+        customer_address=gr.contact.billing_address if gr.contact else None,
+    )
+
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=GoodsReceipt_{gr.receipt_number}.pdf"},
+    )
