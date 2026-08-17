@@ -68,12 +68,14 @@ class Settings(BaseSettings):
     # ----------------------------------------------------------------
     # IRP (Invoice Registration Portal) — NIC e-Invoice
     # ----------------------------------------------------------------
-    IRP_BASE_URL: str = "https://einvoice1-sandbox.nic.in"
+    # No default host: production must set the NIC IRP host explicitly.
+    # A sandbox default let the app file against the wrong portal silently.
+    IRP_BASE_URL: str = ""
     IRP_CLIENT_ID: str = ""
     IRP_CLIENT_SECRET: str = ""
     IRP_USERNAME: str = ""
     IRP_PASSWORD: str = ""
-    # Explicit opt-in for automated tests/local demos. Never enable in production.
+    # Explicit opt-in for automated tests/local demos. Forbidden in production.
     COMPLIANCE_MOCK_ENABLED: bool = False
 
     # ----------------------------------------------------------------

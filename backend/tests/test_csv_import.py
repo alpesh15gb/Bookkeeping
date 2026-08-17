@@ -14,6 +14,7 @@ import os
 import unittest
 import zipfile
 from datetime import date
+from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
@@ -272,6 +273,32 @@ class TestCsvImport(unittest.TestCase):
 
             est = db.query(ProformaInvoice).filter(ProformaInvoice.proforma_number == "EST/1").first()
             self.assertIsNotNone(est)
+
+            # The import must post journals in the same transaction: AR/AP
+            # and GST books must not stay empty while documents show rupees.
+            # Every posted document gets exactly one balanced journal entry.
+            from src.infrastructure.database.models import JournalEntry, JournalLine
+            expected = [
+                ("INVOICE", inv.id),
+                ("BILL", bill.id),
+                ("PAYMENT", pay.id),
+                ("PAYMENT", bp.id),
+                ("EXPENSE", exp.id),
+            ]
+            for source_type, source_id in expected:
+                entry = db.query(JournalEntry).filter(
+                    JournalEntry.tenant_id == inv.tenant_id,
+                    JournalEntry.source_type == source_type,
+                    JournalEntry.source_id == source_id,
+                ).first()
+                self.assertIsNotNone(
+                    entry, f"missing journal for {source_type}:{source_id}"
+                )
+                lines = db.query(JournalLine).filter(JournalLine.entry_id == entry.id).all()
+                self.assertGreaterEqual(len(lines), 2, f"unbalanced {source_type}:{source_id}")
+                debits = sum((l.amount for l in lines if l.direction == "DEBIT"), Decimal("0"))
+                credits = sum((l.amount for l in lines if l.direction == "CREDIT"), Decimal("0"))
+                self.assertEqual(debits, credits, f"unbalanced {source_type}:{source_id}")
         finally:
             db.close()
 

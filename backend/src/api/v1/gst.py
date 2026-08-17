@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
 from datetime import date, datetime, timezone
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from io import BytesIO
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -78,7 +78,7 @@ def get_gstr1_report(
                     invoice_number=inv.invoice_number,
                     invoice_date=inv.issue_date,
                     pos_state_code=inv.pos_state_code,
-                    taxable_value=inv.subtotal,
+                    taxable_value=_invoice_taxable(inv),
                     cgst_amount=inv.cgst_amount,
                     sgst_amount=inv.sgst_amount,
                     igst_amount=inv.igst_amount,
@@ -100,14 +100,15 @@ def get_gstr1_report(
                         invoice_number=inv.invoice_number,
                         invoice_date=inv.issue_date,
                         pos_state_code=inv.pos_state_code,
-                        taxable_value=inv.subtotal,
+                        taxable_value=_invoice_taxable(inv),
                         igst_amount=inv.igst_amount,
                         total_value=inv.total
                     )
                 )
             else:
                 # B2C Small (All other unregistered)
-                for line in inv.lines:
+                for dl in _discounted_lines(inv):
+                    line = dl["line"]
                     key = (inv.pos_state_code, line.gst_rate)
                     if key not in b2cs_groups:
                         b2cs_groups[key] = {
@@ -118,15 +119,16 @@ def get_gstr1_report(
                             "utgst_amount": Decimal("0.0000"),
                             "cess_amount": Decimal("0.0000")
                         }
-                    b2cs_groups[key]["taxable_value"] += line.subtotal
-                    b2cs_groups[key]["cgst_amount"] += line.cgst_amount
-                    b2cs_groups[key]["sgst_amount"] += line.sgst_amount
-                    b2cs_groups[key]["igst_amount"] += line.igst_amount
-                    b2cs_groups[key]["utgst_amount"] += line.utgst_amount
-                    b2cs_groups[key]["cess_amount"] += line.cess_amount
+                    b2cs_groups[key]["taxable_value"] += dl["taxable"]
+                    b2cs_groups[key]["cgst_amount"] += dl["cgst"]
+                    b2cs_groups[key]["sgst_amount"] += dl["sgst"]
+                    b2cs_groups[key]["igst_amount"] += dl["igst"]
+                    b2cs_groups[key]["utgst_amount"] += dl["utgst"]
+                    b2cs_groups[key]["cess_amount"] += dl["cess"]
 
         # Section 12: HSN Summary aggregation
-        for line in inv.lines:
+        for dl in _discounted_lines(inv):
+            line = dl["line"]
             hsn = line.hsn_sac or (line.product.hsn_sac if line.product else None) or ""
             product = line.product
             desc = product.name if product else "N/A"
@@ -147,12 +149,12 @@ def get_gstr1_report(
                 }
             hsn_groups[hsn]["total_quantity"] += line.quantity
             hsn_groups[hsn]["total_value"] += line.total
-            hsn_groups[hsn]["taxable_value"] += line.subtotal
-            hsn_groups[hsn]["cgst_amount"] += line.cgst_amount
-            hsn_groups[hsn]["sgst_amount"] += line.sgst_amount
-            hsn_groups[hsn]["igst_amount"] += line.igst_amount
-            hsn_groups[hsn]["utgst_amount"] += line.utgst_amount
-            hsn_groups[hsn]["cess_amount"] += line.cess_amount
+            hsn_groups[hsn]["taxable_value"] += dl["taxable"]
+            hsn_groups[hsn]["cgst_amount"] += dl["cgst"]
+            hsn_groups[hsn]["sgst_amount"] += dl["sgst"]
+            hsn_groups[hsn]["igst_amount"] += dl["igst"]
+            hsn_groups[hsn]["utgst_amount"] += dl["utgst"]
+            hsn_groups[hsn]["cess_amount"] += dl["cess"]
 
     b2cs_lines = [
         GSTR1B2CSLine(
@@ -289,6 +291,68 @@ def _gst_rate_from_amounts(taxable: Decimal, *taxes: Decimal) -> float:
     return _gst_amount(sum((Decimal(str(v or 0)) for v in taxes), Decimal("0")) * 100 / taxable)
 
 
+_PAISE = Decimal("0.01")
+
+
+def _fix_residual(rows: list[dict], key: str, target: Decimal) -> None:
+    """Adjust the largest row so the per-line sum equals the target exactly."""
+    total = sum((r[key] or Decimal("0")) for r in rows)
+    diff = Decimal(str(target)) - total
+    if diff and rows:
+        idx = max(range(len(rows)), key=lambda i: rows[i][key] or Decimal("0"))
+        rows[idx][key] = (rows[idx][key] or Decimal("0")) + diff
+
+
+def _discounted_lines(inv: Invoice) -> list[dict]:
+    """Per-line taxable/tax values after proportional header-discount allocation.
+
+    Header discounts are stored on the invoice only: line taxes are computed
+    pre-discount and the invoice scales the header totals by
+    (subtotal - discount) / subtotal. GSTN filings present per-item txval and
+    tax, so the discount must be allocated across lines (subtotal-weighted)
+    and each bucket residual-fixed to the invoice's own discounted taxable
+    value and scaled header taxes. Without this, a header discount overstates
+    taxable value and output tax in GSTR-1 and the offline-tool file.
+    """
+    lines = list(inv.lines)
+    if not lines:
+        return []
+    subtotal = sum((Decimal(str(l.subtotal or 0)) for l in lines), Decimal("0"))
+    taxable_total = (subtotal - Decimal(str(inv.discount_total or 0))).quantize(_PAISE, rounding=ROUND_HALF_UP)
+    factor = (taxable_total / subtotal) if subtotal else Decimal("0")
+    rows = []
+    for l in lines:
+        rows.append({
+            "line": l,
+            "taxable": (Decimal(str(l.subtotal or 0)) * factor).quantize(_PAISE, rounding=ROUND_HALF_UP),
+            "cgst": (Decimal(str(l.cgst_amount or 0)) * factor).quantize(_PAISE, rounding=ROUND_HALF_UP),
+            "sgst": (Decimal(str(l.sgst_amount or 0)) * factor).quantize(_PAISE, rounding=ROUND_HALF_UP),
+            "igst": (Decimal(str(l.igst_amount or 0)) * factor).quantize(_PAISE, rounding=ROUND_HALF_UP),
+            "utgst": (Decimal(str(l.utgst_amount or 0)) * factor).quantize(_PAISE, rounding=ROUND_HALF_UP),
+            "cess": (Decimal(str(l.cess_amount or 0)) * factor).quantize(_PAISE, rounding=ROUND_HALF_UP),
+        })
+    _fix_residual(rows, "taxable", taxable_total)
+    if inv.is_rcm:
+        # RCM zeroes the seller's header taxes; the file must too.
+        for r in rows:
+            for k in ("cgst", "sgst", "igst", "utgst", "cess"):
+                r[k] = Decimal("0")
+    else:
+        _fix_residual(rows, "cgst", inv.cgst_amount or 0)
+        _fix_residual(rows, "sgst", inv.sgst_amount or 0)
+        _fix_residual(rows, "igst", inv.igst_amount or 0)
+        _fix_residual(rows, "utgst", inv.utgst_amount or 0)
+        _fix_residual(rows, "cess", inv.cess_amount or 0)
+    return rows
+
+
+def _invoice_taxable(inv: Invoice) -> Decimal:
+    """Invoice-level taxable value after header discount."""
+    return (Decimal(str(inv.subtotal or 0)) - Decimal(str(inv.discount_total or 0))).quantize(
+        _PAISE, rounding=ROUND_HALF_UP
+    )
+
+
 @router.get("/gstr1/offline-json")
 def export_gstr1_offline_json(
     start_date: date = Query(...),
@@ -364,15 +428,15 @@ def export_gstr1_offline_json(
             {
                 "num": index,
                 "itm_det": {
-                    "txval": _gst_amount(line.subtotal),
-                    "rt": _gst_amount(line.gst_rate),
-                    "iamt": _gst_amount(line.igst_amount),
-                    "camt": _gst_amount(line.cgst_amount),
-                    "samt": _gst_amount((line.sgst_amount or 0) + (line.utgst_amount or 0)),
-                    "csamt": _gst_amount(line.cess_amount),
+                    "txval": _gst_amount(dl["taxable"]),
+                    "rt": _gst_amount(dl["line"].gst_rate),
+                    "iamt": _gst_amount(dl["igst"]),
+                    "camt": _gst_amount(dl["cgst"]),
+                    "samt": _gst_amount(dl["sgst"] + dl["utgst"]),
+                    "csamt": _gst_amount(dl["cess"]),
                 },
             }
-            for index, line in enumerate(inv.lines, 1)
+            for index, dl in enumerate(_discounted_lines(inv), 1)
         ]
 
     for inv in invoices:
@@ -394,7 +458,8 @@ def export_gstr1_offline_json(
         if is_interstate and inv.total > threshold:
             payload["b2cl"].append({"pos": inv.pos_state_code, "inv": [inv_json]})
             continue
-        for line in inv.lines:
+        for dl in _discounted_lines(inv):
+            line = dl["line"]
             key = (inv.pos_state_code, Decimal(str(line.gst_rate)))
             row = b2cs.setdefault(key, {
                 "sply_ty": "INTER" if is_interstate else "INTRA",
@@ -402,11 +467,11 @@ def export_gstr1_offline_json(
                 "rt": _gst_amount(line.gst_rate), "txval": 0.0,
                 "iamt": 0.0, "camt": 0.0, "samt": 0.0, "csamt": 0.0,
             })
-            row["txval"] += _gst_amount(line.subtotal)
-            row["iamt"] += _gst_amount(line.igst_amount)
-            row["camt"] += _gst_amount(line.cgst_amount)
-            row["samt"] += _gst_amount((line.sgst_amount or 0) + (line.utgst_amount or 0))
-            row["csamt"] += _gst_amount(line.cess_amount)
+            row["txval"] += _gst_amount(dl["taxable"])
+            row["iamt"] += _gst_amount(dl["igst"])
+            row["camt"] += _gst_amount(dl["cgst"])
+            row["samt"] += _gst_amount(dl["sgst"] + dl["utgst"])
+            row["csamt"] += _gst_amount(dl["cess"])
 
     payload["b2b"] = [{"ctin": gstin, "inv": rows} for gstin, rows in sorted(b2b_by_gstin.items())]
     payload["b2cs"] = []

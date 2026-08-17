@@ -1421,6 +1421,51 @@ def _apply_import(
         ))
         counts["stock_entries_imported"] = counts.get("stock_entries_imported", 0) + 1
 
+    # ── 10. Post journals for imported documents ───────────────────────────
+    # The CSV bundle must never commit POSTED/PAID documents without ledger
+    # postings: AR/AP and GST books would stay empty while documents show
+    # rupees (the pre-fix behavior). Every posting is idempotent and runs in
+    # a savepoint; any failure raises, which rolls the whole import back
+    # (this endpoint's atomic contract). source_channel=IMPORT is stamped so
+    # the ledger is auditable back to the migration.
+    from src.core.posting_context import set_session_posting_channel
+    from src.domains.accounting.backfill_posting import (
+        post_bill_if_missing,
+        post_bill_payment_if_missing,
+        post_expense_if_missing,
+        post_invoice_if_missing,
+        post_payment_if_missing,
+    )
+
+    set_session_posting_channel(db, "IMPORT")
+    for inv in db.query(Invoice).filter(
+        Invoice.tenant_id == tenant_id, Invoice.deleted_at.is_(None),
+    ).all():
+        if inv.status in ("POSTED", "PARTIALLY_PAID", "PAID"):
+            with db.begin_nested():
+                post_invoice_if_missing(db, tenant_id, inv)
+    for bill in db.query(Bill).filter(
+        Bill.tenant_id == tenant_id, Bill.deleted_at.is_(None),
+    ).all():
+        if bill.status in ("POSTED", "PARTIALLY_PAID", "PAID", "UNPAID"):
+            with db.begin_nested():
+                post_bill_if_missing(db, tenant_id, bill)
+    for pay in db.query(Payment).filter(
+        Payment.tenant_id == tenant_id, Payment.deleted_at.is_(None),
+    ).all():
+        with db.begin_nested():
+            post_payment_if_missing(db, tenant_id, pay)
+    for bp in db.query(BillPayment).filter(
+        BillPayment.tenant_id == tenant_id, BillPayment.deleted_at.is_(None),
+    ).all():
+        with db.begin_nested():
+            post_bill_payment_if_missing(db, tenant_id, bp)
+    for expense in db.query(Expense).filter(
+        Expense.tenant_id == tenant_id, Expense.deleted_at.is_(None),
+    ).all():
+        with db.begin_nested():
+            post_expense_if_missing(db, tenant_id, expense)
+
 
 def _add_line(
     db: Session,

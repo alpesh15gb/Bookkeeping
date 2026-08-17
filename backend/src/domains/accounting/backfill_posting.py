@@ -31,6 +31,8 @@ from src.domains.accounting.services import (
 from src.infrastructure.database.models import (
     Bill,
     BillPayment,
+    Expense,
+    ExpenseCategory,
     Invoice,
     Payment,
 )
@@ -182,6 +184,62 @@ def post_payment_if_missing(db: Session, tenant_id: uuid.UUID, payment: Payment)
         bank_or_cash_account_id=bank_or_cash,
         customer_account_id=customer,
         amount=payment.amount,
+    )
+    commit_ledger_draft(db, tenant_id, draft)
+    return True
+
+
+def post_expense_if_missing(db: Session, tenant_id: uuid.UUID, expense: Expense) -> bool:
+    """Create the expense journal entry if one does not exist. Returns True if posted.
+
+    Mirrors the interactive expense post flow (expenses.py) so imported
+    POSTED expenses land in the books the same way hand-entered ones do.
+    """
+    if expense.amount is None or expense.amount <= 0:
+        raise ValueError("cannot post expense with non-positive amount")
+    _check_no_existing_posting(db, tenant_id, "EXPENSE", expense.id)
+    category = db.query(ExpenseCategory).filter(
+        ExpenseCategory.id == expense.expense_category_id,
+        ExpenseCategory.tenant_id == tenant_id,
+        ExpenseCategory.deleted_at.is_(None),
+    ).first()
+    if not category or not category.linked_account_id:
+        raise ValueError(f"Expense {expense.expense_number} has no linked account to post.")
+    from src.domains.taxation.services import GSTEngine
+
+    resolver = AccountResolver(db, tenant_id)
+    cash_account_id = expense.bank_account_id or resolver.resolve("assets.cash")
+    cgst_input_id = resolver.resolve("cgst_input")
+    sgst_input_id = resolver.resolve("sgst_input")
+    igst_input_id = resolver.resolve("igst_input")
+    utgst_input_id = resolver.resolve("utgst_input")
+    cess_input_id = resolver.resolve("cess_input")
+    round_off_account_id = resolver.resolve("round_off") if (expense.round_off or 0) != 0 else None
+    claim_itc = GSTEngine.can_claim_itc(db, tenant_id, True)
+    tax_total = (
+        (expense.cgst_amount or 0) + (expense.sgst_amount or 0) + (expense.igst_amount or 0)
+        + (expense.utgst_amount or 0) + (expense.cess_amount or 0)
+    )
+    draft = LedgerPostingEngine.create_expense_posting(
+        tenant_id=tenant_id,
+        expense_id=expense.id,
+        expense_number=expense.expense_number,
+        expense_date=expense.expense_date,
+        expense_account_id=category.linked_account_id,
+        cash_account_id=cash_account_id,
+        amount=expense.amount if claim_itc else expense.amount + tax_total,
+        cgst_account_id=cgst_input_id,
+        cgst_amount=expense.cgst_amount if claim_itc else Decimal("0"),
+        sgst_account_id=sgst_input_id,
+        sgst_amount=expense.sgst_amount if claim_itc else Decimal("0"),
+        igst_account_id=igst_input_id,
+        igst_amount=expense.igst_amount if claim_itc else Decimal("0"),
+        utgst_account_id=utgst_input_id,
+        utgst_amount=expense.utgst_amount if claim_itc else Decimal("0"),
+        cess_account_id=cess_input_id,
+        cess_amount=expense.cess_amount if claim_itc else Decimal("0"),
+        round_off_account_id=round_off_account_id,
+        round_off_amount=expense.round_off or Decimal("0"),
     )
     commit_ledger_draft(db, tenant_id, draft)
     return True

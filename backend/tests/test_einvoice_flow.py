@@ -205,6 +205,56 @@ class TestEInvoiceFlow(unittest.TestCase):
         )
         self.assertEqual(again.status_code, 400)
 
+    def test_production_refuses_mock_irn(self):
+        """Regression: mock mode fabricates IRNs; production must fail closed
+        instead of persisting a fake IRN on a live invoice."""
+        original_env = settings.APP_ENV
+        original_base = settings.IRP_BASE_URL
+        try:
+            settings.APP_ENV = "production"
+            settings.IRP_BASE_URL = "https://einvoice1-sandbox.nic.in"
+            invoice = self._invoice()
+            self._enable()
+            resp = self.client.post(
+                f"/api/v1/invoices/{invoice['id']}/e-invoice", headers=self.headers_a
+            )
+            self.assertEqual(resp.status_code, 502, resp.text)
+            self.assertIn("forbidden in production", resp.json()["detail"])
+            db = SessionLocal()
+            try:
+                inv = db.query(Invoice).filter(
+                    Invoice.id == uuid.UUID(invoice["id"])
+                ).first()
+                self.assertNotEqual(inv.e_invoice_status, "GENERATED")
+                self.assertIsNone(inv.irn)
+            finally:
+                db.close()
+        finally:
+            settings.APP_ENV = original_env
+            settings.IRP_BASE_URL = original_base
+
+    def test_production_requires_irp_host_and_credentials(self):
+        """Regression: with mock off, a missing IRP host must fail closed in
+        production instead of reaching for a default sandbox URL."""
+        original_env = settings.APP_ENV
+        original_mock = settings.COMPLIANCE_MOCK_ENABLED
+        original_base = settings.IRP_BASE_URL
+        try:
+            settings.APP_ENV = "production"
+            settings.COMPLIANCE_MOCK_ENABLED = False
+            settings.IRP_BASE_URL = ""
+            invoice = self._invoice()
+            self._enable()
+            resp = self.client.post(
+                f"/api/v1/invoices/{invoice['id']}/e-invoice", headers=self.headers_a
+            )
+            self.assertEqual(resp.status_code, 502, resp.text)
+            self.assertIn("IRP_BASE_URL is not configured", resp.json()["detail"])
+        finally:
+            settings.APP_ENV = original_env
+            settings.COMPLIANCE_MOCK_ENABLED = original_mock
+            settings.IRP_BASE_URL = original_base
+
     def test_24_hour_cancellation_constraint(self):
         self._enable()
         invoice = self._invoice()

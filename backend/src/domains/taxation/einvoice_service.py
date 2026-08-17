@@ -47,12 +47,25 @@ class EInvoiceService:
             "password": settings.IRP_PASSWORD,
         }
 
-        url = f"{settings.IRP_BASE_URL}/ic/irp/api/v1/irn/generate"
+        # Fail closed: mock mode is a dev/test artifact and is forbidden in
+        # production (it fabricates IRNs). Without mock, a real NIC IRP host
+        # and credentials are mandatory — never fall back to a sandbox.
+        if settings.COMPLIANCE_MOCK_ENABLED:
+            if settings.APP_ENV == "production":
+                raise RuntimeError(
+                    "Compliance mock mode is forbidden in production: it fabricates "
+                    "IRNs and would register a fake e-invoice on a live invoice."
+                )
+        else:
+            if not settings.IRP_BASE_URL:
+                raise RuntimeError(
+                    "IRP_BASE_URL is not configured. E-invoice generation is "
+                    "disabled until the NIC IRP host and credentials are set."
+                )
+            if not settings.IRP_USERNAME or not settings.IRP_PASSWORD:
+                raise RuntimeError("IRP credentials are not configured.")
 
-        if not settings.COMPLIANCE_MOCK_ENABLED and (
-            not settings.IRP_USERNAME or not settings.IRP_PASSWORD
-        ):
-            raise RuntimeError("IRP credentials are not configured.")
+        url = f"{settings.IRP_BASE_URL}/ic/irp/api/v1/irn/generate"
 
         try:
             if settings.COMPLIANCE_MOCK_ENABLED:
@@ -90,7 +103,16 @@ class EInvoiceService:
     def _call_irp_cancel(tenant: Tenant, invoice: Invoice, reason: str, remarks: str) -> None:
         from src.core.config import settings
         if settings.COMPLIANCE_MOCK_ENABLED:
+            if settings.APP_ENV == "production":
+                raise RuntimeError(
+                    "Compliance mock mode is forbidden in production: it would "
+                    "silently skip IRP cancellation."
+                )
             return
+        if not settings.IRP_BASE_URL:
+            raise RuntimeError(
+                "IRP_BASE_URL is not configured. IRP cancellation is disabled."
+            )
         if not settings.IRP_USERNAME or not settings.IRP_PASSWORD:
             raise RuntimeError("IRP credentials are not configured.")
         import requests
