@@ -119,6 +119,15 @@ class IdempotencyMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         path = str(request.url.path)
+        # The OTP-gated company purge is exactly-once by design (single-use OTP
+        # consumed before execution) and fundamentally incompatible with claim
+        # tracking: the tenant-wide wipe deletes the PROCESSING claim row this
+        # middleware just inserted, so the commit-marker would abort with
+        # IdempotencyClaimLostError. Bypass claim handling for both purge
+        # routes; the endpoint's OTP verification is the retry guard.
+        if path.startswith("/api/v1/purge/"):
+            return await call_next(request)
+
         key = request.headers.get("Idempotency-Key")
         if not key:
             from src.core.config import settings

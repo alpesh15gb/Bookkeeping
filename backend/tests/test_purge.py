@@ -20,6 +20,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import delete, text
 
+from src.infrastructure.database.idempotency import IdempotencyRecord
 from src.infrastructure.database.models import (
     Account, Branch, Contact, FinancialYear, Invoice,
     JournalEntry, JournalLine, StockLedger,
@@ -196,8 +197,21 @@ def test_purge_wipes_ledger_despite_append_only_guards(
         r = client.post("/api/v1/purge/request", headers=headers)
         assert r.status_code == 200, r.text
         otp = _dev_otp(r)
-        r = client.post("/api/v1/purge/verify", json={"otp": otp}, headers=headers)
+        # The frontend sends an Idempotency-Key on mutations. Purge must not
+        # create a claim: the wipe deletes the tenant's idempotency rows, and
+        # the claim commit-marker would abort (IdempotencyClaimLostError) on
+        # Postgres. The OTP is the purge's exactly-once guard instead.
+        key = f"purge-regression-{uuid4().hex}"
+        r = client.post(
+            "/api/v1/purge/verify",
+            json={"otp": otp},
+            headers={**headers, "Idempotency-Key": key},
+        )
         assert r.status_code == 200, r.text
+        assert db_session.query(IdempotencyRecord).filter(
+            IdempotencyRecord.idempotency_key == key,
+            IdempotencyRecord.tenant_id == tenant.id,
+        ).count() == 0
 
         # Ledger history is gone for the purged tenant.
         assert db_session.query(JournalEntry).filter_by(tenant_id=tenant.id).count() == 0
