@@ -589,7 +589,10 @@ def request_purge_otp(
         redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1)
         redis_client.ping()
     except Exception:
-        pass
+        # Redis is optional here: fall back to the in-process cache. Without
+        # this reset, a dead client object stays truthy and the .setex below
+        # raises, 500ing the request instead of using the fallback.
+        redis_client = None
 
     cache_key = f"purge_otp:{tenant_id}:{current_user.id}"
     if redis_client:
@@ -636,7 +639,9 @@ def verify_and_execute_purge(
         redis_client = redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1)
         redis_client.ping()
     except Exception:
-        pass
+        # Same fallback contract as request_purge_otp: a dead Redis must not
+        # turn the OTP lookup into a 500, or leave a stale truthy client.
+        redis_client = None
 
     cache_key = f"purge_otp:{tenant_id}:{current_user.id}"
     valid_otp = None

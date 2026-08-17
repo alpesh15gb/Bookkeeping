@@ -1139,31 +1139,37 @@ def import_vyapar_backup(
                 except Exception:
                     pass
 
-        # ── 10c. Auto-post journal entries for invoices and bills ──────────────
-        from src.domains.accounting.auto_post import auto_post_invoice, auto_post_bill
+        # ── 10c. Post ledger entries for imported invoices and bills ──────────
+        # State-preserving posting: creates the missing journal entry without
+        # touching document status, amount_paid, allocations or stock. The old
+        # guard (status in SENT/DRAFT) never matched imported statuses
+        # (POSTED/PARTIALLY_PAID/PAID), so imports landed with no ledger at all.
         from src.core.posting_context import set_session_posting_channel
+        from src.domains.accounting.backfill_posting import (
+            post_invoice_if_missing, post_bill_if_missing,
+        )
         set_session_posting_channel(db, "IMPORT")
         posted_invoices = 0
         posted_bills = 0
-        try:
-            for inv_id_str in inv_map.values():
-                try:
-                    inv = db.query(Invoice).filter(Invoice.id == uuid.UUID(inv_id_str)).first()
-                    if inv and inv.status in ("SENT", "DRAFT"):
-                        auto_post_invoice(db, tenant_id, inv, allow_negative_stock=True)
-                        posted_invoices += 1
-                except Exception as e:
-                    summary.errors.append(f"Auto-post invoice {inv_id_str}: {e}")
-            for bill_id_str in bill_map.values():
-                try:
-                    bill = db.query(Bill).filter(Bill.id == uuid.UUID(bill_id_str)).first()
-                    if bill and bill.status in ("UNPAID", "DRAFT"):
-                        auto_post_bill(db, tenant_id, bill)
-                        posted_bills += 1
-                except Exception as e:
-                    summary.errors.append(f"Auto-post bill {bill_id_str}: {e}")
-        finally:
-            pass
+        for inv_id_str in inv_map.values():
+            try:
+                inv = db.query(Invoice).filter(Invoice.id == uuid.UUID(inv_id_str)).first()
+                if inv and inv.status in ("POSTED", "PARTIALLY_PAID", "PAID"):
+                    # Savepoint: a failing posting must not poison the whole import.
+                    with db.begin_nested():
+                        if post_invoice_if_missing(db, tenant_id, inv):
+                            posted_invoices += 1
+            except Exception as e:
+                summary.errors.append(f"Auto-post invoice {inv_id_str}: {e}")
+        for bill_id_str in bill_map.values():
+            try:
+                bill = db.query(Bill).filter(Bill.id == uuid.UUID(bill_id_str)).first()
+                if bill and bill.status in ("POSTED", "PARTIALLY_PAID", "PAID", "UNPAID"):
+                    with db.begin_nested():
+                        if post_bill_if_missing(db, tenant_id, bill):
+                            posted_bills += 1
+            except Exception as e:
+                summary.errors.append(f"Auto-post bill {bill_id_str}: {e}")
 
         # ── 11. Import payments from txn_payment_mapping ──────────────────────
         try:
@@ -1290,6 +1296,29 @@ def import_vyapar_backup(
 
         except Exception as e:
             summary.errors.append(f"Payment import: {e}")
+
+        # ── 11b. Post ledger entries for imported payments ────────────────────
+        # Payments (receipts + disbursements) also need journal entries; the
+        # legacy import created the Payment rows without ever posting them.
+        from src.domains.accounting.backfill_posting import (
+            post_payment_if_missing, post_bill_payment_if_missing,
+        )
+        for pay in db.query(Payment).filter(
+            Payment.tenant_id == tenant_id, Payment.deleted_at.is_(None),
+        ).all():
+            try:
+                with db.begin_nested():
+                    post_payment_if_missing(db, tenant_id, pay)
+            except Exception as e:
+                summary.errors.append(f"Auto-post payment {pay.payment_number}: {e}")
+        for bp in db.query(BillPayment).filter(
+            BillPayment.tenant_id == tenant_id, BillPayment.deleted_at.is_(None),
+        ).all():
+            try:
+                with db.begin_nested():
+                    post_bill_payment_if_missing(db, tenant_id, bp)
+            except Exception as e:
+                summary.errors.append(f"Auto-post bill payment {bp.payment_number}: {e}")
 
         # ── 12. Import stock from kb_item_stock_tracking + kb_item_adjustments ─
         try:

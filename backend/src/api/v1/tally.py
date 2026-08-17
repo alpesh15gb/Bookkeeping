@@ -545,11 +545,13 @@ async def import_tally_xml(
             # ── RECEIPT VOUCHER → Payment ────────────────────────────────
             elif vtype in ("RECEIPT",):
                 amount = Decimal("0")
+                party_ledger = ""
                 for alloc in voucher.findall("LEDGERENTRIES.LIST"):
                     alloc_amount = _safe_decimal(_xml_text(alloc, "AMOUNT") or "0")
                     alloc_ledger = _xml_text(alloc, "LEDGERNAME") or ""
                     if alloc_amount > 0 and alloc_ledger.lower() not in ("cash", "bank", "bank account", "cash account"):
                         amount = alloc_amount
+                        party_ledger = alloc_ledger
                         break
 
                 if amount <= 0:
@@ -557,11 +559,13 @@ async def import_tally_xml(
                         alloc_amount = _safe_decimal(_xml_text(alloc, "AMOUNT") or "0")
                         if alloc_amount < 0:
                             amount = abs(alloc_amount)
+                            party_ledger = _xml_text(alloc, "LEDGERNAME") or ""
                             break
 
                 if amount > 0:
                     payment = Payment(
                         tenant_id=tenant_id,
+                        contact_id=ledger_contact_map.get(party_ledger),
                         payment_number=_next_number("payment_number"),
                         payment_date=vdate,
                         payment_mode="BANK",
@@ -575,11 +579,13 @@ async def import_tally_xml(
             # ── PAYMENT VOUCHER → Bill Payment ───────────────────────────
             elif vtype in ("PAYMENT",):
                 amount = Decimal("0")
+                party_ledger = ""
                 for alloc in voucher.findall("LEDGERENTRIES.LIST"):
                     alloc_amount = _safe_decimal(_xml_text(alloc, "AMOUNT") or "0")
                     alloc_ledger = _xml_text(alloc, "LEDGERNAME") or ""
                     if alloc_amount > 0 and alloc_ledger.lower() not in ("cash", "bank", "bank account", "cash account"):
                         amount = alloc_amount
+                        party_ledger = alloc_ledger
                         break
 
                 if amount <= 0:
@@ -587,11 +593,13 @@ async def import_tally_xml(
                         alloc_amount = _safe_decimal(_xml_text(alloc, "AMOUNT") or "0")
                         if alloc_amount < 0:
                             amount = abs(alloc_amount)
+                            party_ledger = _xml_text(alloc, "LEDGERNAME") or ""
                             break
 
                 if amount > 0:
                     bp = BillPayment(
                         tenant_id=tenant_id,
+                        contact_id=ledger_contact_map.get(party_ledger),
                         payment_number=_next_number("bill_payment_number"),
                         payment_date=vdate,
                         payment_mode="BANK",
@@ -605,6 +613,48 @@ async def import_tally_xml(
             # ── JOURNAL VOUCHER → Expense (if simple) ────────────────────
             elif vtype in ("JOURNAL", "CONTRA"):
                 pass  # Journal entries are complex; skip for now
+
+    # ── Post ledger entries for imported documents ──────────────────────
+    # State-preserving posting: creates the missing journal entry without
+    # touching document status, amount_paid, allocations or stock.
+    from src.core.posting_context import set_session_posting_channel
+    from src.domains.accounting.backfill_posting import (
+        post_invoice_if_missing, post_bill_if_missing,
+        post_payment_if_missing, post_bill_payment_if_missing,
+    )
+    set_session_posting_channel(db, "IMPORT")
+    for inv in db.query(Invoice).filter(
+        Invoice.tenant_id == tenant_id, Invoice.deleted_at.is_(None),
+    ).all():
+        try:
+            with db.begin_nested():
+                post_invoice_if_missing(db, tenant_id, inv)
+        except Exception as e:
+            summary["errors"].append(f"Auto-post invoice {inv.invoice_number}: {e}")
+    for bill in db.query(Bill).filter(
+        Bill.tenant_id == tenant_id, Bill.deleted_at.is_(None),
+    ).all():
+        try:
+            with db.begin_nested():
+                post_bill_if_missing(db, tenant_id, bill)
+        except Exception as e:
+            summary["errors"].append(f"Auto-post bill {bill.bill_number}: {e}")
+    for pay in db.query(Payment).filter(
+        Payment.tenant_id == tenant_id, Payment.deleted_at.is_(None),
+    ).all():
+        try:
+            with db.begin_nested():
+                post_payment_if_missing(db, tenant_id, pay)
+        except Exception as e:
+            summary["errors"].append(f"Auto-post payment {pay.payment_number}: {e}")
+    for bp in db.query(BillPayment).filter(
+        BillPayment.tenant_id == tenant_id, BillPayment.deleted_at.is_(None),
+    ).all():
+        try:
+            with db.begin_nested():
+                post_bill_payment_if_missing(db, tenant_id, bp)
+        except Exception as e:
+            summary["errors"].append(f"Auto-post bill payment {bp.payment_number}: {e}")
 
     db.commit()
     return summary

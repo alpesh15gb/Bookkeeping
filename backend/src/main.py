@@ -101,6 +101,7 @@ from src.api.v1.gstr2a import router as gstr2a_router
 from src.api.v1.vyapar_import import router as vyapar_import_router
 from src.api.v1.tally import router as tally_router
 from src.api.v1.csv_import import router as csv_import_router
+from src.api.v1.backfill import router as backfill_router
 from src.api.v1.bill_scan import router as bill_scan_router
 from src.api.v1.eway_bills import router as eway_bills_router
 from src.api.idempotency_middleware import IdempotencyMiddleware
@@ -477,6 +478,7 @@ app.include_router(gstr2a_router,     prefix="/api/v1")
 app.include_router(vyapar_import_router, prefix="/api/v1")
 app.include_router(tally_router,         prefix="/api/v1")
 app.include_router(csv_import_router,   prefix="/api/v1")
+app.include_router(backfill_router,     prefix="/api/v1")
 app.include_router(bill_scan_router,     prefix="/api/v1")
 app.include_router(returns_router,       prefix="/api/v1")
 app.include_router(financial_years_router, prefix="/api/v1")
