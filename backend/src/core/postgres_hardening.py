@@ -247,10 +247,19 @@ def _apply_ledger_immutability(connection) -> None:
     * stock_ledger     — NEVER updated (except reversal-linkage metadata),
       NEVER deleted.
 
-    There is deliberately NO client-settable bypass: a transaction-scoped GUC
-    that named eligible source types would let any role that holds DELETE on
-    the ledger tables (the application roles do) destroy accounting history
-    with raw SQL.  Append-only means append-only.
+    There is deliberately NO client-settable bypass for routine writes: a
+    transaction-scoped GUC that named eligible source types would let any role
+    that holds DELETE on the ledger tables destroy accounting history with raw
+    SQL.  Append-only means append-only.
+
+    The one designed exception is the OTP-gated company purge
+    (POST /api/v1/purge/verify).  It is a full tenant wipe, so the delete
+    guards permit deletion of ledger rows ONLY while the transaction-scoped
+    GUC ``app.purge_tenant_id`` names the exact tenant being purged — the
+    guard compares the row's own tenant_id against the flag, so a purge can
+    never delete another tenant's accounting history, and the flag evaporates
+    with the transaction (commit or rollback).  This mirrors the existing RLS
+    tenant scoping via ``app.current_tenant_id`` set in src/core/database.py.
     """
     if not (
         _table_has_column(connection, "journal_entries", "id")
@@ -301,6 +310,9 @@ def _apply_ledger_immutability(connection) -> None:
             CREATE OR REPLACE FUNCTION apex_guard_journal_entries_delete()
             RETURNS trigger AS $$
             BEGIN
+                IF current_setting('app.purge_tenant_id', true) = OLD.tenant_id::text THEN
+                    RETURN OLD;
+                END IF;
                 RAISE EXCEPTION 'journal_entries is append-only accounting history and can never be deleted; create a reversal entry instead'
                     USING ERRCODE = '55000';
             END;
@@ -329,6 +341,9 @@ def _apply_ledger_immutability(connection) -> None:
             CREATE OR REPLACE FUNCTION apex_guard_journal_lines_delete()
             RETURNS trigger AS $$
             BEGIN
+                IF current_setting('app.purge_tenant_id', true) = OLD.tenant_id::text THEN
+                    RETURN OLD;
+                END IF;
                 RAISE EXCEPTION 'journal_lines is immutable accounting history and can never be deleted; create a reversal entry instead'
                     USING ERRCODE = '55000';
             END;
@@ -372,6 +387,9 @@ def _apply_ledger_immutability(connection) -> None:
             CREATE OR REPLACE FUNCTION apex_guard_stock_ledger_delete()
             RETURNS trigger AS $$
             BEGIN
+                IF current_setting('app.purge_tenant_id', true) = OLD.tenant_id::text THEN
+                    RETURN OLD;
+                END IF;
                 RAISE EXCEPTION 'stock_ledger is append-only inventory history; create a reversal movement instead'
                     USING ERRCODE = '55000';
             END;

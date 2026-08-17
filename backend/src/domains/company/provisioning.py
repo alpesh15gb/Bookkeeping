@@ -3,7 +3,7 @@
 from datetime import date, timedelta
 import uuid
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, text
 from sqlalchemy.orm import Session
 
 from src.core.database import Base
@@ -182,6 +182,16 @@ def reset_company_to_signup_defaults(
     discovered from SQLAlchemy metadata so purge cannot silently miss a table.
     The caller owns the transaction and audit-log entry.
     """
+    # The ledger immutability guards (apex_guard_*_delete in
+    # postgres_hardening) permit DELETE only while this transaction-scoped
+    # flag names the purged tenant, so the wipe cannot touch another tenant's
+    # accounting history. SET LOCAL evaporates on commit/rollback. SQLite
+    # (the test engine) has no such guards and no SET LOCAL, so skip it.
+    if db.bind.dialect.name == "postgresql":
+        db.execute(
+            text("SET LOCAL app.purge_tenant_id = :tenant_id"),
+            {"tenant_id": str(tenant.id)},
+        )
     tables = list(reversed(Base.metadata.sorted_tables))
 
     # Line/detail tables generally inherit tenant scope through their parent
