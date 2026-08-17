@@ -293,6 +293,10 @@ def preview_bill(
     rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
+    # TDS calculation (mirrors create_bill so preview matches the saved bill)
+    tds_rate = payload.tds_rate or Decimal("0.00")
+    tds_amount = (adjusted_subtotal * tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
+
     preview_bill = Bill(
         id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
         tenant_id=tenant_id,
@@ -314,6 +318,9 @@ def preview_bill(
         amount_paid=Decimal("0.0000"),
         pos_state_code=payload.pos_state_code,
         is_gst_inclusive=payload.is_gst_inclusive if payload.is_gst_inclusive else False,
+        itc_eligible=GSTEngine.can_claim_itc(db, tenant_id, payload.itc_eligible),
+        tds_rate=tds_rate,
+        tds_amount=tds_amount,
         lines=db_lines,
         contact=contact,
         created_at=datetime.now(timezone.utc),

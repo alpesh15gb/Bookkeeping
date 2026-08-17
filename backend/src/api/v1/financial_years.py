@@ -40,8 +40,11 @@ def _compute_status(fy: FinancialYear, today: date) -> str:
     if today < fy.start_date:
         return "UPCOMING"
 
-    # If data is missing a current flag, the in-range FY is still current.
-    return "CURRENT"
+    # Today falls inside this FY's range, but a DIFFERENT year is the
+    # designated current one (is_current). Reporting "CURRENT" here is the
+    # bug that made two years look current at once. "OPEN" signals an active,
+    # bookable year that is not the one the books are currently in.
+    return "OPEN"
 
 
 def _sync_tenant_fy_start(db: Session, tenant_id: uuid.UUID, fy_start: date):

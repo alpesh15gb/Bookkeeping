@@ -12,6 +12,12 @@ from src.api.deps import enforce_permission
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard Analytics"])
 
+# Migrated documents can carry paise-level unallocated residuals (₹0.00–₹0.99)
+# that are effectively settled. They must not surface as overdue debt or
+# inflate the overdue KPI. The books keep the exact residual; only the
+# dashboard's overdue surfaces treat dust as paid.
+OVERDUE_DUST_TOLERANCE = Decimal("1.00")
+
 
 @router.get("/metrics")
 def get_dashboard_metrics(
@@ -154,6 +160,7 @@ def dashboard_kpis(
         Invoice.deleted_at == None,
         Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
         Invoice.due_date < func.current_date(),
+        Invoice.total - Invoice.amount_paid > OVERDUE_DUST_TOLERANCE,
     ).scalar() or 0
 
     return {
@@ -188,6 +195,7 @@ def get_overdue_alerts(
         Invoice.deleted_at == None,
         Invoice.status.in_(["POSTED", "PARTIALLY_PAID"]),
         Invoice.due_date < today,
+        Invoice.total - Invoice.amount_paid > OVERDUE_DUST_TOLERANCE,
     ).order_by(Invoice.due_date.asc()).limit(20).all()
 
     alerts = []

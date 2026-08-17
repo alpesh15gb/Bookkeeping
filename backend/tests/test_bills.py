@@ -134,6 +134,41 @@ class TestVendorBills(unittest.TestCase):
         self.assertEqual(bill.json()["status"], "PAID")
         self.assertEqual(float(bill.json()["amount_paid"]), 236000.00)
 
+    def test_preview_bill_returns_200_with_full_totals(self):
+        """Regression: preview must serialize a full BillResponse (itc_eligible etc.),
+        not blow up into a 500 ResponseValidationError."""
+        payload = {
+            "contact_id": "3fa85f64-5717-4562-b3fc-2c963f66afa7",
+            "bill_number": "PREVIEW-TEST-001",
+            "issue_date": str(date.today()),
+            "due_date": str(date.today()),
+            "pos_state_code": "29",
+            "line_items": [{
+                "product_id": "4fa85f64-5717-4562-b3fc-2c963f66afd9",
+                "quantity": 1,
+                "rate": 200000.00,
+                "discount": 0.00,
+                "hsn_sac": "84713010",
+                "gst_rate": 18.0,
+            }],
+            "discount_rate": 0.0,
+            "shipping_charges": 0.0,
+            "tds_rate": 0.0,
+            "is_gst_inclusive": False,
+            "itc_eligible": True,
+            "post_on_create": False,
+        }
+        res = self.client.post("/api/v1/bills/preview", json=payload, headers=self.headers)
+        self.assertEqual(res.status_code, 200, res.text)
+        data = res.json()
+        self.assertEqual(data["status"], "DRAFT")
+        self.assertEqual(data["bill_number"], "PREVIEW")
+        self.assertTrue(data["itc_eligible"])
+        self.assertEqual(float(data["subtotal"]), 200000.00)
+        self.assertEqual(float(data["cgst_amount"]), 18000.00)
+        self.assertEqual(float(data["sgst_amount"]), 18000.00)
+        self.assertEqual(float(data["total"]), 236000.00)
+
 
 if __name__ == "__main__":
     unittest.main()

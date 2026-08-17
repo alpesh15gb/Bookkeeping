@@ -252,7 +252,7 @@ def list_expenses(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     page: int = Query(1, ge=1),
-    limit: int = Query(50, ge=1, le=100),
+    limit: int = Query(50, ge=1, le=500),
     db: Session = Depends(get_db_session),
     tenant_id: uuid.UUID = Depends(enforce_permission("expense:view")),
 ):
