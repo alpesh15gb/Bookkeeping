@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ENVELOPE>
+  <HEADER>
+    <TALLYREQUEST>Export Data</TALLYREQUEST>
+  </HEADER>
+  <BODY>
+    <DATA>
+      <TALLYMESSAGE>
+        <LEDGER>
+          <NAME>Acme Traders</NAME>
+          <PARENT>Sundry Debtors</PARENT>
+          <PARTYGSTIN>29AACFA1234A1Z5</PARTYGSTIN>
+          <STATE>Karnataka</STATE>
+          <LEDGERPHONE>+919812345678</LEDGERPHONE>
+          <EMAIL>billing@acme.in</EMAIL>
+          <ADDRESS>MG Road, Bengaluru</ADDRESS>
+        </LEDGER>
+      </TALLYMESSAGE>
+      <TALLYMESSAGE>
+        <LEDGER>
+          <NAME>Global Suppliers</NAME>
+          <PARENT>Sundry Creditors</PARENT>
+          <PARTYGSTIN>27AACFS5678B1Z2</PARTYGSTIN>
+          <STATE>Maharashtra</STATE>
+          <LEDGERPHONE>+919987654321</LEDGERPHONE>
+          <ADDRESS>Pune</ADDRESS>
+        </LEDGER>
+      </TALLYMESSAGE>
+      <TALLYMESSAGE>
+        <STOCKITEM>
+          <NAME>Steel Rods</NAME>
+          <PARENT>Primary</PARENT>
+          <HSNCODE>72142010</HSNCODE>
+          <BASEUNITS>KGS</BASEUNITS>
+          <SELLINGPRICE>120</SELLINGPRICE>
+          <GSTDETAILS>
+            <GSTSLABLIST>
+              <GSTSLAB>
+                <GSTRATE>18</GSTRATE>
+              </GSTSLAB>
+            </GSTSLABLIST>
+          </GSTDETAILS>
+        </STOCKITEM>
+      </TALLYMESSAGE>
+      <TALLYMESSAGE>
+        <VOUCHER>
+          <VOUCHERTYPENAME>Sales</VOUCHERTYPENAME>
+          <DATE>20260115</DATE>
+          <VOUCHERNUMBER>INV-1001</VOUCHERNUMBER>
+          <PARTYLEDGERNAME>Acme Traders</PARTYLEDGERNAME>
+          <ALLINVENTORYENTRIES.LIST>
+            <INVENTORYENTRIES.LIST>
+              <STOCKITEMNAME>Steel Rods</STOCKITEMNAME>
+              <ACTUALQTY>100</ACTUALQTY>
+              <RATE>100</RATE>
+              <AMOUNT>10000</AMOUNT>
+            </INVENTORYENTRIES.LIST>
+          </ALLINVENTORYENTRIES.LIST>
+          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>Acme Traders</LEDGERNAME>
+            <AMOUNT>-11800</AMOUNT>
+          </LEDGERENTRIES.LIST>
+          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>CGST</LEDGERNAME>
+            <AMOUNT>900</AMOUNT>
+          </LEDGERENTRIES.LIST>
+          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>SGST</LEDGERNAME>
+            <AMOUNT>900</AMOUNT>
+          </LEDGERENTRIES.LIST>
+        </VOUCHER>
+      </TALLYMESSAGE>
+      <TALLYMESSAGE>
+        <VOUCHER>
+          <VOUCHERTYPENAME>Purchase</VOUCHERTYPENAME>
+          <DATE>20260120</DATE>
+          <VOUCHERNUMBER>PUR-2001</VOUCHERNUMBER>
+          <PARTYLEDGERNAME>Global Suppliers</PARTYLEDGERNAME>
+          <ALLINVENTORYENTRIES.LIST>
+            <INVENTORYENTRIES.LIST>
+              <STOCKITEMNAME>Steel Rods</STOCKITEMNAME>
+              <ACTUALQTY>50</ACTUALQTY>
+              <RATE>80</RATE>
+              <AMOUNT>4000</AMOUNT>
+            </INVENTORYENTRIES.LIST>
+          </ALLINVENTORYENTRIES.LIST>
+          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>Global Suppliers</LEDGERNAME>
+            <AMOUNT>4720</AMOUNT>
+          </LEDGERENTRIES.LIST>
+          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>CGST</LEDGERNAME>
+            <AMOUNT>360</AMOUNT>
+          </LEDGERENTRIES.LIST>
+          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>SGST</LEDGERNAME>
+            <AMOUNT>360</AMOUNT>
+          </LEDGERENTRIES.LIST>
+        </VOUCHER>
+      </TALLYMESSAGE>
+      <TALLYMESSAGE>
+        <VOUCHER>
+          <VOUCHERTYPENAME>Receipt</VOUCHERTYPENAME>
+          <DATE>20260125</DATE>
+          <VOUCHERNUMBER>RC-3001</VOUCHERNUMBER>
+          <PARTYLEDGERNAME>Acme Traders</PARTYLEDGERNAME>
+          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>Acme Traders</LEDGERNAME>
+            <AMOUNT>5000</AMOUNT>
+          </LEDGERENTRIES.LIST>
+          <LEDGERENTRIES.LIST>
+            <LEDGERNAME>Bank Account</LEDGERNAME>
+            <AMOUNT>-5000</AMOUNT>
+          </LEDGERENTRIES.LIST>
+        </VOUCHER>
+      </TALLYMESSAGE>
+    </DATA>
+  </BODY>
+</ENVELOPE>

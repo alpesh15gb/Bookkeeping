@@ -70,15 +70,20 @@ def _xml_text(parent, tag, default=None) -> Optional[str]:
     return el.text.strip() if el is not None and el.text else default
 
 
-def _xml_date(parent, tag) -> Optional[str]:
-    """Tally dates are YYYYMMDD or YYYY-MM-DD. Return ISO string."""
+def _xml_date(parent, tag) -> Optional[date]:
+    """Tally dates are YYYYMMDD or YYYY-MM-DD. Return a date object."""
     raw = _xml_text(parent, tag)
     if not raw:
         return None
     raw = raw.strip().replace("-", "")
     if len(raw) == 8:
-        return f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}"
-    return raw
+        iso = f"{raw[:4]}-{raw[4:6]}-{raw[6:8]}"
+    else:
+        iso = raw
+    try:
+        return date.fromisoformat(iso)
+    except ValueError:
+        return None
 
 
 def _tally_date_xml(iso_str: str) -> str:
@@ -282,7 +287,17 @@ async def import_tally_xml(
             summary["products_imported"] += 1
 
     # ── Phase 3: Import Vouchers as Invoices/Bills/Payments/Expenses ─────
-    numbering = NumberingSeriesService(db)
+    # NumberingSeriesService is a static-method service; document types map
+    # to the generate_next_number TYPE keys, not legacy column names.
+    _NUMBERING_KEYS = {
+        "invoice_number": "INVOICE",
+        "bill_number": "BILL",
+        "payment_number": "PAYMENT",
+        "bill_payment_number": "DISBURSEMENT",
+    }
+    def _next_number(document_type: str) -> str:
+        return NumberingSeriesService.generate_next_number(
+            db, tenant_id, _NUMBERING_KEYS.get(document_type, "INVOICE"))
 
     for msg in root.iter("TALLYMESSAGE"):
         for voucher in msg.findall("VOUCHER"):
@@ -301,7 +316,7 @@ async def import_tally_xml(
                     continue
 
                 contact_id = ledger_contact_map.get(party_name) if party_name else None
-                inv_number = vnumber or numbering.get_next("invoice_number")
+                inv_number = vnumber or _next_number("invoice_number")
 
                 lines = []
                 total_subtotal = Decimal("0")
@@ -394,7 +409,7 @@ async def import_tally_xml(
                         invoice_id=invoice.id,
                         product_id=uuid.UUID(line["product_id"]) if line["product_id"] else None,
                         hsn_sac=line["hsn_sac"],
-                        product_name=line["product_name"],
+                        description=line["product_name"],
                         quantity=Decimal(str(line["quantity"])),
                         rate=Decimal(str(line["rate"])),
                         discount=Decimal("0"),
@@ -418,7 +433,7 @@ async def import_tally_xml(
                     continue
 
                 contact_id = ledger_contact_map.get(party_name) if party_name else None
-                bill_number = vnumber or numbering.get_next("bill_number")
+                bill_number = vnumber or _next_number("bill_number")
 
                 lines = []
                 total_subtotal = Decimal("0")
@@ -509,7 +524,7 @@ async def import_tally_xml(
                         bill_id=bill.id,
                         product_id=uuid.UUID(line["product_id"]) if line["product_id"] else None,
                         hsn_sac=line["hsn_sac"],
-                        product_name=line["product_name"],
+                        description=line["product_name"],
                         quantity=Decimal(str(line["quantity"])),
                         rate=Decimal(str(line["rate"])),
                         discount=Decimal("0"),
@@ -547,11 +562,11 @@ async def import_tally_xml(
                 if amount > 0:
                     payment = Payment(
                         tenant_id=tenant_id,
-                        payment_number=numbering.get_next("payment_number"),
+                        payment_number=_next_number("payment_number"),
                         payment_date=vdate,
                         payment_mode="BANK",
                         amount=amount,
-                        reference=_safe_str(vnumber),
+                        reference_number=_safe_str(vnumber),
                     )
                     db.add(payment)
                     db.flush()
@@ -577,11 +592,11 @@ async def import_tally_xml(
                 if amount > 0:
                     bp = BillPayment(
                         tenant_id=tenant_id,
-                        payment_number=numbering.get_next("bill_payment_number"),
+                        payment_number=_next_number("bill_payment_number"),
                         payment_date=vdate,
                         payment_mode="BANK",
                         amount=amount,
-                        reference=_safe_str(vnumber),
+                        reference_number=_safe_str(vnumber),
                     )
                     db.add(bp)
                     db.flush()
