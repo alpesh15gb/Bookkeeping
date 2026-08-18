@@ -50,6 +50,7 @@ services:
       - "127.0.0.1:8000:8000"
     environment:
       - APP_ENV=production
+      - APP_URL=${APP_URL:-https://apexbooks.in}
       - DATABASE_URL=postgresql://apexbooks_api:${DB_API_PASSWORD:?DB_API_PASSWORD must be set}@db:5432/bookkeeping
       - MIGRATION_DATABASE_URL=postgresql://apexbooks_migrator:${DB_MIGRATOR_PASSWORD:?DB_MIGRATOR_PASSWORD must be set}@db:5432/bookkeeping
       - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
