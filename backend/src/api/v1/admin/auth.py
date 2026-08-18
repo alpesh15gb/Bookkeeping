@@ -1,0 +1,158 @@
+"""
+Super Admin Authentication endpoints.
+Separate from tenant-level auth — super admins can access all tenants.
+"""
+import uuid
+import logging
+from datetime import datetime, timezone, timedelta
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from pydantic import BaseModel, EmailStr
+from sqlalchemy.orm import Session
+
+from src.core.config import settings
+from src.core.database import get_db_session
+from src.core.security import (
+    create_access_token,
+    create_refresh_token,
+    get_password_hash,
+    verify_password,
+    _revoked_token_check,
+    _rotate_refresh_token,
+)
+from src.infrastructure.database.models import User, TenantMembership
+from src.api.deps import get_current_user
+from src.common.audit_log import _log_audit
+
+logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/admin", tags=["Admin Auth"])
+
+
+class AdminLoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+
+class AdminLoginResponse(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: dict
+
+
+class AdminRefreshRequest(BaseModel):
+    refresh_token: str
+
+
+def require_super_admin(user: User = Depends(get_current_user)) -> User:
+    """Dependency that requires the user to be a super admin."""
+    if not user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super admin access required."
+        )
+    return user
+
+
+@router.post("/login", response_model=AdminLoginResponse)
+async def admin_login(request: Request, payload: AdminLoginRequest, db: Session = Depends(get_db_session)):
+    """Super admin login — requires is_super_admin flag."""
+    user = db.query(User).filter(
+        User.email == payload.email,
+        User.deleted_at == None
+    ).first()
+
+    if not user:
+        _log_audit(db, "admin.login.failed", details={"email": payload.email}, request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password."
+        )
+
+    if not user.is_super_admin:
+        _log_audit(db, "admin.login.denied", user_id=str(user.id), details={"reason": "not_super_admin"}, request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Super admin access required."
+        )
+
+    if not user.is_active:
+        _log_audit(db, "admin.login.blocked", user_id=str(user.id), details={"reason": "deactivated"}, request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Account is deactivated."
+        )
+
+    if not verify_password(payload.password, user.password_hash):
+        user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
+        if user.failed_login_attempts >= 5:
+            user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
+        db.commit()
+        _log_audit(db, "admin.login.failed", user_id=str(user.id), request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password."
+        )
+
+    # Success — reset attempts
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login_at = datetime.now(timezone.utc)
+
+    # Create tokens with admin scope
+    access_token = create_access_token(
+        str(user.id),
+        extra_claims={"scope": "admin", "super_admin": True}
+    )
+    refresh_token = create_refresh_token(str(user.id))
+
+    _log_audit(db, "admin.login.success", user_id=str(user.id), request=request)
+    db.commit()
+
+    return AdminLoginResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        user={
+            "id": str(user.id),
+            "email": user.email,
+            "full_name": user.full_name,
+            "is_super_admin": True,
+        }
+    )
+
+
+@router.post("/refresh")
+async def admin_refresh_token(request: Request, payload: AdminRefreshRequest, db: Session = Depends(get_db_session)):
+    """Refresh admin access token."""
+    try:
+        access_token, refresh_token = _rotate_refresh_token(payload.refresh_token, db)
+        return {
+            "access_token": access_token,
+            "refresh_token": refresh_token,
+            "token_type": "bearer"
+        }
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token."
+        )
+
+
+@router.get("/me")
+async def admin_me(user: User = Depends(require_super_admin)):
+    """Get current admin profile."""
+    return {
+        "id": str(user.id),
+        "email": user.email,
+        "full_name": user.full_name,
+        "is_super_admin": user.is_super_admin,
+        "is_active": user.is_active,
+        "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
+    }

@@ -77,6 +77,7 @@ class User(Base):
     totp_secret = Column(String(32))
     totp_pending_secret = Column(String(32))
     totp_enabled = Column(Boolean, nullable=False, default=False)
+    is_super_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
     deleted_at = Column(DateTime(timezone=True))
@@ -2491,6 +2492,125 @@ _CHILD_PARENT_MAP = {
     PaymentAllocation: ("payment_id", Payment),
     BillPaymentAllocation: ("payment_id", BillPayment),
 }
+
+
+# ---------------------------------------------------------------------------
+# SUBSCRIPTION MANAGEMENT (Super Admin)
+# ---------------------------------------------------------------------------
+
+class SubscriptionPlan(Base):
+    __tablename__ = "subscription_plans"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False, unique=True)
+    display_name = Column(String(200), nullable=False)
+    description = Column(Text)
+    price_monthly = Column(Numeric(10, 2))
+    price_yearly = Column(Numeric(10, 2))
+    currency = Column(String(3), nullable=False, default="INR")
+
+    # Feature limits
+    max_users = Column(Integer, nullable=False, default=1)
+    max_invoices_per_month = Column(Integer)
+    max_contacts = Column(Integer)
+    max_products = Column(Integer)
+    max_storage_mb = Column(Integer)
+
+    # Feature flags
+    gst_filing = Column(Boolean, nullable=False, default=False)
+    e_invoicing = Column(Boolean, nullable=False, default=False)
+    bank_reconciliation = Column(Boolean, nullable=False, default=False)
+    inventory_management = Column(Boolean, nullable=False, default=False)
+    multi_branch = Column(Boolean, nullable=False, default=False)
+    api_access = Column(Boolean, nullable=False, default=False)
+    priority_support = Column(Boolean, nullable=False, default=False)
+
+    # Trial
+    trial_days = Column(Integer, nullable=False, default=14)
+
+    # Status
+    is_active = Column(Boolean, nullable=False, default=True)
+    sort_order = Column(Integer, nullable=False, default=0)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+    # Relationships
+    subscriptions = relationship("TenantSubscription", back_populates="plan")
+
+
+class TenantSubscription(Base):
+    __tablename__ = "tenant_subscriptions"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="uq_tenant_subscription"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    plan_id = Column(UUID(as_uuid=True), ForeignKey("subscription_plans.id"), nullable=False)
+
+    # Status
+    status = Column(String(20), nullable=False, default="trialing")  # trialing, active, past_due, cancelled, suspended
+
+    # Billing
+    billing_cycle = Column(String(20), nullable=False, default="monthly")  # monthly, yearly, custom
+
+    # Dates
+    trial_start = Column(DateTime(timezone=True))
+    trial_end = Column(DateTime(timezone=True))
+    current_period_start = Column(DateTime(timezone=True))
+    current_period_end = Column(DateTime(timezone=True))
+    cancelled_at = Column(DateTime(timezone=True))
+    cancelled_reason = Column(Text)
+
+    # Grace period
+    grace_period_days = Column(Integer, nullable=False, default=7)
+    grace_period_end = Column(DateTime(timezone=True))
+
+    # Payment
+    payment_method_id = Column(String(200))
+    last_payment_date = Column(DateTime(timezone=True))
+    next_payment_date = Column(DateTime(timezone=True))
+
+    # Custom limits override
+    custom_limits = Column(JSONB)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+    updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)
+
+    # Relationships
+    plan = relationship("SubscriptionPlan", back_populates="subscriptions")
+    tenant = relationship("Tenant", backref="subscription")
+
+
+class SubscriptionHistory(Base):
+    __tablename__ = "subscription_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(UUID(as_uuid=True), ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    subscription_id = Column(UUID(as_uuid=True), ForeignKey("tenant_subscriptions.id", ondelete="SET NULL"))
+    action = Column(String(50), nullable=False)  # created, upgraded, downgraded, renewed, cancelled, expired
+    old_plan_id = Column(UUID(as_uuid=True))
+    new_plan_id = Column(UUID(as_uuid=True))
+    old_status = Column(String(20))
+    new_status = Column(String(20))
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    reason = Column(Text)
+    metadata_ = Column("metadata", JSONB)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
+
+
+class AdminAuditLog(Base):
+    __tablename__ = "admin_audit_log"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admin_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=False)
+    action = Column(String(100), nullable=False)
+    target_tenant_id = Column(UUID(as_uuid=True))
+    target_user_id = Column(UUID(as_uuid=True))
+    details = Column(JSONB)
+    ip_address = Column(String(45))
+    created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
 
 
 @event.listens_for(Session, "before_flush")

@@ -501,6 +501,17 @@ app.include_router(cartunez_order_router)
 app.include_router(cartunez_payment_router)
 app.include_router(cartunez_customer_router)
 
+# Admin routes
+from src.api.v1.admin.auth import router as admin_auth_router
+from src.api.v1.admin.tenants import router as admin_tenants_router
+from src.api.v1.admin.subscriptions import router as admin_subscriptions_router
+from src.api.v1.admin.dashboard import router as admin_dashboard_router
+
+app.include_router(admin_auth_router, prefix="/api/v1")
+app.include_router(admin_tenants_router, prefix="/api/v1")
+app.include_router(admin_subscriptions_router, prefix="/api/v1")
+app.include_router(admin_dashboard_router, prefix="/api/v1")
+
 
 # ---------------------------------------------------------------------------
 # Frontend-friendly aliases (frontend calls /contacts, /products not /masters/...)
