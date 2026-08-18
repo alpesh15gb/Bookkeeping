@@ -171,7 +171,51 @@ def invoice_email(invoice_number: str, company_name: str = "ApexBooks") -> tuple
     return (f"Invoice #{invoice_number} - {company_name}", _wrap("Invoice", body))
 
 
+def verification_email(verify_link: str, user_name: str = "User") -> tuple[str, str]:
+    """Returns (subject, html_body) for an email-verification link."""
+    body = f"""
+      <p style="margin:0 0 16px;font-size:14px;color:#1E293B;">
+        Hi <strong>{user_name}</strong>,
+      </p>
+      <p style="margin:0 0 16px;font-size:14px;color:#1E293B;">
+        Welcome to ApexBooks! Please verify your email address by clicking the button below:
+      </p>
+      <p style="margin:0 0 24px;text-align:center;">
+        <a href="{verify_link}"
+           style="display:inline-block;padding:12px 28px;background-color:#DCA035;color:#ffffff;font-size:14px;font-weight:600;text-decoration:none;border-radius:6px;">
+          Verify Email
+        </a>
+      </p>
+      <p style="margin:0 0 8px;font-size:13px;color:#5F6572;">
+        This link expires in <strong>24 hours</strong>.
+      </p>
+      <p style="margin:0;font-size:13px;color:#5F6572;">
+        If you did not create an account, you can safely ignore this email.
+      </p>
+    """
+    return ("Verify Your Email - ApexBooks", _wrap("Email Verification", body))
+
+
 # ── Shared SMTP sender ────────────────────────────────────────
+
+def send_verification_email(email: str, token: str, app_url: str, user_name: str = "User") -> bool:
+    """Send a verification email. Returns True on success."""
+    import smtplib
+    from email.mime.text import MIMEText
+
+    verify_link = f"{app_url}/verify-email?token={token}&email={email}"
+    subject, html_body = verification_email(verify_link, user_name=user_name)
+    msg = MIMEText(html_body, "html")
+    msg["Subject"] = subject
+    msg["From"] = settings.EMAIL_FROM
+    msg["To"] = email
+    try:
+        send_email_smtp(msg)
+        return True
+    except Exception:
+        logger.exception("Failed to send verification email to %s", email)
+        return False
+
 
 def send_email_smtp(msg: MIMEMultipart, timeout: int = 30) -> None:
     """

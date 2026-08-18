@@ -197,7 +197,15 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
     db.commit()
     db.refresh(user)
 
-    # 5. Log verification token (dev mode — no real email sent)
+    # 5. Send verification email (production only — dev auto-verifies above)
+    if settings.is_production and user.email_verify_token:
+        from src.common.email_helper import send_verification_email
+        send_verification_email(
+            email=user.email,
+            token=email_verify_token_raw,
+            app_url=settings.APP_URL,
+            user_name=user.full_name or "User",
+        )
     # Verification secrets must never be written to application logs.
     logger.info("Email verification challenge issued for user %s", user.id)
 
@@ -575,6 +583,42 @@ def verify_email(request: Request, token: str, email: str, db: Session = Depends
     user.email_verify_expires = None
     db.commit()
     return {"detail": "Email verified successfully."}
+
+
+class ResendVerificationRequest(BaseModel):
+    email: str
+
+
+@router.post("/resend-verification")
+@limiter.limit("3/minute")
+def resend_verification_email(
+    request: Request,
+    payload: ResendVerificationRequest,
+    db: Session = Depends(get_db_session),
+):
+    """Resend the email-verification link. Always returns 200 to prevent enumeration."""
+    import uuid
+    user = db.query(User).filter(
+        User.email == payload.email,
+        User.email_verified == False,
+        User.deleted_at == None,
+    ).first()
+    if user:
+        # Generate a fresh token
+        token_raw = uuid.uuid4().hex
+        user.email_verify_token = get_password_hash(token_raw)
+        user.email_verify_expires = datetime.now(timezone.utc) + timedelta(hours=24)
+        db.commit()
+
+        from src.common.email_helper import send_verification_email
+        send_verification_email(
+            email=user.email,
+            token=token_raw,
+            app_url=settings.APP_URL,
+            user_name=user.full_name or "User",
+        )
+    # Always return success — never reveal whether the email exists
+    return {"detail": "If the email is registered and unverified, a verification link has been sent."}
 
 
 # ---------------------------------------------------------------------------
