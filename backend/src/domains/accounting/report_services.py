@@ -222,7 +222,11 @@ class TrialBalanceService:
             lines=lines,
             total_debits=_q(total_debits),
             total_credits=_q(total_credits),
-            is_balanced=abs(_q(total_debits) - _q(total_credits)) <= Decimal("0.01"),
+            # A trial balance is balanced only when debits exactly equal
+            # credits. Tolerating a paise hides real breaks; the DB-level
+            # journal-line balance trigger (apex_guard_journal_entries_balance)
+            # is the backstop that prevents unbalanced entries from existing.
+            is_balanced=_q(total_debits) == _q(total_credits),
         )
 
 

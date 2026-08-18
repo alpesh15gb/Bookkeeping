@@ -25,6 +25,7 @@ def test_sprint_2fa_flow(db_session, client):
         password_hash=get_password_hash("Secure@123"),
         full_name="2FA User",
         is_active=True,
+        email_verified=True,
         totp_secret=totp_secret,
         totp_enabled=True
     )

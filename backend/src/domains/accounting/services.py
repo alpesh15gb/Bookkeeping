@@ -86,13 +86,22 @@ class LedgerPostingEngine:
         cess_amount: Decimal = Decimal("0.00"),
         round_off_account_id: Optional[uuid.UUID] = None,
         round_off_amount: Decimal = Decimal("0.00"),
-        is_rcm: bool = False
+        is_rcm: bool = False,
+        tds_account_id: Optional[uuid.UUID] = None,
+        tds_amount: Decimal = Decimal("0.00"),
+        tcs_account_id: Optional[uuid.UUID] = None,
+        tcs_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         """
         Generates Double Entry Posting for Sales Invoices (Receivables).
 
         Under Reverse Charge Mechanism (is_rcm=True), the buyer self-assesses
         the GST, so no output tax accounts are credited by the seller.
+
+        TDS/TCS on the sales side: the buyer withholds TDS from the payment
+        (seller books a TDS Receivable asset) and the seller collects TCS
+        from the buyer (TCS Payable liability). Both adjust the net
+        receivable so outstanding matches the real amount owed.
         """
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
@@ -100,7 +109,12 @@ class LedgerPostingEngine:
         if is_rcm:
             # RCM: seller invoices subtotal only — buyer accounts for tax
             invoice_total = net_subtotal + shipping_charges
-            lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable (RCM): {invoice_number}"))
+            receivable = invoice_total - tds_amount + tcs_amount
+            if tds_amount > 0 and tds_account_id:
+                lines.append(JournalLineDraft(tds_account_id, tds_amount, "DEBIT", f"TDS Withheld: {invoice_number}"))
+            if tcs_amount > 0 and tcs_account_id:
+                lines.append(JournalLineDraft(tcs_account_id, tcs_amount, "CREDIT", f"TCS Collected: {invoice_number}"))
+            lines.append(JournalLineDraft(customer_account_id, receivable, "DEBIT", f"Receivable (RCM): {invoice_number}"))
             lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue (RCM): {invoice_number}"))
             if shipping_charges > 0:
                 lines.append(JournalLineDraft(sales_revenue_account_id, shipping_charges, "CREDIT", f"Shipping Income (RCM): {invoice_number}"))
@@ -108,8 +122,13 @@ class LedgerPostingEngine:
             tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
             # Customer is debited for subtotal + shipping + taxes. Round-off handled separately below.
             invoice_total = net_subtotal + shipping_charges + tax_total
+            receivable = invoice_total - tds_amount + tcs_amount
 
-            lines.append(JournalLineDraft(customer_account_id, invoice_total, "DEBIT", f"Receivable: {invoice_number}"))
+            if tds_amount > 0 and tds_account_id:
+                lines.append(JournalLineDraft(tds_account_id, tds_amount, "DEBIT", f"TDS Withheld: {invoice_number}"))
+            if tcs_amount > 0 and tcs_account_id:
+                lines.append(JournalLineDraft(tcs_account_id, tcs_amount, "CREDIT", f"TCS Collected: {invoice_number}"))
+            lines.append(JournalLineDraft(customer_account_id, receivable, "DEBIT", f"Receivable: {invoice_number}"))
             lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "CREDIT", f"Sales Revenue: {invoice_number}"))
             if shipping_charges > 0:
                 lines.append(JournalLineDraft(sales_revenue_account_id, shipping_charges, "CREDIT", f"Shipping Income: {invoice_number}"))
@@ -646,16 +665,25 @@ class LedgerPostingEngine:
         round_off_account_id: Optional[uuid.UUID] = None,
         round_off_amount: Decimal = Decimal("0.00"),
         is_rcm: bool = False,
+        tds_account_id: Optional[uuid.UUID] = None,
+        tds_amount: Decimal = Decimal("0.00"),
+        tcs_account_id: Optional[uuid.UUID] = None,
+        tcs_amount: Decimal = Decimal("0.00"),
     ) -> JournalEntryDraft:
         lines: List[JournalLineDraft] = []
         net_subtotal = subtotal - discount_total
         tax_total = cgst_amount + sgst_amount + igst_amount + utgst_amount + cess_amount
         total = net_subtotal + shipping_charges + (Decimal("0") if is_rcm else tax_total)
+        receivable = total - tds_amount + tcs_amount
 
+        if tds_amount > 0 and tds_account_id:
+            lines.append(JournalLineDraft(tds_account_id, tds_amount, "CREDIT", f"TDS Withheld Reversal: {invoice_number}"))
+        if tcs_amount > 0 and tcs_account_id:
+            lines.append(JournalLineDraft(tcs_account_id, tcs_amount, "DEBIT", f"TCS Collected Reversal: {invoice_number}"))
         lines.append(JournalLineDraft(sales_revenue_account_id, net_subtotal, "DEBIT", f"Cancellation: {invoice_number}"))
         if shipping_charges > 0:
             lines.append(JournalLineDraft(sales_revenue_account_id, shipping_charges, "DEBIT", f"Shipping cancellation: {invoice_number}"))
-        lines.append(JournalLineDraft(customer_account_id, total, "CREDIT", f"Cancellation: {invoice_number}"))
+        lines.append(JournalLineDraft(customer_account_id, receivable, "CREDIT", f"Cancellation: {invoice_number}"))
 
         if not is_rcm and cgst_amount > 0 and cgst_account_id:
             lines.append(JournalLineDraft(cgst_account_id, cgst_amount, "DEBIT", "CGST Reversal"))
@@ -1099,6 +1127,7 @@ _STANDARD_ACCOUNTS: Dict[str, Dict[str, str]] = {
 
     # ── Current Liabilities: Statutory ──
     "liability.tds":      {"name": "TDS Payable",            "code": "3101", "type": "LIABILITY", "group": "Statutory Liabilities"},
+    "liability.tcs":      {"name": "TCS Payable",            "code": "3106", "type": "LIABILITY", "group": "Statutory Liabilities"},
     "liability.gst_payable": {"name": "GST Payable",         "code": "3102", "type": "LIABILITY", "group": "Statutory Liabilities"},
     "liability.pf":       {"name": "PF Payable",             "code": "3103", "type": "LIABILITY", "group": "Statutory Liabilities"},
     "liability.esi":      {"name": "ESI Payable",            "code": "3104", "type": "LIABILITY", "group": "Statutory Liabilities"},

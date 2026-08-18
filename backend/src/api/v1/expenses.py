@@ -56,7 +56,7 @@ def _compute_expense_totals(db: Session, tenant_id: uuid.UUID, amount: Decimal, 
         gst_rate=effective_rate,
     )
     raw_total = amount + tax_split.cgst_amount + tax_split.sgst_amount + tax_split.igst_amount + tax_split.utgst_amount + tax_split.cess_amount
-    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    rounded_total = raw_total.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
     return {
         "amount": amount,

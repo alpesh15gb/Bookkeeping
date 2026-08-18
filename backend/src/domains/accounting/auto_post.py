@@ -176,6 +176,8 @@ def auto_post_invoice(
     customer_account_id = resolver.resolve(f"customer.{invoice.contact_id}")
     sales_revenue_account_id = resolver.resolve("sales_revenue")
     tax = _resolve_tax_accounts(resolver, "output")
+    tds_account_id = resolver.resolve("tds_receivable") if invoice.tds_amount and invoice.tds_amount > 0 else None
+    tcs_account_id = resolver.resolve("liability.tcs") if invoice.tcs_amount and invoice.tcs_amount > 0 else None
 
     draft = LedgerPostingEngine.create_invoice_posting(
         tenant_id=tenant_id,
@@ -200,6 +202,10 @@ def auto_post_invoice(
         round_off_account_id=tax["round_off"],
         round_off_amount=invoice.round_off,
         is_rcm=invoice.is_rcm,
+        tds_account_id=tds_account_id,
+        tds_amount=invoice.tds_amount or Decimal("0"),
+        tcs_account_id=tcs_account_id,
+        tcs_amount=invoice.tcs_amount or Decimal("0"),
     )
     commit_ledger_draft(db, tenant_id, draft)
 
@@ -536,6 +542,10 @@ def cancel_invoice(db: Session, tenant_id: uuid.UUID, invoice: Invoice, user_id:
         round_off_account_id=tax["round_off"],
         round_off_amount=invoice.round_off,
         is_rcm=invoice.is_rcm,
+        tds_account_id=resolver.resolve("tds_receivable") if invoice.tds_amount and invoice.tds_amount > 0 else None,
+        tds_amount=invoice.tds_amount or Decimal("0"),
+        tcs_account_id=resolver.resolve("liability.tcs") if invoice.tcs_amount and invoice.tcs_amount > 0 else None,
+        tcs_amount=invoice.tcs_amount or Decimal("0"),
     )
     reversal_entry = commit_ledger_draft(db, tenant_id, draft)
     link_cancel_reversal(db, tenant_id, "INVOICE", invoice.id, reversal_entry, user_id)

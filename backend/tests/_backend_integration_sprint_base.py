@@ -73,6 +73,7 @@ def _seed_user(db, tenant, email="sprint@test.com", role="owner"):
         email=email,
         password_hash=get_password_hash("Test@1234"),
         full_name="Sprint Tester",
+        email_verified=True,
     )
     db.add(user)
     membership = TenantMembership(

@@ -26,10 +26,13 @@ services:
     image: redis:7-alpine
     container_name: bookkeeping_redis
     restart: always
+    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD:?REDIS_PASSWORD must be set}"]
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set}
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,13 +43,16 @@ services:
     build: ./backend
     container_name: bookkeeping_backend
     restart: always
+    # Loopback-only: the Next.js proxy terminates TLS and talks to the API on
+    # 127.0.0.1. Publishing on 0.0.0.0 would expose the API directly to the
+    # internet, bypassing the proxy's auth headers and WAF.
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - APP_ENV=production
       - DATABASE_URL=postgresql://apexbooks_api:${DB_API_PASSWORD:?DB_API_PASSWORD must be set}@db:5432/bookkeeping
       - MIGRATION_DATABASE_URL=postgresql://apexbooks_migrator:${DB_MIGRATOR_PASSWORD:?DB_MIGRATOR_PASSWORD must be set}@db:5432/bookkeeping
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
       - ALLOWED_ORIGINS=https://apexbooks.in,https://api.apexbooks.in,https://app.apexbooks.in,tauri://localhost,https://tauri.localhost,tauri://com.apexbooks.desktop
@@ -65,6 +71,8 @@ services:
       - SMTP_USER
       - SMTP_PASSWORD
       - EMAIL_FROM
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-5}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-5}
     # Migrations run with the privileged migrator role; the API itself serves
     # with the restricted apexbooks_api role (RLS enforced, no superuser).
     command: ["sh", "-c", "alembic upgrade head && exec uvicorn src.main:app --host 0.0.0.0 --port 8000"]
@@ -90,12 +98,14 @@ services:
     environment:
       - APP_ENV=production
       - DATABASE_URL=postgresql://apexbooks_worker:${DB_WORKER_PASSWORD:?DB_WORKER_PASSWORD must be set}@db:5432/bookkeeping
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
       - CARTUNEZ_MEDUSA_BASE_URL
       - CARTUNEZ_MEDUSA_API_KEY
       - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
+      - DB_POOL_SIZE=2
+      - DB_MAX_OVERFLOW=2
       - NVIDIA_NIM_API_KEY
       - NVIDIA_NIM_BASE_URL
       - NVIDIA_NIM_MODEL
@@ -122,12 +132,14 @@ services:
     environment:
       - APP_ENV=production
       - DATABASE_URL=postgresql://apexbooks_worker:${DB_WORKER_PASSWORD:?DB_WORKER_PASSWORD must be set}@db:5432/bookkeeping
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?REDIS_PASSWORD must be set}@redis:6379/0
       - JWT_SECRET_KEY
       - SECRET_KEY
       - CARTUNEZ_MEDUSA_BASE_URL
       - CARTUNEZ_MEDUSA_API_KEY
       - CARTUNEZ_OUTBOUND_ENABLED=${CARTUNEZ_OUTBOUND_ENABLED:-false}
+      - DB_POOL_SIZE=2
+      - DB_MAX_OVERFLOW=2
     depends_on:
       backend:
         condition: service_healthy

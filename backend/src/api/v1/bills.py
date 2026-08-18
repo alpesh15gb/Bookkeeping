@@ -123,29 +123,55 @@ def create_bill(
         bill_cess += db_line.cess_amount
         bill_discount += db_line.discount
 
-    # Apply header-level discount and shipping
+    # Apply header-level discount and shipping (single compiler — same math as
+    # invoices). Header discounts and freight are allocated across lines and
+    # each line's tax is recomputed on its discounted base, so persisted lines
+    # and the header agree to the paise (audit H1); freight is taxed as part of
+    # the taxable base (audit H4); the payable rounds to paise (audit H2).
+    from src.domains.taxation.services import allocate_and_recompute_lines
     header_discount_rate = payload.discount_rate or Decimal("0.00")
     header_shipping = payload.shipping_charges or Decimal("0.0000")
 
     header_discount_amt = (bill_subtotal * header_discount_rate / Decimal("100")).quantize(Decimal("0.0001"))
-    adjusted_subtotal = bill_subtotal - header_discount_amt
     total_discount = bill_discount + header_discount_amt
 
-    # Proportional tax recalculation (matching invoice pattern)
-    tax_multiplier = Decimal("1.00") if bill_subtotal == 0 else adjusted_subtotal / bill_subtotal
-    final_cgst = (bill_cgst * tax_multiplier).quantize(Decimal("0.0001"))
-    final_sgst = (bill_sgst * tax_multiplier).quantize(Decimal("0.0001"))
-    final_igst = (bill_igst * tax_multiplier).quantize(Decimal("0.0001"))
-    final_utgst = (bill_utgst * tax_multiplier).quantize(Decimal("0.0001"))
-    final_cess = (bill_cess * tax_multiplier).quantize(Decimal("0.0001"))
+    computed = allocate_and_recompute_lines(
+        line_subtotals=[l.subtotal for l in db_lines],
+        line_gst_rates=[l.gst_rate for l in db_lines],
+        line_force_igst=[False] * len(db_lines),
+        line_cess_rates=[Decimal("0.00")] * len(db_lines),
+        subtotal=bill_subtotal,
+        discount_amount=header_discount_amt,
+        shipping_charges=header_shipping,
+        origin_state_code=origin_state_code,
+        place_of_supply_state_code=payload.pos_state_code,
+        is_rcm=False,
+        is_gst_inclusive=payload.is_gst_inclusive or False,
+    )
+    for db_line, res in zip(db_lines, computed["lines"]):
+        db_line.subtotal = res["taxable"]
+        db_line.cgst_amount = res["cgst"]
+        db_line.sgst_amount = res["sgst"]
+        db_line.igst_amount = res["igst"]
+        db_line.utgst_amount = res["utgst"]
+        db_line.cess_amount = res["cess"]
+        db_line.total = res["total"]
+    final_cgst = computed["taxes"]["cgst"]
+    final_sgst = computed["taxes"]["sgst"]
+    final_igst = computed["taxes"]["igst"]
+    final_utgst = computed["taxes"]["utgst"]
+    final_cess = computed["taxes"]["cess"]
 
-    raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
-    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    raw_total = (
+        computed["taxable_total"] + computed["shipping_added"]
+        + final_cgst + final_sgst + final_igst + final_utgst + final_cess
+    )
+    rounded_total = raw_total.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
     # TDS calculation
     tds_rate = payload.tds_rate or Decimal("0.00")
-    tds_amount = (adjusted_subtotal * tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
+    tds_amount = ((bill_subtotal - header_discount_amt) * tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
 
     bill_number = payload.bill_number
     if not bill_number:
@@ -278,24 +304,47 @@ def preview_bill(
         bill_cess += db_line.cess_amount
         bill_discount += db_line.discount
 
+    from src.domains.taxation.services import allocate_and_recompute_lines
     header_discount_rate = payload.discount_rate or Decimal("0.00")
     header_shipping = payload.shipping_charges or Decimal("0.0000")
     header_discount_amt = (bill_subtotal * header_discount_rate / Decimal("100")).quantize(Decimal("0.0001"))
-    adjusted_subtotal = bill_subtotal - header_discount_amt
     total_discount = bill_discount + header_discount_amt
-    tax_multiplier = Decimal("1.00") if bill_subtotal == 0 else adjusted_subtotal / bill_subtotal
-    final_cgst = (bill_cgst * tax_multiplier).quantize(Decimal("0.0001"))
-    final_sgst = (bill_sgst * tax_multiplier).quantize(Decimal("0.0001"))
-    final_igst = (bill_igst * tax_multiplier).quantize(Decimal("0.0001"))
-    final_utgst = (bill_utgst * tax_multiplier).quantize(Decimal("0.0001"))
-    final_cess = (bill_cess * tax_multiplier).quantize(Decimal("0.0001"))
-    raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
-    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    computed = allocate_and_recompute_lines(
+        line_subtotals=[l.subtotal for l in db_lines],
+        line_gst_rates=[l.gst_rate for l in db_lines],
+        line_force_igst=[False] * len(db_lines),
+        line_cess_rates=[Decimal("0.00")] * len(db_lines),
+        subtotal=bill_subtotal,
+        discount_amount=header_discount_amt,
+        shipping_charges=header_shipping,
+        origin_state_code=origin_state_code,
+        place_of_supply_state_code=payload.pos_state_code,
+        is_rcm=False,
+        is_gst_inclusive=payload.is_gst_inclusive or False,
+    )
+    for db_line, res in zip(db_lines, computed["lines"]):
+        db_line.subtotal = res["taxable"]
+        db_line.cgst_amount = res["cgst"]
+        db_line.sgst_amount = res["sgst"]
+        db_line.igst_amount = res["igst"]
+        db_line.utgst_amount = res["utgst"]
+        db_line.cess_amount = res["cess"]
+        db_line.total = res["total"]
+    final_cgst = computed["taxes"]["cgst"]
+    final_sgst = computed["taxes"]["sgst"]
+    final_igst = computed["taxes"]["igst"]
+    final_utgst = computed["taxes"]["utgst"]
+    final_cess = computed["taxes"]["cess"]
+    raw_total = (
+        computed["taxable_total"] + computed["shipping_added"]
+        + final_cgst + final_sgst + final_igst + final_utgst + final_cess
+    )
+    rounded_total = raw_total.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
     # TDS calculation (mirrors create_bill so preview matches the saved bill)
     tds_rate = payload.tds_rate or Decimal("0.00")
-    tds_amount = (adjusted_subtotal * tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
+    tds_amount = ((bill_subtotal - header_discount_amt) * tds_rate / Decimal("100")).quantize(Decimal("0.0001"))
 
     preview_bill = Bill(
         id=uuid.UUID("00000000-0000-0000-0000-000000000000"),
@@ -710,19 +759,42 @@ def update_bill(
             if str(existing_line.id) not in kept_ids:
                 db.delete(existing_line)
 
+        from src.domains.taxation.services import allocate_and_recompute_lines
         header_discount_rate = payload.discount_rate or Decimal("0.00")
         header_shipping = payload.shipping_charges or Decimal("0.0000")
         header_discount_amt = (bill_subtotal * header_discount_rate / Decimal("100")).quantize(Decimal("0.0001"))
-        adjusted_subtotal = bill_subtotal - header_discount_amt
         total_discount = bill_discount + header_discount_amt
-        tax_multiplier = Decimal("1.00") if bill_subtotal == 0 else adjusted_subtotal / bill_subtotal
-        final_cgst = (bill_cgst * tax_multiplier).quantize(Decimal("0.0001"))
-        final_sgst = (bill_sgst * tax_multiplier).quantize(Decimal("0.0001"))
-        final_igst = (bill_igst * tax_multiplier).quantize(Decimal("0.0001"))
-        final_utgst = (bill_utgst * tax_multiplier).quantize(Decimal("0.0001"))
-        final_cess = (bill_cess * tax_multiplier).quantize(Decimal("0.0001"))
-        raw_total = adjusted_subtotal + final_cgst + final_sgst + final_igst + final_utgst + final_cess + header_shipping
-        rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+        computed = allocate_and_recompute_lines(
+            line_subtotals=[l.subtotal for l in db_lines],
+            line_gst_rates=[l.gst_rate for l in db_lines],
+            line_force_igst=[False] * len(db_lines),
+            line_cess_rates=[Decimal("0.00")] * len(db_lines),
+            subtotal=bill_subtotal,
+            discount_amount=header_discount_amt,
+            shipping_charges=header_shipping,
+            origin_state_code=origin_state_code,
+            place_of_supply_state_code=payload.pos_state_code,
+            is_rcm=False,
+            is_gst_inclusive=payload.is_gst_inclusive or False,
+        )
+        for db_line, res in zip(db_lines, computed["lines"]):
+            db_line.subtotal = res["taxable"]
+            db_line.cgst_amount = res["cgst"]
+            db_line.sgst_amount = res["sgst"]
+            db_line.igst_amount = res["igst"]
+            db_line.utgst_amount = res["utgst"]
+            db_line.cess_amount = res["cess"]
+            db_line.total = res["total"]
+        final_cgst = computed["taxes"]["cgst"]
+        final_sgst = computed["taxes"]["sgst"]
+        final_igst = computed["taxes"]["igst"]
+        final_utgst = computed["taxes"]["utgst"]
+        final_cess = computed["taxes"]["cess"]
+        raw_total = (
+            computed["taxable_total"] + computed["shipping_added"]
+            + final_cgst + final_sgst + final_igst + final_utgst + final_cess
+        )
+        rounded_total = raw_total.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
         round_off = rounded_total - raw_total
 
         bill.subtotal = bill_subtotal

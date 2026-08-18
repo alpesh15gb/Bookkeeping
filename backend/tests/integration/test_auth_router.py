@@ -19,7 +19,8 @@ class TestAuthRouter:
             email="test@example.com",
             password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # secret
             full_name="Test User",
-            is_active=True
+            is_active=True,
+            email_verified=True
         )
         db_session.add(user)
         
@@ -61,7 +62,8 @@ class TestAuthRouter:
             email="test@example.com",
             password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # secret
             full_name="Test User",
-            is_active=True
+            is_active=True,
+            email_verified=True
         )
         db_session.add(user)
         
@@ -101,7 +103,8 @@ class TestAuthRouter:
             email="test@example.com",
             password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # secret
             full_name="Test User",
-            is_active=True
+            is_active=True,
+            email_verified=True
         )
         db_session.add(user)
         
@@ -166,7 +169,8 @@ class TestAuthRouter:
             email="test@example.com",
             password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # secret
             full_name="Test User",
-            is_active=True
+            is_active=True,
+            email_verified=True
         )
         db_session.add(user)
         
@@ -219,7 +223,8 @@ class TestAuthRouter:
             email="test@example.com",
             password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # secret
             full_name="Test User",
-            is_active=True
+            is_active=True,
+            email_verified=True
         )
         db_session.add(user)
         
@@ -273,7 +278,8 @@ class TestAuthRouter:
             email="test@example.com",
             password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",  # secret
             full_name="Test User",
-            is_active=True
+            is_active=True,
+            email_verified=True
         )
         db_session.add(user)
         
@@ -358,7 +364,8 @@ class TestAuthRouter:
             email="user1@example.com",
             password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
             full_name="User One",
-            is_active=True
+            is_active=True,
+            email_verified=True
         )
 
         user2 = User(
@@ -366,7 +373,8 @@ class TestAuthRouter:
             email="user2@example.com",
             password_hash="$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW",
             full_name="User Two",
-            is_active=True
+            is_active=True,
+            email_verified=True
         )
 
         db_session.add_all([user1, user2])

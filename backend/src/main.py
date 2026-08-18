@@ -64,7 +64,7 @@ logger = logging.getLogger("bookkeeping")
 # Keep this in sync with the single Alembic head. The ORM is allowed to start
 # so operators can still reach /health, but readiness becomes degraded until
 # migrations are applied. `create_all()` cannot add columns to existing tables.
-REQUIRED_SCHEMA_REVISION = "20260818_0001_purge_guard_bypass"
+REQUIRED_SCHEMA_REVISION = "20260818_0002_totp_pending_secret"
 
 
 def _database_schema_revision(connection) -> Optional[str]:
@@ -335,7 +335,9 @@ async def add_security_headers(request: Request, call_next):
 
 @app.middleware("http")
 async def add_request_id(request: Request, call_next):
-    request_id = str(uuid.uuid4())[:8]
+    # Full-length ID (32 hex chars): short IDs collide in busy logs and make
+    # support triage ambiguous.
+    request_id = str(uuid.uuid4())
     request.state.request_id = request_id
     token = request_id_var.set(request_id)
     try:
@@ -356,6 +358,12 @@ async def add_request_id(request: Request, call_next):
 # Global Exception Handlers (with CORS headers so browsers can read errors)
 # ---------------------------------------------------------------------------
 
+def _support_id(request: Request) -> str:
+    """Every error body carries the request's support ID so users can quote
+    it when reporting an issue."""
+    return getattr(request.state, "request_id", "-")
+
+
 def _add_cors_to_response(response: JSONResponse, request: Request):
     """Attach CORS headers to error responses so the frontend can read them."""
     origin = request.headers.get("origin")
@@ -374,7 +382,7 @@ def _add_cors_to_response(response: JSONResponse, request: Request):
 async def http_exception_handler(request: Request, exc: HTTPException):
     response = JSONResponse(
         status_code=exc.status_code,
-        content={"detail": exc.detail, "code": f"HTTP_{exc.status_code}"},
+        content={"detail": exc.detail, "code": f"HTTP_{exc.status_code}", "support_id": _support_id(request)},
     )
     return _add_cors_to_response(response, request)
 
@@ -383,7 +391,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 async def ledger_validation_handler(request: Request, exc: LedgerValidationError):
     response = JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content={"detail": str(exc), "code": "LEDGER_VALIDATION_ERROR"},
+        content={"detail": str(exc), "code": "LEDGER_VALIDATION_ERROR", "support_id": _support_id(request)},
     )
     return _add_cors_to_response(response, request)
 
@@ -416,7 +424,7 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
         code = "DATA_INTEGRITY_ERROR"
     response = JSONResponse(
         status_code=http_status,
-        content={"detail": detail, "code": code},
+        content={"detail": detail, "code": code, "support_id": _support_id(request)},
     )
     return _add_cors_to_response(response, request)
 
@@ -425,7 +433,7 @@ async def integrity_error_handler(request: Request, exc: IntegrityError):
 async def no_result_handler(request: Request, exc: NoResultFound):
     response = JSONResponse(
         status_code=status.HTTP_404_NOT_FOUND,
-        content={"detail": "The requested resource was not found.", "code": "NOT_FOUND"},
+        content={"detail": "The requested resource was not found.", "code": "NOT_FOUND", "support_id": _support_id(request)},
     )
     return _add_cors_to_response(response, request)
 
@@ -440,6 +448,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
         content={
             "detail": "An unexpected error occurred. Please try again.",
             "code": "INTERNAL_SERVER_ERROR",
+            "support_id": _support_id(request),
         },
     )
     return _add_cors_to_response(response, request)

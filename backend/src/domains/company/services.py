@@ -1,6 +1,7 @@
 import uuid
 import re
 import base64
+import hashlib
 from typing import Optional
 from datetime import date, timedelta
 from sqlalchemy.orm import Session
@@ -11,12 +12,15 @@ from src.infrastructure.database.models import NumberingSeries, TenantSetting, T
 from src.core.config import settings
 
 # Fernet configuration for secure credentials encryption
+#
+# Derive the 32-byte key with SHA-256 instead of truncating/padding the raw
+# secret: truncation wastes entropy and the 'x'-padding fallback made weak
+# secrets predictable. A SHA-256 digest of the secret is a proper KDF for
+# this purpose and works for any secret length.
 SECRET_KEY = settings.SECRET_KEY
 if not SECRET_KEY:
     raise ValueError("SECRET_KEY must be set in configuration for encryption")
-if len(SECRET_KEY) < 32:
-    SECRET_KEY = SECRET_KEY.ljust(32, "x")
-fernet_key = base64.urlsafe_b64encode(SECRET_KEY[:32].encode())
+fernet_key = base64.urlsafe_b64encode(hashlib.sha256(SECRET_KEY.encode()).digest())
 cipher_suite = Fernet(fernet_key)
 
 def encrypt_credential(val: str) -> str:

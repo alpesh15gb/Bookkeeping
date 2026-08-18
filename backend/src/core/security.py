@@ -5,6 +5,7 @@ All secrets are sourced from src.core.config (never hardcoded).
 """
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
+import uuid
 import jwt
 import bcrypt
 
@@ -204,6 +205,7 @@ def create_refresh_token(user_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     payload = {
         "sub": user_id,
+        "jti": str(uuid.uuid4()),
         "exp": expire,
         "iat": datetime.now(timezone.utc),
         "type": "refresh",

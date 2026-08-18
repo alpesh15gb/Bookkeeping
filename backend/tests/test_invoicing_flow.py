@@ -145,8 +145,10 @@ class TestInvoicingFlow(unittest.TestCase):
         data = first.json()
         self.assertTrue(data["invoice_number"].startswith("INV/"))
         self.assertTrue(data["invoice_number"].endswith("/0001"))
-        self.assertEqual(float(data["round_off"]), 0.35)
-        self.assertEqual(float(data["total"]), 119.00)
+        # Paise-accurate totals (GST invoices are paise-legal): 100.55 +
+        # 18.10 GST = 118.65, no whole-rupee rounding, no round_off.
+        self.assertEqual(float(data["round_off"]), 0.0)
+        self.assertEqual(float(data["total"]), 118.65)
         self.assertEqual(data["status"], "POSTED")
 
         second = self.client.post("/api/v1/invoices", json=payload, headers=self.headers)

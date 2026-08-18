@@ -76,6 +76,12 @@ jobs:
         working-directory: backend
         run: python -m compileall -q src scripts pg_tests
 
+      - name: Dependency audit (pip-audit, fail on any advisory)
+        working-directory: backend
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
       - name: Alembic single-head validation
         working-directory: backend
         run: python scripts/ci_check_single_head.py

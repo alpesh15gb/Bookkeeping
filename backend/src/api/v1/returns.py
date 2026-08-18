@@ -134,7 +134,7 @@ def create_sales_return(
         sr_cess += cess_amount
 
     raw_total = sr_subtotal + sr_cgst + sr_sgst + sr_igst + sr_utgst + sr_cess
-    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    rounded_total = raw_total.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
     sr = SalesReturn(
@@ -344,7 +344,7 @@ def create_purchase_return(
         pr_cess += cess_amount
 
     raw_total = pr_subtotal + pr_cgst + pr_sgst + pr_igst + pr_utgst + pr_cess
-    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    rounded_total = raw_total.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
     pr = PurchaseReturn(

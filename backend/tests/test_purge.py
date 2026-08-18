@@ -72,7 +72,7 @@ _GUARD_TRIGGERS = [
 
 
 def _dev_otp(response) -> str:
-    match = re.search(r"OTP code: (\d{6})", response.json().get("detail", ""))
+    match = re.search(r"OTP code: (\d{8})", response.json().get("detail", ""))
     assert match, f"no dev OTP in response: {response.text}"
     return match.group(1)
 

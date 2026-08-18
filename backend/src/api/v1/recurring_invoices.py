@@ -306,7 +306,7 @@ def generate_invoice_now(
         inv_cess += db_line.cess_amount
 
     raw_total = inv_subtotal + inv_cgst + inv_sgst + inv_igst + inv_utgst + inv_cess
-    rounded_total = raw_total.quantize(Decimal("1"), rounding="ROUND_HALF_UP")
+    rounded_total = raw_total.quantize(Decimal("0.01"), rounding="ROUND_HALF_UP")
     round_off = rounded_total - raw_total
 
     invoice = Invoice(

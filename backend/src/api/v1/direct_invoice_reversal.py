@@ -163,6 +163,10 @@ def cancel_invoice_for_direct_correction(
         round_off_account_id=round_off_account_id,
         round_off_amount=invoice.round_off,
         is_rcm=invoice.is_rcm,
+        tds_account_id=resolver.resolve("tds_receivable") if invoice.tds_amount and invoice.tds_amount > 0 else None,
+        tds_amount=invoice.tds_amount or Decimal("0"),
+        tcs_account_id=resolver.resolve("liability.tcs") if invoice.tcs_amount and invoice.tcs_amount > 0 else None,
+        tcs_amount=invoice.tcs_amount or Decimal("0"),
     )
     reversal_entry = commit_ledger_draft(db, tenant_id, ledger_draft)
     link_cancel_reversal(db, tenant_id, "INVOICE", invoice.id, reversal_entry, current_user.id)

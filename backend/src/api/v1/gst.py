@@ -30,8 +30,13 @@ def _b2cl_threshold(issue_date: date) -> Decimal:
     return Decimal("100000.00") if issue_date >= date(2024, 8, 1) else Decimal("250000.00")
 
 @router.get("/validate-gstin/{gstin}")
-def validate_gstin_format(gstin: str):
-    """Validates GSTIN format (15 characters, checksum)."""
+def validate_gstin_format(
+    gstin: str,
+    db: Session = Depends(get_db_session),
+    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+):
+    """Validates GSTIN format (15 characters, checksum). Auth-gated so the
+    endpoint cannot be used as an unauthenticated format probe."""
     from src.domains.company.services import is_valid_gstin
     if not is_valid_gstin(gstin):
         raise HTTPException(status_code=400, detail="Invalid GSTIN format.")
@@ -306,19 +311,53 @@ def _fix_residual(rows: list[dict], key: str, target: Decimal) -> None:
 def _discounted_lines(inv: Invoice) -> list[dict]:
     """Per-line taxable/tax values after proportional header-discount allocation.
 
-    Header discounts are stored on the invoice only: line taxes are computed
-    pre-discount and the invoice scales the header totals by
+    Invoices created before the single-compiler fix store lines with
+    PRE-discount taxable/tax; the header scales the totals by
     (subtotal - discount) / subtotal. GSTN filings present per-item txval and
-    tax, so the discount must be allocated across lines (subtotal-weighted)
-    and each bucket residual-fixed to the invoice's own discounted taxable
-    value and scaled header taxes. Without this, a header discount overstates
-    taxable value and output tax in GSTR-1 and the offline-tool file.
+    tax, so for those rows the discount is allocated across lines
+    (subtotal-weighted) and each bucket residual-fixed to the invoice's own
+    discounted taxable value and scaled header taxes.
+
+    Invoices created after the fix already persist the allocated (discounted,
+    freight-inclusive) line values via allocate_and_recompute_lines, so those
+    rows pass through as-is and are only residual-fixed to the header — never
+    discounted a second time.
     """
     lines = list(inv.lines)
     if not lines:
         return []
     subtotal = sum((Decimal(str(l.subtotal or 0)) for l in lines), Decimal("0"))
-    taxable_total = (subtotal - Decimal(str(inv.discount_total or 0))).quantize(_PAISE, rounding=ROUND_HALF_UP)
+    discount = Decimal(str(inv.discount_total or 0))
+    shipping = Decimal(str(inv.shipping_charges or 0))
+    header_subtotal = Decimal(str(inv.subtotal or 0))
+
+    # Already allocated (new rows): line subtotals sum to the net taxable
+    # (subtotal - discount [+ freight for non-inclusive]), not the gross.
+    already_allocated = abs(subtotal - header_subtotal) > Decimal("0.01")
+
+    if already_allocated:
+        taxable_total = subtotal.quantize(_PAISE, rounding=ROUND_HALF_UP)
+        rows = []
+        for l in lines:
+            rows.append({
+                "line": l,
+                "taxable": Decimal(str(l.subtotal or 0)).quantize(_PAISE, rounding=ROUND_HALF_UP),
+                "cgst": Decimal(str(l.cgst_amount or 0)).quantize(_PAISE, rounding=ROUND_HALF_UP),
+                "sgst": Decimal(str(l.sgst_amount or 0)).quantize(_PAISE, rounding=ROUND_HALF_UP),
+                "igst": Decimal(str(l.igst_amount or 0)).quantize(_PAISE, rounding=ROUND_HALF_UP),
+                "utgst": Decimal(str(l.utgst_amount or 0)).quantize(_PAISE, rounding=ROUND_HALF_UP),
+                "cess": Decimal(str(l.cess_amount or 0)).quantize(_PAISE, rounding=ROUND_HALF_UP),
+            })
+        _fix_residual(rows, "taxable", taxable_total)
+        if not inv.is_rcm:
+            _fix_residual(rows, "cgst", inv.cgst_amount or 0)
+            _fix_residual(rows, "sgst", inv.sgst_amount or 0)
+            _fix_residual(rows, "igst", inv.igst_amount or 0)
+            _fix_residual(rows, "utgst", inv.utgst_amount or 0)
+            _fix_residual(rows, "cess", inv.cess_amount or 0)
+        return rows
+
+    taxable_total = (header_subtotal - discount).quantize(_PAISE, rounding=ROUND_HALF_UP)
     factor = (taxable_total / subtotal) if subtotal else Decimal("0")
     rows = []
     for l in lines:
@@ -347,7 +386,17 @@ def _discounted_lines(inv: Invoice) -> list[dict]:
 
 
 def _invoice_taxable(inv: Invoice) -> Decimal:
-    """Invoice-level taxable value after header discount."""
+    """Invoice-level taxable value after header discount.
+
+    For invoices created before the single-compiler fix this is
+    subtotal - discount_total (freight was added after tax and is not part of
+    the taxable base). New invoices persist already-allocated lines, so the
+    taxable equals the sum of those lines (which includes taxed freight).
+    """
+    lines = list(inv.lines)
+    subtotal = sum((Decimal(str(l.subtotal or 0)) for l in lines), Decimal("0"))
+    if abs(subtotal - Decimal(str(inv.subtotal or 0))) > Decimal("0.01"):
+        return subtotal.quantize(_PAISE, rounding=ROUND_HALF_UP)
     return (Decimal(str(inv.subtotal or 0)) - Decimal(str(inv.discount_total or 0))).quantize(
         _PAISE, rounding=ROUND_HALF_UP
     )
@@ -358,7 +407,7 @@ def export_gstr1_offline_json(
     start_date: date = Query(...),
     end_date: date = Query(...),
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view")),
+    tenant_id: uuid.UUID = Depends(enforce_permission("gst:report_view")),
 ):
     """Generate GST Returns Offline Tool JSON for GSTR-1/IFF review and upload."""
     if start_date > end_date:
@@ -395,7 +444,6 @@ def export_gstr1_offline_json(
         inv.invoice_number
         for inv in invoices
         if (inv.supply_type or "DOMESTIC") != "DOMESTIC"
-        or any(Decimal(str(line.gst_rate or 0)) == 0 for line in inv.lines)
     })
     if unsupported_invoices:
         sample = ", ".join(unsupported_invoices[:10])
@@ -404,7 +452,7 @@ def export_gstr1_offline_json(
             status_code=422,
             detail=(
                 "GST Offline JSON currently supports taxable domestic supplies only. "
-                "Export/SEZ and nil/exempt/non-GST supplies need statutory section classification "
+                "Export/SEZ supplies need statutory section classification "
                 f"before export. Review: {sample}{suffix}"
             ),
         )
@@ -419,7 +467,11 @@ def export_gstr1_offline_json(
         "cdnr": [],
         "cdnur": [],
         "hsn": {"data": []},
+        # 0% (nil/exempt) domestic lines are aggregated here so mixed
+        # taxable + nil invoices can be filed instead of being rejected.
+        "nil": {"inv_typ": "OTH", "nil_amt": 0.0, "expt_amt": 0.0, "ngsup_amt": 0.0, "sply_ty": "OTH"},
     }
+    nil_amount = Decimal("0.00")
     b2b_by_gstin: dict[str, list] = {}
     b2cs: dict[tuple[str, Decimal], dict] = {}
 
@@ -437,6 +489,7 @@ def export_gstr1_offline_json(
                 },
             }
             for index, dl in enumerate(_discounted_lines(inv), 1)
+            if Decimal(str(dl["line"].gst_rate or 0)) != 0
         ]
 
     for inv in invoices:
@@ -460,6 +513,11 @@ def export_gstr1_offline_json(
             continue
         for dl in _discounted_lines(inv):
             line = dl["line"]
+            if Decimal(str(line.gst_rate or 0)) == 0:
+                # Nil-rated supply: no tax, and the GSTN offline tool wants it
+                # in the nil section rather than a B2CS row.
+                nil_amount += dl["taxable"]
+                continue
             key = (inv.pos_state_code, Decimal(str(line.gst_rate)))
             row = b2cs.setdefault(key, {
                 "sply_ty": "INTER" if is_interstate else "INTRA",
@@ -479,6 +537,8 @@ def export_gstr1_offline_json(
         for amount_key in ("txval", "iamt", "camt", "samt", "csamt"):
             row[amount_key] = _gst_amount(row[amount_key])
         payload["b2cs"].append(row)
+    if nil_amount:
+        payload["nil"]["nil_amt"] = _gst_amount(nil_amount)
 
     report = get_gstr1_report(start_date=start_date, end_date=end_date, db=db, tenant_id=tenant_id)
     for index, hsn in enumerate(report.hsn_summary, 1):
@@ -714,7 +774,7 @@ def export_gstr1(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("gst:report_view"))
 ):
     """Generates an Excel workbook for GSTR-1 returns, importable by the GST Offline Tool."""
     report = get_gstr1_report(start_date=start_date, end_date=end_date, db=db, tenant_id=tenant_id)
@@ -1016,7 +1076,7 @@ def export_gstr2(
     start_date: Optional[date] = None,
     end_date: Optional[date] = None,
     db: Session = Depends(get_db_session),
-    tenant_id: uuid.UUID = Depends(enforce_permission("invoice:view"))
+    tenant_id: uuid.UUID = Depends(enforce_permission("gst:report_view"))
 ):
     """Generates an Excel workbook for GSTR-2 inward purchase supplies (bills)."""
     origin_state_code = resolve_origin_state_code(db, tenant_id)

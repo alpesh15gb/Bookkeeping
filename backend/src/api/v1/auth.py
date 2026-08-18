@@ -62,29 +62,62 @@ def _get_redis_client():
         return None
 
 
-def _revoke_refresh_token(user_id: str, token: str):
+def _extract_refresh_jti(token: str) -> Optional[str]:
+    try:
+        payload = decode_token(token, expected_type="refresh")
+        return payload.get("jti")
+    except Exception:
+        return None
+
+
+def _register_refresh_jti(user_id: str, token: str):
+    """Add a refresh token's jti to the user's allow-list."""
+    jti = _extract_refresh_jti(token)
+    if not jti:
+        return
     r = _get_redis_client()
     if r:
         try:
-            r.sadd(f"refresh_tokens:{user_id}", token)
-            r.expire(f"refresh_tokens:{user_id}", settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
+            r.sadd(f"refresh_jtis:{user_id}", jti)
+            r.expire(f"refresh_jtis:{user_id}", settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
         except Exception:
             pass
 
 
-def _is_refresh_token_revoked(user_id: str, token: str) -> bool:
+def _remove_refresh_jti(user_id: str, token: str):
+    """Remove a refresh token's jti from the user's allow-list."""
+    jti = _extract_refresh_jti(token)
+    if not jti:
+        return
     r = _get_redis_client()
     if r:
         try:
-            return bool(r.sismember(f"refresh_tokens:{user_id}", token))
+            r.srem(f"refresh_jtis:{user_id}", jti)
         except Exception:
             pass
-    # In production, fail closed: reject token if Redis is unavailable
-    # In development/test, fail open to allow testing without Redis
+
+
+def _is_refresh_jti_valid(user_id: str, token: str) -> bool:
+    """A refresh token is valid only if its jti is on the user's allow-list.
+
+    This fails closed: a token whose jti is unknown (or whose allow-list
+    cannot be consulted because Redis is down) is rejected, so a stolen or
+    flushed token cannot be replayed. In test/dev without Redis we fall back
+    to the JWT signature alone.
+    """
+    jti = _extract_refresh_jti(token)
+    if not jti:
+        return False
+    r = _get_redis_client()
+    if r:
+        try:
+            return bool(r.sismember(f"refresh_jtis:{user_id}", jti))
+        except Exception:
+            pass
     if settings.APP_ENV == "production":
-        logger.critical("Redis unavailable during token revocation check — failing closed")
-        return True
-    return False
+        logger.critical("Redis unavailable during refresh jti check — failing closed")
+        return False
+    return True
 
 
 def _log_audit(db: Session, action: str, user_id: str = None, tenant_id: str = None, details: dict = None, request: Request = None):
@@ -125,6 +158,13 @@ def register_user(request: Request, payload: UserRegister, db: Session = Depends
         email_verify_token=email_verify_token_hash,
         email_verify_expires=email_verify_expires,
     )
+    # Dev/test environments have no SMTP, so there is no way to deliver the
+    # verification link; auto-verify there so local registration stays
+    # usable. Production always requires the emailed link.
+    if not settings.is_production:
+        user.email_verified = True
+        user.email_verify_token = None
+        user.email_verify_expires = None
     db.add(user)
     db.flush() # Flushes to allocate user ID
 
@@ -211,6 +251,14 @@ def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_d
             detail="User account is deactivated."
         )
 
+    if not user.email_verified:
+        _log_audit(db, "login.blocked", user_id=str(user.id), details={"reason": "email_unverified"}, request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email is not verified. Please verify your email before signing in."
+        )
+
     # 5. Check if 2FA (TOTP) is enabled
     if user.totp_enabled:
         challenge_token = create_2fa_challenge_token(str(user.id))
@@ -239,6 +287,7 @@ def login_user(request: Request, payload: UserLogin, db: Session = Depends(get_d
     # 3. Create session tokens
     access_token = create_access_token(user_id=str(user.id), scopes=scopes)
     refresh_token = create_refresh_token(user_id=str(user.id))
+    _register_refresh_jti(str(user.id), refresh_token)
 
     _log_audit(db, "login.success", user_id=str(user.id), request=request)
     db.commit()
@@ -271,7 +320,7 @@ def refresh_token(
             detail="Could not validate refresh credentials."
         )
 
-    if _is_refresh_token_revoked(user_id_str, token):
+    if not _is_refresh_jti_valid(user_id_str, token):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Refresh token has been revoked."
@@ -299,8 +348,9 @@ def refresh_token(
     new_access_token = create_access_token(user_id=str(user.id), scopes=scopes)
     new_refresh_token = create_refresh_token(user_id=str(user.id))
 
-    # Revoke the old refresh token on rotation
-    _revoke_refresh_token(str(user.id), token)
+    # Rotate: drop the old jti from the allow-list, register the new one
+    _remove_refresh_jti(str(user.id), token)
+    _register_refresh_jti(str(user.id), new_refresh_token)
 
     return TokenResponse(
         access_token=new_access_token,
@@ -326,7 +376,7 @@ def logout_user(
         payload = decode_token(refresh_token_str, expected_type="refresh")
         user_id = payload.get("sub")
         if user_id:
-            _revoke_refresh_token(user_id, refresh_token_str)
+            _remove_refresh_jti(user_id, refresh_token_str)
     except Exception:
         pass
     return {"detail": "Logged out successfully."}
@@ -539,12 +589,28 @@ class TwoFactorTokenPayload(BaseModel):
 @limiter.limit("3/minute")
 def enable_2fa(
     request: Request,
+    payload: TwoFactorTokenPayload | None = None,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
 ):
-    from src.domains.auth.totp_service import generate_totp_secret, get_totp_uri, generate_qr_base64
+    from src.domains.auth.totp_service import generate_totp_secret, get_totp_uri, generate_qr_base64, verify_totp_spend
+
+    # Rotating an already-active 2FA setup requires proof of control of the
+    # CURRENT authenticator first; otherwise a stolen access token could
+    # silently reset the user's second factor and lock them out.
+    if current_user.totp_enabled:
+        if not payload or not payload.token:
+            raise HTTPException(status_code=400, detail="Current 2FA code is required to rotate the authenticator.")
+        if not current_user.totp_secret or not verify_totp_spend(
+            current_user.totp_secret, payload.token, str(current_user.id)
+        ):
+            raise HTTPException(status_code=400, detail="Invalid 2FA token.")
+
+    # Stage the new secret in the pending column; it only becomes live after
+    # /2fa/verify succeeds, so an abandoned setup never breaks an active
+    # authenticator and first-time enrollment stays safe.
     secret = generate_totp_secret()
-    current_user.totp_secret = secret
+    current_user.totp_pending_secret = secret
     db.commit()
     uri = get_totp_uri(secret, current_user.email)
     qr = generate_qr_base64(uri)
@@ -559,9 +625,12 @@ def verify_2fa(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
 ):
-    from src.domains.auth.totp_service import verify_totp
-    if not current_user.totp_secret or not verify_totp(current_user.totp_secret, payload.token):
+    from src.domains.auth.totp_service import verify_totp_spend
+    pending = current_user.totp_pending_secret or current_user.totp_secret
+    if not pending or not verify_totp_spend(pending, payload.token, str(current_user.id)):
         raise HTTPException(status_code=400, detail="Invalid 2FA token.")
+    current_user.totp_secret = pending
+    current_user.totp_pending_secret = None
     current_user.totp_enabled = True
     db.commit()
     return {"detail": "2FA enabled successfully."}
@@ -575,11 +644,14 @@ def disable_2fa(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db_session)
 ):
-    from src.domains.auth.totp_service import verify_totp
-    if not current_user.totp_secret or not verify_totp(current_user.totp_secret, payload.token):
+    from src.domains.auth.totp_service import verify_totp_spend
+    if not current_user.totp_secret or not verify_totp_spend(
+        current_user.totp_secret, payload.token, str(current_user.id)
+    ):
         raise HTTPException(status_code=400, detail="Invalid 2FA token.")
     current_user.totp_enabled = False
     current_user.totp_secret = None
+    current_user.totp_pending_secret = None
     db.commit()
     return {"detail": "2FA disabled successfully."}
 
@@ -642,9 +714,9 @@ def verify_2fa_challenge(
     if not user or not user.is_active:
         raise HTTPException(status_code=401, detail="Invalid challenge token or inactive user.")
 
-    # 4. Verify TOTP code
-    from src.domains.auth.totp_service import verify_totp
-    if not user.totp_secret or not verify_totp(user.totp_secret, totp_code):
+    # 4. Verify TOTP code (single-use: a captured code cannot be replayed)
+    from src.domains.auth.totp_service import verify_totp_spend
+    if not user.totp_secret or not verify_totp_spend(user.totp_secret, totp_code, str(user.id)):
         _log_audit(db, "login.2fa.failed", user_id=str(user.id), details={"reason": "invalid_code"}, request=request)
         db.commit()
         raise HTTPException(status_code=401, detail="Invalid 2FA code.")
@@ -677,6 +749,7 @@ def verify_2fa_challenge(
     # 7. Create access and refresh tokens
     access_token = create_access_token(user_id=str(user.id), scopes=scopes)
     refresh_token = create_refresh_token(user_id=str(user.id))
+    _register_refresh_jti(str(user.id), refresh_token)
 
     _log_audit(db, "login.success", user_id=str(user.id), details={"method": "2fa"}, request=request)
     db.commit()

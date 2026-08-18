@@ -24,6 +24,13 @@ class Settings(BaseSettings):
     # Database
     # ----------------------------------------------------------------
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./bookkeeping.db")
+    # Connection pool caps per process. The API, Celery worker, and beat each
+    # create their own engine, so the real ceiling is these × process count;
+    # keep them conservative and tune per service via env in compose.
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 5
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
 
     # ----------------------------------------------------------------
     # Redis

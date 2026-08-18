@@ -75,6 +75,7 @@ class User(Base):
     email_verify_token = Column(String(255))
     email_verify_expires = Column(DateTime(timezone=True))
     totp_secret = Column(String(32))
+    totp_pending_secret = Column(String(32))
     totp_enabled = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)
     updated_at = Column(DateTime(timezone=True), nullable=False, default=_now, onupdate=_now)

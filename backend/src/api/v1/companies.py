@@ -580,8 +580,8 @@ def request_purge_otp(
     current_user: User = Depends(get_current_user),
     tenant_id: uuid.UUID = Depends(enforce_permission("tenant:update"))
 ):
-    """Generates a 6-digit OTP to authorize purging of the company data, and emails it to the owner."""
-    otp = f"{secrets.randbelow(900000) + 100000}"
+    """Generates an 8-digit OTP to authorize purging of the company data, and emails it to the owner."""
+    otp = f"{secrets.randbelow(90000000) + 10000000}"
     
     import redis
     redis_client = None
@@ -694,9 +694,13 @@ def verify_and_execute_purge(
     except Exception as e:
         db.rollback()
         logger.error(f"Failed to purge company data: {e}")
+        # Never interpolate the raw exception into the response: it can leak
+        # connection strings, table internals, or file paths to the client.
+        # The support_id (added by the global exception handler) is what the
+        # user quotes when reporting the failure.
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"An error occurred while purging company data: {str(e)}"
+            detail="An error occurred while purging company data. Please try again or contact support."
         )
 
     return {
