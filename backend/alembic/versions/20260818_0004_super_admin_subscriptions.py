@@ -17,8 +17,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Add super_admin flag to users
-    op.add_column('users', sa.Column('is_super_admin', sa.Boolean(), server_default='false', nullable=False))
+    # Add super_admin flag to users (idempotent — may already exist from manual psql)
+    conn = op.get_bind()
+    result = conn.execute(sa.text(
+        "SELECT 1 FROM information_schema.columns WHERE table_name='users' AND column_name='is_super_admin'"
+    )).fetchone()
+    if not result:
+        op.add_column('users', sa.Column('is_super_admin', sa.Boolean(), server_default='false', nullable=False))
     
     # Create subscription_plans table
     op.create_table(
