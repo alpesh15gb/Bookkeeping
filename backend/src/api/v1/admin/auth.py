@@ -87,6 +87,23 @@ async def admin_login(request: Request, payload: AdminLoginRequest, db: Session 
             detail="Account is deactivated."
         )
 
+    if not user.email_verified:
+        _log_audit(db, "admin.login.denied", user_id=str(user.id), details={"reason": "email_not_verified"}, request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Email is not verified."
+        )
+
+    # Check account lockout
+    if user.locked_until and user.locked_until > datetime.now(timezone.utc):
+        _log_audit(db, "admin.login.blocked", user_id=str(user.id), details={"reason": "locked"}, request=request)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Account is temporarily locked due to too many failed login attempts."
+        )
+
     if not verify_password(payload.password, user.password_hash):
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
         if user.failed_login_attempts >= 5:

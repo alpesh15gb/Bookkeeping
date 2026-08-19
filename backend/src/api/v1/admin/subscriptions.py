@@ -264,6 +264,8 @@ async def create_or_update_subscription(
 
     sub = db.query(TenantSubscription).filter(TenantSubscription.tenant_id == tenant_id).first()
     now = datetime.now(timezone.utc)
+    old_plan_id = None
+    old_status = None
 
     if sub:
         # Update existing
@@ -297,9 +299,9 @@ async def create_or_update_subscription(
         tenant_id=tenant_id,
         subscription_id=sub.id if sub else None,
         action=action,
-        old_plan_id=old_plan_id if sub and action == "upgraded" else None,
+        old_plan_id=old_plan_id if action == "upgraded" else None,
         new_plan_id=payload.plan_id,
-        old_status=old_status if sub else None,
+        old_status=old_status,
         new_status="active",
         admin_id=admin.id,
         reason=f"Admin {action} subscription",

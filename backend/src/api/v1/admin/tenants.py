@@ -79,7 +79,7 @@ async def list_tenants(
     page_size: int = Query(20, ge=1, le=100),
     search: Optional[str] = None,
     status_filter: Optional[str] = None,  # active, trialing, suspended, cancelled
-    plan: Optional[str] = None,
+    plan_filter: Optional[str] = None,
 ):
     """List all tenants with subscription info, paginated and filterable."""
     query = db.query(Tenant).filter(Tenant.deleted_at == None)
@@ -93,6 +93,24 @@ async def list_tenants(
             (Tenant.gstin.ilike(search_term))
         )
 
+    # Pre-filter by subscription status at DB level for correct pagination
+    if status_filter:
+        subq = db.query(TenantSubscription.tenant_id).filter(
+            TenantSubscription.status == status_filter
+        ).subquery()
+        query = query.filter(Tenant.id.in_(subq))
+
+    if plan_filter:
+        plan_row = db.query(SubscriptionPlan).filter(SubscriptionPlan.name == plan_filter).first()
+        if plan_row:
+            subq = db.query(TenantSubscription.tenant_id).filter(
+                TenantSubscription.plan_id == plan_row.id
+            ).subquery()
+            query = query.filter(Tenant.id.in_(subq))
+        else:
+            # Plan not found — return empty
+            return PaginatedTenants(items=[], total=0, page=page, page_size=page_size, pages=0)
+
     total = query.count()
     tenants = query.order_by(desc(Tenant.created_at)).offset((page - 1) * page_size).limit(page_size).all()
 
@@ -100,15 +118,7 @@ async def list_tenants(
     for t in tenants:
         # Get subscription
         sub = db.query(TenantSubscription).filter(TenantSubscription.tenant_id == t.id).first()
-        plan = db.query(SubscriptionPlan).filter(SubscriptionPlan.id == sub.plan_id).first() if sub else None
-
-        # Filter by status
-        if status_filter and (not sub or sub.status != status_filter):
-            continue
-
-        # Filter by plan
-        if plan and plan.name != plan:
-            continue
+        sub_plan = db.query(SubscriptionPlan).filter(SubscriptionPlan.id == sub.plan_id).first() if sub else None
 
         # Counts
         user_count = db.query(TenantMembership).filter(
@@ -126,7 +136,7 @@ async def list_tenants(
             user_count=user_count,
             invoice_count=invoice_count,
             subscription_status=sub.status if sub else None,
-            plan_name=plan.display_name if plan else None,
+            plan_name=sub_plan.display_name if sub_plan else None,
             created_at=t.created_at.isoformat() if t.created_at else None,
         ))
 

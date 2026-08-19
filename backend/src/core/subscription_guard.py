@@ -76,9 +76,11 @@ def require_active_subscription(
 
     if sub.status == "trialing":
         if sub.trial_end and sub.trial_end < now:
+            from datetime import timedelta
             # Trial expired → move to past_due
             sub.status = "past_due"
-            sub.grace_period_end = now + (sub.grace_period_end - sub.trial_end if sub.grace_period_end else __import__("datetime").timedelta(days=sub.grace_period_days))
+            grace_length = (sub.grace_period_end - sub.trial_end) if sub.grace_period_end else timedelta(days=sub.grace_period_days)
+            sub.grace_period_end = now + grace_length
             sub.current_period_end = sub.grace_period_end
             db.commit()
             raise HTTPException(
