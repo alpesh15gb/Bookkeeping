@@ -15,7 +15,7 @@ from sqlalchemy import (
     ForeignKey, Text, JSON, Integer, Index, UniqueConstraint, CheckConstraint, text, Uuid,
     inspect,
 )
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship, Session
 from sqlalchemy import event
 from src.core.database import Base
