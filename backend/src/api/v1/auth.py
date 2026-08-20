@@ -734,11 +734,12 @@ def verify_2fa_challenge(
         if not user_id_str:
             raise HTTPException(status_code=401, detail="Invalid challenge token.")
         user_id = uuid.UUID(user_id_str)
-    except jwt.ExpiredSignatureError:
-        _log_audit(db, "login.2fa.failed", details={"reason": "expired"}, request=request)
-        db.commit()
-        raise HTTPException(status_code=401, detail="Challenge token has expired.")
     except Exception as e:
+        err_lower = str(e).lower()
+        if "expired" in err_lower or "exp" in err_lower:
+            _log_audit(db, "login.2fa.failed", details={"reason": "expired"}, request=request)
+            db.commit()
+            raise HTTPException(status_code=401, detail="Challenge token has expired.")
         _log_audit(db, "login.2fa.failed", details={"reason": "invalid_token", "error": str(e)}, request=request)
         db.commit()
         raise HTTPException(status_code=401, detail="Invalid challenge token.")

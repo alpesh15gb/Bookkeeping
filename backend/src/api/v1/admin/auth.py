@@ -108,7 +108,6 @@ async def admin_login(request: Request, payload: AdminLoginRequest, db: Session 
         user.failed_login_attempts = (user.failed_login_attempts or 0) + 1
         if user.failed_login_attempts >= 5:
             user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=15)
-        db.commit()
         _log_audit(db, "admin.login.failed", user_id=str(user.id), request=request)
         db.commit()
         raise HTTPException(
