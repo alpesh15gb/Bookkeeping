@@ -1,6 +1,6 @@
 """super admin and subscriptions tables
 
-Revision ID: 0004_super_admin_subscriptions
+Revision ID: 20260818_0004_super_admin_subscriptions
 Revises: 20260818_0002_totp_pending_secret
 Create Date: 2026-08-19
 
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 
 # revision identifiers
-revision = '2004_super_admin_subscriptions'
+revision = '20260818_0004_super_admin_subscriptions'
 down_revision = '20260818_0002_totp_pending_secret'
 branch_labels = None
 depends_on = None
