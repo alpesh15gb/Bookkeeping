@@ -4,6 +4,7 @@ Separate from tenant-level auth — super admins can access all tenants.
 """
 import uuid
 import logging
+import redis as _redis
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -18,17 +19,86 @@ from src.core.security import (
     create_refresh_token,
     get_password_hash,
     verify_password,
-    _revoked_token_check,
-    _rotate_refresh_token,
+    decode_token,
 )
 from src.infrastructure.database.models import User, TenantMembership
 from src.api.deps import get_current_user
-from src.common.audit_log import _log_audit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin Auth"])
 
 
+# ── Redis helpers for refresh-token JTI allow-list ──────────────────────
+def _get_redis_client():
+    try:
+        r = _redis.from_url(settings.REDIS_URL, decode_responses=True, socket_connect_timeout=1)
+        r.ping()
+        return r
+    except Exception:
+        return None
+
+
+def _extract_refresh_jti(token: str) -> Optional[str]:
+    try:
+        payload = decode_token(token, expected_type="refresh")
+        return payload.get("jti")
+    except Exception:
+        return None
+
+
+def _register_refresh_jti(user_id: str, token: str):
+    jti = _extract_refresh_jti(token)
+    if not jti:
+        return
+    r = _get_redis_client()
+    if r:
+        try:
+            r.sadd(f"refresh_jtis:{user_id}", jti)
+            r.expire(f"refresh_jtis:{user_id}", settings.REFRESH_TOKEN_EXPIRE_DAYS * 86400)
+        except Exception:
+            pass
+
+
+def _remove_refresh_jti(user_id: str, token: str):
+    jti = _extract_refresh_jti(token)
+    if not jti:
+        return
+    r = _get_redis_client()
+    if r:
+        try:
+            r.srem(f"refresh_jtis:{user_id}", jti)
+        except Exception:
+            pass
+
+
+def _is_refresh_jti_valid(user_id: str, token: str) -> bool:
+    jti = _extract_refresh_jti(token)
+    if not jti:
+        return False
+    r = _get_redis_client()
+    if r:
+        try:
+            return r.sismember(f"refresh_jtis:{user_id}", jti)
+        except Exception:
+            return False
+    return True  # no Redis — fall back to allowing (dev/test)
+
+
+# ── Admin audit log helper ──────────────────────────────────────────────
+def _log_audit(db: Session, action: str, user_id: str = None, request: Request = None, details: dict = None):
+    """Lightweight audit entry — no tenant_id for admin actions."""
+    from src.infrastructure.database.models import AuditLog
+    entry = AuditLog(
+        id=str(uuid.uuid4()),
+        action=action,
+        user_id=user_id,
+        details=details or {},
+        ip_address=request.client.host if request and request.client else None,
+    )
+    db.add(entry)
+
+
+# ── Request / response schemas ──────────────────────────────────────────
 class AdminLoginRequest(BaseModel):
     email: EmailStr
     password: str
@@ -121,12 +191,10 @@ async def admin_login(request: Request, payload: AdminLoginRequest, db: Session 
     user.locked_until = None
     user.last_login_at = datetime.now(timezone.utc)
 
-    # Create tokens with admin scope
-    access_token = create_access_token(
-        str(user.id),
-        extra_claims={"scope": "admin", "super_admin": True}
-    )
+    # Create tokens — admin uses the same token format, JTI allow-list
+    access_token = create_access_token(str(user.id), scopes=["admin", "super_admin"])
     refresh_token = create_refresh_token(str(user.id))
+    _register_refresh_jti(str(user.id), refresh_token)
 
     _log_audit(db, "admin.login.success", user_id=str(user.id), request=request)
     db.commit()
@@ -145,21 +213,50 @@ async def admin_login(request: Request, payload: AdminLoginRequest, db: Session 
 
 @router.post("/refresh")
 async def admin_refresh_token(request: Request, payload: AdminRefreshRequest, db: Session = Depends(get_db_session)):
-    """Refresh admin access token."""
+    """Refresh admin access token — same JTI rotation as tenant auth."""
+    token = payload.refresh_token
+    if not token:
+        raise HTTPException(status_code=400, detail="refresh_token is required.")
+
     try:
-        access_token, refresh_token = _rotate_refresh_token(payload.refresh_token, db)
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer"
-        }
+        token_payload = decode_token(token, expected_type="refresh")
+        user_id_str = token_payload.get("sub")
+        if not user_id_str:
+            raise HTTPException(status_code=401, detail="Invalid token claims.")
+        user_id = uuid.UUID(user_id_str)
     except HTTPException:
         raise
     except Exception:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token."
+            detail="Could not validate refresh credentials."
         )
+
+    if not _is_refresh_jti_valid(user_id_str, token):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token has been revoked."
+        )
+
+    user = db.query(User).filter(User.id == user_id, User.deleted_at == None).first()
+    if not user or not user.is_active or not user.is_super_admin:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is deactivated, not found, or not a super admin."
+        )
+
+    # Rotate: drop old JTI, register new token
+    new_access_token = create_access_token(str(user.id), scopes=["admin", "super_admin"])
+    new_refresh_token = create_refresh_token(str(user.id))
+
+    _remove_refresh_jti(str(user.id), token)
+    _register_refresh_jti(str(user.id), new_refresh_token)
+
+    return {
+        "access_token": new_access_token,
+        "refresh_token": new_refresh_token,
+        "token_type": "bearer"
+    }
 
 
 @router.get("/me")
