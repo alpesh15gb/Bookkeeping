@@ -121,9 +121,10 @@ async def admin_login(request: Request, payload: AdminLoginRequest, db: Session 
     user.locked_until = None
     user.last_login_at = datetime.now(timezone.utc)
 
-    # Create tokens with admin scope
-    access_token = create_access_token(str(user.id), scopes=["admin"])
+    # Create tokens with admin and super-admin scopes, then allow-list the refresh JTI.
+    access_token = create_access_token(str(user.id), scopes=["admin", "super_admin"])
     refresh_token = create_refresh_token(str(user.id))
+    _register_refresh_jti(str(user.id), refresh_token)
 
     _log_audit(db, "admin.login.success", user_id=str(user.id), request=request)
     db.commit()
@@ -156,7 +157,7 @@ async def admin_refresh_token(request: Request, payload: AdminRefreshRequest, db
         ).first()
         if not user:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token.")
-        access_token = create_access_token(str(user.id), scopes=["admin"])
+        access_token = create_access_token(str(user.id), scopes=["admin", "super_admin"])
         refresh_token = create_refresh_token(str(user.id))
         _remove_refresh_jti(str(user.id), payload.refresh_token)
         _register_refresh_jti(str(user.id), refresh_token)
