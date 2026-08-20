@@ -69,9 +69,6 @@ def _ensure_qty_within_remaining(
             detail=f"Received quantity exceeds remaining ordered quantity ({remaining}).",
         )
 
-router = APIRouter(prefix="/goods-receipts", tags=["Goods Receipts (GRN)"])
-
-
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _resolve_po_details(db: Session, tenant_id: uuid.UUID, purchase_order_id: uuid.UUID | None) -> tuple:

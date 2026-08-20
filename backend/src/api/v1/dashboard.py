@@ -229,7 +229,7 @@ def get_expense_trend(
     query = db.query(
         func.extract("month", Expense.expense_date).label("month"),
         func.extract("year", Expense.expense_date).label("year"),
-        func.coalesce(func.sum(Expense.amount), 0).label("total"),
+        func.coalesce(func.sum(Expense.total), 0).label("total"),
     ).filter(
         Expense.tenant_id == tenant_id,
         Expense.status == "POSTED",

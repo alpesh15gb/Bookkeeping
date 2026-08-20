@@ -18,6 +18,7 @@ from decimal import Decimal
 from typing import List, Optional
 
 from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -383,6 +384,23 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     response = JSONResponse(
         status_code=exc.status_code,
         content={"detail": exc.detail, "code": f"HTTP_{exc.status_code}", "support_id": _support_id(request)},
+    )
+    return _add_cors_to_response(response, request)
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_handler(request: Request, exc: RequestValidationError):
+    """Return compact, user-actionable messages for Pydantic validation errors."""
+    errors = []
+    for error in exc.errors():
+        location = [str(item) for item in error.get("loc", ()) if item != "body"]
+        field = ".".join(location) or "request"
+        message = str(error.get("msg") or "Invalid value")
+        errors.append(f"{field}: {message}")
+    detail = "; ".join(errors) or "Request validation failed."
+    response = JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content={"detail": detail, "code": "VALIDATION_ERROR", "support_id": _support_id(request)},
     )
     return _add_cors_to_response(response, request)
 

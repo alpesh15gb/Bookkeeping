@@ -16,11 +16,11 @@ from src.core.database import get_db_session
 from src.core.security import (
     create_access_token,
     create_refresh_token,
+    decode_token,
     get_password_hash,
     verify_password,
-    _revoked_token_check,
-    _rotate_refresh_token,
 )
+from src.api.v1.auth import _is_refresh_jti_valid, _register_refresh_jti, _remove_refresh_jti
 from src.infrastructure.database.models import User, TenantMembership
 from src.api.deps import get_current_user
 from src.common.audit_log import _log_audit
@@ -122,10 +122,7 @@ async def admin_login(request: Request, payload: AdminLoginRequest, db: Session 
     user.last_login_at = datetime.now(timezone.utc)
 
     # Create tokens with admin scope
-    access_token = create_access_token(
-        str(user.id),
-        extra_claims={"scope": "admin", "super_admin": True}
-    )
+    access_token = create_access_token(str(user.id), scopes=["admin"])
     refresh_token = create_refresh_token(str(user.id))
 
     _log_audit(db, "admin.login.success", user_id=str(user.id), request=request)
@@ -145,21 +142,29 @@ async def admin_login(request: Request, payload: AdminLoginRequest, db: Session 
 
 @router.post("/refresh")
 async def admin_refresh_token(request: Request, payload: AdminRefreshRequest, db: Session = Depends(get_db_session)):
-    """Refresh admin access token."""
+    """Rotate a refresh token while preserving the super-admin boundary."""
     try:
-        access_token, refresh_token = _rotate_refresh_token(payload.refresh_token, db)
-        return {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-            "token_type": "bearer"
-        }
+        token_payload = decode_token(payload.refresh_token, expected_type="refresh")
+        user_id = token_payload.get("sub")
+        if not user_id or not _is_refresh_jti_valid(user_id, payload.refresh_token):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token.")
+        user = db.query(User).filter(
+            User.id == uuid.UUID(user_id),
+            User.deleted_at == None,
+            User.is_active == True,
+            User.is_super_admin == True,
+        ).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token.")
+        access_token = create_access_token(str(user.id), scopes=["admin"])
+        refresh_token = create_refresh_token(str(user.id))
+        _remove_refresh_jti(str(user.id), payload.refresh_token)
+        _register_refresh_jti(str(user.id), refresh_token)
+        return {"access_token": access_token, "refresh_token": refresh_token, "token_type": "bearer"}
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid refresh token."
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token.")
 
 
 @router.get("/me")

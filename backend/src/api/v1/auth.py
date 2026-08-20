@@ -9,7 +9,7 @@ from datetime import datetime, timedelta, timezone
 import redis
 
 from src.core.database import get_db_session, set_db_tenant_context
-from src.infrastructure.database.models import User, Tenant, TenantMembership, PasswordResetToken, AuditLog
+from src.infrastructure.database.models import User, Tenant, TenantMembership, PasswordResetToken
 from src.schemas.auth_schemas import UserRegister, UserLogin, TokenResponse, UserResponse, SchemaBase, Login2FAResponse, TwoFactorChallengeRequest
 from src.core.security import (
     get_password_hash,
@@ -24,6 +24,7 @@ from pydantic import BaseModel
 from src.api.deps import get_current_user
 from src.core.config import settings
 from src.core.rate_limiter import limiter
+from src.common.audit_log import _log_audit
 
 logger = logging.getLogger(__name__)
 
@@ -119,17 +120,6 @@ def _is_refresh_jti_valid(user_id: str, token: str) -> bool:
         return False
     return True
 
-
-def _log_audit(db: Session, action: str, user_id: str = None, tenant_id: str = None, details: dict = None, request: Request = None):
-    log = AuditLog(
-        action=action,
-        actor_id=uuid.UUID(user_id) if user_id else None,
-        tenant_id=uuid.UUID(tenant_id) if tenant_id else None,
-        entity_type="Auth",
-        after_state=details or {},
-        ip_address=request.client.host if request and request.client else None,
-    )
-    db.add(log)
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

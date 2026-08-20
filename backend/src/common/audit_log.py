@@ -20,6 +20,25 @@ _audit_context: contextvars.ContextVar[Dict[str, Any]] = contextvars.ContextVar(
 )
 
 
+def _log_audit(
+    db: Session,
+    action: str,
+    user_id: str = None,
+    tenant_id: str = None,
+    details: Optional[dict] = None,
+    request=None,
+) -> None:
+    """Record an authentication event without coupling auth routers together."""
+    db.add(AuditLog(
+        action=action,
+        actor_id=uuid.UUID(user_id) if user_id else None,
+        tenant_id=uuid.UUID(tenant_id) if tenant_id else None,
+        entity_type="Auth",
+        after_state=details or {},
+        ip_address=request.client.host if request and request.client else None,
+    ))
+
+
 def set_audit_context(
     *,
     tenant_id: uuid.UUID,
