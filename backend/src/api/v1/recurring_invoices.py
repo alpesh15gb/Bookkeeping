@@ -72,6 +72,7 @@ def create_recurring_invoice(
         currency=payload.currency or "INR",
         exchange_rate=payload.exchange_rate or Decimal("1.000000"),
         pos_state_code=payload.pos_state_code,
+        is_gst_inclusive=payload.is_gst_inclusive,
         notes=payload.notes,
         terms_and_conditions=payload.terms_and_conditions,
         items=db_items,
@@ -109,6 +110,7 @@ def list_recurring_invoices(
             next_date=r.next_date,
             occurrences_created=r.occurrences_created,
             currency=r.currency,
+            is_gst_inclusive=bool(r.is_gst_inclusive),
             created_at=r.created_at,
             contact_name=contact_name,
         )
@@ -266,6 +268,10 @@ def generate_invoice_now(
         line_subtotal = (item.quantity * item.rate) - item.discount
         if line_subtotal < 0:
             line_subtotal = Decimal("0.0000")
+        if recurring.is_gst_inclusive and resolved_gst_rate > 0:
+            line_subtotal = line_subtotal / (
+                Decimal("1") + resolved_gst_rate / Decimal("100")
+            )
 
         tax_split = GSTEngine.calculate_tax(
             origin_state_code=origin_state_code,
@@ -331,7 +337,7 @@ def generate_invoice_now(
         e_invoice_status="PENDING",
         notes=recurring.notes,
         terms_and_conditions=recurring.terms_and_conditions,
-        is_gst_inclusive=False,
+        is_gst_inclusive=bool(recurring.is_gst_inclusive),
         is_rcm=False,
         supply_type="DOMESTIC",
         currency=recurring.currency,

@@ -76,6 +76,7 @@ def generate_invoice_pdf(
     company_address: Optional[Any] = None,
     terms_and_conditions: Optional[str] = None,
     place_of_supply_state_code: Optional[str] = None,
+    is_gst_inclusive: bool = False,
 ) -> bytes:
     buffer = io.BytesIO()
 
@@ -160,6 +161,9 @@ def generate_invoice_pdf(
     company_email = company_email or ""
     company_website = company_website or ""
     display_pos_code = place_of_supply_state_code or origin_state_code
+    rate_header = (
+        "Rate incl. GST" if is_gst_inclusive else "Rate excl. GST"
+    )
     
     # 1. Page settings based on template format
     if template == "thermal":
@@ -332,7 +336,7 @@ def generate_invoice_pdf(
         table_data = [[
             Paragraph("<b>Item</b>", normal_style),
             Paragraph("<b>Qty</b>", right_style),
-            Paragraph("<b>Rate</b>", right_style),
+            Paragraph(f"<b>{rate_header}</b>", right_style),
             Paragraph("<b>Amt</b>", right_style)
         ]]
         for item in items:
@@ -444,7 +448,7 @@ def generate_invoice_pdf(
         elements.append(Spacer(1, 4*mm))
 
         # Items Table
-        table_headers = ['S.No.', 'Description of Goods', 'Qty', 'Rate', 'Amount']
+        table_headers = ['S.No.', 'Description of Goods', 'Qty', rate_header, 'Amount']
         grid_data = [[Paragraph(f"<b>{h}</b>", bold_style) for h in table_headers]]
         for i, item in enumerate(items, 1):
             desc = item.get('description') or item.get('product_name') or 'N/A'
@@ -601,7 +605,7 @@ def generate_invoice_pdf(
             Paragraph("<b>Item name</b>", ParagraphStyle('ColH2', parent=bold_style, fontSize=8)),
             Paragraph("<b>HSN/SAC</b>", ParagraphStyle('ColH3', parent=bold_style, fontSize=8)),
             Paragraph("<b>Quantity</b>", ParagraphStyle('ColH4', parent=bold_style, fontSize=8, alignment=TA_RIGHT)),
-            Paragraph("<b>Price/ Unit</b>", ParagraphStyle('ColH5', parent=bold_style, fontSize=8, alignment=TA_RIGHT)),
+            Paragraph(f"<b>{rate_header}</b>", ParagraphStyle('ColH5', parent=bold_style, fontSize=8, alignment=TA_RIGHT)),
             Paragraph("<b>GST</b>", ParagraphStyle('ColH6', parent=bold_style, fontSize=8, alignment=TA_RIGHT)),
             Paragraph("<b>Amount</b>", ParagraphStyle('ColH7', parent=bold_style, fontSize=8, alignment=TA_RIGHT))
         ]
@@ -816,7 +820,7 @@ def generate_invoice_pdf(
         elements.append(Spacer(1, 4*mm))
         
         # Classic Items Table. To make the vertical lines run all the way down, we pad the table with empty lines if needed.
-        table_headers = ['S.No.', 'Description', 'Qty', 'Rate', 'Amount']
+        table_headers = ['S.No.', 'Description', 'Qty', rate_header, 'Amount']
         grid_data = [[Paragraph(f"<b>{h}</b>", bold_style) for h in table_headers]]
         for i, item in enumerate(items, 1):
             desc = item.get('description') or item.get('product_name') or 'N/A'

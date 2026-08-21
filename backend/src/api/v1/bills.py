@@ -1066,6 +1066,7 @@ def print_bill(
         amount_paid=bill.amount_paid or Decimal("0.00"),
         customer_address=bill.contact.billing_address if bill.contact else None,
         terms_and_conditions=bill.terms_and_conditions,
+        is_gst_inclusive=bool(bill.is_gst_inclusive),
     )
 
     return StreamingResponse(
@@ -1110,6 +1111,9 @@ def clone_bill(
         total=original.total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=original.pos_state_code,
+        shipping_charges=original.shipping_charges,
+        is_gst_inclusive=bool(original.is_gst_inclusive),
+        itc_eligible=bool(original.itc_eligible),
         notes=original.notes,
         terms_and_conditions=original.terms_and_conditions,
         reference_number=original.reference_number,

@@ -2285,6 +2285,7 @@ def print_invoice(
         customer_address=invoice.contact.billing_address if invoice.contact else None,
         terms_and_conditions=invoice.terms_and_conditions,
         place_of_supply_state_code=invoice.pos_state_code,
+        is_gst_inclusive=bool(invoice.is_gst_inclusive),
     )
 
     return StreamingResponse(
@@ -2546,6 +2547,15 @@ def clone_invoice(
         total=original.total,
         amount_paid=Decimal("0.0000"),
         pos_state_code=original.pos_state_code,
+        is_gst_inclusive=bool(original.is_gst_inclusive),
+        is_rcm=bool(original.is_rcm),
+        supply_type=original.supply_type,
+        currency=original.currency,
+        exchange_rate=original.exchange_rate,
+        tds_rate=original.tds_rate,
+        tds_amount=original.tds_amount,
+        tcs_rate=original.tcs_rate,
+        tcs_amount=original.tcs_amount,
         e_invoice_status="PENDING",
         notes=original.notes,
         terms_and_conditions=original.terms_and_conditions,
