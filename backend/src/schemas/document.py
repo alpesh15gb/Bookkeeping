@@ -547,6 +547,7 @@ class RecurringInvoiceCreate(SchemaBase):
     currency: Optional[str] = Field(default="INR", max_length=10)
     exchange_rate: Optional[Decimal] = Field(default=Decimal("1.000000"), ge=0)
     pos_state_code: str = Field(..., pattern="^[0-9]{2}$")
+    is_gst_inclusive: bool = False
     notes: Optional[str] = None
     terms_and_conditions: Optional[str] = None
     items: List[RecurringInvoiceItemCreate]
@@ -572,6 +573,7 @@ class RecurringInvoiceUpdate(SchemaBase):
     currency: Optional[str] = None
     exchange_rate: Optional[Decimal] = None
     pos_state_code: Optional[str] = None
+    is_gst_inclusive: Optional[bool] = None
     notes: Optional[str] = None
     terms_and_conditions: Optional[str] = None
     items: Optional[List[RecurringInvoiceItemCreate]] = None
@@ -601,6 +603,7 @@ class RecurringInvoiceResponse(SchemaBase):
     currency: str
     exchange_rate: Decimal
     pos_state_code: str
+    is_gst_inclusive: bool
     notes: Optional[str]
     terms_and_conditions: Optional[str]
     created_at: datetime
@@ -617,6 +620,7 @@ class RecurringInvoiceListResponse(SchemaBase):
     next_date: date
     occurrences_created: int
     currency: str
+    is_gst_inclusive: bool
     created_at: datetime
     contact_name: Optional[str] = None
 

@@ -2328,6 +2328,7 @@ class RecurringInvoice(Base):
     currency = Column(String(10), nullable=False, default="INR")
     exchange_rate = Column(Numeric(15, 6), nullable=False, default=1)
     pos_state_code = Column(String(2), nullable=False)
+    is_gst_inclusive = Column(Boolean, nullable=False, default=False)
     notes = Column(Text)
     terms_and_conditions = Column(Text)
     created_at = Column(DateTime(timezone=True), nullable=False, default=_now)

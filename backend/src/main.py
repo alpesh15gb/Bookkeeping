@@ -65,7 +65,7 @@ logger = logging.getLogger("bookkeeping")
 # Keep this in sync with the single Alembic head. The ORM is allowed to start
 # so operators can still reach /health, but readiness becomes degraded until
 # migrations are applied. `create_all()` cannot add columns to existing tables.
-REQUIRED_SCHEMA_REVISION = "20260818_0004_super_admin_subscriptions"
+REQUIRED_SCHEMA_REVISION = "20260821_0001_recurring_invoice_tax_mode"
 
 
 def _database_schema_revision(connection) -> Optional[str]:
